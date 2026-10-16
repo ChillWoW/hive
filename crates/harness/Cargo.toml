@@ -1,0 +1,13 @@
+[package]
+name = "hive-harness"
+version = "0.0.1"
+edition = "2021"
+license = "GPL-3.0-only"
+publish = false
+
+[dependencies]
+hive-proto.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
