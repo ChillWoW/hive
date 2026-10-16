@@ -1,13 +1,13 @@
-# kode-client
+# hive
 
-Repo: https://github.com/kodestudios/kode-client — licensed under GPL-3.0.
+Repo: https://github.com/ChillWoW/hive (private) — licensed under GPL-3.0.
 
-Desktop app "Kode": Tauri 2 shell (Rust, `src-tauri/`) around a React 19 + Vite + Tailwind v4 frontend (`src/`). Package manager is bun.
+Desktop app "Hive": Tauri 2 shell (Rust, `src-tauri/`) around a React 19 + Vite + Tailwind v4 frontend (`src/`). Package manager is bun.
 
 ## Commands
 
 - `bun run dev` — frontend only, Vite on http://localhost:1421
-- `bun run dev:local` — Tauri dev with the dev config (`Kode Dev`, amber icon)
+- `bun run dev:local` — Tauri dev with the dev config (`Hive Dev`, blue icon)
 - `bun run dev:prod` — Tauri dev with the prod config
 - `bun run build` — `tsc -b && vite build` into `build/`
 - `bun run lint` — oxlint

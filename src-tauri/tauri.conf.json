@@ -1,9 +1,9 @@
 {
     "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-    "productName": "Kode",
-    "mainBinaryName": "Kode",
+    "productName": "Hive",
+    "mainBinaryName": "Hive",
     "version": "0.0.1",
-    "identifier": "com.kodestudios.kode",
+    "identifier": "com.hive",
     "build": {
         "frontendDist": "../build",
         "devUrl": "http://localhost:1421",
@@ -13,7 +13,7 @@
     "app": {
         "windows": [
             {
-                "title": "Kode",
+                "title": "Hive",
                 "width": 1200,
                 "height": 800,
                 "decorations": false,

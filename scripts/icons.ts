@@ -83,7 +83,7 @@ for (const variant of VARIANTS) {
     for (const mobile of ["android", "ios"])
         await rm(join(output, mobile), { recursive: true, force: true });
 
-    const scratch = await mkdtemp(join(tmpdir(), `kode-icon-${variant.out}-`));
+    const scratch = await mkdtemp(join(tmpdir(), `hive-icon-${variant.out}-`));
     try {
         const padded = join(scratch, "icon.svg");
         await writeFile(padded, await macosSvg(source));

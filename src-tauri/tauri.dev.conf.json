@@ -1,6 +1,6 @@
 {
-    "productName": "Kode Dev",
-    "identifier": "com.kodestudios.kode.dev",
+    "productName": "Hive Dev",
+    "identifier": "com.hive.dev",
     "bundle": {
         "icon": [
             "icons/dev/32x32.png",
