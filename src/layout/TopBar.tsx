@@ -63,27 +63,15 @@ export function TopBar({ title, className }: TopBarProps) {
                         <SidebarSimpleIcon className="size-4" />
                     </Button>
 
-                    <Button
-                        variant="ghost"
-                        onClick={toggleSidebar}
-                        className="p-0 size-6"
-                    >
+                    <Button variant="ghost" className="p-0 size-6">
                         <ArrowLeftIcon className="size-4" />
                     </Button>
 
-                    <Button
-                        variant="ghost"
-                        onClick={toggleSidebar}
-                        className="p-0 size-6"
-                    >
+                    <Button variant="ghost" className="p-0 size-6">
                         <ArrowRightIcon className="size-4" />
                     </Button>
 
-                    <Button
-                        variant="ghost"
-                        onClick={toggleSidebar}
-                        className="p-0 size-6"
-                    >
+                    <Button variant="ghost" className="p-0 size-6">
                         <PlusIcon className="size-4" />
                     </Button>
                 </div>
