@@ -1,0 +1,136 @@
+@import "tailwindcss";
+
+@theme {
+    --color-dark-50: #c9c9c9;
+    --color-dark-100: #b8b8b8;
+    --color-dark-200: #828282;
+    --color-dark-250: #767676;
+    --color-dark-300: #696969;
+    --color-dark-400: #424242;
+    --color-dark-500: #3b3b3b;
+    --color-dark-600: #2e2e2e;
+    --color-dark-700: #242424;
+    --color-dark-800: #1f1f1f;
+    --color-dark-850: #1a1a1a;
+    --color-dark-900: #141414;
+    --color-dark-950: #0d0d0d;
+
+    --color-primary-50: #ffffff;
+    --color-primary-100: #f9fafb;
+    --color-primary-200: #f3f4f6;
+    --color-primary-300: #e5e7eb;
+    --color-primary-400: #d1d5db;
+    --color-primary-500: #9ca3af;
+    --color-primary-600: #6b7280;
+    --color-primary-700: #4b5563;
+    --color-primary-800: #374151;
+    --color-primary-900: #1f2937;
+
+    /* Named for the meaning, not the hue, so what a warning looks like is
+       changed here rather than at every use. */
+    --color-danger: #ff616e;
+    --color-success: #a5e075;
+    --color-warning: #f0a45d;
+    --color-info: #6fb3f2;
+
+    /* Skeleton's `shimmer` animation: a band swept across from its starting
+       `-translate-x-full`. */
+    --animate-skeleton-shimmer: skeleton-shimmer 1.5s ease-in-out infinite;
+
+    @keyframes skeleton-shimmer {
+        to {
+            translate: 100% 0;
+        }
+    }
+}
+
+@layer base {
+    button:not(:disabled),
+    [role="button"]:not([aria-disabled="true"]) {
+        cursor: pointer;
+    }
+
+    button:disabled,
+    [role="button"][aria-disabled="true"] {
+        cursor: not-allowed;
+    }
+
+    *,
+    *::before,
+    *::after {
+        outline: none;
+    }
+
+    *:focus,
+    *:focus-visible,
+    *:active {
+        outline: none;
+        box-shadow: none;
+    }
+}
+
+@layer utilities {
+    .hide-scrollbar {
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+    }
+}
+
+html,
+body,
+#root {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    overscroll-behavior: none;
+}
+
+body {
+    margin: 0;
+    font-family: system-ui, sans-serif;
+    background-color: var(--color-dark-900);
+    color: var(--color-dark-50);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+}
+
+:root {
+    --scrollbar-size: 8px;
+    --scrollbar-track: #141414;
+    --scrollbar-thumb: #424242;
+    --scrollbar-thumb-hover: #696969;
+}
+
+::-webkit-scrollbar {
+    width: var(--scrollbar-size);
+    height: var(--scrollbar-size);
+}
+
+::-webkit-scrollbar-track {
+    background: var(--scrollbar-track);
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--scrollbar-thumb);
+    border-radius: 0.1875rem;
+    border: 0.125rem solid var(--scrollbar-track);
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--scrollbar-thumb-hover);
+}
+
+::-webkit-scrollbar-corner {
+    background: transparent;
+}
+
+::-webkit-scrollbar-button {
+    display: none;
+    width: 0;
+    height: 0;
+}
+
+.hide-scrollbar::-webkit-scrollbar {
+    display: none;
+}

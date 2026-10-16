@@ -1,0 +1,18 @@
+{
+    "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
+    "app": {
+        "windows": [
+            {
+                "title": "Kode",
+                "width": 1200,
+                "height": 800,
+                "decorations": true,
+                "titleBarStyle": "Overlay",
+                "hiddenTitle": true,
+                "trafficLightPosition": { "x": 14, "y": 20 },
+                "dragDropEnabled": false,
+                "zoomHotkeysEnabled": true
+            }
+        ]
+    }
+}

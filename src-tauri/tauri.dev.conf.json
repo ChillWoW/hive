@@ -1,0 +1,19 @@
+{
+    "productName": "Kode Dev",
+    "identifier": "com.kodestudios.kode.dev",
+    "bundle": {
+        "icon": [
+            "icons/dev/32x32.png",
+            "icons/dev/128x128.png",
+            "icons/dev/128x128@2x.png",
+            "icons/dev/icon.icns",
+            "icons/dev/icon.ico"
+        ],
+        "windows": {
+            "nsis": {
+                "installerIcon": "icons/dev/icon.ico",
+                "uninstallerIcon": "icons/dev/icon.ico"
+            }
+        }
+    }
+}

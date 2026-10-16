@@ -1,0 +1,45 @@
+{
+    "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
+    "productName": "Kode",
+    "mainBinaryName": "Kode",
+    "version": "0.0.1",
+    "identifier": "com.kodestudios.kode",
+    "build": {
+        "frontendDist": "../build",
+        "devUrl": "http://localhost:1421",
+        "beforeDevCommand": "bun run dev",
+        "beforeBuildCommand": "bun run build"
+    },
+    "app": {
+        "windows": [
+            {
+                "title": "Kode",
+                "width": 1200,
+                "height": 800,
+                "decorations": false,
+                "dragDropEnabled": false,
+                "zoomHotkeysEnabled": true
+            }
+        ],
+        "security": {
+            "csp": null
+        }
+    },
+    "bundle": {
+        "active": true,
+        "targets": ["app", "dmg", "nsis"],
+        "icon": [
+            "icons/prod/32x32.png",
+            "icons/prod/128x128.png",
+            "icons/prod/128x128@2x.png",
+            "icons/prod/icon.icns",
+            "icons/prod/icon.ico"
+        ],
+        "windows": {
+            "nsis": {
+                "installerIcon": "icons/prod/icon.ico",
+                "uninstallerIcon": "icons/prod/icon.ico"
+            }
+        }
+    }
+}
