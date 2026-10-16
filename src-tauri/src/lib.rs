@@ -1,3 +1,5 @@
+mod mock;
+
 use tauri_plugin_window_state::StateFlags;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -13,6 +15,7 @@ pub fn run() {
         )
         .build(),
     )
+    .invoke_handler(tauri::generate_handler![mock::mock_run])
     .setup(|app| {
       if cfg!(debug_assertions) {
         app.handle().plugin(
