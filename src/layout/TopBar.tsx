@@ -1,9 +1,18 @@
+import { SIDEBAR_WIDTH, useLayoutStore } from "@/stores/useLayoutStore";
 import { useWindowState } from "./useWindowState";
 import { WindowControls } from "./WindowControls";
 import { cn } from "@/lib/cn";
 import { isMac } from "@/lib/platform";
+import { Button } from "@/ui";
+import {
+    ArrowLeftIcon,
+    ArrowRightIcon,
+    PlusIcon,
+    SidebarSimpleIcon
+} from "@phosphor-icons/react";
 
 type TopBarProps = {
+    title?: string;
     className?: string;
 };
 
@@ -15,35 +24,85 @@ type TopBarProps = {
  */
 const MAC_TRAFFIC_LIGHTS = "w-[72px]";
 
-export function TopBar({ className }: TopBarProps) {
-    // Only the macOS inset cares, and only about fullscreen: the traffic lights
-    // are gone there, and holding the corner open for them leaves a hole.
+export function TopBar({ title, className }: TopBarProps) {
     const { fullscreen } = useWindowState();
     const insetForTrafficLights = isMac && !fullscreen;
+
+    const open = useLayoutStore((state) => state.sidebarOpen);
+    const toggleSidebar = useLayoutStore((state) => state.toggleSidebar);
 
     return (
         <header
             data-tauri-drag-region
             className={cn(
-                "flex h-9 w-full shrink-0 select-none items-center bg-transparent",
+                "absolute inset-x-0 top-0 z-10 flex h-9 select-none items-center bg-transparent",
                 className
             )}
         >
-            {/* A spacer rather than padding, so the corner the buttons sit in
-                still drags the window like the rest of the bar. */}
-            {insetForTrafficLights && (
-                <div
-                    data-tauri-drag-region
-                    className={cn("h-full shrink-0", MAC_TRAFFIC_LIGHTS)}
-                />
-            )}
-            {/* The empty middle is the drag handle — it has to stay in the tree even with
-                nothing in it, or there is nothing wide to grab the window by. */}
             <div
                 data-tauri-drag-region
-                className="flex h-full min-w-0 flex-1 items-center gap-1 px-2.5"
-            />
-            {/* macOS draws its own; see `WindowControls`. */}
+                style={{ width: open ? SIDEBAR_WIDTH : 0 }}
+                className="relative flex h-full min-w-fit shrink-0 items-center transition-[width]"
+            >
+                {insetForTrafficLights && (
+                    <div
+                        data-tauri-drag-region
+                        className={MAC_TRAFFIC_LIGHTS}
+                    />
+                )}
+
+                <div
+                    data-tauri-drag-region
+                    className="flex h-full items-center gap-0.5 px-2"
+                >
+                    <Button
+                        variant="ghost"
+                        onClick={toggleSidebar}
+                        className="p-0 size-6"
+                    >
+                        <SidebarSimpleIcon className="size-4" />
+                    </Button>
+
+                    <Button
+                        variant="ghost"
+                        onClick={toggleSidebar}
+                        className="p-0 size-6"
+                    >
+                        <ArrowLeftIcon className="size-4" />
+                    </Button>
+
+                    <Button
+                        variant="ghost"
+                        onClick={toggleSidebar}
+                        className="p-0 size-6"
+                    >
+                        <ArrowRightIcon className="size-4" />
+                    </Button>
+
+                    <Button
+                        variant="ghost"
+                        onClick={toggleSidebar}
+                        className="p-0 size-6"
+                    >
+                        <PlusIcon className="size-4" />
+                    </Button>
+                </div>
+            </div>
+
+            <div
+                data-tauri-drag-region
+                className="flex h-full min-w-0 flex-1 items-center gap-1 px-3"
+            >
+                {title && (
+                    <span className="truncate text-[13px] text-dark-50">
+                        {title}
+                    </span>
+                )}
+                {/* Spacer: an empty strip you can grab to drag the window. */}
+                <div data-tauri-drag-region className="h-full flex-1" />
+                {/* right-side actions go here */}
+            </div>
+
             {!isMac && <WindowControls />}
         </header>
     );
