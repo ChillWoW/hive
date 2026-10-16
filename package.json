@@ -10,6 +10,7 @@
         "build": "tsc -b && vite build",
         "icons": "bun run scripts/icons.ts",
         "lint": "oxlint",
+        "proto": "cargo test -p hive-proto export_bindings",
         "preview": "vite preview"
     },
     "dependencies": {

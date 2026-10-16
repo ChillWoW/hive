@@ -23,6 +23,8 @@ export default defineConfig({
     server: {
         port: 1421,
         strictPort: true, // fail loudly instead of shifting ports
-        watch: { ignored: ["**/src-tauri/**"] } // Backend changes shouldn't trigger HMR
+        // Backend changes shouldn't trigger HMR, and Cargo's locked build
+        // artifacts in `target/` crash the watcher on Windows.
+        watch: { ignored: ["**/src-tauri/**", "**/crates/**", "**/target/**"] }
     }
 });
