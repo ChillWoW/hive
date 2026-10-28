@@ -18,7 +18,12 @@ import {
 } from "@/harnesses";
 import { cn } from "@/lib/cn";
 import { Popover, Tooltip, usePortalContainer } from "@/ui";
-import { footerButtonClassName, pickerTriggerClassName, popupClassName } from "./chip";
+import {
+    footerButtonClassName,
+    pickerTriggerClassName,
+    popupClassName,
+    searchInputClassName
+} from "./chip";
 import { useComposerStore } from "./store";
 
 /** A row is 32px plus the list's 2px gap; tabs and scrolling count in rows. */
@@ -301,8 +306,9 @@ function ModelCard({
                 </div>
             )}
 
-            <label className="flex h-10 shrink-0 items-center gap-2 px-2.5">
-                <MagnifyingGlassIcon className="size-4 shrink-0 text-dark-300" />
+            {/* As in the project picker; the divider runs across the card's inset. */}
+            <label className="-mx-1 mb-1 flex shrink-0 items-center gap-2 border-b border-dark-600 px-3.5">
+                <MagnifyingGlassIcon className="size-3.5 shrink-0 text-dark-300" />
                 <input
                     id={SEARCH_ID}
                     value={query}
@@ -316,7 +322,7 @@ function ModelCard({
                     placeholder="Search models…"
                     aria-label="Search models"
                     aria-activedescendant={shown[active] ? `model-row-${active}` : undefined}
-                    className="h-full w-full bg-transparent text-sm text-dark-50 outline-none placeholder:text-dark-300"
+                    className={searchInputClassName}
                 />
             </label>
 
