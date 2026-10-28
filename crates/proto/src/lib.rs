@@ -4,6 +4,7 @@
 //! (`bun run proto`, or any `cargo test -p hive-proto`); never edit it by hand.
 
 pub mod agent;
+pub mod catalog;
 pub mod chat;
 pub mod command;
 pub mod fold;
@@ -12,6 +13,7 @@ pub mod settings;
 pub mod watch;
 
 pub use agent::*;
+pub use catalog::*;
 pub use chat::*;
 pub use command::*;
 pub use fold::fold_event;
@@ -52,6 +54,7 @@ mod export {
         Settings::export_all(&cfg).unwrap();
         MessagesUpdate::export_all(&cfg).unwrap();
         ChatsUpdate::export_all(&cfg).unwrap();
+        HarnessCatalog::export_all(&cfg).unwrap();
 
         let mut modules = Vec::new();
         collect_modules(&dir, "", &mut modules);

@@ -9,7 +9,8 @@ use std::collections::VecDeque;
 use std::time::Duration;
 
 use hive_proto::{
-    AgentEvent, DoneStatus, HarnessId, RunRequest, SlashCommand, TodoItem, TodoStatus, ToolCall,
+    AgentEvent, DoneStatus, HarnessCapabilities, HarnessCatalog, HarnessId, Model,
+    ReasoningLevel, RunRequest, SandboxLevel, SlashCommand, TodoItem, TodoStatus, ToolCall,
     ToolDiff, UserInputAnswer, UserInputQuestion,
 };
 use tokio::sync::mpsc;
@@ -43,6 +44,45 @@ impl MockHarness {
 impl Harness for MockHarness {
     fn id(&self) -> HarnessId {
         HarnessId::Mock
+    }
+
+    fn catalog(&self) -> HarnessCatalog {
+        let model = |id: &str, label: &str, reasoning: &[ReasoningLevel]| Model {
+            id: id.into(),
+            label: label.into(),
+            description: Some("Plays a scripted turn; spends no tokens".into()),
+            reasoning_levels: reasoning.to_vec(),
+            options: Vec::new(),
+        };
+        HarnessCatalog {
+            id: HarnessId::Mock,
+            label: "Mock".into(),
+            installed: true,
+            models: vec![
+                model(
+                    "mock-1",
+                    "Mock",
+                    &[ReasoningLevel::Low, ReasoningLevel::Medium, ReasoningLevel::High],
+                ),
+                model("mock-mini", "Mock Mini", &[]),
+            ],
+            default_model: Some("mock-1".into()),
+            commands: vec![SlashCommand {
+                name: "review".into(),
+                description: "Review the current diff".into(),
+                input_hint: Some("focus area".into()),
+            }],
+            sandbox_levels: vec![
+                SandboxLevel::WorkspaceWrite,
+                SandboxLevel::ReadOnly,
+                SandboxLevel::DangerFullAccess,
+            ],
+            capabilities: HarnessCapabilities {
+                steering: false,
+                interrupt: true,
+                attachments: false,
+            },
+        }
     }
 
     fn run(&self, request: RunRequest) -> Result<Run, HarnessError> {

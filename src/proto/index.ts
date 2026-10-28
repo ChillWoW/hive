@@ -10,6 +10,8 @@ export type { CommandPayload } from "./CommandPayload";
 export type { CommandStatus } from "./CommandStatus";
 export type { ContextUsage } from "./ContextUsage";
 export type { DoneStatus } from "./DoneStatus";
+export type { HarnessCapabilities } from "./HarnessCapabilities";
+export type { HarnessCatalog } from "./HarnessCatalog";
 export type { HarnessId } from "./HarnessId";
 export type { Message } from "./Message";
 export type { MessagePart } from "./MessagePart";

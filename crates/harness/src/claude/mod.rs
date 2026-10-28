@@ -23,8 +23,9 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use hive_proto::{
-    AgentEvent, DoneStatus, HarnessId, ReasoningLevel, RunRequest, SandboxLevel, SlashCommand,
-    ToolCall, UserInputAnswer, UserInputQuestion,
+    AgentEvent, DoneStatus, HarnessCapabilities, HarnessCatalog, HarnessId, Model,
+    ReasoningLevel, RunRequest, SandboxLevel, SlashCommand, ToolCall, UserInputAnswer,
+    UserInputQuestion,
 };
 use serde_json::Value;
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
@@ -108,9 +109,74 @@ fn effort(level: ReasoningLevel) -> &'static str {
     }
 }
 
+/// `--effort` levels; `effort` folds `Minimal` into `low`, so it isn't offered.
+const EFFORTS: [ReasoningLevel; 5] = [
+    ReasoningLevel::Low,
+    ReasoningLevel::Medium,
+    ReasoningLevel::High,
+    ReasoningLevel::XHigh,
+    ReasoningLevel::Max,
+];
+
+fn model(id: &str, label: &str, description: &str, reasoning: &[ReasoningLevel]) -> Model {
+    Model {
+        id: id.into(),
+        label: label.into(),
+        description: Some(description.into()),
+        reasoning_levels: reasoning.to_vec(),
+        options: Vec::new(),
+    }
+}
+
+fn command(name: &str, description: &str) -> SlashCommand {
+    SlashCommand {
+        name: name.into(),
+        description: description.into(),
+        input_hint: None,
+    }
+}
+
 impl Harness for ClaudeHarness {
     fn id(&self) -> HarnessId {
         HarnessId::ClaudeCode
+    }
+
+    /// The CLI's model aliases (`--model`), which track the latest of each
+    /// family, so the list doesn't go stale with releases.
+    fn catalog(&self) -> HarnessCatalog {
+        HarnessCatalog {
+            id: HarnessId::ClaudeCode,
+            label: "Claude Code".into(),
+            installed: self.executable.is_some() || find_on_path("claude").is_some(),
+            models: vec![
+                model(
+                    "default",
+                    "Default",
+                    "The model Claude Code recommends for your account",
+                    &EFFORTS,
+                ),
+                model("opus", "Opus", "Most capable, for complex work", &EFFORTS),
+                model("sonnet", "Sonnet", "Fast and capable, for everyday tasks", &EFFORTS),
+                model("haiku", "Haiku", "Fastest, for quick answers", &[]),
+            ],
+            default_model: Some("default".into()),
+            commands: vec![
+                command("compact", "Summarize the conversation to free up context"),
+                command("init", "Write a CLAUDE.md describing the codebase"),
+                command("review", "Review a pull request"),
+            ],
+            sandbox_levels: vec![
+                SandboxLevel::WorkspaceWrite,
+                SandboxLevel::ReadOnly,
+                SandboxLevel::DangerFullAccess,
+            ],
+            capabilities: HarnessCapabilities {
+                // A prompt written mid-turn waits for the turn's `result`.
+                steering: false,
+                interrupt: true,
+                attachments: false,
+            },
+        }
     }
 
     fn run(&self, request: RunRequest) -> Result<Run, HarnessError> {

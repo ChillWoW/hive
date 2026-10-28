@@ -22,6 +22,10 @@ pub fn run() {
         )
         .build(),
     )
+    // The composer's folder picker.
+    .plugin(tauri_plugin_dialog::init())
+    // Markdown links open in the system browser, not the webview.
+    .plugin(tauri_plugin_opener::init())
     .invoke_handler(tauri::generate_handler![
       engine::create_chat,
       engine::list_chats,
@@ -29,6 +33,8 @@ pub fn run() {
       engine::watch_messages,
       engine::watch_chats,
       engine::unwatch,
+      engine::list_harnesses,
+      engine::update_chat_config,
       settings::settings_get,
       settings::settings_update,
       settings::settings_reset,

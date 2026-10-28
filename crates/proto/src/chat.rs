@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::agent::{HarnessId, ReasoningLevel, SandboxLevel};
+use crate::agent::{HarnessId, ReasoningLevel, SandboxLevel, SlashCommand};
 
 /// The run settings a chat sends with each turn; the composer edits these.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
@@ -83,6 +83,10 @@ pub struct Session {
     /// Latest context-window occupancy.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub context: Option<ContextUsage>,
+    /// Slash commands the session reported, the user's own included.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[ts(as = "Option<Vec<SlashCommand>>")]
+    pub commands: Vec<SlashCommand>,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]

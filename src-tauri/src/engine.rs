@@ -6,7 +6,9 @@ use std::collections::HashMap;
 use std::sync::Mutex;
 
 use hive_engine::{Engine, WatchId};
-use hive_proto::{Chat, ChatConfig, ChatsUpdate, Command, CommandPayload, MessagesUpdate};
+use hive_proto::{
+    Chat, ChatConfig, ChatsUpdate, Command, CommandPayload, HarnessCatalog, MessagesUpdate,
+};
 use tauri::ipc::Channel;
 use tauri::{State, Webview};
 
@@ -104,4 +106,21 @@ pub async fn unwatch(
     engine.unwatch(id);
     watches.remove(id);
     Ok(())
+}
+
+#[tauri::command]
+pub async fn list_harnesses(engine: State<'_, Engine>) -> Result<Vec<HarnessCatalog>, String> {
+    Ok(engine.catalogs())
+}
+
+/// Saves a chat's run settings; a live run picks them up from its next turn.
+#[tauri::command]
+pub async fn update_chat_config(
+    engine: State<'_, Engine>,
+    chat_id: String,
+    config: ChatConfig,
+) -> Result<Chat, String> {
+    engine
+        .update_config(&chat_id, config)
+        .map_err(|e| e.to_string())
 }

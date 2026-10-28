@@ -24,8 +24,8 @@ use std::time::Duration;
 use hive_harness::{Harness, RunHandle};
 use hive_proto::{
     AgentEvent, Chat, ChatConfig, ChatsUpdate, Command, CommandPayload, CommandStatus,
-    ContextUsage, DoneStatus, HarnessId, MessageStatus, MessagesUpdate, RunRequest, Session,
-    SessionStatus, UserInputAnswer,
+    ContextUsage, DoneStatus, HarnessCatalog, HarnessId, MessageStatus, MessagesUpdate,
+    RunRequest, Session, SessionStatus, SlashCommand, UserInputAnswer,
 };
 use hive_store::{new_id, now_ms, Recovery, Store, StoreError, Turn};
 use tokio::sync::mpsc;
@@ -89,6 +89,8 @@ pub struct Engine {
 struct Inner {
     store: Store,
     harnesses: HashMap<HarnessId, Arc<dyn Harness>>,
+    /// Registration order, which is the order pickers list them in.
+    order: Vec<HarnessId>,
     config: EngineConfig,
     runtime: tokio::runtime::Handle,
     chats: Mutex<HashMap<String, Arc<ChatRuntime>>>,
@@ -118,6 +120,11 @@ struct ChatState {
     /// Prompts handed to the run while a turn was in flight, oldest first.
     queued: VecDeque<Queued>,
     session: Option<Session>,
+    /// The run's slash commands, kept for sessions created after they came.
+    commands: Vec<SlashCommand>,
+    /// The chat's config changed under the run: close it once its work is
+    /// done, so the next prompt starts one with the new config.
+    restart: bool,
     watchers: Vec<Watcher<MessagesUpdate>>,
 }
 
@@ -167,6 +174,7 @@ impl Engine {
         Self {
             inner: Arc::new(Inner {
                 store,
+                order: harnesses.iter().map(|h| h.id()).collect(),
                 harnesses: harnesses.into_iter().map(|h| (h.id(), h)).collect(),
                 config,
                 runtime,
@@ -231,6 +239,46 @@ impl Engine {
     /// Most recently active first.
     pub fn chats(&self) -> Result<Vec<Chat>> {
         Ok(self.store().chats()?)
+    }
+
+    /// Every registered harness's catalog, in registration order.
+    pub fn catalogs(&self) -> Vec<HarnessCatalog> {
+        self.inner
+            .order
+            .iter()
+            .filter_map(|id| self.inner.harnesses.get(id))
+            .map(|h| h.catalog())
+            .collect()
+    }
+
+    /// Saves the chat's run settings. A live run keeps the ones it started
+    /// with, so it's closed — now if idle, else once its work is done — and
+    /// the next prompt starts a run that resumes the session with these.
+    pub fn update_config(&self, chat_id: &str, config: ChatConfig) -> Result<Chat> {
+        let runtime = self.runtime_for(chat_id);
+        let mut st = lock(&runtime.state);
+        let mut chat = self.chat(chat_id)?;
+        if chat.config == config {
+            return Ok(chat);
+        }
+        // Another CLI can't resume this one's session.
+        if chat.config.harness != config.harness {
+            chat.harness_session_id = None;
+        }
+        chat.config = config;
+        self.store().save_chat(&chat)?;
+        if st.run.is_some() {
+            if st.in_flight() || !st.queued.is_empty() {
+                st.restart = true;
+            } else {
+                self.end_run(chat_id, &mut st);
+            }
+        }
+        publish(
+            &mut lock(&self.inner.list).watchers,
+            ChatsUpdate::Chat { chat: chat.clone() },
+        );
+        Ok(chat)
     }
 
     fn chat(&self, id: &str) -> Result<Chat> {
@@ -582,6 +630,15 @@ impl Engine {
                     self.publish_session(chat_id, Some(session));
                 }
             }
+            AgentEvent::AvailableCommands { commands } => {
+                st.commands = commands.clone();
+                if let Some(session) = &mut st.session {
+                    session.commands = commands;
+                    session.updated_at = now_ms();
+                    let session = session.clone();
+                    self.publish_session(chat_id, Some(session));
+                }
+            }
             AgentEvent::Done { status, .. } => {
                 // Status and duration, which the event alone doesn't carry.
                 if let Some(message) = finished {
@@ -589,6 +646,10 @@ impl Engine {
                 }
                 self.publish_chat(chat_id);
                 if !st.queued.is_empty() {
+                    return;
+                }
+                if st.restart {
+                    self.end_run(chat_id, st);
                     return;
                 }
                 let status = match status {
@@ -643,6 +704,8 @@ impl Engine {
         if let Some(run) = st.run.take() {
             run.handle.close();
         }
+        st.restart = false;
+        st.commands.clear();
         if st.session.take().is_some() {
             self.publish_session(chat_id, None);
         }
@@ -663,6 +726,7 @@ impl Engine {
                 started_at: Some(now),
                 updated_at: now,
                 context: None,
+                commands: st.commands.clone(),
             }),
         };
         let session = session.clone();

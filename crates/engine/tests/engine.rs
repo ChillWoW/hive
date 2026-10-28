@@ -429,3 +429,68 @@ async fn start_resumes_a_turn_cut_short_by_exit() {
     assert_eq!(commands.len(), 1);
     assert_eq!(commands[0].status, CommandStatus::Applied);
 }
+
+#[tokio::test]
+async fn catalogs_list_registered_harnesses() {
+    let (_dir, engine) = engine(0.0);
+    let catalogs = engine.catalogs();
+    assert_eq!(catalogs.len(), 1);
+    assert_eq!(catalogs[0].id, HarnessId::Mock);
+    assert!(!catalogs[0].models.is_empty());
+}
+
+#[tokio::test]
+async fn a_session_carries_the_runs_slash_commands() {
+    let (_dir, engine) = engine(0.0);
+    let chat = engine
+        .create_chat("/demo", config(HarnessId::Mock))
+        .unwrap();
+    let mut chats = watch_chats(&engine);
+    engine.queue_command(&chat.id, send("hi")).unwrap();
+    until(&mut chats, |u| {
+        matches!(u, ChatsUpdate::Session { session: Some(s), .. } if !s.commands.is_empty())
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn a_config_change_restarts_the_run_after_its_turn() {
+    let (_dir, engine) = engine(0.0);
+    let chat = engine
+        .create_chat("/demo", config(HarnessId::Mock))
+        .unwrap();
+    let mut chats = watch_chats(&engine);
+    let mut updates = watch_messages(&engine, &chat.id);
+
+    engine.queue_command(&chat.id, send("first")).unwrap();
+    let seen = until(&mut updates, is_input).await;
+
+    // Mid-turn: saved now, the run lives until the turn ends.
+    let changed = ChatConfig {
+        model: Some("mock-mini".into()),
+        ..config(HarnessId::Mock)
+    };
+    let saved = engine.update_config(&chat.id, changed.clone()).unwrap();
+    assert_eq!(saved.config, changed);
+    assert_eq!(engine.store().chat(&chat.id).unwrap().unwrap().config, changed);
+
+    engine
+        .queue_command(&chat.id, answer(request_id(&seen)))
+        .unwrap();
+    until(&mut updates, is_done).await;
+    until(&mut chats, |u| {
+        matches!(u, ChatsUpdate::Session { session: None, .. })
+    })
+    .await;
+
+    // The next prompt starts a fresh run on the new model.
+    engine.queue_command(&chat.id, send("second")).unwrap();
+    let seen = until(&mut updates, is_input).await;
+    assert!(seen.iter().any(|u| matches!(
+        u,
+        MessagesUpdate::Event {
+            event: AgentEvent::SessionStarted { model, .. },
+            ..
+        } if model == "mock-mini"
+    )));
+}

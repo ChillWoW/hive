@@ -7,7 +7,7 @@
 //! handle is closed or dropped, and the event stream ends when the process
 //! exits.
 
-use hive_proto::{AgentEvent, HarnessId, RunRequest, UserInputAnswer};
+use hive_proto::{AgentEvent, HarnessCatalog, HarnessId, RunRequest, UserInputAnswer};
 use tokio::sync::mpsc;
 
 pub mod claude;
@@ -26,6 +26,11 @@ pub enum HarnessError {
 
 pub trait Harness: Send + Sync {
     fn id(&self) -> HarnessId;
+
+    /// What the composer offers for this harness: models, built-in slash
+    /// commands, sandbox levels and capabilities. Cheap enough to call per
+    /// request; `installed` is checked each time.
+    fn catalog(&self) -> HarnessCatalog;
 
     /// Starts a session and sends `request.prompt` as its first turn. Must be
     /// called from inside a tokio runtime.
