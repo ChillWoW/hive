@@ -115,7 +115,7 @@ export function SettingRow({
                     )}
                 </div>
                 {description && (
-                    <span className="text-xs leading-4 text-dark-300">
+                    <span className="text-xs leading-4 text-dark-250">
                         {typeof description === "string" ? (
                             <Highlight text={description} />
                         ) : (

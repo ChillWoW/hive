@@ -45,7 +45,7 @@ export function AboutPage() {
                     label="Location"
                     description={
                         path ? (
-                            <span className="font-mono text-[11px] break-all text-dark-300">
+                            <span className="font-mono text-[11px] break-all text-dark-250">
                                 {path}
                             </span>
                         ) : (
