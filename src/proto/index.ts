@@ -23,6 +23,7 @@ export type { MessagesUpdate } from "./MessagesUpdate";
 export type { Model } from "./Model";
 export type { ModelOption } from "./ModelOption";
 export type { ModelOptionChoice } from "./ModelOptionChoice";
+export type { NotificationsSettings } from "./NotificationsSettings";
 export type { ReasoningLevel } from "./ReasoningLevel";
 export type { RunRequest } from "./RunRequest";
 export type { SandboxLevel } from "./SandboxLevel";

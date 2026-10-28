@@ -12,7 +12,10 @@
     "core:window:allow-toggle-maximize",
     "core:window:allow-set-fullscreen",
     "core:window:allow-close",
+    "core:window:allow-set-badge-count",
+    "core:window:allow-set-overlay-icon",
     "dialog:allow-open",
-    "opener:allow-open-url"
+    "opener:allow-open-url",
+    "notification:default"
   ]
 }

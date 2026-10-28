@@ -8,7 +8,7 @@ import {
     type SettingsSections
 } from "./api";
 
-export type SettingsPageId = "chats" | "keyboard" | "about";
+export type SettingsPageId = "chats" | "notifications" | "keyboard" | "about";
 
 type SettingsState = {
     settings: Settings;

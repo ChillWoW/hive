@@ -7,6 +7,13 @@ export const DEFAULT_SETTINGS: Settings = {
     "resumeInterrupted": false,
     "autoTitle": true
   },
+  "notifications": {
+    "turnFinished": true,
+    "needsInput": true,
+    "inputSound": true,
+    "finishedSound": true,
+    "badge": true
+  },
   "keyboard": {
     "sendWith": "enter",
     "newChat": "Mod+N",

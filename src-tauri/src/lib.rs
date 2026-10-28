@@ -27,6 +27,8 @@ pub fn run() {
     .plugin(tauri_plugin_dialog::init())
     // Markdown links open in the system browser, not the webview.
     .plugin(tauri_plugin_opener::init())
+    // Turns that finish or ask something while the window is in the background.
+    .plugin(tauri_plugin_notification::init())
     .invoke_handler(tauri::generate_handler![
       engine::create_chat,
       engine::list_chats,

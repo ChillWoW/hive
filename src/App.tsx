@@ -4,6 +4,7 @@ import { useChat, useChatsRuntime, useChatsStore } from "@/chats";
 import { folderName } from "@/composer";
 import { useKeybindingsRuntime } from "@/keybindings";
 import { Sidebar, TopBar } from "@/layout";
+import { useNotificationsRuntime } from "@/notifications";
 import { SettingsModal, useSettingsRuntime } from "@/settings";
 import { PortalContainerProvider } from "@/ui";
 
@@ -11,6 +12,7 @@ export function App() {
     useKeybindingsRuntime();
     useSettingsRuntime();
     useChatsRuntime();
+    useNotificationsRuntime();
     const chat = useChat(useChatsStore((s) => s.activeChatId));
     const title = chat ? (chat.title ?? folderName(chat.cwd)) : undefined;
     // Overlays mount here, below the top bar, so an open modal never covers

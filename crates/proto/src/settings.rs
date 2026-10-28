@@ -24,6 +24,7 @@ pub const SETTINGS_VERSION: u32 = 1;
 pub struct Settings {
     pub version: u32,
     pub chats: ChatsSettings,
+    pub notifications: NotificationsSettings,
     pub keyboard: KeyboardSettings,
 }
 
@@ -32,6 +33,7 @@ impl Default for Settings {
         Self {
             version: SETTINGS_VERSION,
             chats: ChatsSettings::default(),
+            notifications: NotificationsSettings::default(),
             keyboard: KeyboardSettings::default(),
         }
     }
@@ -53,6 +55,36 @@ impl Default for ChatsSettings {
         Self {
             resume_interrupted: false,
             auto_title: true,
+        }
+    }
+}
+
+/// Read by the frontend (`src/notifications/`).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase", default)]
+pub struct NotificationsSettings {
+    /// A system notification when a turn finishes or fails while the window
+    /// isn't focused.
+    pub turn_finished: bool,
+    /// A system notification when an agent asks a question or for approval
+    /// while the window isn't focused.
+    pub needs_input: bool,
+    /// A chime when an agent asks a question or for approval.
+    pub input_sound: bool,
+    /// A chime when a turn finishes or fails.
+    pub finished_sound: bool,
+    /// The number of unseen chats on the taskbar / dock icon.
+    pub badge: bool,
+}
+
+impl Default for NotificationsSettings {
+    fn default() -> Self {
+        Self {
+            turn_finished: true,
+            needs_input: true,
+            input_sound: true,
+            finished_sound: true,
+            badge: true,
         }
     }
 }
