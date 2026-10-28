@@ -135,7 +135,7 @@ export function ChatRow({
                         </span>
                         <span
                             className={cn(
-                                "w-7 shrink-0 text-right text-[11px] text-dark-300 tabular-nums",
+                                "w-7 shrink-0 text-right text-[11px] text-dark-250 tabular-nums",
                                 "group-hover/chat:invisible group-has-[[data-popup-open]]/chat:invisible"
                             )}
                         >
@@ -268,7 +268,7 @@ function RenameField({ chat, onDone }: { chat: Chat; onDone: () => void }) {
                     else if (event.key === "Escape") finish(false);
                 }}
                 onBlur={() => finish(true)}
-                className="min-w-0 flex-1 bg-transparent text-xs text-dark-50 outline-none placeholder:text-dark-300"
+                className="min-w-0 flex-1 bg-transparent text-xs text-dark-50 outline-none placeholder:text-dark-250"
             />
         </div>
     );
