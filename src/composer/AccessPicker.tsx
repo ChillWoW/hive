@@ -1,4 +1,4 @@
-import { CheckIcon } from "@phosphor-icons/react";
+import { CheckIcon, ListChecksIcon } from "@phosphor-icons/react";
 import type { ChatConfig } from "@/proto";
 import { ACCESS_LABELS, resolveAccess, useCatalog } from "@/harnesses";
 import { cn } from "@/lib/cn";
@@ -38,11 +38,20 @@ export function AccessPicker({
                 )}
             >
                 <span className="whitespace-nowrap">{ACCESS_LABELS[current].label}</span>
-                {plan && <span className="whitespace-nowrap text-info">Plan</span>}
+                {/* A tinted pill, so plan mode reads as a state, not more text. */}
+                {plan && (
+                    <span className="inline-flex h-5 items-center gap-1 rounded-full bg-info/15 pr-2 pl-1.5 text-xs font-medium whitespace-nowrap text-info">
+                        <ListChecksIcon className="size-3" weight="bold" />
+                        Plan
+                    </span>
+                )}
             </Menu.Trigger>
             <Menu.Content
                 side="top"
-                align="start"
+                // The chip grows leftwards when the Plan pill appears (the
+                // controls are right-aligned); its right edge stays put, so the
+                // menu hangs from that one and doesn't jump.
+                align="end"
                 sideOffset={10}
                 collisionPadding={12}
                 className="w-64 min-w-0"
@@ -56,16 +65,16 @@ export function AccessPicker({
                             onClick={() => {
                                 if (!selected) onChange({ ...config, access: mode });
                             }}
-                            className="grid grid-cols-[1fr_1rem] items-start gap-x-2"
+                            className="grid grid-cols-[1fr_1rem] items-center gap-x-2"
                         >
                             <Row label={label} description={description} />
-                            {selected && <CheckIcon className="mt-0.5 size-3" weight="bold" />}
+                            {selected && <CheckIcon className="size-3" weight="bold" />}
                         </Menu.Item>
                     );
                 })}
                 {/* An agent with one mode can't ask before acting: say so. */}
                 {modes.length === 1 && (
-                    <p className="px-2.5 py-1 text-[11px] text-dark-300">
+                    <p className="px-2.5 py-1 text-[11px] text-dark-250">
                         {catalog.label} can't ask before acting, so it always runs with{" "}
                         {ACCESS_LABELS[modes[0]!].label.toLowerCase()}.
                     </p>
@@ -81,10 +90,9 @@ export function AccessPicker({
                         >
                             <Row
                                 label="Plan mode"
-                                description="Explore and propose a plan before changing anything."
+                                description="Plans before changing anything"
                             />
                             <Switch
-                                size="sm"
                                 checked={plan}
                                 tabIndex={-1}
                                 className="pointer-events-none ml-auto"
@@ -101,7 +109,7 @@ function Row({ label, description }: { label: string; description: string }) {
     return (
         <span className="flex min-w-0 flex-col">
             <span className="text-dark-50">{label}</span>
-            <span className="text-[11px] text-dark-300">{description}</span>
+            <span className="text-[11px] text-dark-250">{description}</span>
         </span>
     );
 }

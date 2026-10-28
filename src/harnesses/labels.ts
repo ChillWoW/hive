@@ -15,14 +15,14 @@ export const ACCESS_MODES: AccessMode[] = ["supervised", "auto-accept-edits", "f
 export const ACCESS_LABELS: Record<AccessMode, { label: string; description: string }> = {
     supervised: {
         label: "Supervised",
-        description: "Ask before commands and file changes."
+        description: "Asks before commands and edits"
     },
     "auto-accept-edits": {
         label: "Auto-accept edits",
-        description: "Apply edits, ask before other actions."
+        description: "Edits freely, asks for the rest"
     },
     "full-access": {
         label: "Full access",
-        description: "Run commands and edits without asking."
+        description: "Never asks first"
     }
 };
