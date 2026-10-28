@@ -339,12 +339,12 @@ export function Composer({
                             "group-data-tall/deck:col-span-2 group-data-tall/deck:col-start-1 group-data-tall/deck:row-start-2"
                         )}
                     >
+                        <AccessPicker config={config} onChange={onConfigChange} />
                         <ModelPicker
                             config={config}
                             onChange={onConfigChange}
                             locked={lockedHarness}
                         />
-                        <AccessPicker config={config} onChange={onConfigChange} />
                         <Tooltip>
                             <Tooltip.Trigger
                                 render={
