@@ -165,8 +165,6 @@ function ModelCard({
     const toggleFavorite = useComposerStore((s) => s.toggleFavorite);
     const [query, setQuery] = useState("");
     const listRef = useRef<HTMLDivElement>(null);
-    /** Where the list is scrolled to, in rows: which tab is lit. */
-    const [topRow, setTopRow] = useState(0);
 
     // Starred models first, then each harness's own, in catalog order.
     const { rows, groups } = useMemo(() => {
@@ -258,7 +256,11 @@ function ModelCard({
         }
     };
 
-    const viewed = [...groups].reverse().find((g) => g.start <= topRow)?.id;
+    // The lit tab is the highlighted row's group: a tab click highlights its
+    // first row, and hovering or arrowing through rows moves it along. (Not
+    // the scroll position: a list too short to scroll never reaches a later
+    // group's start.)
+    const viewed = [...groups].reverse().find((g) => g.start <= active)?.id;
 
     return (
         <div className="flex flex-col">
@@ -281,8 +283,8 @@ function ModelCard({
                                             "inline-flex size-8 shrink-0 items-center justify-center rounded-[7px] outline-none",
                                             "transition-[background-color,opacity] duration-150",
                                             viewed === group.id
-                                                ? "bg-white/[0.08]"
-                                                : "opacity-60 hover:bg-white/[0.05] hover:opacity-100"
+                                                ? "bg-dark-700"
+                                                : "opacity-60 hover:bg-dark-800 hover:opacity-100"
                                         )}
                                     >
                                         {group.harness ? (
@@ -322,9 +324,6 @@ function ModelCard({
                 ref={listRef}
                 role="listbox"
                 aria-label="Models"
-                onScroll={(event) =>
-                    setTopRow(Math.round(event.currentTarget.scrollTop / ROW_PITCH))
-                }
                 style={{ maxHeight: VISIBLE_ROWS * ROW_PITCH }}
                 className="hide-scrollbar flex flex-col gap-0.5 overflow-y-auto overscroll-contain"
             >
@@ -360,7 +359,7 @@ function ModelCard({
                         onClick={onToggleEffort}
                         className={cn(
                             footerButtonClassName,
-                            "h-8 rounded-[7px] px-2 text-sm text-dark-50 hover:bg-white/[0.04] aria-expanded:bg-white/[0.06]"
+                            "h-8 rounded-[7px] px-2 text-sm text-dark-50 hover:bg-dark-800 aria-expanded:bg-dark-700"
                         )}
                     >
                         <span>Reasoning</span>
@@ -409,8 +408,8 @@ function ModelRow({
                 "group/row flex h-8 shrink-0 cursor-pointer items-center gap-2 rounded-[7px] pr-1 pl-2 select-none",
                 "text-dark-50 transition-colors duration-100",
                 selected
-                    ? "bg-white/[0.08] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.07)]"
-                    : active && "bg-white/[0.04]",
+                    ? "bg-dark-700"
+                    : active && "bg-dark-800",
                 disabled && "cursor-default opacity-50"
             )}
         >
@@ -421,7 +420,7 @@ function ModelRow({
                 </span>
                 {/* The row under the pointer or the arrow keys says what it is. */}
                 {active && description && (
-                    <span className="min-w-0 truncate text-[11px] text-dark-300">
+                    <span className="min-w-0 truncate text-[11px] text-dark-250">
                         {description}
                     </span>
                 )}
@@ -436,7 +435,7 @@ function ModelRow({
                 }}
                 className={cn(
                     "inline-flex size-6 shrink-0 items-center justify-center rounded-md outline-none",
-                    "transition-[background-color,opacity] duration-150 hover:bg-white/[0.08]",
+                    "transition-[background-color,opacity] duration-150 hover:bg-dark-600",
                     // Quiet until the row is hovered or the model is starred.
                     !row.favorite && !active && "opacity-0"
                 )}
@@ -487,7 +486,7 @@ function EffortCard({
                         className={cn(
                             "grid h-8 w-full grid-cols-[1fr_1rem] items-center gap-x-2 rounded-[7px] px-2.5",
                             "text-left text-sm text-dark-50 outline-none select-none",
-                            "hover:bg-white/[0.04] focus-visible:bg-white/[0.04]"
+                            "hover:bg-dark-700 focus-visible:bg-dark-700"
                         )}
                     >
                         <span>{REASONING_LABELS[level]}</span>
