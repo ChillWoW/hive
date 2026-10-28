@@ -46,24 +46,26 @@ export function ReasoningPicker({
                 collisionPadding={12}
                 className="w-40 min-w-0"
             >
-                <Menu.GroupLabel>Reasoning</Menu.GroupLabel>
-                {options.map((level) => {
-                    const selected = level === config.reasoning;
-                    return (
-                        <Menu.Item
-                            key={level ?? "default"}
-                            onClick={() => {
-                                if (!selected) onChange({ ...config, reasoning: level });
-                            }}
-                            className="grid grid-cols-[1fr_1rem] text-dark-100"
-                        >
-                            <span>
-                                {level ? REASONING_LABELS[level] : "Auto"}
-                            </span>
-                            {selected && <CheckIcon className="size-3" weight="bold" />}
-                        </Menu.Item>
-                    );
-                })}
+                <Menu.Group>
+                    <Menu.GroupLabel>Reasoning</Menu.GroupLabel>
+                    {options.map((level) => {
+                        const selected = level === config.reasoning;
+                        return (
+                            <Menu.Item
+                                key={level ?? "default"}
+                                onClick={() => {
+                                    if (!selected) onChange({ ...config, reasoning: level });
+                                }}
+                                className="grid grid-cols-[1fr_1rem] text-dark-100"
+                            >
+                                <span>
+                                    {level ? REASONING_LABELS[level] : "Auto"}
+                                </span>
+                                {selected && <CheckIcon className="size-3" weight="bold" />}
+                            </Menu.Item>
+                        );
+                    })}
+                </Menu.Group>
             </Menu.Content>
         </Menu>
     );

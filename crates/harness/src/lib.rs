@@ -10,6 +10,7 @@
 use hive_proto::{AgentEvent, HarnessCatalog, HarnessId, RunRequest, UserInputAnswer};
 use tokio::sync::mpsc;
 
+pub mod approval;
 pub mod claude;
 pub mod mock;
 

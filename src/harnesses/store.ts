@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { create } from "zustand";
 import type {
+    AccessMode,
     ChatConfig,
     HarnessCatalog,
     HarnessId,
@@ -9,10 +10,11 @@ import type {
     SlashCommand
 } from "@/proto";
 import { isTauri } from "@/lib/platform";
+import { ACCESS_MODES } from "./labels";
 
 /**
  * What each harness offers (`Harness::catalog` in Rust): models, built-in
- * slash commands, sandbox levels, capabilities. Fetched at launch and again
+ * slash commands, capabilities. Fetched at launch and again
  * whenever a picker opens, since `installed` can change while Hive runs.
  */
 
@@ -52,8 +54,8 @@ const BROWSER_CATALOGS: HarnessCatalog[] = [
                 description: "Summarize the conversation to free up context"
             }
         ],
-        sandboxLevels: ["workspace-write", "read-only", "danger-full-access"],
-        capabilities: { steering: false, interrupt: true, attachments: false }
+        accessModes: ["supervised", "auto-accept-edits", "full-access"],
+        capabilities: { steering: false, interrupt: true, attachments: false, plan: true }
     }
 ];
 
@@ -117,8 +119,10 @@ export function resolveModel(
 
 /**
  * `config` made valid for `catalog`: a model it has, a reasoning level that
- * model takes, a sandbox level it supports. Used when switching harness or
- * model, and on remembered new-chat settings that went stale.
+ * model takes, an access mode the harness honors, plan mode only where it
+ * has one. Used when switching harness or model, and on remembered new-chat
+ * settings that went stale. The sandbox level is kept as is; nothing in the
+ * UI picks it.
  */
 export function fitConfig(
     catalog: HarnessCatalog,
@@ -129,16 +133,30 @@ export function fitConfig(
         config.reasoning && model?.reasoningLevels.includes(config.reasoning)
             ? config.reasoning
             : undefined;
-    const sandbox = catalog.sandboxLevels.includes(config.sandbox)
-        ? config.sandbox
-        : (catalog.sandboxLevels[0] ?? config.sandbox);
     return {
         harness: catalog.id,
         model: model?.id,
         reasoning,
         modelOptions: config.harness === catalog.id ? config.modelOptions : {},
-        sandbox
+        sandbox: config.sandbox,
+        access: resolveAccess(config.access, catalog.accessModes),
+        plan: config.plan && catalog.capabilities.plan
     };
+}
+
+/**
+ * The mode a run gets when `wanted` isn't among those the harness `offered`:
+ * the most trusting offered mode that still asks at least as much. A harness
+ * with nothing that asks as much runs in its least trusting mode — for an
+ * agent that can't ask at all, full access, which the chip then shows.
+ */
+export function resolveAccess(wanted: AccessMode, offered: AccessMode[]): AccessMode {
+    if (offered.length === 0) return "full-access";
+    if (offered.includes(wanted)) return wanted;
+    const rank = (mode: AccessMode) => ACCESS_MODES.indexOf(mode);
+    const asking = offered.filter((mode) => rank(mode) <= rank(wanted));
+    if (asking.length === 0) return offered[0]!;
+    return asking.reduce((best, mode) => (rank(mode) > rank(best) ? mode : best));
 }
 
 /** A live session's own list when it has one, else the harness's built-ins. */

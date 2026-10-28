@@ -461,6 +461,8 @@ impl Engine {
             reasoning: config.reasoning,
             model_options: config.model_options.clone(),
             auto_approve: false,
+            access: config.access,
+            plan: config.plan,
             resume: chat.harness_session_id.clone(),
             attachments: Vec::new(),
         };

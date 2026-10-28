@@ -10,6 +10,7 @@ import type { ChatConfig, SlashCommand } from "@/proto";
 import { cn } from "@/lib/cn";
 import { Tooltip } from "@/ui";
 import { ModelPicker } from "./ModelPicker";
+import { AccessPicker } from "./AccessPicker";
 import { ReasoningPicker } from "./ReasoningPicker";
 import { SlashMenu } from "./SlashMenu";
 import { useSlashMenu } from "./useSlashMenu";
@@ -177,6 +178,7 @@ export function Composer({
                     locked={lockedHarness}
                 />
                 <ReasoningPicker config={config} onChange={onConfigChange} />
+                <AccessPicker config={config} onChange={onConfigChange} />
                 <div className="flex-1" />
                 <Tooltip>
                     <Tooltip.Trigger

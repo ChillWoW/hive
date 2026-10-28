@@ -4,11 +4,19 @@
 //! - The session opens with an `initialize` control request (its response
 //!   lists the slash commands), then each turn is a user line on stdin. The
 //!   process stays up between turns until stdin closes.
-//! - Permission prompts ride the stdio control channel
-//!   (`--permission-prompt-tool stdio`, undocumented but what the Agent SDK
-//!   uses): the CLI sends `can_use_tool` and waits for allow/deny.
-//!   `AskUserQuestion` and, unless `auto_approve` is set, every other prompt
-//!   surface as [`AgentEvent::InputRequested`] keyed by the CLI's request id.
+//! - Permissions ride the stdio control channel (`--permission-prompt-tool
+//!   stdio`, undocumented but what the Agent SDK uses): the CLI sends
+//!   `can_use_tool` and blocks until it gets an answer. The run's access mode
+//!   decides what's asked: full access allows every call, auto-accept edits
+//!   allows the edit tools and asks before the rest, supervised asks before
+//!   each — a yes/no [`AgentEvent::InputRequested`] keyed by the CLI's
+//!   request id (see [`crate::approval`]). `AskUserQuestion` goes the same
+//!   way with the agent's own questions. `auto_approve` skips even the CLI's
+//!   own checks (`bypassPermissions`).
+//! - Access and plan modes map onto `--permission-mode` ([`permission_mode`]).
+//!   Plan mode ends when the user approves `ExitPlanMode`; the run continues
+//!   in its access mode, and while the chat stays in plan mode each new turn
+//!   switches the CLI back into it (`set_permission_mode`).
 //! - Each turn ends with the CLI's own `result` frame.
 //! - Interrupt sends the `interrupt` control request: the turn ends with an
 //!   interrupted `result` and the process keeps running.
@@ -23,15 +31,15 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use hive_proto::{
-    AgentEvent, DoneStatus, HarnessCapabilities, HarnessCatalog, HarnessId, Model,
-    ReasoningLevel, RunRequest, SandboxLevel, SlashCommand, ToolCall, UserInputAnswer,
-    UserInputQuestion,
+    AccessMode, AgentEvent, DoneStatus, HarnessCapabilities, HarnessCatalog, HarnessId, Model,
+    ReasoningLevel, RunRequest, SlashCommand, UserInputAnswer, UserInputQuestion,
 };
 use serde_json::Value;
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, ChildStderr, ChildStdin, Command};
 use tokio::sync::mpsc;
 
+use crate::approval::{self, Action};
 use crate::{Harness, HarnessError, Run, RunCommand, RunHandle};
 use normalize::Normalizer;
 use wire::{ControlRequestFrame, Frame};
@@ -71,13 +79,23 @@ impl ClaudeHarness {
             // Required alongside `--print --output-format stream-json`.
             "--verbose",
             "--include-partial-messages",
+            // Routes `can_use_tool` (and AskUserQuestion with it) to us.
             "--permission-prompt-tool",
             "stdio",
-            "--permission-mode",
-            permission_mode(request.sandbox),
         ]
         .map(str::to_owned)
         .into();
+        args.extend(["--permission-mode".into(), permission_mode(request).into()]);
+        if request.auto_approve {
+            // In plan mode the bypass is only made available (the skip flag
+            // itself overrides `--permission-mode plan`), so approving the
+            // plan can switch to it in place.
+            args.push(if request.plan {
+                "--allow-dangerously-skip-permissions".into()
+            } else {
+                "--dangerously-skip-permissions".into()
+            });
+        }
         if let Some(model) = &request.model {
             args.extend(["--model".into(), model.clone()]);
         }
@@ -91,13 +109,84 @@ impl ClaudeHarness {
     }
 }
 
-fn permission_mode(sandbox: SandboxLevel) -> &'static str {
-    match sandbox {
-        SandboxLevel::ReadOnly => "plan",
-        SandboxLevel::WorkspaceWrite => "acceptEdits",
-        SandboxLevel::DangerFullAccess => "bypassPermissions",
+/// What a run may do without asking. `auto_approve` means full access,
+/// whatever the mode says.
+fn access(request: &RunRequest) -> AccessMode {
+    if request.auto_approve {
+        AccessMode::FullAccess
+    } else {
+        request.access
     }
 }
+
+/// The CLI permission mode a run's access mode works in. Full access is
+/// `bypassPermissions` only with `auto_approve`: without it the run stays in
+/// `default` and every tool call is allowed when asked, so no run launches
+/// with a skip-permissions flag it wasn't given (the CLI refuses those as
+/// root outside a sandbox).
+fn access_permission_mode(request: &RunRequest) -> &'static str {
+    if request.auto_approve {
+        return "bypassPermissions";
+    }
+    match request.access {
+        AccessMode::AutoAcceptEdits => "acceptEdits",
+        AccessMode::Supervised | AccessMode::FullAccess => "default",
+    }
+}
+
+/// The `--permission-mode` a run launches (or a turn starts) with: plan mode
+/// over its access mode.
+fn permission_mode(request: &RunRequest) -> &'static str {
+    if request.plan {
+        "plan"
+    } else {
+        access_permission_mode(request)
+    }
+}
+
+/// Claude's file-changing tools: auto-accept edits allows these unasked.
+const EDIT_TOOLS: [&str; 4] = ["Edit", "Write", "MultiEdit", "NotebookEdit"];
+
+/// What a `can_use_tool` request has to ask the user before it's allowed,
+/// in `access`; `None` allows it now. `ExitPlanMode` (the plan is ready)
+/// asks whether to start implementing it.
+fn approval_question(
+    tool: &str,
+    display_name: Option<&str>,
+    description: Option<&str>,
+    input: &Value,
+    access: AccessMode,
+) -> Option<UserInputQuestion> {
+    if tool == "ExitPlanMode" {
+        return (!access.is_full_access()).then(|| {
+            approval::question(
+                "Approve plan",
+                "Claude wants to start implementing its plan. Allow it?",
+            )
+        });
+    }
+    let edit = EDIT_TOOLS.contains(&tool);
+    let action = if edit { Action::Edit } else { Action::Other };
+    if approval::allowed_without_asking(access, action) {
+        return None;
+    }
+    let field = |key: &str| input.get(key).and_then(Value::as_str);
+    Some(if tool == "Bash" {
+        approval::command("Claude", field("command").unwrap_or_default())
+    } else if edit {
+        let paths: Vec<&str> = field("file_path")
+            .or_else(|| field("notebook_path"))
+            .into_iter()
+            .collect();
+        approval::edit("Claude", &paths)
+    } else {
+        let name = display_name.filter(|n| !n.trim().is_empty()).unwrap_or(tool);
+        approval::tool("Claude", name, description)
+    })
+}
+
+/// What a refused approval tells the agent.
+const APPROVAL_DENIED: &str = "The user did not allow this.";
 
 fn effort(level: ReasoningLevel) -> &'static str {
     match level {
@@ -165,16 +254,14 @@ impl Harness for ClaudeHarness {
                 command("init", "Write a CLAUDE.md describing the codebase"),
                 command("review", "Review a pull request"),
             ],
-            sandbox_levels: vec![
-                SandboxLevel::WorkspaceWrite,
-                SandboxLevel::ReadOnly,
-                SandboxLevel::DangerFullAccess,
-            ],
+            access_modes: AccessMode::ALL.to_vec(),
             capabilities: HarnessCapabilities {
                 // A prompt written mid-turn waits for the turn's `result`.
                 steering: false,
                 interrupt: true,
                 attachments: false,
+                // The CLI's own plan mode; approving `ExitPlanMode` ends it.
+                plan: true,
             },
         }
     }
@@ -221,9 +308,12 @@ impl Harness for ClaudeHarness {
                 stdin: Some(stdin_tx),
                 commands,
                 events: events_tx,
-                auto_approve: request.auto_approve,
                 normalizer: Normalizer::default(),
                 pending: HashMap::new(),
+                access: access(&request),
+                plan: request.plan,
+                after_plan: access_permission_mode(&request),
+                controls_sent: 0,
                 turns: 1,
                 interrupt_deadline: None,
                 interrupts_sent: 0,
@@ -237,12 +327,16 @@ impl Harness for ClaudeHarness {
 
 /// A `can_use_tool` request waiting on the user.
 enum Pending {
+    /// `AskUserQuestion`: the agent's own questions.
     Questions {
         input: Value,
         questions: Vec<UserInputQuestion>,
     },
-    Permission {
+    /// A tool call the access mode doesn't cover.
+    Approval {
         input: Value,
+        question: UserInputQuestion,
+        exit_plan: bool,
     },
 }
 
@@ -253,9 +347,16 @@ struct Session {
     stdin: Option<mpsc::UnboundedSender<String>>,
     commands: mpsc::UnboundedReceiver<RunCommand>,
     events: mpsc::Sender<AgentEvent>,
-    auto_approve: bool,
     normalizer: Normalizer,
     pending: HashMap<String, Pending>,
+    /// What tool calls may do without asking.
+    access: AccessMode,
+    /// Each turn starts in plan mode.
+    plan: bool,
+    /// The permission mode approving a plan switches to.
+    after_plan: &'static str,
+    /// Our own control requests, for unique ids.
+    controls_sent: u64,
     /// Prompts written whose turn hasn't ended yet.
     turns: usize,
     interrupt_deadline: Option<tokio::time::Instant>,
@@ -357,18 +458,26 @@ impl Session {
                 .await;
         }
 
-        if self.auto_approve {
-            self.write(wire::control_response_line(
-                &request_id,
-                wire::allow(body.input),
-            ));
+        let exit_plan = body.tool_name == "ExitPlanMode";
+        let question = approval_question(
+            &body.tool_name,
+            body.display_name.as_deref(),
+            body.description.as_deref(),
+            &body.input,
+            self.access,
+        );
+        let Some(question) = question else {
+            let response = self.allow(body.input, exit_plan);
+            self.write(wire::control_response_line(&request_id, response));
             return Ok(());
-        }
-
-        let question = permission_question(&body.tool_name, &body.input);
+        };
         self.pending.insert(
             request_id.clone(),
-            Pending::Permission { input: body.input },
+            Pending::Approval {
+                input: body.input,
+                question: question.clone(),
+                exit_plan,
+            },
         );
         self.emit(AgentEvent::InputRequested {
             request_id,
@@ -377,10 +486,36 @@ impl Session {
         .await
     }
 
+    /// Allows a tool call. Approving the plan leaves plan mode for the run's
+    /// access mode, not the CLI's `default`.
+    fn allow(&self, input: Value, exit_plan: bool) -> Value {
+        if exit_plan {
+            wire::exit_plan(input, self.after_plan)
+        } else {
+            wire::allow(input)
+        }
+    }
+
+    /// Puts the CLI back in plan mode for the turn about to start; approving
+    /// the last plan left it in the access mode.
+    fn enter_plan(&mut self) {
+        if !self.plan {
+            return;
+        }
+        self.controls_sent += 1;
+        let id = format!("hive_mode_{}", self.controls_sent);
+        self.write(wire::set_permission_mode_line(&id, "plan"));
+    }
+
     async fn on_command(&mut self, command: RunCommand) -> Result<(), Gone> {
         match command {
             RunCommand::Send(prompt) => {
                 if self.stdin.is_some() {
+                    // A prompt sent mid-turn waits for it; `end_turn` puts
+                    // plan mode back before that one starts.
+                    if self.turns == 0 {
+                        self.enter_plan();
+                    }
                     self.turns += 1;
                     self.write(wire::user_line(&prompt));
                 }
@@ -397,15 +532,15 @@ impl Session {
                     Pending::Questions { input, questions } => {
                         wire::allow(input_with_answers(&input, &questions, &answers))
                     }
-                    Pending::Permission { input } => {
-                        let allowed = answers
-                            .first()
-                            .and_then(|a| a.labels.first())
-                            .is_some_and(|label| label == ALLOW);
-                        if allowed {
-                            wire::allow(input)
+                    Pending::Approval {
+                        input,
+                        question,
+                        exit_plan,
+                    } => {
+                        if approval::approved(&question, &answers) {
+                            self.allow(input, exit_plan)
                         } else {
-                            wire::deny("The user denied this tool use.")
+                            wire::deny(APPROVAL_DENIED)
                         }
                     }
                 };
@@ -445,6 +580,10 @@ impl Session {
     async fn end_turn(&mut self) -> Result<(), Gone> {
         self.turns = self.turns.saturating_sub(1);
         self.interrupt_deadline = None;
+        // A queued prompt starts next.
+        if self.turns > 0 {
+            self.enter_plan();
+        }
         let open: Vec<String> = self.pending.drain().map(|(id, _)| id).collect();
         for request_id in open {
             self.emit(AgentEvent::InputResolved { request_id }).await?;
@@ -562,31 +701,6 @@ fn find_on_path(name: &str) -> Option<PathBuf> {
             path.is_file().then_some(path)
         })
     })
-}
-
-const ALLOW: &str = "Allow";
-const DENY: &str = "Deny";
-
-/// A permission prompt, as a two-option question.
-fn permission_question(tool: &str, input: &Value) -> UserInputQuestion {
-    let detail = match normalize::decode_tool_use(tool, input) {
-        ToolCall::Exec { command } => Some(command),
-        ToolCall::ReadFile { path }
-        | ToolCall::WriteFile { path, .. }
-        | ToolCall::EditFile { path, .. } => Some(path),
-        ToolCall::WebFetch { url, .. } => Some(url),
-        _ => None,
-    };
-    UserInputQuestion {
-        id: "permission".into(),
-        header: "Permission".into(),
-        question: match detail {
-            Some(detail) => format!("Allow {tool}: {detail}"),
-            None => format!("Allow {tool}?"),
-        },
-        options: vec![ALLOW.into(), DENY.into()],
-        multi_select: false,
-    }
 }
 
 /// `AskUserQuestion`'s input → questions. Option descriptions are dropped;
@@ -713,23 +827,105 @@ mod tests {
     }
 
     #[test]
-    fn permission_question_names_the_tool_input() {
-        let q = permission_question("Bash", &json!({"command": "rm -rf build"}));
-        assert_eq!(q.question, "Allow Bash: rm -rf build");
-        assert_eq!(q.options, vec![ALLOW, DENY]);
-    }
-
-    #[test]
     fn launch_args_follow_the_request() {
-        let request: RunRequest = serde_json::from_value(json!({
+        let mut request: RunRequest = serde_json::from_value(json!({
             "harness": "claude-code", "prompt": "p", "cwd": ".", "sandbox": "read-only",
             "model": "opus", "reasoning": "xhigh", "resume": "s1",
         }))
         .unwrap();
         let args = ClaudeHarness::launch_args(&request).join(" ");
-        assert!(args.contains("--permission-mode plan"));
+        // The sandbox level doesn't reach Claude; full access (the default)
+        // allows tool calls over the control channel.
+        assert!(args.contains("--permission-mode default"));
         assert!(args.contains("--model opus"));
         assert!(args.contains("--effort xhigh"));
         assert!(args.contains("--resume s1"));
+
+        request.auto_approve = true;
+        let args = ClaudeHarness::launch_args(&request).join(" ");
+        assert!(args.contains("--permission-mode bypassPermissions"));
+        assert!(args.contains("--dangerously-skip-permissions"));
+    }
+
+    fn mode_request(access: AccessMode, auto_approve: bool, plan: bool) -> RunRequest {
+        let mut request: RunRequest = serde_json::from_value(json!({
+            "harness": "claude-code", "prompt": "p", "cwd": ".", "sandbox": "workspace-write",
+        }))
+        .unwrap();
+        request.access = access;
+        request.auto_approve = auto_approve;
+        request.plan = plan;
+        request
+    }
+
+    /// The flags after `--permission-prompt-tool stdio` that concern permissions.
+    fn permission_args(request: &RunRequest) -> Vec<String> {
+        let args = ClaudeHarness::launch_args(request);
+        let at = args.iter().position(|a| a == "--permission-mode").unwrap();
+        args[at..]
+            .iter()
+            .take_while(|a| !matches!(a.as_str(), "--model" | "--effort" | "--resume"))
+            .cloned()
+            .collect()
+    }
+
+    #[test]
+    fn modes_launch_with_their_permission_mode() {
+        use AccessMode::*;
+        let cases: [(AccessMode, bool, bool, &[&str]); 7] = [
+            (FullAccess, false, false, &["--permission-mode", "default"]),
+            (AutoAcceptEdits, false, false, &["--permission-mode", "acceptEdits"]),
+            (Supervised, false, false, &["--permission-mode", "default"]),
+            (
+                Supervised,
+                true,
+                false,
+                &["--permission-mode", "bypassPermissions", "--dangerously-skip-permissions"],
+            ),
+            (FullAccess, false, true, &["--permission-mode", "plan"]),
+            (AutoAcceptEdits, false, true, &["--permission-mode", "plan"]),
+            (
+                FullAccess,
+                true,
+                true,
+                &["--permission-mode", "plan", "--allow-dangerously-skip-permissions"],
+            ),
+        ];
+        for (access, auto_approve, plan, expected) in cases {
+            assert_eq!(
+                permission_args(&mode_request(access, auto_approve, plan)),
+                expected,
+                "{access:?} auto_approve={auto_approve} plan={plan}"
+            );
+        }
+        // Approving a plan lands in the access mode, not plan.
+        assert_eq!(
+            access_permission_mode(&mode_request(AutoAcceptEdits, false, true)),
+            "acceptEdits"
+        );
+    }
+
+    #[test]
+    fn access_modes_decide_what_is_asked() {
+        use AccessMode::*;
+        let ask = |tool: &str, input: &Value, access| {
+            approval_question(tool, None, None, input, access).map(|q| q.question)
+        };
+        for tool in ["Bash", "Edit", "WebFetch", "ExitPlanMode", "mcp__x__y"] {
+            assert_eq!(ask(tool, &json!({}), FullAccess), None, "{tool}");
+        }
+        assert_eq!(ask("Edit", &json!({"file_path": "a.rs"}), AutoAcceptEdits), None);
+        assert_eq!(
+            ask("Bash", &json!({"command": "rm -rf build"}), AutoAcceptEdits).as_deref(),
+            Some("Claude wants to run `rm -rf build`. Allow it?")
+        );
+        assert_eq!(
+            ask("Write", &json!({"file_path": "a.rs"}), Supervised).as_deref(),
+            Some("Claude wants to modify a.rs. Allow it?")
+        );
+        assert_eq!(
+            ask("ExitPlanMode", &json!({"plan": "p"}), AutoAcceptEdits).as_deref(),
+            Some("Claude wants to start implementing its plan. Allow it?")
+        );
     }
 }

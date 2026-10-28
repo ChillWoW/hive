@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::agent::{HarnessId, ReasoningLevel, SandboxLevel, SlashCommand};
+use crate::agent::{AccessMode, HarnessId, ReasoningLevel, SandboxLevel, SlashCommand};
 
 /// The run settings a chat sends with each turn; the composer edits these.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
@@ -20,6 +20,13 @@ pub struct ChatConfig {
     #[serde(default)]
     pub model_options: BTreeMap<String, String>,
     pub sandbox: SandboxLevel,
+    /// What the agent may do without asking; chats from before access modes
+    /// read as full access, which is how they ran.
+    #[serde(default)]
+    pub access: AccessMode,
+    /// Plan mode, kept on the chat until turned off: each turn starts in it.
+    #[serde(default)]
+    pub plan: bool,
 }
 
 /// A conversation with one harness in one working directory.

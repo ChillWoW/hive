@@ -13,4 +13,8 @@ interrupt: boolean,
 /**
  * Images can ride along with a prompt.
  */
-attachments: boolean, };
+attachments: boolean, 
+/**
+ * Honors plan mode (`RunRequest::plan`).
+ */
+plan: boolean, };

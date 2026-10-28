@@ -61,6 +61,8 @@ async fn two_mock_turns_persist_and_match_their_journal() {
                 reasoning: None,
                 model_options: Default::default(),
                 sandbox: SandboxLevel::WorkspaceWrite,
+                access: Default::default(),
+                plan: false,
             },
         )
         .unwrap();
@@ -75,6 +77,8 @@ async fn two_mock_turns_persist_and_match_their_journal() {
             reasoning: None,
             model_options: Default::default(),
             auto_approve: false,
+            access: Default::default(),
+            plan: false,
             resume: None,
             attachments: Vec::new(),
         })

@@ -12,7 +12,6 @@ import {
     Composer,
     FolderPicker,
     QuestionWizard,
-    SandboxPicker,
     useComposerStore
 } from "@/composer";
 import {
@@ -56,11 +55,13 @@ export function ChatView() {
     const newCatalog =
         visible.find((c) => c.id === newChat.config.harness) ?? visible[0];
     const catalog = chat ? chatCatalog : newCatalog;
+    // New chats always get workspace-write; nothing in the UI picks it.
+    const remembered: ChatConfig = { ...newChat.config, sandbox: "workspace-write" };
     const config: ChatConfig = chat
         ? chat.config
         : newCatalog
-          ? fitConfig(newCatalog, newChat.config)
-          : newChat.config;
+          ? fitConfig(newCatalog, remembered)
+          : remembered;
 
     const setConfig = (next: ChatConfig) => {
         if (chat) {
@@ -128,23 +129,20 @@ export function ChatView() {
                         placeholder={hero ? "What should we work on?" : "Reply…"}
                     />
                 )}
-                <div className="mt-1 flex h-6 items-center justify-between gap-2 px-1">
-                    <div className="flex min-w-0 items-center gap-1">
-                        <FolderPicker
-                            cwd={chat ? chat.cwd : newChat.cwd}
-                            locked={!!chat}
-                            onChange={(cwd) => {
-                                setNeedFolder(false);
-                                setNewChat({ cwd });
-                            }}
-                        />
-                        {needFolder && !chat && !newChat.cwd && (
-                            <span className="truncate text-xs text-warning">
-                                Choose a folder for the agent to work in
-                            </span>
-                        )}
-                    </div>
-                    <SandboxPicker config={config} onChange={setConfig} />
+                <div className="mt-1 flex h-6 min-w-0 items-center gap-1 px-1">
+                    <FolderPicker
+                        cwd={chat ? chat.cwd : newChat.cwd}
+                        locked={!!chat}
+                        onChange={(cwd) => {
+                            setNeedFolder(false);
+                            setNewChat({ cwd });
+                        }}
+                    />
+                    {needFolder && !chat && !newChat.cwd && (
+                        <span className="truncate text-xs text-warning">
+                            Choose a folder for the agent to work in
+                        </span>
+                    )}
                 </div>
             </div>
         </div>

@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::agent::{HarnessId, Model, SandboxLevel, SlashCommand};
+use crate::agent::{AccessMode, HarnessId, Model, SlashCommand};
 
 /// A harness's models, commands and capabilities, from
 /// `Harness::catalog`.
@@ -23,8 +23,10 @@ pub struct HarnessCatalog {
     /// Built-in slash commands. A live session reports its own full list
     /// (`Session::commands`), which includes the user's.
     pub commands: Vec<SlashCommand>,
-    /// Best-supported first; the first is the default.
-    pub sandbox_levels: Vec<SandboxLevel>,
+    /// The access modes this harness honors, least to most trusting. A chat
+    /// asking for another runs with the closest one that asks at least as
+    /// much.
+    pub access_modes: Vec<AccessMode>,
     pub capabilities: HarnessCapabilities,
 }
 
@@ -38,4 +40,6 @@ pub struct HarnessCapabilities {
     pub interrupt: bool,
     /// Images can ride along with a prompt.
     pub attachments: bool,
+    /// Honors plan mode (`RunRequest::plan`).
+    pub plan: bool,
 }

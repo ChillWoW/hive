@@ -222,6 +222,12 @@ pub(crate) struct ControlRequestBody {
     pub subtype: String,
     #[serde(default)]
     pub tool_name: String,
+    /// `can_use_tool`: the tool's name as shown to people (an MCP tool's
+    /// own), and what the model says the call is for.
+    #[serde(default)]
+    pub display_name: Option<String>,
+    #[serde(default)]
+    pub description: Option<String>,
     #[serde(default)]
     pub input: Value,
 }
@@ -281,8 +287,29 @@ pub(crate) fn allow(updated_input: Value) -> Value {
     json!({ "behavior": "allow", "updatedInput": updated_input })
 }
 
+/// `can_use_tool` allow for `ExitPlanMode` that leaves plan mode for `mode`.
+/// Without it the CLI drops to `default`.
+pub(crate) fn exit_plan(updated_input: Value, mode: &str) -> Value {
+    json!({
+        "behavior": "allow",
+        "updatedInput": updated_input,
+        "updatedPermissions": [{ "type": "setMode", "mode": mode, "destination": "session" }],
+    })
+}
+
+/// `can_use_tool` deny: the model reads `message` as the tool's result.
 pub(crate) fn deny(message: &str) -> Value {
     json!({ "behavior": "deny", "message": message })
+}
+
+/// Switches the live process's permission mode.
+pub(crate) fn set_permission_mode_line(request_id: &str, mode: &str) -> String {
+    json!({
+        "type": "control_request",
+        "request_id": request_id,
+        "request": { "subtype": "set_permission_mode", "mode": mode },
+    })
+    .to_string()
 }
 
 #[cfg(test)]

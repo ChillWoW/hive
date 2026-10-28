@@ -44,7 +44,9 @@ export const useComposerStore = create<ComposerState>()(
                 config: {
                     harness: "claude-code",
                     modelOptions: {},
-                    sandbox: "workspace-write"
+                    sandbox: "workspace-write",
+                    access: "full-access",
+                    plan: false
                 }
             },
             setDraft: (chatId, text) =>
@@ -61,7 +63,23 @@ export const useComposerStore = create<ComposerState>()(
         {
             name: "hive.composer",
             storage: createJSONStorage(() => localStorage),
-            partialize: (s) => ({ newChat: s.newChat })
+            // The access mode is remembered; plan mode is for the chat at hand.
+            partialize: (s) => ({
+                newChat: { ...s.newChat, config: { ...s.newChat.config, plan: false } }
+            }),
+            // Settings saved before access modes existed lack them.
+            merge: (saved, current) => {
+                const newChat = (saved as Partial<ComposerState> | undefined)?.newChat;
+                if (!newChat) return current;
+                return {
+                    ...current,
+                    newChat: {
+                        ...current.newChat,
+                        ...newChat,
+                        config: { ...current.newChat.config, ...newChat.config }
+                    }
+                };
+            }
         }
     )
 );

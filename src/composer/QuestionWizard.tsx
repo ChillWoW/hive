@@ -2,17 +2,11 @@ import { useEffect, useRef, useState } from "react";
 import {
     ArrowLeftIcon,
     ChatCircleDotsIcon,
-    CheckIcon,
-    ShieldWarningIcon
+    CheckIcon
 } from "@phosphor-icons/react";
 import type { UserInputAnswer, UserInputQuestion } from "@/proto";
 import { cn } from "@/lib/cn";
 import { Button } from "@/ui";
-
-/** A permission prompt: two fixed choices, nothing to write in. */
-function isPermission(q: UserInputQuestion) {
-    return q.options.length === 2 && q.options[0] === "Allow" && q.options[1] === "Deny";
-}
 
 type Draft = { picked: string[]; custom: string };
 
@@ -27,7 +21,7 @@ function labelsOf(draft: Draft): string[] {
  * An agent's questions, one step at a time, in place of the composer. A
  * single-choice question moves on as soon as an option is picked; several
  * choices, or an answer of one's own, take Next. Submit on the last step
- * sends every answer together (a permission prompt sends on the click), and
+ * sends every answer together, and
  * the wizard closes when the agent takes them.
  * Number keys pick options, Enter moves on.
  */
@@ -50,7 +44,6 @@ export function QuestionWizard({
     const draft = drafts[step] ?? EMPTY;
     const last = step === questions.length - 1;
     const answered = labelsOf(draft).length > 0;
-    const permission = question ? isPermission(question) : false;
 
     useEffect(() => {
         rootRef.current?.focus();
@@ -96,9 +89,8 @@ export function QuestionWizard({
             i === step ? { picked: [option], custom: "" } : d
         );
         setDrafts(all);
-        // The last step waits for Submit, so the answers can be looked over;
-        // a permission prompt is answered by the click.
-        if (!last || permission) next(all);
+        // The last step waits for Submit, so the answers can be looked over.
+        if (!last) next(all);
     };
 
     const onKeyDown = (event: React.KeyboardEvent) => {
@@ -113,8 +105,6 @@ export function QuestionWizard({
         }
     };
 
-    const Icon = permission ? ShieldWarningIcon : ChatCircleDotsIcon;
-
     return (
         <div
             ref={rootRef}
@@ -127,7 +117,7 @@ export function QuestionWizard({
             )}
         >
             <div className="flex items-center gap-2 text-xs text-dark-200">
-                <Icon className="size-3.5 shrink-0" />
+                <ChatCircleDotsIcon className="size-3.5 shrink-0" />
                 <span className="truncate font-medium">{question.header}</span>
                 {questions.length > 1 && (
                     <span className="ml-auto shrink-0 tabular-nums text-dark-300">
@@ -172,30 +162,28 @@ export function QuestionWizard({
                         </button>
                     );
                 })}
-                {!permission && (
-                    <input
-                        value={draft.custom}
-                        disabled={sending}
-                        onChange={(event) => {
-                            const custom = event.target.value;
-                            edit((d) => ({
-                                picked: question.multiSelect ? d.picked : [],
-                                custom
-                            }));
-                        }}
-                        onKeyDown={(event) => {
-                            if (event.key !== "Enter" || event.nativeEvent.isComposing) return;
-                            event.preventDefault();
-                            next();
-                        }}
-                        placeholder="Something else…"
-                        className={cn(
-                            "mt-1 h-9 min-w-0 rounded-md border border-dashed bg-transparent px-2.5 text-sm text-dark-50 outline-none transition-colors",
-                            "placeholder:text-dark-300 hover:border-dark-500 focus:border-solid focus:border-dark-400 disabled:opacity-50",
-                            draft.custom.trim() ? "border-dark-400" : "border-dark-600"
-                        )}
-                    />
-                )}
+                <input
+                    value={draft.custom}
+                    disabled={sending}
+                    onChange={(event) => {
+                        const custom = event.target.value;
+                        edit((d) => ({
+                            picked: question.multiSelect ? d.picked : [],
+                            custom
+                        }));
+                    }}
+                    onKeyDown={(event) => {
+                        if (event.key !== "Enter" || event.nativeEvent.isComposing) return;
+                        event.preventDefault();
+                        next();
+                    }}
+                    placeholder="Something else…"
+                    className={cn(
+                        "mt-1 h-9 min-w-0 rounded-md border border-dashed bg-transparent px-2.5 text-sm text-dark-50 outline-none transition-colors",
+                        "placeholder:text-dark-300 hover:border-dark-500 focus:border-solid focus:border-dark-400 disabled:opacity-50",
+                        draft.custom.trim() ? "border-dark-400" : "border-dark-600"
+                    )}
+                />
             </div>
 
             {error && <p className="text-xs text-danger">{error}</p>}
@@ -230,17 +218,15 @@ export function QuestionWizard({
                             Back
                         </Button>
                     )}
-                    {(question.multiSelect || !permission) && (
-                        <Button
-                            size="sm"
-                            variant="primary"
-                            disabled={!answered || sending}
-                            loading={sending}
-                            onClick={() => next()}
-                        >
-                            {last ? "Submit" : "Next"}
-                        </Button>
-                    )}
+                    <Button
+                        size="sm"
+                        variant="primary"
+                        disabled={!answered || sending}
+                        loading={sending}
+                        onClick={() => next()}
+                    >
+                        {last ? "Submit" : "Next"}
+                    </Button>
                 </div>
             </div>
         </div>

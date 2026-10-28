@@ -1,7 +1,8 @@
-export { REASONING_LABELS, SANDBOX_LEVELS } from "./labels";
+export { ACCESS_LABELS, ACCESS_MODES, REASONING_LABELS } from "./labels";
 export {
     fitConfig,
     refreshCatalogs,
+    resolveAccess,
     resolveModel,
     slashCommands,
     useCatalog,

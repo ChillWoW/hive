@@ -52,6 +52,8 @@ fn parse_args() -> Result<Options, String> {
         reasoning: None,
         model_options: Default::default(),
         auto_approve: false,
+        access: Default::default(),
+        plan: false,
         resume: None,
         attachments: Vec::new(),
     };

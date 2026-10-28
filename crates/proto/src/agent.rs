@@ -40,6 +40,35 @@ pub enum SandboxLevel {
     DangerFullAccess,
 }
 
+/// How much an agent may do before it has to ask. Each harness maps the mode
+/// onto its own approval policy and lists the modes it can honor
+/// (`HarnessCatalog::access_modes`); whatever a run must still ask reaches the
+/// user as a yes/no question.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
+#[serde(rename_all = "kebab-case")]
+pub enum AccessMode {
+    /// Ask before commands and file changes.
+    Supervised,
+    /// Apply file changes without asking; ask before anything else.
+    AutoAcceptEdits,
+    /// Run commands and change files without asking.
+    #[default]
+    FullAccess,
+}
+
+impl AccessMode {
+    /// Every mode, least to most trusting (the picker's order).
+    pub const ALL: [AccessMode; 3] = [
+        AccessMode::Supervised,
+        AccessMode::AutoAcceptEdits,
+        AccessMode::FullAccess,
+    ];
+
+    pub fn is_full_access(&self) -> bool {
+        *self == AccessMode::FullAccess
+    }
+}
+
 /// A model a harness offers, as the model picker shows it.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
@@ -88,8 +117,16 @@ pub struct RunRequest {
     /// Selections for [`Model::options`]: option id -> choice id.
     #[serde(default)]
     pub model_options: BTreeMap<String, String>,
+    /// Skip every check, the CLI's own included. Stronger than full access.
     #[serde(default)]
     pub auto_approve: bool,
+    /// What the agent may do without asking.
+    #[serde(default)]
+    pub access: AccessMode,
+    /// Plan mode: the agent explores and proposes a plan instead of changing
+    /// anything. Honored by harnesses whose catalog says so.
+    #[serde(default)]
+    pub plan: bool,
     /// Harness-native session id to continue, from an earlier
     /// [`AgentEvent::SessionStarted`].
     #[serde(default, skip_serializing_if = "Option::is_none")]

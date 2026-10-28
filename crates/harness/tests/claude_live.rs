@@ -20,6 +20,8 @@ fn request(prompt: &str, cwd: &std::path::Path) -> RunRequest {
         reasoning: None,
         model_options: Default::default(),
         auto_approve: false,
+        access: Default::default(),
+        plan: false,
         resume: None,
         attachments: Vec::new(),
     }

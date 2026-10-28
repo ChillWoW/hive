@@ -1,10 +1,4 @@
-import {
-    EyeIcon,
-    InfinityIcon,
-    PencilSimpleIcon,
-    type Icon
-} from "@phosphor-icons/react";
-import type { ReasoningLevel, SandboxLevel } from "@/proto";
+import type { AccessMode, ReasoningLevel } from "@/proto";
 
 export const REASONING_LABELS: Record<ReasoningLevel, string> = {
     minimal: "Minimal",
@@ -15,23 +9,20 @@ export const REASONING_LABELS: Record<ReasoningLevel, string> = {
     max: "Max"
 };
 
-export const SANDBOX_LEVELS: Record<
-    SandboxLevel,
-    { label: string; description: string; icon: Icon }
-> = {
-    "read-only": {
-        label: "Read only",
-        description: "Plans and reads; asks before changing anything",
-        icon: EyeIcon
+/** Every access mode, least to most trusting (the picker's order). */
+export const ACCESS_MODES: AccessMode[] = ["supervised", "auto-accept-edits", "full-access"];
+
+export const ACCESS_LABELS: Record<AccessMode, { label: string; description: string }> = {
+    supervised: {
+        label: "Supervised",
+        description: "Ask before commands and file changes."
     },
-    "workspace-write": {
-        label: "Edit files",
-        description: "Edits files freely; asks before commands",
-        icon: PencilSimpleIcon
+    "auto-accept-edits": {
+        label: "Auto-accept edits",
+        description: "Apply edits, ask before other actions."
     },
-    "danger-full-access": {
+    "full-access": {
         label: "Full access",
-        description: "Runs anything without asking",
-        icon: InfinityIcon
+        description: "Run commands and edits without asking."
     }
 };

@@ -9,8 +9,8 @@ use std::collections::VecDeque;
 use std::time::Duration;
 
 use hive_proto::{
-    AgentEvent, DoneStatus, HarnessCapabilities, HarnessCatalog, HarnessId, Model,
-    ReasoningLevel, RunRequest, SandboxLevel, SlashCommand, TodoItem, TodoStatus, ToolCall,
+    AccessMode, AgentEvent, DoneStatus, HarnessCapabilities, HarnessCatalog, HarnessId, Model,
+    ReasoningLevel, RunRequest, SlashCommand, TodoItem, TodoStatus, ToolCall,
     ToolDiff, UserInputAnswer, UserInputQuestion,
 };
 use tokio::sync::mpsc;
@@ -72,15 +72,13 @@ impl Harness for MockHarness {
                 description: "Review the current diff".into(),
                 input_hint: Some("focus area".into()),
             }],
-            sandbox_levels: vec![
-                SandboxLevel::WorkspaceWrite,
-                SandboxLevel::ReadOnly,
-                SandboxLevel::DangerFullAccess,
-            ],
+            // A script can't ask before acting.
+            access_modes: vec![AccessMode::FullAccess],
             capabilities: HarnessCapabilities {
                 steering: false,
                 interrupt: true,
                 attachments: false,
+                plan: false,
             },
         }
     }
@@ -510,6 +508,8 @@ mod tests {
             reasoning: None,
             model_options: Default::default(),
             auto_approve: false,
+            access: Default::default(),
+            plan: false,
             resume: None,
             attachments: Vec::new(),
         }
