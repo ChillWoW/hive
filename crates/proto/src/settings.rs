@@ -35,12 +35,24 @@ impl Default for Settings {
     }
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase", default)]
 pub struct ChatsSettings {
     /// At launch, send turns that Hive closed mid-run back to their agent to
     /// finish. Off by default: it spends tokens unasked.
     pub resume_interrupted: bool,
+    /// Name new chats with a short model run after their first turn. Off, the
+    /// first prompt's opening words name them instead.
+    pub auto_title: bool,
+}
+
+impl Default for ChatsSettings {
+    fn default() -> Self {
+        Self {
+            resume_interrupted: false,
+            auto_title: true,
+        }
+    }
 }
 
 impl Settings {

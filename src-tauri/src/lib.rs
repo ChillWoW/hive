@@ -73,9 +73,11 @@ pub fn run() {
       }
       let data_dir = app.path().app_data_dir()?;
       let settings = hive_store::SettingsFile::open(&data_dir)?;
-      // Read once: resuming only happens at launch.
+      // Resuming only happens at launch; titles follow the setting live.
+      let chats = settings.get().chats;
       let config = EngineConfig {
-        resume_interrupted: settings.get().chats.resume_interrupted,
+        resume_interrupted: chats.resume_interrupted,
+        auto_title: chats.auto_title,
         ..EngineConfig::default()
       };
       app.manage(settings);

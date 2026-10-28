@@ -11,6 +11,7 @@ use hive_proto::{
     AccessMode, AgentEvent, DoneStatus, HarnessId, MessagePart, MessageRole, Model, ReasoningLevel,
     RunRequest, SandboxLevel,
 };
+use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
 use crate::{lock, Engine};
@@ -52,10 +53,12 @@ impl Engine {
         let Some(prompt) = self.first_prompt(chat_id)? else {
             return Ok(());
         };
-        let title = match self.generate_title(chat.config.harness, &prompt).await {
-            Some(title) => title,
-            None => fallback_title(&prompt),
+        let generated = if self.inner.auto_title.load(Ordering::Relaxed) {
+            self.generate_title(chat.config.harness, &prompt).await
+        } else {
+            None
         };
+        let title = generated.unwrap_or_else(|| fallback_title(&prompt));
         if title.is_empty() {
             return Ok(());
         }

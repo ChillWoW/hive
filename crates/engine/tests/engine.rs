@@ -640,6 +640,34 @@ async fn a_completed_first_turn_titles_the_chat() {
 }
 
 #[tokio::test]
+async fn without_auto_titles_the_prompt_names_the_chat() {
+    let (_dir, engine) = engine(0.0);
+    engine.set_auto_title(false);
+    let chat = engine
+        .create_chat("/demo", config(HarnessId::Mock))
+        .unwrap();
+    let mut chats = watch_chats(&engine);
+    let mut updates = watch_messages(&engine, &chat.id);
+
+    engine
+        .queue_command(&chat.id, send("fix the login flow please"))
+        .unwrap();
+    let seen = until(&mut updates, is_input).await;
+    engine
+        .queue_command(&chat.id, answer(request_id(&seen)))
+        .unwrap();
+    until(&mut updates, is_done).await;
+
+    until(
+        &mut chats,
+        |u| matches!(u, ChatsUpdate::Chat { chat } if chat.title.is_some()),
+    )
+    .await;
+    let titled = engine.store().chat(&chat.id).unwrap().unwrap();
+    assert_eq!(titled.title.as_deref(), Some("fix the login flow please"));
+}
+
+#[tokio::test]
 async fn chats_are_renamed_pinned_archived_seen_and_deleted() {
     let (_dir, engine) = engine(0.0);
     let chat = engine

@@ -19,7 +19,7 @@
 //! [`Run`]: hive_harness::Run
 
 use std::collections::{HashMap, HashSet, VecDeque};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
@@ -47,6 +47,9 @@ pub struct EngineConfig {
     /// At [`Engine::start`], send every turn that Hive's exit cut short back
     /// to its agent with [`RESUME_PROMPT`].
     pub resume_interrupted: bool,
+    /// Name untitled chats with a title run; off, the first prompt's opening
+    /// words name them. Changed live with [`Engine::set_auto_title`].
+    pub auto_title: bool,
 }
 
 impl Default for EngineConfig {
@@ -54,6 +57,7 @@ impl Default for EngineConfig {
         Self {
             idle_timeout: Duration::from_secs(10 * 60),
             resume_interrupted: false,
+            auto_title: true,
         }
     }
 }
@@ -105,6 +109,8 @@ struct Inner {
     next_id: AtomicU64,
     /// Chats whose title is being written.
     titling: Mutex<HashSet<String>>,
+    /// Starts as `config.auto_title`; follows the setting.
+    auto_title: AtomicBool,
 }
 
 #[derive(Default)]
@@ -187,6 +193,7 @@ impl Engine {
                 store,
                 order: harnesses.iter().map(|h| h.id()).collect(),
                 harnesses: harnesses.into_iter().map(|h| (h.id(), h)).collect(),
+                auto_title: AtomicBool::new(config.auto_title),
                 config,
                 runtime,
                 chats: Mutex::default(),
@@ -199,6 +206,11 @@ impl Engine {
 
     pub fn store(&self) -> &Store {
         &self.inner.store
+    }
+
+    /// Turns title runs on or off for chats titled from now on.
+    pub fn set_auto_title(&self, on: bool) {
+        self.inner.auto_title.store(on, Ordering::Relaxed);
     }
 
     /// Run once at boot, before anything else: recovers what the last

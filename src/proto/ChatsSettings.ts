@@ -5,4 +5,9 @@ export type ChatsSettings = {
  * At launch, send turns that Hive closed mid-run back to their agent to
  * finish. Off by default: it spends tokens unasked.
  */
-resumeInterrupted: boolean, };
+resumeInterrupted: boolean, 
+/**
+ * Name new chats with a short model run after their first turn. Off, the
+ * first prompt's opening words name them instead.
+ */
+autoTitle: boolean, };
