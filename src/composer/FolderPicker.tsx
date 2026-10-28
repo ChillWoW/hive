@@ -1,17 +1,19 @@
 import { useState } from "react";
 import { Combobox } from "@base-ui/react/combobox";
 import {
+    DotsThreeIcon,
     FolderIcon,
     FolderOpenIcon,
     MagnifyingGlassIcon,
-    PlusIcon
+    PlusIcon,
+    TrashIcon
 } from "@phosphor-icons/react";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { projects, useProjects } from "@/projects";
 import { folderName } from "./paths";
 import { cn } from "@/lib/cn";
 import { isTauri } from "@/lib/platform";
-import { Tooltip, usePortalContainer } from "@/ui";
+import { Menu, Tooltip, usePortalContainer } from "@/ui";
 import {
     chipClassName,
     chipTriggerClassName,
@@ -34,7 +36,7 @@ export function FolderPicker({
     locked = false
 }: {
     cwd: string | null;
-    onChange?: (cwd: string) => void;
+    onChange?: (cwd: string | null) => void;
     locked?: boolean;
 }) {
     if (locked) {
@@ -63,12 +65,15 @@ function FolderCombobox({
     onChange
 }: {
     cwd: string | null;
-    onChange?: (cwd: string) => void;
+    /** Null when the picked project is deleted. */
+    onChange?: (cwd: string | null) => void;
 }) {
     const container = usePortalContainer();
     const known = useProjects();
     const items = cwd && !known.includes(cwd) ? [...known, cwd] : known;
     const [open, setOpen] = useState(false);
+    /** The project whose row menu is open. */
+    const [menuFor, setMenuFor] = useState<string | null>(null);
     const [query, setQuery] = useState("");
     const typed = query.trim();
     // A typed path that isn't in the list can be used as is.
@@ -95,7 +100,15 @@ function FolderCombobox({
             items={items}
             value={cwd}
             open={open}
-            onOpenChange={setOpen}
+            onOpenChange={(next, details) => {
+                // A row's menu takes focus and lives outside the popup; the
+                // list stays open under it.
+                if (!next && menuFor) {
+                    details.cancel();
+                    return;
+                }
+                setOpen(next);
+            }}
             inputValue={query}
             onInputValueChange={setQuery}
             onValueChange={(path: string | null) => {
@@ -154,7 +167,10 @@ function FolderCombobox({
                                 <Combobox.Item
                                     key={path}
                                     value={path}
-                                    className={rowClassName}
+                                    className={cn(
+                                        rowClassName,
+                                        "group/row grid-cols-[0.875rem_1fr_1.25rem] py-1"
+                                    )}
                                 >
                                     <ProjectIcon
                                         path={path}
@@ -162,6 +178,15 @@ function FolderCombobox({
                                         className="size-3.5"
                                     />
                                     <span className="truncate">{folderName(path)}</span>
+                                    <ProjectMenu
+                                        path={path}
+                                        open={menuFor === path}
+                                        onOpenChange={(next) => setMenuFor(next ? path : null)}
+                                        onDelete={() => {
+                                            projects.remove(path);
+                                            if (path === cwd) onChange?.(null);
+                                        }}
+                                    />
                                 </Combobox.Item>
                             )}
                         </Combobox.List>
@@ -192,5 +217,67 @@ function FolderCombobox({
                 </Combobox.Positioner>
             </Combobox.Portal>
         </Combobox.Root>
+    );
+}
+
+/**
+ * A project row's "⋯" menu, on the right of the row: shown while the row is
+ * highlighted or the menu is open. Its presses stay off the row, so opening
+ * it doesn't pick the project.
+ */
+function ProjectMenu({
+    path,
+    open,
+    onOpenChange,
+    onDelete
+}: {
+    path: string;
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
+    onDelete: () => void;
+}) {
+    const stop = (event: React.SyntheticEvent) => event.stopPropagation();
+    return (
+        <Menu open={open} onOpenChange={onOpenChange}>
+            <Menu.Trigger
+                aria-label={`Options for ${folderName(path)}`}
+                onPointerDown={stop}
+                onMouseDown={stop}
+                onMouseUp={stop}
+                // The row cancels `pointerdown` to keep focus in the search, so no
+                // `mousedown` arrives to open the menu the usual way.
+                onClick={(event) => {
+                    stop(event);
+                    onOpenChange(!open);
+                }}
+                className={cn(
+                    "inline-flex size-5 items-center justify-center rounded-sm text-dark-300 outline-none",
+                    "transition-[color,background-color,opacity] duration-100",
+                    "hover:bg-dark-600 hover:text-dark-50",
+                    "data-[popup-open]:bg-dark-600 data-[popup-open]:text-dark-50",
+                    "opacity-0 group-data-[highlighted]/row:opacity-100 data-[popup-open]:opacity-100"
+                )}
+            >
+                <DotsThreeIcon className="size-3.5" weight="bold" />
+            </Menu.Trigger>
+            {/* Portalled, but React events still bubble to the row; a press
+                here mustn't pick the project. */}
+            <Menu.Content
+                side="right"
+                align="start"
+                sideOffset={8}
+                onPointerDown={stop}
+                onPointerUp={stop}
+                onMouseDown={stop}
+                onMouseUp={stop}
+                onClick={stop}
+                className="w-36 min-w-0"
+            >
+                <Menu.Item variant="danger" onClick={onDelete}>
+                    <TrashIcon className="size-3.5" />
+                    Delete
+                </Menu.Item>
+            </Menu.Content>
+        </Menu>
     );
 }
