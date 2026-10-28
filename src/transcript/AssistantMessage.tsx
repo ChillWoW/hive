@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { CheckIcon, CopyIcon } from "@phosphor-icons/react";
 import type { Message, MessagePart } from "@/proto";
 import { cn } from "@/lib/cn";
-import { Tooltip } from "@/ui";
+import { DOT_MATRIX_FULL, DotMatrixSpinner, Tooltip } from "@/ui";
 import { Markdown } from "./Markdown";
 import { ErrorChip, InputRow, SubagentChip } from "./parts";
 import { ToolGroup } from "./ToolGroup";
@@ -83,17 +83,12 @@ function WorkingStatus({ since, waiting }: { since: number; waiting: boolean }) 
     const label = waiting ? "Waiting for you" : "Working";
     return (
         <div className="flex items-center gap-2 text-sm">
-            <span className="relative flex size-2 shrink-0">
-                {!waiting && (
-                    <span className="absolute inline-flex size-full animate-ping rounded-full bg-dark-200 opacity-50" />
-                )}
-                <span
-                    className={cn(
-                        "relative inline-flex size-2 rounded-full",
-                        waiting ? "bg-warning" : "bg-dark-100"
-                    )}
-                />
-            </span>
+            {/* Waiting holds every dot lit, pulsing in the warning tone. */}
+            <DotMatrixSpinner
+                label={label}
+                pattern={waiting ? DOT_MATRIX_FULL : undefined}
+                className={waiting ? "animate-pulse text-warning" : "text-dark-100"}
+            />
             <span className={cn("font-[450] text-dark-200", !waiting && "shimmer")}>
                 {label}
             </span>

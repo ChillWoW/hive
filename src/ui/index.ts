@@ -2,6 +2,11 @@ export { Avatar } from "./Avatar";
 export { Button } from "./Button";
 export { Checkbox } from "./Checkbox";
 export { ContextMenu } from "./ContextMenu";
+export {
+    DOT_MATRIX_FULL,
+    DotMatrixSpinner,
+    type DotMatrixSpinnerProps
+} from "./DotMatrixSpinner";
 export { iconButtonClassName } from "./iconButton";
 export { Input } from "./Input";
 export { Menu } from "./Menu";
