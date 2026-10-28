@@ -2,13 +2,15 @@
 //!
 //! - Each chat has at most one live [`Run`]. The first prompt starts it
 //!   (resuming the harness's own session when the chat has one); later
-//!   prompts go to the same process, so a prompt sent mid-turn steers the
-//!   next turn. A run left idle for [`EngineConfig::idle_timeout`] is closed
-//!   and the next prompt starts a fresh one.
+//!   prompts go to the same process. A run left idle for
+//!   [`EngineConfig::idle_timeout`] is closed and the next prompt starts a
+//!   fresh one.
 //! - The UI acts through commands ([`Engine::queue_command`]): each is
 //!   issued in the store's ledger, executed against the chat's run, and
-//!   settled there. A prompt queued behind a running turn stays pending
-//!   until its own turn starts.
+//!   settled there. A prompt sent mid-turn waits in the chat's queue, held
+//!   here rather than by the CLI so it can be reordered, withdrawn or sent
+//!   now; it stays pending until its own turn starts, when the turn before
+//!   it ends. A turn the user stops holds the queue until the next one ends.
 //! - Every event is recorded through the store's turn (journal, fold,
 //!   save) and sent to the chat's watchers, under one per-chat lock, so a
 //!   watcher's snapshot and the updates after it never overlap or leave a
@@ -62,6 +64,8 @@ pub enum EngineError {
     Store(#[from] StoreError),
     #[error("chat {0} not found")]
     ChatNotFound(String),
+    #[error("That prompt is no longer queued.")]
+    NotQueued,
 }
 
 pub type Result<T> = std::result::Result<T, EngineError>;
@@ -121,8 +125,11 @@ struct ChatState {
     /// The latest turn; kept after its `Done` so late subagent events still
     /// fold into it.
     turn: Option<Turn>,
-    /// Prompts handed to the run while a turn was in flight, oldest first.
+    /// Prompts sent while a turn was in flight, next first.
     queued: VecDeque<Queued>,
+    /// The in-flight turn was interrupted to run the queue's front next,
+    /// so its end doesn't hold the queue.
+    handover: bool,
     session: Option<Session>,
     /// The run's slash commands, kept for sessions created after they came.
     commands: Vec<SlashCommand>,
@@ -273,7 +280,7 @@ impl Engine {
         chat.config = config;
         self.store().save_chat(&chat)?;
         if st.run.is_some() {
-            if st.in_flight() || !st.queued.is_empty() {
+            if st.in_flight() {
                 st.restart = true;
             } else {
                 self.end_run(chat_id, &mut st);
@@ -289,9 +296,7 @@ impl Engine {
     /// Names the chat; a blank title clears it, and the next completed turn
     /// names it again.
     pub fn rename_chat(&self, chat_id: &str, title: Option<String>) -> Result<Chat> {
-        let title = title
-            .map(|t| t.trim().to_owned())
-            .filter(|t| !t.is_empty());
+        let title = title.map(|t| t.trim().to_owned()).filter(|t| !t.is_empty());
         self.edit_chat(chat_id, |chat| chat.title = title)
     }
 
@@ -398,12 +403,18 @@ impl Engine {
                 *m = turn.assistant.clone();
             }
         }
-        let pending = self
+        let mut pending: Vec<Command> = self
             .store()
             .commands(chat_id)?
             .into_iter()
             .filter(|c| c.status == CommandStatus::Pending)
             .collect();
+        pending.sort_by_key(|c| {
+            st.queued
+                .iter()
+                .position(|q| q.command_id == c.id)
+                .unwrap_or(usize::MAX)
+        });
         if sink(MessagesUpdate::Snapshot { messages, pending }) {
             st.watchers.push(Watcher {
                 id,
@@ -500,11 +511,7 @@ impl Engine {
         prompt: String,
         message_id: String,
     ) -> Result<Outcome> {
-        let Some(run) = &st.run else {
-            return self.start_run(chat, runtime, st, prompt, message_id);
-        };
-        if st.in_flight() || !st.queued.is_empty() {
-            run.handle.send(prompt.clone());
+        if st.in_flight() {
             st.queued.push_back(Queued {
                 command_id: command_id.to_owned(),
                 prompt,
@@ -512,12 +519,124 @@ impl Engine {
             });
             return Ok(Outcome::Queued);
         }
+        self.dispatch(chat, runtime, st, prompt, message_id)
+    }
+
+    /// Starts a turn with `prompt` now, starting a run first if there's none.
+    fn dispatch(
+        &self,
+        chat: &Chat,
+        runtime: &Arc<ChatRuntime>,
+        st: &mut ChatState,
+        prompt: String,
+        message_id: String,
+    ) -> Result<Outcome> {
+        if st.run.is_none() {
+            return self.start_run(chat, runtime, st, prompt, message_id);
+        }
         self.start_turn(&chat.id, st, &prompt, message_id)?;
         if let Some(run) = &st.run {
             run.handle.send(prompt);
         }
         self.set_status(&chat.id, st, SessionStatus::Working);
         Ok(Outcome::Applied)
+    }
+
+    // The queue
+
+    /// Withdraws a prompt still waiting in the chat's queue.
+    pub fn cancel_queued(&self, chat_id: &str, command_id: &str) -> Result<Command> {
+        let runtime = self.runtime_for(chat_id);
+        let mut st = lock(&runtime.state);
+        self.chat(chat_id)?;
+        let q = take_queued(&mut st, command_id)?;
+        let command =
+            self.store()
+                .resolve_command(&q.command_id, CommandStatus::Cancelled, None)?;
+        publish(
+            &mut st.watchers,
+            MessagesUpdate::Command {
+                command: command.clone(),
+            },
+        );
+        Ok(command)
+    }
+
+    /// Reorders the queue: the listed command ids first, in that order, then
+    /// any others where they were.
+    pub fn reorder_queue(&self, chat_id: &str, command_ids: &[String]) -> Result<()> {
+        let runtime = self.runtime_for(chat_id);
+        let mut st = lock(&runtime.state);
+        self.chat(chat_id)?;
+        let mut rest: Vec<Queued> = st.queued.drain(..).collect();
+        let mut ordered = VecDeque::with_capacity(rest.len());
+        for id in command_ids {
+            if let Some(i) = rest.iter().position(|q| &q.command_id == id) {
+                ordered.push_back(rest.remove(i));
+            }
+        }
+        ordered.extend(rest);
+        st.queued = ordered;
+        self.publish_queue(&mut st);
+        Ok(())
+    }
+
+    /// Runs a queued prompt next: now if nothing is running, else by
+    /// interrupting the running turn.
+    pub fn send_queued_now(&self, chat_id: &str, command_id: &str) -> Result<()> {
+        let runtime = self.runtime_for(chat_id);
+        let mut st = lock(&runtime.state);
+        self.chat(chat_id)?;
+        let q = take_queued(&mut st, command_id)?;
+        if !st.in_flight() {
+            self.start_queued(chat_id, &runtime, &mut st, q);
+            return Ok(());
+        }
+        st.queued.push_front(q);
+        self.publish_queue(&mut st);
+        st.handover = true;
+        if let Some(run) = &mut st.run {
+            run.activity += 1;
+            run.handle.interrupt();
+        }
+        Ok(())
+    }
+
+    /// Starts the queue's front, rejecting prompts that can't start. False
+    /// if none did.
+    fn advance_queue(&self, chat_id: &str, runtime: &Arc<ChatRuntime>, st: &mut ChatState) -> bool {
+        while let Some(q) = st.queued.pop_front() {
+            if self.start_queued(chat_id, runtime, st, q) {
+                return true;
+            }
+        }
+        false
+    }
+
+    /// Starts a turn for a queued prompt and settles its command.
+    fn start_queued(
+        &self,
+        chat_id: &str,
+        runtime: &Arc<ChatRuntime>,
+        st: &mut ChatState,
+        q: Queued,
+    ) -> bool {
+        let outcome = self
+            .chat(chat_id)
+            .and_then(|chat| self.dispatch(&chat, runtime, st, q.prompt, q.message_id));
+        let (status, resolution) = match outcome {
+            Ok(Outcome::Applied) => (CommandStatus::Applied, None),
+            Ok(Outcome::Rejected(reason)) => (CommandStatus::Rejected, Some(reason)),
+            Ok(Outcome::Queued) => unreachable!("dispatch never queues"),
+            Err(e) => (CommandStatus::Rejected, Some(e.to_string())),
+        };
+        self.settle_queued(st, &q.command_id, status, resolution);
+        status == CommandStatus::Applied
+    }
+
+    fn publish_queue(&self, st: &mut ChatState) {
+        let command_ids = st.queued.iter().map(|q| q.command_id.clone()).collect();
+        publish(&mut st.watchers, MessagesUpdate::Queue { command_ids });
     }
 
     fn start_run(
@@ -625,6 +744,8 @@ impl Engine {
         if st.run.as_ref().map(|r| r.id) != Some(run_id) {
             return;
         }
+        // Taken first, so the closing `Done` doesn't hand them to the dead run.
+        let queued: Vec<_> = st.queued.drain(..).collect();
         if st.in_flight() {
             let done = AgentEvent::Done {
                 status: DoneStatus::Errored,
@@ -633,7 +754,6 @@ impl Engine {
             };
             self.handle_event(&chat_id, &runtime, &mut st, done);
         }
-        let queued: Vec<_> = st.queued.drain(..).collect();
         for q in queued {
             self.settle_queued(
                 &mut st,
@@ -664,18 +784,6 @@ impl Engine {
                 }
                 AgentEvent::Done { .. } => run.inputs.clear(),
                 _ => {}
-            }
-        }
-
-        // A queued prompt's turn starts with the first event after the
-        // previous `Done`; a late subagent event still belongs to the turn
-        // that spawned it.
-        if !st.in_flight() && !matches!(event, AgentEvent::Subagent { .. }) {
-            if let Some(q) = st.queued.pop_front() {
-                match self.start_turn(chat_id, st, &q.prompt, q.message_id) {
-                    Ok(()) => self.settle_queued(st, &q.command_id, CommandStatus::Applied, None),
-                    Err(e) => log::warn!("chat {chat_id}: starting a queued turn: {e}"),
-                }
             }
         }
 
@@ -733,11 +841,17 @@ impl Engine {
                 if status == DoneStatus::Completed {
                     self.maybe_title(chat_id);
                 }
-                if !st.queued.is_empty() {
-                    return;
-                }
+                let handover = std::mem::take(&mut st.handover);
+                // The next turn starts a run with the new config.
                 if st.restart {
                     self.end_run(chat_id, st);
+                }
+                // A turn the user stopped holds the queue.
+                let stopped = status == DoneStatus::Interrupted && !handover;
+                if !stopped && self.advance_queue(chat_id, runtime, st) {
+                    return;
+                }
+                if st.run.is_none() {
                     return;
                 }
                 let status = match status {
@@ -782,7 +896,8 @@ impl Engine {
                 .run
                 .as_ref()
                 .is_some_and(|r| r.id == run_id && r.activity == activity);
-            if still_idle && !st.in_flight() && st.queued.is_empty() {
+            // A held queue doesn't need the process; its next turn starts one.
+            if still_idle && !st.in_flight() {
                 engine.end_run(&chat_id, &mut st);
             }
         });
@@ -848,6 +963,15 @@ impl Engine {
             },
         );
     }
+}
+
+fn take_queued(st: &mut ChatState, command_id: &str) -> Result<Queued> {
+    let i = st
+        .queued
+        .iter()
+        .position(|q| q.command_id == command_id)
+        .ok_or(EngineError::NotQueued)?;
+    Ok(st.queued.remove(i).expect("position is in range"))
 }
 
 fn answer(st: &mut ChatState, request_id: String, answers: Vec<UserInputAnswer>) -> Outcome {

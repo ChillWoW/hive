@@ -16,7 +16,7 @@ use crate::message::Message;
 pub enum MessagesUpdate {
     /// The transcript so far (the streaming reply included, as folded up to
     /// now) and the chat's pending commands: prompts queued behind the
-    /// running turn.
+    /// running turn, next first.
     Snapshot {
         messages: Vec<Message>,
         pending: Vec<Command>,
@@ -32,6 +32,9 @@ pub enum MessagesUpdate {
     },
     /// A command issued or settled.
     Command { command: Command },
+    /// The queued prompts' new order, by command id, next first.
+    #[serde(rename_all = "camelCase")]
+    Queue { command_ids: Vec<String> },
 }
 
 /// The chat list and which chats have a live session.

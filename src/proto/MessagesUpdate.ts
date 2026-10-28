@@ -6,4 +6,4 @@ import type { Message } from "./Message";
 /**
  * One chat's transcript.
  */
-export type MessagesUpdate = { "type": "snapshot", messages: Array<Message>, pending: Array<Command>, } | { "type": "message", message: Message, } | { "type": "event", messageId: string, event: AgentEvent, } | { "type": "command", command: Command, };
+export type MessagesUpdate = { "type": "snapshot", messages: Array<Message>, pending: Array<Command>, } | { "type": "message", message: Message, } | { "type": "event", messageId: string, event: AgentEvent, } | { "type": "command", command: Command, } | { "type": "queue", commandIds: Array<string>, };

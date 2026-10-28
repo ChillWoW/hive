@@ -65,6 +65,12 @@ type ChatsState = {
     send: (target: SendTarget, prompt: string) => Promise<void>;
     /** Drops a failed prompt from the outbox. */
     discard: (messageId: string) => void;
+    /** Withdraws a queued prompt; gone at once, back if that's refused. */
+    cancelQueued: (messageId: string) => Promise<boolean>;
+    /** Puts a chat's queued prompts in this order, next first. */
+    reorderQueued: (chatId: string, messageIds: string[]) => Promise<void>;
+    /** Runs a queued prompt next, stopping the running turn if there is one. */
+    sendNow: (messageId: string) => Promise<void>;
     /** Saves a chat's run settings; shown at once, reverted if refused. */
     updateConfig: (chatId: string, config: ChatConfig) => Promise<void>;
     /** Shown at once, reverted if refused; a blank title clears it. */
@@ -161,6 +167,40 @@ function fromCommand(command: Command, queued: boolean): Outgoing | null {
     return o;
 }
 
+/**
+ * Puts a chat's outbox entries for `commandIds` in that order, within the
+ * slots they already hold; other entries stay put.
+ */
+function orderOutbox(s: Draft, chatId: string, commandIds: string[]) {
+    const rank = new Map(commandIds.map((id, i) => [id, i]));
+    const slots: number[] = [];
+    const entries: Outgoing[] = [];
+    s.outbox.forEach((o, i) => {
+        if (o.chatId === chatId && o.commandId && rank.has(o.commandId)) {
+            slots.push(i);
+            entries.push(o);
+        }
+    });
+    entries.sort((a, b) => rank.get(a.commandId!)! - rank.get(b.commandId!)!);
+    slots.forEach((slot, j) => {
+        s.outbox[slot] = entries[j];
+    });
+}
+
+/** A chat's queued prompts' command ids, next first. */
+function queuedIds(outbox: Outgoing[], chatId: string) {
+    return outbox.flatMap((o) =>
+        o.chatId === chatId && o.queued && o.commandId ? [o.commandId] : []
+    );
+}
+
+/** A queued prompt that can still be withdrawn, reordered or sent now. */
+function findQueued(messageId: string) {
+    const o = useChatsStore.getState().outbox.find((o) => o.messageId === messageId);
+    if (!o?.chatId || !o.commandId || !o.queued || o.error) return undefined;
+    return { ...o, chatId: o.chatId, commandId: o.commandId };
+}
+
 function removeOutgoing(s: Draft, messageId: string) {
     const i = s.outbox.findIndex((o) => o.messageId === messageId);
     if (i >= 0) s.outbox.splice(i, 1);
@@ -236,6 +276,67 @@ export const useChatsStore = create<ChatsState>()(
                 const o = s.outbox.find((o) => o.messageId === messageId);
                 if (o?.error) removeOutgoing(s, messageId);
             }),
+
+        cancelQueued: async (messageId) => {
+            const o = findQueued(messageId);
+            if (!o) return false;
+            const at = useChatsStore
+                .getState()
+                .outbox.findIndex((x) => x.messageId === messageId);
+            set((s) => removeOutgoing(s, messageId));
+            try {
+                await chatsApi.cancelQueued(o.chatId, o.commandId);
+                return true;
+            } catch (error) {
+                console.warn(`[chats] withdrawing ${messageId} failed`, error);
+                set((s) => {
+                    // Unless it ran meanwhile.
+                    const saved = s.transcripts[o.chatId]?.messages.some(
+                        (m) => m.id === messageId
+                    );
+                    if (saved || s.outbox.some((x) => x.messageId === messageId)) return;
+                    s.outbox.splice(Math.min(at, s.outbox.length), 0, o);
+                });
+                throw error;
+            }
+        },
+
+        reorderQueued: async (chatId, messageIds) => {
+            const { outbox } = useChatsStore.getState();
+            const before = queuedIds(outbox, chatId);
+            const commandIds = messageIds.flatMap((id) => {
+                const o = outbox.find((o) => o.messageId === id);
+                return o?.commandId ? [o.commandId] : [];
+            });
+            set((s) => orderOutbox(s, chatId, commandIds));
+            try {
+                await chatsApi.reorderQueue(chatId, commandIds);
+            } catch (error) {
+                console.warn(`[chats] reordering ${chatId}'s queue failed`, error);
+                set((s) => orderOutbox(s, chatId, before));
+                throw error;
+            }
+        },
+
+        sendNow: async (messageId) => {
+            const o = findQueued(messageId);
+            if (!o) return;
+            // Out of the tray and into the transcript, as it's sending.
+            set((s) => {
+                const sent = s.outbox.find((x) => x.messageId === messageId);
+                if (sent) sent.queued = false;
+            });
+            try {
+                await chatsApi.sendQueuedNow(o.chatId, o.commandId);
+            } catch (error) {
+                console.warn(`[chats] sending ${messageId} now failed`, error);
+                set((s) => {
+                    const sent = s.outbox.find((x) => x.messageId === messageId);
+                    if (sent && !sent.error) sent.queued = true;
+                });
+                throw error;
+            }
+        },
 
         updateConfig: async (chatId, config) => {
             let previous: ChatConfig | undefined;
@@ -440,6 +541,11 @@ function applyMessages(chatId: string, update: MessagesUpdate) {
                     const o = fromCommand(c, true);
                     if (o) s.outbox.push(o);
                 }
+                orderOutbox(
+                    s,
+                    chatId,
+                    update.pending.map((c) => c.id)
+                );
                 return;
             }
 
@@ -462,6 +568,10 @@ function applyMessages(chatId: string, update: MessagesUpdate) {
                 const { command } = update;
                 const id = sentId(command);
                 if (!id) return;
+                if (command.status === "cancelled") {
+                    removeOutgoing(s, id);
+                    return;
+                }
                 const o = s.outbox.find((o) => o.messageId === id);
                 if (o) {
                     track(o, command, false);
@@ -474,6 +584,10 @@ function applyMessages(chatId: string, update: MessagesUpdate) {
                 }
                 return;
             }
+
+            case "queue":
+                orderOutbox(s, chatId, update.commandIds);
+                return;
         }
     });
 }
@@ -603,6 +717,11 @@ export const chats = {
     send: (target: SendTarget, prompt: string) =>
         useChatsStore.getState().send(target, prompt),
     discard: (messageId: string) => useChatsStore.getState().discard(messageId),
+    cancelQueued: (messageId: string) =>
+        useChatsStore.getState().cancelQueued(messageId),
+    reorderQueued: (chatId: string, messageIds: string[]) =>
+        useChatsStore.getState().reorderQueued(chatId, messageIds),
+    sendNow: (messageId: string) => useChatsStore.getState().sendNow(messageId),
     updateConfig: (chatId: string, config: ChatConfig) =>
         useChatsStore.getState().updateConfig(chatId, config),
     rename: (chatId: string, title: string | null) =>

@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { ArrowBendDownRightIcon } from "@phosphor-icons/react";
 import {
     chats,
     useChat,
@@ -21,9 +20,9 @@ import {
     useCatalogs
 } from "@/harnesses";
 import type { ChatConfig, MessagePart } from "@/proto";
-import { cn } from "@/lib/cn";
 import { Transcript } from "@/transcript";
 import { MorphHeight } from "@/ui";
+import { QueuedTray } from "./QueuedTray";
 
 type InputPart = Extract<MessagePart, { kind: "input" }>;
 
@@ -108,7 +107,9 @@ export function ChatView() {
     const bottom = (
         <div className="shrink-0 px-6 pb-3">
             <div className="mx-auto w-full max-w-3xl">
-                {queued.length > 0 && <QueuedTray messages={queued} />}
+                {chatId && queued.length > 0 && (
+                    <QueuedTray chatId={chatId} messages={queued} running={busy} />
+                )}
                 {/* The box grows into the wizard and back rather than jumping. */}
                 <MorphHeight swapKey={input && chat ? `question:${input.requestId}` : "composer"}>
                     {input && chat ? (
@@ -179,32 +180,6 @@ export function ChatView() {
                 />
             )}
             {bottom}
-        </div>
-    );
-}
-
-/** Prompts waiting for the running turn to end, tucked behind the composer's top edge. */
-function QueuedTray({ messages }: { messages: TranscriptMessage[] }) {
-    return (
-        <div
-            className={cn(
-                "mx-4 rounded-t-2xl border border-b-0 border-dark-700 bg-dark-900 px-1 pt-1 pb-1.5",
-                "transition-[opacity,translate] duration-200 ease-out starting:translate-y-2 starting:opacity-0"
-            )}
-        >
-            <div className="flex h-6 items-center px-2.5 text-xs font-medium text-dark-200">
-                Queued
-            </div>
-            <ul className="flex flex-col">
-                {messages.map((m) => (
-                    <li key={m.id} className="flex h-7 items-center gap-2 px-2.5">
-                        <ArrowBendDownRightIcon className="size-3.5 shrink-0 text-dark-400" />
-                        <span className="min-w-0 flex-1 truncate text-[13px] text-dark-100">
-                            {m.parts.flatMap((p) => (p.kind === "text" ? [p.text] : [])).join(" ")}
-                        </span>
-                    </li>
-                ))}
-            </ul>
         </div>
     );
 }

@@ -161,6 +161,7 @@ impl View {
                     None => self.commands.push(command),
                 }
             }
+            MessagesUpdate::Queue { .. } => {}
         }
     }
 }
@@ -256,6 +257,120 @@ async fn a_prompt_sent_mid_turn_waits_for_its_own_turn() {
         .iter()
         .filter(|m| m.role == Assistant)
         .all(|m| m.status == Some(MessageStatus::Complete)));
+}
+
+fn settled(u: &MessagesUpdate, id: &str, status: CommandStatus) -> bool {
+    matches!(u, MessagesUpdate::Command { command } if command.id == id && command.status == status)
+}
+
+fn user_ids(engine: &Engine, chat_id: &str) -> Vec<String> {
+    engine
+        .store()
+        .messages(chat_id)
+        .unwrap()
+        .into_iter()
+        .filter(|m| m.role == MessageRole::User)
+        .map(|m| m.id)
+        .collect()
+}
+
+#[tokio::test]
+async fn the_queue_is_reordered_withdrawn_and_runs_in_order() {
+    let (_dir, engine) = engine(0.0);
+    let chat = engine
+        .create_chat("/demo", config(HarnessId::Mock))
+        .unwrap();
+    let mut updates = watch_messages(&engine, &chat.id);
+
+    engine.queue_command(&chat.id, send("first")).unwrap();
+    let seen = until(&mut updates, is_input).await;
+    let a = engine.queue_command(&chat.id, send("a")).unwrap();
+    let b = engine.queue_command(&chat.id, send("b")).unwrap();
+    let c = engine.queue_command(&chat.id, send("c")).unwrap();
+
+    engine
+        .reorder_queue(&chat.id, &[c.id.clone(), a.id.clone()])
+        .unwrap();
+    until(&mut updates, |u| {
+        matches!(u, MessagesUpdate::Queue { command_ids } if *command_ids == [c.id.clone(), a.id.clone(), b.id.clone()])
+    })
+    .await;
+    // A late watcher sees the same order.
+    let mut late = watch_messages(&engine, &chat.id);
+    match late.recv().await.unwrap() {
+        MessagesUpdate::Snapshot { pending, .. } => {
+            let ids: Vec<_> = pending.iter().map(|c| c.id.clone()).collect();
+            assert_eq!(ids, [c.id.clone(), a.id.clone(), b.id.clone()]);
+        }
+        other => panic!("expected a snapshot, got {other:?}"),
+    }
+
+    let cancelled = engine.cancel_queued(&chat.id, &a.id).unwrap();
+    assert_eq!(cancelled.status, CommandStatus::Cancelled);
+    assert!(engine.cancel_queued(&chat.id, &a.id).is_err());
+
+    // c, then b, each a turn of its own.
+    let mut request = request_id(&seen);
+    for next in [&c, &b] {
+        engine.queue_command(&chat.id, answer(request)).unwrap();
+        until(&mut updates, |u| {
+            settled(u, &next.id, CommandStatus::Applied)
+        })
+        .await;
+        request = request_id(&until(&mut updates, is_input).await);
+    }
+    engine.queue_command(&chat.id, answer(request)).unwrap();
+    until(&mut updates, is_done).await;
+    assert_eq!(
+        user_ids(&engine, &chat.id),
+        ["user-first", "user-c", "user-b"]
+    );
+}
+
+#[tokio::test]
+async fn a_stopped_turn_holds_the_queue_and_send_now_hands_over() {
+    let (_dir, engine) = engine(0.0);
+    let chat = engine
+        .create_chat("/demo", config(HarnessId::Mock))
+        .unwrap();
+    let mut updates = watch_messages(&engine, &chat.id);
+
+    engine.queue_command(&chat.id, send("first")).unwrap();
+    until(&mut updates, is_input).await;
+    let a = engine.queue_command(&chat.id, send("a")).unwrap();
+    let b = engine.queue_command(&chat.id, send("b")).unwrap();
+
+    // Stopping holds the queue.
+    engine
+        .queue_command(&chat.id, CommandPayload::Interrupt)
+        .unwrap();
+    until(&mut updates, is_done).await;
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    assert_eq!(user_ids(&engine, &chat.id), ["user-first"]);
+
+    // Idle: send now starts it at once, the rest stays held.
+    engine.send_queued_now(&chat.id, &b.id).unwrap();
+    until(&mut updates, |u| settled(u, &b.id, CommandStatus::Applied)).await;
+    until(&mut updates, is_input).await;
+    assert_eq!(user_ids(&engine, &chat.id), ["user-first", "user-b"]);
+
+    // Mid-turn: send now interrupts, and the queue carries on with it.
+    let c = engine.queue_command(&chat.id, send("c")).unwrap();
+    engine.send_queued_now(&chat.id, &c.id).unwrap();
+    until(&mut updates, |u| settled(u, &c.id, CommandStatus::Applied)).await;
+    let messages = engine.store().messages(&chat.id).unwrap();
+    assert_eq!(messages[3].status, Some(MessageStatus::Aborted));
+    assert_eq!(
+        user_ids(&engine, &chat.id),
+        ["user-first", "user-b", "user-c"]
+    );
+    let seen = until(&mut updates, is_input).await;
+    engine
+        .queue_command(&chat.id, answer(request_id(&seen)))
+        .unwrap();
+    until(&mut updates, |u| settled(u, &a.id, CommandStatus::Applied)).await;
+
+    assert!(engine.send_queued_now(&chat.id, &a.id).is_err());
 }
 
 #[tokio::test]

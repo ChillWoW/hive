@@ -169,3 +169,39 @@ pub async fn mark_chat_seen(engine: State<'_, Engine>, chat_id: String) -> Resul
 pub async fn delete_chat(engine: State<'_, Engine>, chat_id: String) -> Result<(), String> {
     engine.delete_chat(&chat_id).map_err(|e| e.to_string())
 }
+
+/// Withdraws a prompt still waiting behind the running turn.
+#[tauri::command]
+pub async fn cancel_queued(
+    engine: State<'_, Engine>,
+    chat_id: String,
+    command_id: String,
+) -> Result<Command, String> {
+    engine
+        .cancel_queued(&chat_id, &command_id)
+        .map_err(|e| e.to_string())
+}
+
+/// Puts the listed queued prompts first, in that order.
+#[tauri::command]
+pub async fn reorder_queue(
+    engine: State<'_, Engine>,
+    chat_id: String,
+    command_ids: Vec<String>,
+) -> Result<(), String> {
+    engine
+        .reorder_queue(&chat_id, &command_ids)
+        .map_err(|e| e.to_string())
+}
+
+/// Runs a queued prompt next, interrupting the running turn if there is one.
+#[tauri::command]
+pub async fn send_queued_now(
+    engine: State<'_, Engine>,
+    chat_id: String,
+    command_id: String,
+) -> Result<(), String> {
+    engine
+        .send_queued_now(&chat_id, &command_id)
+        .map_err(|e| e.to_string())
+}

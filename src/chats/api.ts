@@ -87,6 +87,24 @@ export const chatsApi = {
             ? invoke<Command>("queue_command", { chatId, payload })
             : Promise.reject(new Error(NO_BACKEND)),
 
+    /** Withdraws a prompt still waiting behind the running turn. */
+    cancelQueued: (chatId: string, commandId: string): Promise<Command> =>
+        isTauri
+            ? invoke<Command>("cancel_queued", { chatId, commandId })
+            : Promise.reject(new Error(NO_BACKEND)),
+
+    /** Puts the listed queued prompts first, in that order. */
+    reorderQueue: (chatId: string, commandIds: string[]): Promise<void> =>
+        isTauri
+            ? invoke<void>("reorder_queue", { chatId, commandIds })
+            : Promise.reject(new Error(NO_BACKEND)),
+
+    /** Runs a queued prompt next, interrupting the running turn if any. */
+    sendQueuedNow: (chatId: string, commandId: string): Promise<void> =>
+        isTauri
+            ? invoke<void>("send_queued_now", { chatId, commandId })
+            : Promise.reject(new Error(NO_BACKEND)),
+
     /** A snapshot, then every change to the list and live sessions. */
     watchChats: (onUpdate: (update: ChatsUpdate) => void): Promise<Unwatch> => {
         if (!isTauri) {
