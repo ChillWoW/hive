@@ -45,6 +45,12 @@ export const chatsApi = {
             ? invoke<Chat>("create_chat", { cwd, config })
             : Promise.reject(new Error(NO_BACKEND)),
 
+    /** A live run picks the new settings up from its next turn. */
+    updateConfig: (chatId: string, config: ChatConfig): Promise<Chat> =>
+        isTauri
+            ? invoke<Chat>("update_chat_config", { chatId, config })
+            : Promise.reject(new Error(NO_BACKEND)),
+
     /** Settled, or `pending` for a prompt queued behind the running turn. */
     queueCommand: (chatId: string, payload: CommandPayload): Promise<Command> =>
         isTauri

@@ -1,6 +1,8 @@
 import { SIDEBAR_WIDTH, useLayoutStore } from "@/stores/useLayoutStore";
 import { useWindowState } from "./useWindowState";
 import { WindowControls } from "./WindowControls";
+import { chats } from "@/chats";
+import { composer } from "@/composer";
 import { cn } from "@/lib/cn";
 import { isMac } from "@/lib/platform";
 import { Button } from "@/ui";
@@ -71,7 +73,15 @@ export function TopBar({ title, className }: TopBarProps) {
                         <ArrowRightIcon className="size-4" />
                     </Button>
 
-                    <Button variant="ghost" className="p-0 size-6">
+                    <Button
+                        variant="ghost"
+                        aria-label="New chat"
+                        onClick={() => {
+                            chats.select(null);
+                            composer.focus();
+                        }}
+                        className="p-0 size-6"
+                    >
                         <PlusIcon className="size-4" />
                     </Button>
                 </div>

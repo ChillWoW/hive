@@ -8,7 +8,8 @@ import type {
     Command,
     Message,
     MessagesUpdate,
-    Session
+    Session,
+    UserInputAnswer
 } from "@/proto";
 import { foldEvent } from "@/transcript/fold";
 import { chatsApi, type Unwatch } from "./api";
@@ -64,6 +65,16 @@ type ChatsState = {
     send: (target: SendTarget, prompt: string) => Promise<void>;
     /** Drops a failed prompt from the outbox. */
     discard: (messageId: string) => void;
+    /** Saves a chat's run settings; shown at once, reverted if refused. */
+    updateConfig: (chatId: string, config: ChatConfig) => Promise<void>;
+    /** Stops the running turn. */
+    interrupt: (chatId: string) => Promise<void>;
+    /** Answers an agent's question; the wizard closes when it resolves. */
+    answer: (
+        chatId: string,
+        requestId: string,
+        answers: UserInputAnswer[]
+    ) => Promise<void>;
 };
 
 type Draft = ChatsState;
@@ -195,9 +206,56 @@ export const useChatsStore = create<ChatsState>()(
             set((s) => {
                 const o = s.outbox.find((o) => o.messageId === messageId);
                 if (o?.error) removeOutgoing(s, messageId);
-            })
+            }),
+
+        updateConfig: async (chatId, config) => {
+            let previous: ChatConfig | undefined;
+            set((s) => {
+                const chat = s.chats.find((c) => c.id === chatId);
+                if (!chat) return;
+                previous = chat.config;
+                chat.config = config;
+            });
+            try {
+                const chat = await chatsApi.updateConfig(chatId, config);
+                set((s) => upsertChat(s, chat));
+            } catch (error) {
+                console.warn(`[chats] updating ${chatId}'s config failed`, error);
+                set((s) => {
+                    const chat = s.chats.find((c) => c.id === chatId);
+                    // Only if nothing changed it again meanwhile.
+                    if (chat && previous && chat.config === config) {
+                        chat.config = previous;
+                    }
+                });
+                throw error;
+            }
+        },
+
+        interrupt: async (chatId) => {
+            await settled(chatsApi.queueCommand(chatId, { kind: "interrupt" }));
+        },
+
+        answer: async (chatId, requestId, answers) => {
+            await settled(
+                chatsApi.queueCommand(chatId, {
+                    kind: "answer",
+                    requestId,
+                    answers
+                })
+            );
+        }
     }))
 );
+
+/** Rejects with the command's resolution when the engine refused it. */
+async function settled(command: Promise<Command>): Promise<Command> {
+    const c = await command;
+    if (c.status === "rejected" || c.status === "expired") {
+        throw new Error(c.resolution ?? "That didn't go through.");
+    }
+    return c;
+}
 
 const set = useChatsStore.setState;
 
@@ -420,5 +478,16 @@ export const chats = {
         useChatsStore.getState().select(chatId),
     send: (target: SendTarget, prompt: string) =>
         useChatsStore.getState().send(target, prompt),
-    discard: (messageId: string) => useChatsStore.getState().discard(messageId)
+    discard: (messageId: string) => useChatsStore.getState().discard(messageId),
+    updateConfig: (chatId: string, config: ChatConfig) =>
+        useChatsStore.getState().updateConfig(chatId, config),
+    interrupt: (chatId: string) => useChatsStore.getState().interrupt(chatId),
+    answer: (chatId: string, requestId: string, answers: UserInputAnswer[]) =>
+        useChatsStore.getState().answer(chatId, requestId, answers)
 };
+
+export function useChat(chatId: string | null) {
+    return useChatsStore((s) =>
+        chatId ? s.chats.find((c) => c.id === chatId) : undefined
+    );
+}

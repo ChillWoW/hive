@@ -1,5 +1,9 @@
 @import "tailwindcss";
 
+/* Streamdown (src/transcript/Markdown.tsx) styles itself with utility classes
+   compiled into its bundle; Tailwind skips node_modules unless told. */
+@source "../node_modules/streamdown/dist/*.js";
+
 @theme {
     --color-dark-50: #c9c9c9;
     --color-dark-100: #b8b8b8;
@@ -42,6 +46,53 @@
             translate: 100% 0;
         }
     }
+
+    --animate-shimmer: shimmer 1.2s linear infinite;
+
+    @keyframes shimmer {
+        from {
+            background-position: 100% 0;
+        }
+        to {
+            background-position: 0 0;
+        }
+    }
+}
+
+/* `shimmer`: a band of light sweeping across text, for labels of work in
+   progress ("Thinking", a running tool). The gradient is painted in
+   `currentColor`, so `text-*` still sets the base; the band is
+   `--shimmer-highlight`. Reduced motion gets plain text. */
+@utility shimmer {
+    background-image: linear-gradient(
+        90deg,
+        currentColor 40%,
+        var(--shimmer-highlight, var(--color-dark-50)) 50%,
+        currentColor 60%
+    );
+    background-size: 250% 100%;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: var(--animate-shimmer);
+
+    @media (prefers-reduced-motion: reduce) {
+        animation: none;
+        background-image: none;
+        -webkit-text-fill-color: currentColor;
+    }
+}
+
+/* The shadcn-style names Streamdown's classes are written against, pointed at
+   this palette. App code keeps using the palette itself. */
+@theme inline {
+    --color-background: var(--color-dark-900);
+    --color-foreground: var(--color-dark-50);
+    --color-muted: var(--color-dark-800);
+    --color-muted-foreground: var(--color-dark-200);
+    --color-border: var(--color-dark-700);
+    --color-sidebar: var(--color-dark-850);
+    --color-primary: var(--color-primary-200);
+    --color-primary-foreground: var(--color-dark-900);
 }
 
 @layer base {
@@ -74,6 +125,103 @@
         scrollbar-width: none;
         -ms-overflow-style: none;
     }
+}
+
+/* Rendered markdown (src/transcript/Markdown.tsx). Unlayered on purpose:
+   Streamdown's defaults are utility classes, and only rules outside the
+   layers outrank them. Its type scale is pulled down to the chat's 14px. */
+.markdown {
+    font-size: 0.875rem;
+    line-height: 1.5rem;
+    color: var(--color-dark-100);
+    overflow-wrap: anywhere;
+}
+
+.markdown [data-streamdown^="heading-"],
+.markdown [data-streamdown="strong"] {
+    color: var(--color-dark-50);
+}
+
+/* Reasoning: the same markdown a step quieter. */
+.markdown.markdown-muted {
+    color: var(--color-dark-300);
+}
+
+/* A thought inside a tool group, at the group's 12px. */
+.markdown.markdown-small {
+    font-size: 0.75rem;
+    line-height: 1.125rem;
+}
+
+.markdown.markdown-muted [data-streamdown^="heading-"],
+.markdown.markdown-muted [data-streamdown="strong"] {
+    color: var(--color-dark-200);
+}
+
+.markdown [data-streamdown^="heading-"] {
+    margin-top: 1.25rem;
+    margin-bottom: 0.25rem;
+    line-height: 1.4;
+}
+
+.markdown [data-streamdown="heading-1"] {
+    font-size: 1.25rem;
+}
+
+.markdown [data-streamdown="heading-2"] {
+    font-size: 1.125rem;
+}
+
+.markdown [data-streamdown="heading-3"] {
+    font-size: 1rem;
+}
+
+.markdown [data-streamdown="heading-4"],
+.markdown [data-streamdown="heading-5"],
+.markdown [data-streamdown="heading-6"] {
+    font-size: 0.875rem;
+}
+
+.markdown [data-streamdown="ordered-list"],
+.markdown [data-streamdown="unordered-list"] {
+    list-style-position: outside;
+    padding-left: 1.25rem;
+}
+
+.markdown [data-streamdown="list-item"]::marker {
+    color: var(--color-dark-300);
+}
+
+.markdown [data-streamdown="blockquote"] {
+    border-left-width: 2px;
+    font-style: normal;
+}
+
+.markdown [data-streamdown="inline-code"] {
+    font-size: 0.8125rem;
+    padding: 0.0625rem 0.3125rem;
+    border-radius: 0.25rem;
+}
+
+.markdown [data-streamdown="code-block"],
+.markdown [data-streamdown="table-wrapper"] {
+    border-radius: 0.375rem;
+}
+
+.markdown [data-streamdown="code-block-body"] {
+    font-size: 0.8125rem;
+    line-height: 1.35rem;
+}
+
+/* The Shiki theme brings its own background; the block's panel is the app's. */
+.markdown [data-streamdown="code-block-body"] pre {
+    background: transparent;
+}
+
+/* Streamdown's streaming caret is an `::after` on the last block. */
+.markdown > :last-child::after {
+    color: var(--color-dark-200);
+    animation: var(--animate-pulse);
 }
 
 html,
