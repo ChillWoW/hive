@@ -6,5 +6,15 @@ export const DEFAULT_SETTINGS: Settings = {
   "chats": {
     "resumeInterrupted": false,
     "autoTitle": true
+  },
+  "keyboard": {
+    "sendWith": "enter",
+    "newChat": "Mod+N",
+    "toggleSidebar": "Mod+B",
+    "openSettings": "Mod+,",
+    "focusComposer": "Mod+L",
+    "previousChat": "Ctrl+Shift+Tab",
+    "nextChat": "Ctrl+Tab",
+    "togglePlan": "Shift+Tab"
   }
 };

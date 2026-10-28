@@ -24,6 +24,7 @@ pub const SETTINGS_VERSION: u32 = 1;
 pub struct Settings {
     pub version: u32,
     pub chats: ChatsSettings,
+    pub keyboard: KeyboardSettings,
 }
 
 impl Default for Settings {
@@ -31,6 +32,7 @@ impl Default for Settings {
         Self {
             version: SETTINGS_VERSION,
             chats: ChatsSettings::default(),
+            keyboard: KeyboardSettings::default(),
         }
     }
 }
@@ -51,6 +53,49 @@ impl Default for ChatsSettings {
         Self {
             resume_interrupted: false,
             auto_title: true,
+        }
+    }
+}
+
+/// Which key sends a prompt from the composer; the other one adds a line.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "kebab-case")]
+pub enum SendKey {
+    #[default]
+    Enter,
+    /// Cmd+Enter on macOS, Ctrl+Enter elsewhere.
+    ModEnter,
+}
+
+/// Shortcuts, read by the frontend's keybinding layer (`src/keybindings/`).
+/// Each is a combo like `"Mod+Shift+P"` (`Mod`: Cmd on macOS, Ctrl
+/// elsewhere); an empty string leaves the action unbound. A combo the
+/// frontend can't parse is treated as unbound.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase", default)]
+pub struct KeyboardSettings {
+    pub send_with: SendKey,
+    pub new_chat: String,
+    pub toggle_sidebar: String,
+    pub open_settings: String,
+    pub focus_composer: String,
+    pub previous_chat: String,
+    pub next_chat: String,
+    /// Only while typing a prompt.
+    pub toggle_plan: String,
+}
+
+impl Default for KeyboardSettings {
+    fn default() -> Self {
+        Self {
+            send_with: SendKey::Enter,
+            new_chat: "Mod+N".into(),
+            toggle_sidebar: "Mod+B".into(),
+            open_settings: "Mod+,".into(),
+            focus_composer: "Mod+L".into(),
+            previous_chat: "Ctrl+Shift+Tab".into(),
+            next_chat: "Ctrl+Tab".into(),
+            toggle_plan: "Shift+Tab".into(),
         }
     }
 }

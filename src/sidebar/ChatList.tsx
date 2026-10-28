@@ -3,6 +3,7 @@ import { ArchiveIcon, CaretRightIcon, PlusIcon } from "@phosphor-icons/react";
 import { chats, useChatsStore } from "@/chats";
 import { composer, folderName, useComposerStore } from "@/composer";
 import { ProjectIcon } from "@/composer/ProjectIcon";
+import { useShortcut } from "@/keybindings";
 import { cn } from "@/lib/cn";
 import type { Chat } from "@/proto";
 import { Tooltip } from "@/ui";
@@ -21,6 +22,24 @@ export function ChatList() {
     const { pinned, projects, archived } = useSidebarGroups();
     const loaded = useChatsStore((s) => s.loaded);
     const [deleting, setDeleting] = useState<Chat | null>(null);
+
+    // Sidebar order, folded groups included; Archived only while in it.
+    const step = (by: 1 | -1) => {
+        const activeId = useChatsStore.getState().activeChatId;
+        const order = [...pinned, ...projects.flatMap((p) => p.chats)];
+        if (archived.some((c) => c.id === activeId)) order.push(...archived);
+        if (!order.length) return false;
+        const index = order.findIndex((c) => c.id === activeId);
+        const next =
+            index < 0
+                ? by > 0
+                    ? 0
+                    : order.length - 1
+                : (index + by + order.length) % order.length;
+        chats.select(order[next]!.id);
+    };
+    useShortcut("nextChat", () => step(1));
+    useShortcut("previousChat", () => step(-1));
 
     const row: Row = (chat) => (
         <ChatRow key={chat.id} chat={chat} onDelete={setDeleting} />

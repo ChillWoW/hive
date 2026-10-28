@@ -19,6 +19,7 @@ import {
     useCatalog,
     useCatalogs
 } from "@/harnesses";
+import { useShortcut } from "@/keybindings";
 import type { ChatConfig, MessagePart } from "@/proto";
 import { Transcript } from "@/transcript";
 import { MorphHeight } from "@/ui";
@@ -70,6 +71,11 @@ export function ChatView() {
             setNewChat({ config: next });
         }
     };
+
+    useShortcut("togglePlan", () => {
+        if (!catalog?.capabilities.plan) return false;
+        setConfig({ ...config, plan: !config.plan });
+    });
 
     const shown = messages.filter((m) => m.delivery?.state !== "queued");
     const queued = messages.filter((m) => m.delivery?.state === "queued");

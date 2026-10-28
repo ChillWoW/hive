@@ -3,6 +3,7 @@ import { useWindowState } from "./useWindowState";
 import { WindowControls } from "./WindowControls";
 import { chats } from "@/chats";
 import { composer } from "@/composer";
+import { useShortcut, useShortcutTitle } from "@/keybindings";
 import { cn } from "@/lib/cn";
 import { isMac } from "@/lib/platform";
 import { Button } from "@/ui";
@@ -32,6 +33,14 @@ export function TopBar({ title, className }: TopBarProps) {
 
     const open = useLayoutStore((state) => state.sidebarOpen);
     const toggleSidebar = useLayoutStore((state) => state.toggleSidebar);
+    const newChat = () => {
+        chats.select(null);
+        composer.focus();
+    };
+    useShortcut("toggleSidebar", toggleSidebar);
+    useShortcut("newChat", newChat);
+    const sidebarTitle = useShortcutTitle("toggleSidebar", "Toggle sidebar");
+    const newChatTitle = useShortcutTitle("newChat", "New chat");
 
     return (
         <header
@@ -60,6 +69,8 @@ export function TopBar({ title, className }: TopBarProps) {
                     <Button
                         variant="ghost"
                         onClick={toggleSidebar}
+                        aria-label="Toggle sidebar"
+                        title={sidebarTitle}
                         className="p-0 size-6"
                     >
                         <SidebarSimpleIcon className="size-4" />
@@ -76,10 +87,8 @@ export function TopBar({ title, className }: TopBarProps) {
                     <Button
                         variant="ghost"
                         aria-label="New chat"
-                        onClick={() => {
-                            chats.select(null);
-                            composer.focus();
-                        }}
+                        title={newChatTitle}
+                        onClick={newChat}
                         className="p-0 size-6"
                     >
                         <PlusIcon className="size-4" />

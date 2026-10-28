@@ -7,7 +7,10 @@ import {
 } from "@phosphor-icons/react";
 import TextareaAutosize from "react-textarea-autosize";
 import type { ChatConfig, SlashCommand } from "@/proto";
+import { COMPOSER_SCOPE, useShortcut } from "@/keybindings/runtime";
 import { cn } from "@/lib/cn";
+import { isMac } from "@/lib/platform";
+import { useSettingsStore } from "@/settings/store";
 import { Tooltip } from "@/ui";
 import { ModelPicker } from "./ModelPicker";
 import { AccessPicker } from "./AccessPicker";
@@ -129,6 +132,14 @@ export function Composer({
         textareaRef.current?.focus();
     }, [focusToken, chatId]);
 
+    useShortcut("focusComposer", () => {
+        const el = textareaRef.current;
+        if (!el) return false;
+        el.focus();
+        el.setSelectionRange(el.value.length, el.value.length);
+    });
+    const sendWith = useSettingsStore((s) => s.settings.keyboard.sendWith);
+
     // Decides the shape. The text is measured on one line in a hidden span
     // and compared against the room the one-row shape leaves the field —
     // only measurable while in that shape, so it's remembered from there,
@@ -248,6 +259,9 @@ export function Composer({
             return;
         }
         if (event.key !== "Enter" || event.shiftKey) return;
+        // With Mod+Enter sending, a bare Enter is a new line.
+        const mod = isMac ? event.metaKey : event.ctrlKey;
+        if (sendWith === "mod-enter" && !mod) return;
         // Enter mid-composition is the IME accepting a candidate.
         if (event.nativeEvent.isComposing) return;
         event.preventDefault();
@@ -259,6 +273,7 @@ export function Composer({
 
     return (
         <form
+            {...COMPOSER_SCOPE}
             onSubmit={(event) => {
                 event.preventDefault();
                 submit();

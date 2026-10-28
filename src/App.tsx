@@ -2,11 +2,13 @@ import { useState } from "react";
 import { ChatView } from "@/chat/ChatView";
 import { useChat, useChatsRuntime, useChatsStore } from "@/chats";
 import { folderName } from "@/composer";
+import { useKeybindingsRuntime } from "@/keybindings";
 import { Sidebar, TopBar } from "@/layout";
 import { SettingsModal, useSettingsRuntime } from "@/settings";
 import { PortalContainerProvider } from "@/ui";
 
 export function App() {
+    useKeybindingsRuntime();
     useSettingsRuntime();
     useChatsRuntime();
     const chat = useChat(useChatsStore((s) => s.activeChatId));
