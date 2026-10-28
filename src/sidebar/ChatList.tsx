@@ -5,7 +5,8 @@ import { composer, folderName, useComposerStore } from "@/composer";
 import { ProjectIcon } from "@/composer/ProjectIcon";
 import { cn } from "@/lib/cn";
 import type { Chat } from "@/proto";
-import { ChatRow } from "./ChatRow";
+import { Tooltip } from "@/ui";
+import { CARD_DWELL, ChatRow } from "./ChatRow";
 import { DeleteChatDialog } from "./DeleteChatDialog";
 import { useSidebarGroups, type ProjectGroup } from "./groups";
 import { ARCHIVED, isCollapsed, PINNED, projectKey, useSidebarStore } from "./store";
@@ -34,7 +35,9 @@ export function ChatList() {
     }
 
     return (
-        <>
+        // Once a row's card has shown, the next row's follows at once until
+        // the pointer rests off the list for a moment (as in zeron).
+        <Tooltip.Provider delay={CARD_DWELL} timeout={400}>
             <div className="flex flex-col gap-3">
                 {pinned.length > 0 && (
                     <Section sectionKey={PINNED} label="Pinned">
@@ -62,7 +65,7 @@ export function ChatList() {
             </div>
 
             <DeleteChatDialog chat={deleting} onClose={() => setDeleting(null)} />
-        </>
+        </Tooltip.Provider>
     );
 }
 
