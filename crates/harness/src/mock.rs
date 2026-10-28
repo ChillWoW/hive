@@ -97,6 +97,57 @@ impl Harness for MockHarness {
         tokio::spawn(player.run(request));
         Ok(Run { events, handle })
     }
+
+    fn supports_titles(&self) -> bool {
+        true
+    }
+
+    /// Title-cases the request's first four words, which the prompt's last
+    /// line carries as a JSON string.
+    fn run_title(&self, request: RunRequest) -> Result<Run, HarnessError> {
+        let (events_tx, events) = mpsc::channel(8);
+        let (handle, mut commands) = RunHandle::new();
+        let asked = request
+            .prompt
+            .lines()
+            .last()
+            .and_then(|line| serde_json::from_str::<String>(line).ok())
+            .unwrap_or_default();
+        let title = asked
+            .split_whitespace()
+            .take(4)
+            .map(|word| {
+                let mut chars = word.chars();
+                chars.next().map_or_else(String::new, |first| {
+                    first.to_uppercase().chain(chars).collect()
+                })
+            })
+            .collect::<Vec<_>>()
+            .join(" ");
+        let delay = Duration::from_secs_f64(0.4 * self.speed);
+        tokio::spawn(async move {
+            tokio::time::sleep(delay).await;
+            for event in [
+                AgentEvent::TextDelta { text: title },
+                AgentEvent::Done {
+                    status: DoneStatus::Completed,
+                    error: None,
+                    session_id: None,
+                },
+            ] {
+                if events_tx.send(event).await.is_err() {
+                    return;
+                }
+            }
+            // Until closed, like a real session.
+            while let Some(command) = commands.recv().await {
+                if matches!(command, RunCommand::Close) {
+                    return;
+                }
+            }
+        });
+        Ok(Run { events, handle })
+    }
 }
 
 enum Step {

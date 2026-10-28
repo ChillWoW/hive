@@ -166,6 +166,20 @@ impl Store {
         self.journal.delete(id)
     }
 
+    /// Names the chat unless it already has a title (a rename wins). Returns
+    /// the chat if it changed.
+    pub fn title_chat(&self, id: &str, title: &str) -> Result<Option<Chat>> {
+        let Some(mut chat) = self.chat(id)? else {
+            return Ok(None);
+        };
+        if chat.title.as_deref().is_some_and(|t| !t.trim().is_empty()) {
+            return Ok(None);
+        }
+        chat.title = Some(title.to_owned());
+        self.save_chat(&chat)?;
+        Ok(Some(chat))
+    }
+
     fn update_chat(&self, id: &str, update: impl FnOnce(&mut Chat)) -> Result<()> {
         let mut chat = self
             .chat(id)?
@@ -518,6 +532,22 @@ mod tests {
         store.delete_chat(&b.id).unwrap();
         assert!(store.chat(&b.id).unwrap().is_none());
         assert!(store.messages(&b.id).unwrap().is_empty());
+    }
+
+    #[test]
+    fn an_automatic_title_never_replaces_one() {
+        let (_dir, store) = store();
+        let mut chat = store.create_chat("/a", config()).unwrap();
+        let titled = store.title_chat(&chat.id, "Auto").unwrap().unwrap();
+        assert_eq!(titled.title.as_deref(), Some("Auto"));
+
+        chat.title = Some("Mine".into());
+        store.save_chat(&chat).unwrap();
+        assert!(store.title_chat(&chat.id, "Auto").unwrap().is_none());
+        assert_eq!(
+            store.chat(&chat.id).unwrap().unwrap().title.as_deref(),
+            Some("Mine")
+        );
     }
 
     #[test]

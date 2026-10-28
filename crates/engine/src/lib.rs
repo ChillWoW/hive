@@ -30,6 +30,8 @@ use hive_proto::{
 use hive_store::{new_id, now_ms, Recovery, Store, StoreError, Turn};
 use tokio::sync::mpsc;
 
+mod titles;
+
 pub use hive_store;
 
 /// Sent in place of the user when a turn Hive's exit cut short is resumed.
@@ -97,6 +99,8 @@ struct Inner {
     /// Lock order: a chat's state, then this; never the other way.
     list: Mutex<ChatList>,
     next_id: AtomicU64,
+    /// Chats whose title is being written.
+    titling: Mutex<HashSet<String>>,
 }
 
 #[derive(Default)]
@@ -181,6 +185,7 @@ impl Engine {
                 chats: Mutex::default(),
                 list: Mutex::default(),
                 next_id: AtomicU64::new(1),
+                titling: Mutex::default(),
             }),
         }
     }
@@ -647,6 +652,9 @@ impl Engine {
                     publish(&mut st.watchers, MessagesUpdate::Message { message });
                 }
                 self.publish_chat(chat_id);
+                if status == DoneStatus::Completed {
+                    self.maybe_title(chat_id);
+                }
                 if !st.queued.is_empty() {
                     return;
                 }

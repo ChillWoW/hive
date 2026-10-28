@@ -285,12 +285,50 @@ impl Harness for ClaudeHarness {
     }
 
     fn run(&self, request: RunRequest) -> Result<Run, HarnessError> {
+        self.spawn(request, false)
+    }
+
+    fn supports_titles(&self) -> bool {
+        true
+    }
+
+    /// The chat's modes don't apply: its tools are off, and anything it
+    /// still asks for is a question the title run fails on.
+    fn run_title(&self, mut request: RunRequest) -> Result<Run, HarnessError> {
+        request.resume = None;
+        request.attachments.clear();
+        request.model_options.clear();
+        request.auto_approve = false;
+        request.access = AccessMode::Supervised;
+        request.plan = false;
+        self.spawn(request, true)
+    }
+}
+
+impl ClaudeHarness {
+    fn spawn(&self, request: RunRequest, title: bool) -> Result<Run, HarnessError> {
         let exe = match &self.executable {
             Some(path) => path.clone(),
             None => find_on_path("claude").ok_or(HarnessError::NotInstalled("claude"))?,
         };
         let mut cmd = command_for(&exe);
-        cmd.args(Self::launch_args(&request))
+        cmd.args(Self::launch_args(&request));
+        if title {
+            cmd.args([
+                "--system-prompt",
+                crate::TITLE_INSTRUCTIONS,
+                "--tools",
+                "",
+                "--mcp-config",
+                r#"{"mcpServers":{}}"#,
+                "--setting-sources",
+                "",
+            ]);
+            if !managed_mcp_config() {
+                cmd.arg("--strict-mcp-config");
+            }
+        }
+        cmd
             // Set when Hive itself runs inside Claude Code; the child would
             // otherwise think it's nested.
             .env_remove("CLAUDECODE")
@@ -314,7 +352,10 @@ impl Harness for ClaudeHarness {
 
         let (stdin_tx, stdin_rx) = mpsc::unbounded_channel::<String>();
         tokio::spawn(write_stdin(stdin, stdin_rx));
-        let _ = stdin_tx.send(wire::initialize_line(INITIALIZE_ID));
+        // A title run needs no slash commands.
+        if !title {
+            let _ = stdin_tx.send(wire::initialize_line(INITIALIZE_ID));
+        }
         let _ = stdin_tx.send(wire::user_line(&request.prompt));
 
         let (events_tx, events) = mpsc::channel(256);
@@ -707,6 +748,20 @@ fn command_for(exe: &Path) -> Command {
     }
 }
 
+/// An administrator's `managed-mcp.json`, at the paths Claude Code reads.
+/// While it exists the CLI refuses `--strict-mcp-config` and exits, and it
+/// already keeps every other MCP server out on its own.
+fn managed_mcp_config() -> bool {
+    let path = if cfg!(target_os = "macos") {
+        "/Library/Application Support/ClaudeCode/managed-mcp.json"
+    } else if cfg!(windows) {
+        r"C:\Program Files\ClaudeCode\managed-mcp.json"
+    } else {
+        "/etc/claude-code/managed-mcp.json"
+    };
+    Path::new(path).is_file()
+}
+
 fn find_on_path(name: &str) -> Option<PathBuf> {
     let candidates: &[&str] = if cfg!(windows) {
         &["exe", "cmd", "bat"]
@@ -892,13 +947,22 @@ mod tests {
         use AccessMode::*;
         let cases: [(AccessMode, bool, bool, &[&str]); 7] = [
             (FullAccess, false, false, &["--permission-mode", "default"]),
-            (AutoAcceptEdits, false, false, &["--permission-mode", "acceptEdits"]),
+            (
+                AutoAcceptEdits,
+                false,
+                false,
+                &["--permission-mode", "acceptEdits"],
+            ),
             (Supervised, false, false, &["--permission-mode", "default"]),
             (
                 Supervised,
                 true,
                 false,
-                &["--permission-mode", "bypassPermissions", "--dangerously-skip-permissions"],
+                &[
+                    "--permission-mode",
+                    "bypassPermissions",
+                    "--dangerously-skip-permissions",
+                ],
             ),
             (FullAccess, false, true, &["--permission-mode", "plan"]),
             (AutoAcceptEdits, false, true, &["--permission-mode", "plan"]),
@@ -906,7 +970,11 @@ mod tests {
                 FullAccess,
                 true,
                 true,
-                &["--permission-mode", "plan", "--allow-dangerously-skip-permissions"],
+                &[
+                    "--permission-mode",
+                    "plan",
+                    "--allow-dangerously-skip-permissions",
+                ],
             ),
         ];
         for (access, auto_approve, plan, expected) in cases {
@@ -932,7 +1000,10 @@ mod tests {
         for tool in ["Bash", "Edit", "WebFetch", "ExitPlanMode", "mcp__x__y"] {
             assert_eq!(ask(tool, &json!({}), FullAccess), None, "{tool}");
         }
-        assert_eq!(ask("Edit", &json!({"file_path": "a.rs"}), AutoAcceptEdits), None);
+        assert_eq!(
+            ask("Edit", &json!({"file_path": "a.rs"}), AutoAcceptEdits),
+            None
+        );
         assert_eq!(
             ask("Bash", &json!({"command": "rm -rf build"}), AutoAcceptEdits).as_deref(),
             Some("Claude wants to run `rm -rf build`. Allow it?")
