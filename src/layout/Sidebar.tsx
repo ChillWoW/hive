@@ -1,3 +1,4 @@
+import { SettingsButton } from "@/settings";
 import { SIDEBAR_WIDTH, useLayoutStore } from "@/stores/useLayoutStore";
 
 export function Sidebar() {
@@ -14,7 +15,9 @@ export function Sidebar() {
                 className="flex h-full flex-col border-r border-dark-600 bg-dark-850 pt-9"
             >
                 <div className="min-h-0 flex-1 overflow-y-auto px-2 py-1"></div>
-                <div className="flex h-11 shrink-0 items-center px-2"></div>
+                <div className="flex h-11 shrink-0 items-center px-2">
+                    <SettingsButton />
+                </div>
             </div>
         </aside>
     );

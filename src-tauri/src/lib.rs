@@ -1,5 +1,7 @@
 mod mock;
+mod settings;
 
+use tauri::Manager;
 use tauri_plugin_window_state::StateFlags;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -15,7 +17,15 @@ pub fn run() {
         )
         .build(),
     )
-    .invoke_handler(tauri::generate_handler![mock::mock_run])
+    .invoke_handler(tauri::generate_handler![
+      mock::mock_run,
+      settings::settings_get,
+      settings::settings_update,
+      settings::settings_reset,
+      settings::settings_reload,
+      settings::settings_path,
+      settings::settings_reveal,
+    ])
     .setup(|app| {
       if cfg!(debug_assertions) {
         app.handle().plugin(
@@ -24,6 +34,8 @@ pub fn run() {
             .build(),
         )?;
       }
+      let data_dir = app.path().app_data_dir()?;
+      app.manage(hive_store::SettingsFile::open(data_dir)?);
       Ok(())
     })
     .run(tauri::generate_context!())

@@ -21,6 +21,7 @@ export type { RunRequest } from "./RunRequest";
 export type { SandboxLevel } from "./SandboxLevel";
 export type { Session } from "./Session";
 export type { SessionStatus } from "./SessionStatus";
+export type { Settings } from "./Settings";
 export type { SlashCommand } from "./SlashCommand";
 export type { SubagentStatus } from "./SubagentStatus";
 export type { TodoItem } from "./TodoItem";
@@ -30,3 +31,5 @@ export type { ToolDiff } from "./ToolDiff";
 export type { UserInputAnswer } from "./UserInputAnswer";
 export type { UserInputQuestion } from "./UserInputQuestion";
 export type { JsonValue } from "./serde_json/JsonValue";
+
+export { DEFAULT_SETTINGS } from "./defaults";

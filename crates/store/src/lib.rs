@@ -11,6 +11,7 @@
 //! [`Store::recover`] rebuilds unfinished messages from their journals.
 
 pub mod journal;
+pub mod settings;
 
 use std::path::Path;
 use std::sync::{Mutex, MutexGuard, PoisonError};
@@ -23,6 +24,7 @@ use hive_proto::{
 use rusqlite::{params, Connection, OptionalExtension};
 
 pub use journal::{Journal, JournalLine};
+pub use settings::{SettingsFile, SETTINGS_FILE};
 
 /// How often a streaming message is saved while only deltas arrive. The
 /// journal has every delta regardless.

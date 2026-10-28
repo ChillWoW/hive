@@ -70,6 +70,7 @@ version = "0.0.1"
 dependencies = [
  "hive-harness",
  "hive-proto",
+ "hive-store",
  "log",
  "serde",
  "serde_json",
