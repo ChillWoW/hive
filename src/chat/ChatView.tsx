@@ -23,6 +23,7 @@ import {
 import type { ChatConfig, MessagePart } from "@/proto";
 import { cn } from "@/lib/cn";
 import { Transcript } from "@/transcript";
+import { MorphHeight } from "@/ui";
 
 type InputPart = Extract<MessagePart, { kind: "input" }>;
 
@@ -108,27 +109,30 @@ export function ChatView() {
         <div className="shrink-0 px-6 pb-3">
             <div className="mx-auto w-full max-w-3xl">
                 {queued.length > 0 && <QueuedTray messages={queued} />}
-                {input && chat ? (
-                    <QuestionWizard
-                        key={input.requestId}
-                        questions={input.questions}
-                        onSubmit={(answers) => chats.answer(chat.id, input.requestId, answers)}
-                    />
-                ) : (
-                    <Composer
-                        chatId={chatId}
-                        config={config}
-                        onConfigChange={setConfig}
-                        lockedHarness={!!chat}
-                        busy={busy}
-                        canStop={!!chat && streaming && !!catalog?.capabilities.interrupt}
-                        steering={!!catalog?.capabilities.steering}
-                        commands={slashCommands(catalog, session?.commands)}
-                        onSend={sendTo}
-                        onStop={chat ? () => void chats.interrupt(chat.id).catch(() => {}) : undefined}
-                        placeholder={hero ? "What should we work on?" : "Reply…"}
-                    />
-                )}
+                {/* The box grows into the wizard and back rather than jumping. */}
+                <MorphHeight swapKey={input && chat ? `question:${input.requestId}` : "composer"}>
+                    {input && chat ? (
+                        <QuestionWizard
+                            key={input.requestId}
+                            questions={input.questions}
+                            onSubmit={(answers) => chats.answer(chat.id, input.requestId, answers)}
+                        />
+                    ) : (
+                        <Composer
+                            chatId={chatId}
+                            config={config}
+                            onConfigChange={setConfig}
+                            lockedHarness={!!chat}
+                            busy={busy}
+                            canStop={!!chat && streaming && !!catalog?.capabilities.interrupt}
+                            steering={!!catalog?.capabilities.steering}
+                            commands={slashCommands(catalog, session?.commands)}
+                            onSend={sendTo}
+                            onStop={chat ? () => void chats.interrupt(chat.id).catch(() => {}) : undefined}
+                            placeholder={hero ? "What should we work on?" : "Reply…"}
+                        />
+                    )}
+                </MorphHeight>
                 <div className="mt-1 flex h-6 min-w-0 items-center gap-1 px-1">
                     <FolderPicker
                         cwd={chat ? chat.cwd : newChat.cwd}

@@ -11,6 +11,7 @@ export { iconButtonClassName } from "./iconButton";
 export { Input } from "./Input";
 export { Menu } from "./Menu";
 export { Modal } from "./Modal";
+export { MorphHeight } from "./MorphHeight";
 export { NumberInput } from "./NumberInput";
 export { Popover } from "./Popover";
 export { PortalContainerProvider, usePortalContainer } from "./PortalContainer";
