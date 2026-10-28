@@ -10,7 +10,7 @@ export function App() {
     useSettingsRuntime();
     useChatsRuntime();
     const chat = useChat(useChatsStore((s) => s.activeChatId));
-    const title = chat ? (chat.title ?? folderName(chat.cwd)) : "New chat";
+    const title = chat ? (chat.title ?? folderName(chat.cwd)) : undefined;
     // Overlays mount here, below the top bar, so an open modal never covers
     // the window's drag region or its controls.
     const [overlayLayer, setOverlayLayer] = useState<HTMLDivElement | null>(
