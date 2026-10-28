@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Combobox } from "@base-ui/react/combobox";
 import {
     FolderIcon,
@@ -7,7 +7,7 @@ import {
     PlusIcon
 } from "@phosphor-icons/react";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
-import { useChatsStore } from "@/chats";
+import { projects, useProjects } from "@/projects";
 import { folderName } from "./paths";
 import { cn } from "@/lib/cn";
 import { isTauri } from "@/lib/platform";
@@ -22,17 +22,11 @@ import {
 } from "./chip";
 import { ProjectIcon } from "./ProjectIcon";
 
-/** Every chat's folder, most recently active first, once each. */
-function useRecentFolders(): string[] {
-    const chats = useChatsStore((s) => s.chats);
-    return useMemo(() => [...new Set(chats.map((c) => c.cwd))], [chats]);
-}
-
 /**
  * The folder a chat works in, as a chip under the composer. In the new-chat
- * view it picks where the next chat runs: a recent folder, one from the
- * system dialog, or a path typed into the search. A chat already started is
- * `locked` to its folder.
+ * view it picks where the next chat runs: a project (`useProjects`), one from
+ * the system dialog, or a path typed into the search; whichever it is becomes
+ * a project. A chat already started is `locked` to its folder.
  */
 export function FolderPicker({
     cwd,
@@ -72,8 +66,8 @@ function FolderCombobox({
     onChange?: (cwd: string) => void;
 }) {
     const container = usePortalContainer();
-    const recent = useRecentFolders();
-    const items = cwd && !recent.includes(cwd) ? [cwd, ...recent] : recent;
+    const known = useProjects();
+    const items = cwd && !known.includes(cwd) ? [...known, cwd] : known;
     const [open, setOpen] = useState(false);
     const [query, setQuery] = useState("");
     const typed = query.trim();
@@ -82,6 +76,7 @@ function FolderCombobox({
 
     const pick = (path: string) => {
         setOpen(false);
+        projects.add(path);
         onChange?.(path);
     };
 
@@ -92,7 +87,7 @@ function FolderCombobox({
             defaultPath: cwd ?? undefined,
             title: "Choose a folder"
         });
-        if (typeof picked === "string") onChange?.(picked);
+        if (typeof picked === "string") pick(picked);
     };
 
     return (
@@ -111,14 +106,24 @@ function FolderCombobox({
                 path.toLowerCase().includes(q.trim().toLowerCase())
             }
         >
-            <Combobox.Trigger
-                className={cn(chipTriggerClassName, !cwd && "text-warning")}
-            >
-                <FolderIcon className="size-3.5 shrink-0" />
-                <span className="truncate">
-                    {cwd ? folderName(cwd) : "Choose a folder"}
-                </span>
-            </Combobox.Trigger>
+            {/* The full path on hover; quiet while the list is open. */}
+            <Tooltip disabled={!cwd || open}>
+                <Tooltip.Trigger
+                    render={
+                        <Combobox.Trigger
+                            className={cn(chipTriggerClassName, !cwd && "text-warning")}
+                        >
+                            <FolderIcon className="size-3.5 shrink-0" />
+                            <span className="truncate">
+                                {cwd ? folderName(cwd) : "Choose a folder"}
+                            </span>
+                        </Combobox.Trigger>
+                    }
+                />
+                <Tooltip.Content side="top" align="start">
+                    {cwd}
+                </Tooltip.Content>
+            </Tooltip>
 
             <Combobox.Portal container={container ?? undefined}>
                 <Combobox.Positioner
