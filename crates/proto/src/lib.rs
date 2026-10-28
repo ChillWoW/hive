@@ -8,6 +8,7 @@ pub mod catalog;
 pub mod chat;
 pub mod command;
 pub mod fold;
+pub mod git;
 pub mod message;
 pub mod provider;
 pub mod settings;
@@ -18,6 +19,7 @@ pub use catalog::*;
 pub use chat::*;
 pub use command::*;
 pub use fold::fold_event;
+pub use git::*;
 pub use message::*;
 pub use provider::*;
 pub use settings::*;
@@ -60,6 +62,7 @@ mod export {
         ProviderStatus::export_all(&cfg).unwrap();
         SignInMethod::export_all(&cfg).unwrap();
         SignInStarted::export_all(&cfg).unwrap();
+        GitRepo::export_all(&cfg).unwrap();
 
         let mut modules = Vec::new();
         collect_modules(&dir, "", &mut modules);

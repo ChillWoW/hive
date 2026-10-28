@@ -19,6 +19,7 @@ tauri-build = { version = "2.6.3", features = [] }
 
 [dependencies]
 hive-engine.workspace = true
+hive-git.workspace = true
 hive-harness.workspace = true
 hive-proto.workspace = true
 hive-store.workspace = true

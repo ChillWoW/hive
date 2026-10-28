@@ -70,6 +70,7 @@ version = "0.0.1"
 dependencies = [
  "base64 0.22.1",
  "hive-engine",
+ "hive-git",
  "hive-harness",
  "hive-proto",
  "hive-store",
@@ -1528,6 +1529,16 @@ dependencies = [
  "hive-store",
  "log",
  "serde_json",
+ "tempfile",
+ "thiserror 2.0.19",
+ "tokio",
+]
+
+[[package]]
+name = "hive-git"
+version = "0.0.1"
+dependencies = [
+ "hive-proto",
  "tempfile",
  "thiserror 2.0.19",
  "tokio",

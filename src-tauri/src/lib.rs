@@ -1,5 +1,6 @@
 mod engine;
 mod folders;
+mod git;
 mod providers;
 mod settings;
 
@@ -48,6 +49,10 @@ pub fn run() {
       engine::mark_chat_seen,
       engine::delete_chat,
       folders::folder_icon,
+      git::git_repo,
+      git::git_switch_branch,
+      git::git_create_branch,
+      git::git_delete_branch,
       providers::provider_status,
       providers::provider_install,
       providers::provider_update,

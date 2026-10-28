@@ -11,6 +11,8 @@ export type { CommandPayload } from "./CommandPayload";
 export type { CommandStatus } from "./CommandStatus";
 export type { ContextUsage } from "./ContextUsage";
 export type { DoneStatus } from "./DoneStatus";
+export type { GitBranch } from "./GitBranch";
+export type { GitRepo } from "./GitRepo";
 export type { HarnessCapabilities } from "./HarnessCapabilities";
 export type { HarnessCatalog } from "./HarnessCatalog";
 export type { HarnessId } from "./HarnessId";

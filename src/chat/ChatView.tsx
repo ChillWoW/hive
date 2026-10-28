@@ -19,6 +19,7 @@ import {
     useCatalog,
     useCatalogs
 } from "@/harnesses";
+import { BranchPicker } from "@/git";
 import { useShortcut } from "@/keybindings";
 import type { ChatConfig, MessagePart } from "@/proto";
 import { Transcript } from "@/transcript";
@@ -150,6 +151,7 @@ export function ChatView() {
                             setNewChat({ cwd });
                         }}
                     />
+                    <BranchPicker cwd={chat ? chat.cwd : newChat.cwd} />
                     {needFolder && !chat && !newChat.cwd && (
                         <span className="truncate text-xs text-warning">
                             Choose a folder for the agent to work in
