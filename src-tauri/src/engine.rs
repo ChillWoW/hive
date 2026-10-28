@@ -124,3 +124,48 @@ pub async fn update_chat_config(
         .update_config(&chat_id, config)
         .map_err(|e| e.to_string())
 }
+
+/// A blank title clears it; the chat is named again after its next turn.
+#[tauri::command]
+pub async fn rename_chat(
+    engine: State<'_, Engine>,
+    chat_id: String,
+    title: Option<String>,
+) -> Result<Chat, String> {
+    engine
+        .rename_chat(&chat_id, title)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn set_chat_archived(
+    engine: State<'_, Engine>,
+    chat_id: String,
+    archived: bool,
+) -> Result<Chat, String> {
+    engine
+        .set_archived(&chat_id, archived)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn set_chat_pinned(
+    engine: State<'_, Engine>,
+    chat_id: String,
+    pinned: bool,
+) -> Result<Chat, String> {
+    engine
+        .set_pinned(&chat_id, pinned)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn mark_chat_seen(engine: State<'_, Engine>, chat_id: String) -> Result<Chat, String> {
+    engine.mark_seen(&chat_id).map_err(|e| e.to_string())
+}
+
+/// Deletes the chat and everything in it, stopping its run.
+#[tauri::command]
+pub async fn delete_chat(engine: State<'_, Engine>, chat_id: String) -> Result<(), String> {
+    engine.delete_chat(&chat_id).map_err(|e| e.to_string())
+}

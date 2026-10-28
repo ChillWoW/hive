@@ -51,6 +51,36 @@ export const chatsApi = {
             ? invoke<Chat>("update_chat_config", { chatId, config })
             : Promise.reject(new Error(NO_BACKEND)),
 
+    /** A blank title clears it; the next completed turn names the chat again. */
+    rename: (chatId: string, title: string | null): Promise<Chat> =>
+        isTauri
+            ? invoke<Chat>("rename_chat", { chatId, title })
+            : Promise.reject(new Error(NO_BACKEND)),
+
+    /** Archiving also unpins. */
+    setArchived: (chatId: string, archived: boolean): Promise<Chat> =>
+        isTauri
+            ? invoke<Chat>("set_chat_archived", { chatId, archived })
+            : Promise.reject(new Error(NO_BACKEND)),
+
+    /** Pinning also unarchives. */
+    setPinned: (chatId: string, pinned: boolean): Promise<Chat> =>
+        isTauri
+            ? invoke<Chat>("set_chat_pinned", { chatId, pinned })
+            : Promise.reject(new Error(NO_BACKEND)),
+
+    /** Clears the chat's unread dot. */
+    markSeen: (chatId: string): Promise<Chat> =>
+        isTauri
+            ? invoke<Chat>("mark_chat_seen", { chatId })
+            : Promise.reject(new Error(NO_BACKEND)),
+
+    /** Deletes the chat with its transcript, stopping its run. */
+    remove: (chatId: string): Promise<void> =>
+        isTauri
+            ? invoke<void>("delete_chat", { chatId })
+            : Promise.reject(new Error(NO_BACKEND)),
+
     /** Settled, or `pending` for a prompt queued behind the running turn. */
     queueCommand: (chatId: string, payload: CommandPayload): Promise<Command> =>
         isTauri

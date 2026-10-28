@@ -1,6 +1,8 @@
 export { useChatsRuntime } from "./useChatsRuntime";
 export {
+    activity,
     chats,
+    isUnseen,
     retainMessages,
     useChat,
     useChatMessages,

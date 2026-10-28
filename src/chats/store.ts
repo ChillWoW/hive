@@ -67,6 +67,16 @@ type ChatsState = {
     discard: (messageId: string) => void;
     /** Saves a chat's run settings; shown at once, reverted if refused. */
     updateConfig: (chatId: string, config: ChatConfig) => Promise<void>;
+    /** Shown at once, reverted if refused; a blank title clears it. */
+    rename: (chatId: string, title: string | null) => Promise<void>;
+    /** Archiving also unpins. */
+    setArchived: (chatId: string, archived: boolean) => Promise<void>;
+    /** Pinning also unarchives. */
+    setPinned: (chatId: string, pinned: boolean) => Promise<void>;
+    /** Clears the chat's unread dot. */
+    markSeen: (chatId: string) => Promise<void>;
+    /** Gone from the list at once; back if the engine refuses. */
+    remove: (chatId: string) => Promise<void>;
     /** Stops the running turn. */
     interrupt: (chatId: string) => Promise<void>;
     /** Answers an agent's question; the wizard closes when it resolves. */
@@ -81,9 +91,28 @@ type Draft = ChatsState;
 
 const NOT_SENT = "This message wasn't sent.";
 
-function activity(chat: Chat) {
+/** When the chat last had activity: its latest turn, else its creation. */
+export function activity(chat: Chat) {
     return chat.lastMessageAt ?? chat.createdAt;
 }
+
+/** The chat has activity the user hasn't opened yet (`Chat::unseen`). */
+export function isUnseen(chat: Chat) {
+    if (chat.lastMessageAt == null) return false;
+    return chat.lastSeenAt == null || chat.lastMessageAt > chat.lastSeenAt;
+}
+
+/** Drops a chat and everything kept for it. */
+function dropChat(s: Draft, chatId: string) {
+    s.chats = s.chats.filter((c) => c.id !== chatId);
+    delete s.sessions[chatId];
+    delete s.transcripts[chatId];
+    s.outbox = s.outbox.filter((o) => o.chatId !== chatId);
+    if (s.activeChatId === chatId) s.activeChatId = null;
+}
+
+/** Chats being marked seen, so a re-render doesn't ask twice. */
+const marking = new Set<string>();
 
 function upsertChat(s: Draft, chat: Chat) {
     const i = s.chats.findIndex((c) => c.id === chat.id);
@@ -232,6 +261,62 @@ export const useChatsStore = create<ChatsState>()(
             }
         },
 
+        rename: (chatId, title) => {
+            const trimmed = title?.trim() || undefined;
+            return editChat(chatId, { title: trimmed }, () =>
+                chatsApi.rename(chatId, trimmed ?? null)
+            );
+        },
+
+        setArchived: (chatId, archived) =>
+            editChat(
+                chatId,
+                archived ? { archived, pinnedAt: undefined } : { archived },
+                () => chatsApi.setArchived(chatId, archived)
+            ),
+
+        setPinned: (chatId, pinned) => {
+            const chat = useChatsStore.getState().chats.find((c) => c.id === chatId);
+            const patch: Partial<Chat> = pinned
+                ? { pinnedAt: chat?.pinnedAt ?? Date.now(), archived: false }
+                : { pinnedAt: undefined };
+            return editChat(chatId, patch, () => chatsApi.setPinned(chatId, pinned));
+        },
+
+        markSeen: async (chatId) => {
+            const chat = useChatsStore.getState().chats.find((c) => c.id === chatId);
+            if (!chat || !isUnseen(chat) || marking.has(chatId)) return;
+            marking.add(chatId);
+            try {
+                await editChat(
+                    chatId,
+                    { lastSeenAt: Math.max(Date.now(), chat.lastMessageAt ?? 0) },
+                    () => chatsApi.markSeen(chatId)
+                );
+            } finally {
+                marking.delete(chatId);
+            }
+        },
+
+        remove: async (chatId) => {
+            const state = useChatsStore.getState();
+            const chat = state.chats.find((c) => c.id === chatId);
+            if (!chat) return;
+            const wasActive = state.activeChatId === chatId;
+            set((s) => dropChat(s, chatId));
+            try {
+                await chatsApi.remove(chatId);
+            } catch (error) {
+                console.warn(`[chats] deleting ${chatId} failed`, error);
+                set((s) => {
+                    if (s.chats.some((c) => c.id === chatId)) return;
+                    upsertChat(s, chat);
+                    if (wasActive && s.activeChatId === null) s.activeChatId = chatId;
+                });
+                throw error;
+            }
+        },
+
         interrupt: async (chatId) => {
             await settled(chatsApi.queueCommand(chatId, { kind: "interrupt" }));
         },
@@ -259,6 +344,42 @@ async function settled(command: Promise<Command>): Promise<Command> {
 
 const set = useChatsStore.setState;
 
+/**
+ * Shows `patch` on the chat at once and saves it with `request`; if that's
+ * refused, puts back whichever fields nothing has changed again meanwhile.
+ */
+async function editChat(
+    chatId: string,
+    patch: Partial<Chat>,
+    request: () => Promise<Chat>
+): Promise<void> {
+    const keys = Object.keys(patch) as (keyof Chat)[];
+    const before: Partial<Chat> = {};
+    set((s) => {
+        const chat = s.chats.find((c) => c.id === chatId);
+        if (!chat) return;
+        for (const key of keys) (before as Record<string, unknown>)[key] = chat[key];
+        Object.assign(chat, patch);
+        s.chats.sort((a, b) => activity(b) - activity(a));
+    });
+    try {
+        const chat = await request();
+        set((s) => upsertChat(s, chat));
+    } catch (error) {
+        console.warn(`[chats] updating ${chatId} failed`, error);
+        set((s) => {
+            const chat = s.chats.find((c) => c.id === chatId);
+            if (!chat) return;
+            for (const key of keys) {
+                if (chat[key] === patch[key]) {
+                    (chat as Record<string, unknown>)[key] = before[key];
+                }
+            }
+        });
+        throw error;
+    }
+}
+
 function applyChats(update: ChatsUpdate) {
     set((s) => {
         switch (update.type) {
@@ -271,6 +392,9 @@ function applyChats(update: ChatsUpdate) {
                 return;
             case "chat":
                 upsertChat(s, update.chat);
+                return;
+            case "removed":
+                dropChat(s, update.chatId);
                 return;
             case "session":
                 if (update.session) s.sessions[update.chatId] = update.session;
@@ -481,6 +605,14 @@ export const chats = {
     discard: (messageId: string) => useChatsStore.getState().discard(messageId),
     updateConfig: (chatId: string, config: ChatConfig) =>
         useChatsStore.getState().updateConfig(chatId, config),
+    rename: (chatId: string, title: string | null) =>
+        useChatsStore.getState().rename(chatId, title),
+    setArchived: (chatId: string, archived: boolean) =>
+        useChatsStore.getState().setArchived(chatId, archived),
+    setPinned: (chatId: string, pinned: boolean) =>
+        useChatsStore.getState().setPinned(chatId, pinned),
+    markSeen: (chatId: string) => useChatsStore.getState().markSeen(chatId),
+    remove: (chatId: string) => useChatsStore.getState().remove(chatId),
     interrupt: (chatId: string) => useChatsStore.getState().interrupt(chatId),
     answer: (chatId: string, requestId: string, answers: UserInputAnswer[]) =>
         useChatsStore.getState().answer(chatId, requestId, answers)

@@ -46,6 +46,9 @@ pub enum ChatsUpdate {
     },
     /// A chat added or changed.
     Chat { chat: Chat },
+    /// A chat deleted, with its transcript.
+    #[serde(rename_all = "camelCase")]
+    Removed { chat_id: String },
     /// A chat's session changed; `None` once its harness process is gone.
     #[serde(rename_all = "camelCase")]
     Session {

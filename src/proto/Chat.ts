@@ -9,7 +9,15 @@ export type Chat = { id: string, title?: string, cwd: string, config: ChatConfig
  * Harness-native session id of the latest run, sent back as
  * `RunRequest::resume` so the CLI keeps its own history.
  */
-harnessSessionId?: string, archived: boolean, 
+harnessSessionId?: string, 
+/**
+ * Listed under the sidebar's Archived section; a new turn brings it back.
+ */
+archived: boolean, 
+/**
+ * Epoch millis of the pin; pinned chats are listed first, in pin order.
+ */
+pinnedAt?: number, 
 /**
  * Epoch millis.
  */

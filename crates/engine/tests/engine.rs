@@ -523,3 +523,50 @@ async fn a_completed_first_turn_titles_the_chat() {
     let titled = engine.store().chat(&chat.id).unwrap().unwrap();
     assert_eq!(titled.title.as_deref(), Some("Fix The Login Flow"));
 }
+
+#[tokio::test]
+async fn chats_are_renamed_pinned_archived_seen_and_deleted() {
+    let (_dir, engine) = engine(0.0);
+    let chat = engine
+        .create_chat("/demo", config(HarnessId::Mock))
+        .unwrap();
+    let mut chats = watch_chats(&engine);
+    until(&mut chats, |u| matches!(u, ChatsUpdate::Snapshot { .. })).await;
+
+    let renamed = engine
+        .rename_chat(&chat.id, Some("  Mine  ".into()))
+        .unwrap();
+    assert_eq!(renamed.title.as_deref(), Some("Mine"));
+    let cleared = engine.rename_chat(&chat.id, Some(" ".into())).unwrap();
+    assert_eq!(cleared.title, None);
+
+    let pinned = engine.set_pinned(&chat.id, true).unwrap();
+    let pinned_at = pinned.pinned_at.expect("pinned");
+    // Pinning again keeps its place.
+    assert_eq!(
+        engine.set_pinned(&chat.id, true).unwrap().pinned_at,
+        Some(pinned_at)
+    );
+    let archived = engine.set_archived(&chat.id, true).unwrap();
+    assert!(archived.archived);
+    assert_eq!(archived.pinned_at, None, "archiving unpins");
+
+    // A new turn unarchives and leaves the chat unseen until it's viewed.
+    let mut updates = watch_messages(&engine, &chat.id);
+    engine.queue_command(&chat.id, send("hi")).unwrap();
+    let request = request_id(&until(&mut updates, is_input).await);
+    engine.queue_command(&chat.id, answer(request)).unwrap();
+    until(&mut updates, is_done).await;
+    let after = engine.chats().unwrap().remove(0);
+    assert!(!after.archived);
+    assert!(after.unseen());
+    assert!(!engine.mark_seen(&chat.id).unwrap().unseen());
+
+    engine.delete_chat(&chat.id).unwrap();
+    assert!(engine.chats().unwrap().is_empty());
+    until(&mut chats, |u| {
+        matches!(u, ChatsUpdate::Removed { chat_id } if *chat_id == chat.id)
+    })
+    .await;
+    assert!(engine.delete_chat(&chat.id).is_err());
+}

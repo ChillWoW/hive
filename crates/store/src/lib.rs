@@ -69,6 +69,13 @@ const MIGRATIONS: &[&str] = &[r#"
     );
     CREATE INDEX commands_by_chat ON commands(chat_id);
     CREATE INDEX commands_by_status ON commands(status);
+"#,
+// Chats from before the unread dot count as seen.
+r#"
+    UPDATE chats
+    SET data = json_set(data, '$.lastSeenAt', json_extract(data, '$.lastMessageAt'))
+    WHERE json_extract(data, '$.lastMessageAt') IS NOT NULL
+      AND json_extract(data, '$.lastSeenAt') IS NULL;
 "#];
 
 pub struct Store {
@@ -126,6 +133,7 @@ impl Store {
             config,
             harness_session_id: None,
             archived: false,
+            pinned_at: None,
             created_at: now_ms(),
             last_message_at: None,
             last_seen_at: None,
@@ -180,12 +188,18 @@ impl Store {
         Ok(Some(chat))
     }
 
-    fn update_chat(&self, id: &str, update: impl FnOnce(&mut Chat)) -> Result<()> {
+    /// Applies `update` to the chat and saves it if that changed anything.
+    /// Returns the chat as saved.
+    pub fn update_chat(&self, id: &str, update: impl FnOnce(&mut Chat)) -> Result<Chat> {
         let mut chat = self
             .chat(id)?
             .ok_or_else(|| StoreError::NotFound(format!("chat {id}")))?;
+        let before = chat.clone();
         update(&mut chat);
-        self.save_chat(&chat)
+        if chat != before {
+            self.save_chat(&chat)?;
+        }
+        Ok(chat)
     }
 
     // Messages
@@ -324,7 +338,11 @@ impl Store {
             status: Some(MessageStatus::Streaming),
             duration_ms: None,
         };
-        self.update_chat(chat_id, |chat| chat.last_message_at = Some(now))?;
+        self.update_chat(chat_id, |chat| {
+            chat.last_message_at = Some(now);
+            // New work brings an archived chat back.
+            chat.archived = false;
+        })?;
         self.save_message(&user)?;
         self.save_message(&assistant)?;
         Ok(Turn {
@@ -532,6 +550,25 @@ mod tests {
         store.delete_chat(&b.id).unwrap();
         assert!(store.chat(&b.id).unwrap().is_none());
         assert!(store.messages(&b.id).unwrap().is_empty());
+    }
+
+    #[test]
+    fn chats_from_before_the_unread_dot_open_as_seen() {
+        let dir = tempfile::tempdir().unwrap();
+        let id = {
+            let store = Store::open(dir.path()).unwrap();
+            let chat = store.create_chat("/a", config()).unwrap();
+            store.start_turn(&chat.id, "hi", None).unwrap();
+            store
+                .db()
+                .pragma_update(None, "user_version", 1)
+                .unwrap();
+            chat.id
+        };
+        let store = Store::open(dir.path()).unwrap();
+        let chat = store.chat(&id).unwrap().unwrap();
+        assert_eq!(chat.last_seen_at, chat.last_message_at);
+        assert!(!chat.unseen());
     }
 
     #[test]

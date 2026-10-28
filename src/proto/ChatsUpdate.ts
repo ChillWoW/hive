@@ -5,4 +5,4 @@ import type { Session } from "./Session";
 /**
  * The chat list and which chats have a live session.
  */
-export type ChatsUpdate = { "type": "snapshot", chats: Array<Chat>, sessions: Array<Session>, } | { "type": "chat", chat: Chat, } | { "type": "session", chatId: string, session?: Session, };
+export type ChatsUpdate = { "type": "snapshot", chats: Array<Chat>, sessions: Array<Session>, } | { "type": "chat", chat: Chat, } | { "type": "removed", chatId: string, } | { "type": "session", chatId: string, session?: Session, };

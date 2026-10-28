@@ -43,8 +43,12 @@ pub struct Chat {
     /// `RunRequest::resume` so the CLI keeps its own history.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub harness_session_id: Option<String>,
+    /// Listed under the sidebar's Archived section; a new turn brings it back.
     #[serde(default)]
     pub archived: bool,
+    /// Epoch millis of the pin; pinned chats are listed first, in pin order.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pinned_at: Option<i64>,
     /// Epoch millis.
     pub created_at: i64,
     /// Epoch millis.

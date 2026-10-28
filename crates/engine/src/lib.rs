@@ -286,6 +286,84 @@ impl Engine {
         Ok(chat)
     }
 
+    /// Names the chat; a blank title clears it, and the next completed turn
+    /// names it again.
+    pub fn rename_chat(&self, chat_id: &str, title: Option<String>) -> Result<Chat> {
+        let title = title
+            .map(|t| t.trim().to_owned())
+            .filter(|t| !t.is_empty());
+        self.edit_chat(chat_id, |chat| chat.title = title)
+    }
+
+    /// Archiving unpins.
+    pub fn set_archived(&self, chat_id: &str, archived: bool) -> Result<Chat> {
+        self.edit_chat(chat_id, |chat| {
+            chat.archived = archived;
+            if archived {
+                chat.pinned_at = None;
+            }
+        })
+    }
+
+    /// Pinning unarchives; a chat already pinned keeps its place.
+    pub fn set_pinned(&self, chat_id: &str, pinned: bool) -> Result<Chat> {
+        self.edit_chat(chat_id, |chat| {
+            if !pinned {
+                chat.pinned_at = None;
+            } else if chat.pinned_at.is_none() {
+                chat.pinned_at = Some(now_ms());
+                chat.archived = false;
+            }
+        })
+    }
+
+    /// The user has seen everything in the chat so far, which clears its
+    /// unread dot.
+    pub fn mark_seen(&self, chat_id: &str) -> Result<Chat> {
+        self.edit_chat(chat_id, |chat| {
+            if chat.unseen() {
+                chat.last_seen_at = Some(now_ms().max(chat.last_message_at.unwrap_or(0)));
+            }
+        })
+    }
+
+    /// Deletes the chat with its transcript, journal and commands, closing
+    /// its run first.
+    pub fn delete_chat(&self, chat_id: &str) -> Result<()> {
+        let runtime = self.runtime_for(chat_id);
+        let mut st = lock(&runtime.state);
+        self.chat(chat_id)?;
+        self.end_run(chat_id, &mut st);
+        st.turn = None;
+        st.queued.clear();
+        // Their chat is gone; nothing more will come.
+        st.watchers.clear();
+        self.store().delete_chat(chat_id)?;
+        lock(&self.inner.chats).remove(chat_id);
+        publish(
+            &mut lock(&self.inner.list).watchers,
+            ChatsUpdate::Removed {
+                chat_id: chat_id.to_owned(),
+            },
+        );
+        Ok(())
+    }
+
+    /// Changes the chat under its lock, publishing it if anything changed.
+    fn edit_chat(&self, chat_id: &str, edit: impl FnOnce(&mut Chat)) -> Result<Chat> {
+        let runtime = self.runtime_for(chat_id);
+        let _st = lock(&runtime.state);
+        let before = self.chat(chat_id)?;
+        let chat = self.store().update_chat(chat_id, edit)?;
+        if chat != before {
+            publish(
+                &mut lock(&self.inner.list).watchers,
+                ChatsUpdate::Chat { chat: chat.clone() },
+            );
+        }
+        Ok(chat)
+    }
+
     fn chat(&self, id: &str) -> Result<Chat> {
         self.store()
             .chat(id)?
