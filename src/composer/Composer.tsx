@@ -151,8 +151,11 @@ export function Composer({
         const controls = controlsRef.current;
         if (!deck || !textarea || !span || !controls) return;
 
+        // Fractional widths: rounded `clientWidth`s can say the text fits
+        // while it is already wrapping by a fraction of a pixel.
+        const deckWidth = deck.getBoundingClientRect().width;
         if (!tall) {
-            chromeRef.current = deck.clientWidth - textarea.clientWidth;
+            chromeRef.current = deckWidth - textarea.getBoundingClientRect().width;
             // The pickers spilling out of their column, or a picker's label
             // spilling out of its button once the model name has truncated
             // away. Buttons only: the model picker also renders a hidden
@@ -164,16 +167,16 @@ export function Composer({
                     (button) => button.scrollWidth > button.clientWidth
                 );
             if (overflowing) {
-                crampedAtRef.current = Math.max(crampedAtRef.current, deck.clientWidth);
+                crampedAtRef.current = Math.max(crampedAtRef.current, deckWidth);
             }
         }
         const style = getComputedStyle(textarea);
         const padding = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
-        const room = deck.clientWidth - chromeRef.current - padding;
+        const room = deckWidth - chromeRef.current - padding;
         const next =
-            deck.clientWidth <= crampedAtRef.current ||
+            deckWidth <= crampedAtRef.current ||
             draft.includes("\n") ||
-            span.offsetWidth > room;
+            span.getBoundingClientRect().width > room;
 
         if (next !== tall) {
             setTall(next);
