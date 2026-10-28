@@ -3,6 +3,9 @@
 export type { AgentEvent } from "./AgentEvent";
 export type { Chat } from "./Chat";
 export type { ChatConfig } from "./ChatConfig";
+export type { Command } from "./Command";
+export type { CommandPayload } from "./CommandPayload";
+export type { CommandStatus } from "./CommandStatus";
 export type { ContextUsage } from "./ContextUsage";
 export type { DoneStatus } from "./DoneStatus";
 export type { HarnessId } from "./HarnessId";

@@ -2,7 +2,9 @@ import type { AgentEvent, MessagePart } from "@/proto";
 
 /**
  * Folds one streamed event into an assistant message's parts, in place
- * (call it on an immer draft).
+ * (call it on an immer draft). Mirrors `fold_event` in
+ * `crates/proto/src/fold.rs`, which folds what gets saved; keep the two in
+ * step.
  *
  * - Deltas grow the trailing text/reasoning part, or start one if the trail
  *   is something else (a tool call in between splits a text block).

@@ -1,0 +1,19 @@
+[package]
+name = "hive-store"
+version = "0.0.1"
+edition = "2021"
+license = "GPL-3.0-only"
+publish = false
+
+[dependencies]
+hive-proto.workspace = true
+rusqlite.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+hive-harness.workspace = true
+tempfile.workspace = true
+tokio.workspace = true

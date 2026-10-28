@@ -5,10 +5,14 @@
 
 pub mod agent;
 pub mod chat;
+pub mod command;
+pub mod fold;
 pub mod message;
 
 pub use agent::*;
 pub use chat::*;
+pub use command::*;
+pub use fold::fold_event;
 pub use message::*;
 
 #[cfg(test)]
@@ -40,6 +44,7 @@ mod export {
         Message::export_all(&cfg).unwrap();
         Chat::export_all(&cfg).unwrap();
         Session::export_all(&cfg).unwrap();
+        Command::export_all(&cfg).unwrap();
 
         let mut modules = Vec::new();
         collect_modules(&dir, "", &mut modules);
