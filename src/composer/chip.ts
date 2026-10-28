@@ -15,7 +15,7 @@ export const pickerTriggerClassName = cn(
 
 /** A chip under the composer. */
 export const chipClassName = cn(
-    "inline-flex h-6 min-w-0 max-w-64 items-center gap-1.5 rounded-full px-2",
+    "inline-flex h-6 min-w-0 max-w-64 items-center gap-1.5 rounded-md px-2",
     "text-xs text-dark-200 outline-none select-none transition-colors duration-150"
 );
 

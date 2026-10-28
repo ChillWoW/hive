@@ -1,4 +1,5 @@
 mod engine;
+mod folders;
 mod settings;
 
 use std::sync::Arc;
@@ -35,6 +36,7 @@ pub fn run() {
       engine::unwatch,
       engine::list_harnesses,
       engine::update_chat_config,
+      folders::folder_icon,
       settings::settings_get,
       settings::settings_update,
       settings::settings_reset,

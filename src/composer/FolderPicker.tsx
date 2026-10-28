@@ -20,6 +20,7 @@ import {
     rowClassName,
     searchInputClassName
 } from "./chip";
+import { ProjectIcon } from "./ProjectIcon";
 
 /** Every chat's folder, most recently active first, once each. */
 function useRecentFolders(): string[] {
@@ -150,13 +151,12 @@ function FolderCombobox({
                                     value={path}
                                     className={rowClassName}
                                 >
-                                    <FolderIcon className="size-3.5 text-dark-200" />
-                                    <span className="flex min-w-0 flex-col">
-                                        <span className="truncate">{folderName(path)}</span>
-                                        <span className="truncate text-[11px] text-dark-300">
-                                            {path}
-                                        </span>
-                                    </span>
+                                    <ProjectIcon
+                                        path={path}
+                                        selected={path === cwd}
+                                        className="size-3.5"
+                                    />
+                                    <span className="truncate">{folderName(path)}</span>
                                 </Combobox.Item>
                             )}
                         </Combobox.List>
