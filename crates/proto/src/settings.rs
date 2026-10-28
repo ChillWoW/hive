@@ -113,6 +113,8 @@ pub struct KeyboardSettings {
     pub focus_composer: String,
     pub previous_chat: String,
     pub next_chat: String,
+    pub go_back: String,
+    pub go_forward: String,
     /// Only while typing a prompt.
     pub toggle_plan: String,
 }
@@ -127,6 +129,8 @@ impl Default for KeyboardSettings {
             focus_composer: "Mod+L".into(),
             previous_chat: "Ctrl+Shift+Tab".into(),
             next_chat: "Ctrl+Tab".into(),
+            go_back: "Alt+Left".into(),
+            go_forward: "Alt+Right".into(),
             toggle_plan: "Shift+Tab".into(),
         }
     }

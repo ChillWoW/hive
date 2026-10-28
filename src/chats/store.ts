@@ -60,7 +60,16 @@ type ChatsState = {
     transcripts: Record<string, Transcript>;
     outbox: Outgoing[];
 
+    /**
+     * Where Back and Forward go, nearest last, as in a browser; null is the
+     * new-chat view. `select` pushes the chat it leaves onto `back`.
+     */
+    back: (string | null)[];
+    forward: (string | null)[];
+
     select: (chatId: string | null) => void;
+    goBack: () => void;
+    goForward: () => void;
     /** Shows the prompt now; creates the chat first for a new-chat target. */
     send: (target: SendTarget, prompt: string) => Promise<void>;
     /** Drops a failed prompt from the outbox. */
@@ -115,6 +124,47 @@ function dropChat(s: Draft, chatId: string) {
     delete s.transcripts[chatId];
     s.outbox = s.outbox.filter((o) => o.chatId !== chatId);
     if (s.activeChatId === chatId) s.activeChatId = null;
+    s.back = tidyHistory(s.back, chatId, s.activeChatId);
+    s.forward = tidyHistory(s.forward, chatId, s.activeChatId);
+}
+
+/** Enough to walk back through a session, small enough not to matter. */
+const HISTORY_LIMIT = 100;
+
+/** Leaves the active chat for `chatId`, remembering it for Back. */
+function navigate(s: Draft, chatId: string | null) {
+    if (s.activeChatId === chatId) return;
+    s.back.push(s.activeChatId);
+    if (s.back.length > HISTORY_LIMIT) s.back.shift();
+    s.forward = [];
+    s.activeChatId = chatId;
+}
+
+/** Moves one entry from `from` to `to`, skipping chats that are gone. */
+function step(s: Draft, from: (string | null)[], to: (string | null)[]) {
+    while (from.length > 0) {
+        const chatId = from.pop()!;
+        if (chatId === s.activeChatId) continue;
+        if (chatId !== null && !s.chats.some((c) => c.id === chatId)) continue;
+        to.push(s.activeChatId);
+        s.activeChatId = chatId;
+        return;
+    }
+}
+
+/** A history stack without `removed`, repeats, or the chat it leads from. */
+function tidyHistory(
+    stack: (string | null)[],
+    removed: string,
+    current: string | null
+) {
+    const out: (string | null)[] = [];
+    for (const chatId of stack) {
+        if (chatId === removed || chatId === out[out.length - 1]) continue;
+        out.push(chatId);
+    }
+    while (out.length > 0 && out[out.length - 1] === current) out.pop();
+    return out;
 }
 
 /** Chats being marked seen, so a re-render doesn't ask twice. */
@@ -221,7 +271,12 @@ export const useChatsStore = create<ChatsState>()(
         transcripts: {},
         outbox: [],
 
-        select: (chatId) => set({ activeChatId: chatId }),
+        back: [],
+        forward: [],
+
+        select: (chatId) => set((s) => navigate(s, chatId)),
+        goBack: () => set((s) => step(s, s.back, s.forward)),
+        goForward: () => set((s) => step(s, s.forward, s.back)),
 
         send: async (target, prompt) => {
             const messageId = crypto.randomUUID();
@@ -255,7 +310,11 @@ export const useChatsStore = create<ChatsState>()(
                         if (o) o.chatId = chat.id;
                         // Follow the prompt into its chat, unless the user
                         // already went elsewhere.
-                        if (s.activeChatId === null) s.activeChatId = chat.id;
+                        // The chat takes the new-chat view's place in history.
+                        if (s.activeChatId === null) {
+                            s.activeChatId = chat.id;
+                            s.forward = [];
+                        }
                     });
                 }
                 const command = await chatsApi.queueCommand(chatId, {
@@ -714,6 +773,8 @@ export const chats = {
     get: () => useChatsStore.getState(),
     select: (chatId: string | null) =>
         useChatsStore.getState().select(chatId),
+    goBack: () => useChatsStore.getState().goBack(),
+    goForward: () => useChatsStore.getState().goForward(),
     send: (target: SendTarget, prompt: string) =>
         useChatsStore.getState().send(target, prompt),
     discard: (messageId: string) => useChatsStore.getState().discard(messageId),

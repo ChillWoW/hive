@@ -1,8 +1,9 @@
 import { SIDEBAR_WIDTH, useLayoutStore } from "@/stores/useLayoutStore";
 import { useWindowState } from "./useWindowState";
 import { WindowControls } from "./WindowControls";
-import { chats } from "@/chats";
+import { chats, useChatsStore } from "@/chats";
 import { composer } from "@/composer";
+import { useEffect } from "react";
 import { useShortcut } from "@/keybindings";
 import { cn } from "@/lib/cn";
 import { isMac } from "@/lib/platform";
@@ -27,6 +28,20 @@ type TopBarProps = {
  */
 const MAC_TRAFFIC_LIGHTS = "w-[72px]";
 
+/** The mouse's side buttons (3 back, 4 forward) step through chat history. */
+function useMouseNavigation() {
+    useEffect(() => {
+        const onMouseUp = (event: MouseEvent) => {
+            if (event.button === 3) chats.goBack();
+            else if (event.button === 4) chats.goForward();
+            else return;
+            event.preventDefault();
+        };
+        window.addEventListener("mouseup", onMouseUp);
+        return () => window.removeEventListener("mouseup", onMouseUp);
+    }, []);
+}
+
 export function TopBar({ title, className }: TopBarProps) {
     const { fullscreen } = useWindowState();
     const insetForTrafficLights = isMac && !fullscreen;
@@ -39,6 +54,12 @@ export function TopBar({ title, className }: TopBarProps) {
     };
     useShortcut("toggleSidebar", toggleSidebar);
     useShortcut("newChat", newChat);
+
+    const canGoBack = useChatsStore((s) => s.back.length > 0);
+    const canGoForward = useChatsStore((s) => s.forward.length > 0);
+    useShortcut("goBack", chats.goBack);
+    useShortcut("goForward", chats.goForward);
+    useMouseNavigation();
 
     return (
         <header
@@ -82,13 +103,43 @@ export function TopBar({ title, className }: TopBarProps) {
                         </Tooltip.Content>
                     </Tooltip>
 
-                    <Button variant="ghost" className="p-0 size-6">
-                        <ArrowLeftIcon className="size-4" />
-                    </Button>
+                    <Tooltip>
+                        <Tooltip.Trigger
+                            render={
+                                <Button
+                                    variant="ghost"
+                                    aria-label="Back"
+                                    onClick={chats.goBack}
+                                    disabled={!canGoBack}
+                                    className="p-0 size-6"
+                                >
+                                    <ArrowLeftIcon className="size-4" />
+                                </Button>
+                            }
+                        />
+                        <Tooltip.Content side="bottom" shortcut="goBack">
+                            Back
+                        </Tooltip.Content>
+                    </Tooltip>
 
-                    <Button variant="ghost" className="p-0 size-6">
-                        <ArrowRightIcon className="size-4" />
-                    </Button>
+                    <Tooltip>
+                        <Tooltip.Trigger
+                            render={
+                                <Button
+                                    variant="ghost"
+                                    aria-label="Forward"
+                                    onClick={chats.goForward}
+                                    disabled={!canGoForward}
+                                    className="p-0 size-6"
+                                >
+                                    <ArrowRightIcon className="size-4" />
+                                </Button>
+                            }
+                        />
+                        <Tooltip.Content side="bottom" shortcut="goForward">
+                            Forward
+                        </Tooltip.Content>
+                    </Tooltip>
 
                     <Tooltip>
                         <Tooltip.Trigger

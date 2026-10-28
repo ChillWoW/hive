@@ -45,6 +45,22 @@ export const ACTIONS: readonly Action[] = [
         repeats: true
     },
     {
+        id: "goBack",
+        label: "Back",
+        description: "The chat you were on before",
+        keywords: "back previous history navigate return",
+        scope: "global",
+        repeats: true
+    },
+    {
+        id: "goForward",
+        label: "Forward",
+        description: "Undoes Back",
+        keywords: "forward next history navigate",
+        scope: "global",
+        repeats: true
+    },
+    {
         id: "toggleSidebar",
         label: "Toggle sidebar",
         keywords: "sidebar hide show collapse panel",

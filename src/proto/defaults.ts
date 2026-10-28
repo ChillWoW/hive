@@ -22,6 +22,8 @@ export const DEFAULT_SETTINGS: Settings = {
     "focusComposer": "Mod+L",
     "previousChat": "Ctrl+Shift+Tab",
     "nextChat": "Ctrl+Tab",
+    "goBack": "Alt+Left",
+    "goForward": "Alt+Right",
     "togglePlan": "Shift+Tab"
   }
 };
