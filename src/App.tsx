@@ -1,10 +1,12 @@
 import { useState } from "react";
+import { useChatsRuntime } from "@/chats";
 import { Sidebar, TopBar } from "@/layout";
 import { SettingsModal, useSettingsRuntime } from "@/settings";
 import { PortalContainerProvider } from "@/ui";
 
 export function App() {
     useSettingsRuntime();
+    useChatsRuntime();
     // Overlays mount here, below the top bar, so an open modal never covers
     // the window's drag region or its controls.
     const [overlayLayer, setOverlayLayer] = useState<HTMLDivElement | null>(
