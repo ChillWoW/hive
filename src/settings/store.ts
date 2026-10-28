@@ -8,7 +8,7 @@ import {
     type SettingsSections
 } from "./api";
 
-export type SettingsPageId = "about";
+export type SettingsPageId = "chats" | "about";
 
 type SettingsState = {
     settings: Settings;
@@ -64,7 +64,7 @@ export const useSettingsStore = create<SettingsState>()((set, get) => {
         settings: DEFAULT_SETTINGS,
 
         isOpen: false,
-        page: "about",
+        page: "chats",
         setOpen: (isOpen) => set({ isOpen }),
         open: (page) => set((s) => ({ isOpen: true, page: page ?? s.page })),
         toggle: () => set((s) => ({ isOpen: !s.isOpen })),

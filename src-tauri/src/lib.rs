@@ -1,6 +1,11 @@
-mod mock;
+mod engine;
 mod settings;
 
+use std::sync::Arc;
+
+use hive_engine::{Engine, EngineConfig};
+use hive_harness::{ClaudeHarness, Harness, MockHarness};
+use tauri::webview::PageLoadEvent;
 use tauri::Manager;
 use tauri_plugin_window_state::StateFlags;
 
@@ -18,7 +23,12 @@ pub fn run() {
         .build(),
     )
     .invoke_handler(tauri::generate_handler![
-      mock::mock_run,
+      engine::create_chat,
+      engine::list_chats,
+      engine::queue_command,
+      engine::watch_messages,
+      engine::watch_chats,
+      engine::unwatch,
       settings::settings_get,
       settings::settings_update,
       settings::settings_reset,
@@ -26,6 +36,17 @@ pub fn run() {
       settings::settings_path,
       settings::settings_reveal,
     ])
+    // A reload takes the page's channels with it.
+    .on_page_load(|webview, payload| {
+      if payload.event() == PageLoadEvent::Started {
+        let app = webview.app_handle();
+        if let (Some(watches), Some(engine)) =
+          (app.try_state::<engine::Watches>(), app.try_state::<Engine>())
+        {
+          watches.clear(&engine, webview.label());
+        }
+      }
+    })
     .setup(|app| {
       if cfg!(debug_assertions) {
         app.handle().plugin(
@@ -35,7 +56,30 @@ pub fn run() {
         )?;
       }
       let data_dir = app.path().app_data_dir()?;
-      app.manage(hive_store::SettingsFile::open(data_dir)?);
+      let settings = hive_store::SettingsFile::open(&data_dir)?;
+      // Read once: resuming only happens at launch.
+      let config = EngineConfig {
+        resume_interrupted: settings.get().chats.resume_interrupted,
+        ..EngineConfig::default()
+      };
+      app.manage(settings);
+
+      let harnesses: Vec<Arc<dyn Harness>> =
+        vec![Arc::new(ClaudeHarness::new()), Arc::new(MockHarness::new())];
+      let engine = Engine::new(
+        hive_store::Store::open(&data_dir)?,
+        harnesses,
+        config,
+        tauri::async_runtime::handle().inner().clone(),
+      );
+      let recovery = engine.start()?;
+      log::info!(
+        "recovered: {} commands expired, {} turns aborted",
+        recovery.expired_commands,
+        recovery.aborted_messages.len()
+      );
+      app.manage(engine);
+      app.manage(engine::Watches::default());
       Ok(())
     })
     .run(tauri::generate_context!())

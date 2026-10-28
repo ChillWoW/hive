@@ -1,0 +1,431 @@
+//! The engine driving `MockHarness` end to end: commands in, store and
+//! watchers out.
+
+use std::sync::Arc;
+use std::time::Duration;
+
+use hive_engine::{Engine, EngineConfig, RESUME_PROMPT};
+use hive_harness::{Harness, MockHarness};
+use hive_proto::{
+    fold_event, AgentEvent, ChatConfig, ChatsUpdate, Command, CommandPayload, CommandStatus,
+    DoneStatus, HarnessId, Message, MessagePart, MessageRole, MessageStatus, MessagesUpdate,
+    SandboxLevel, SessionStatus, UserInputAnswer,
+};
+use hive_store::Store;
+use tokio::sync::mpsc;
+use tokio::time::timeout;
+
+const WAIT: Duration = Duration::from_secs(10);
+
+fn config(harness: HarnessId) -> ChatConfig {
+    ChatConfig {
+        harness,
+        model: None,
+        reasoning: None,
+        model_options: Default::default(),
+        sandbox: SandboxLevel::WorkspaceWrite,
+    }
+}
+
+fn engine_in(dir: &tempfile::TempDir, speed: f64, config: EngineConfig) -> Engine {
+    let harness: Arc<dyn Harness> = Arc::new(MockHarness::with_speed(speed));
+    Engine::new(
+        Store::open(dir.path()).unwrap(),
+        vec![harness],
+        config,
+        tokio::runtime::Handle::current(),
+    )
+}
+
+fn engine(speed: f64) -> (tempfile::TempDir, Engine) {
+    let dir = tempfile::tempdir().unwrap();
+    let engine = engine_in(&dir, speed, EngineConfig::default());
+    (dir, engine)
+}
+
+fn send(prompt: &str) -> CommandPayload {
+    CommandPayload::Send {
+        prompt: prompt.into(),
+        message_id: format!("user-{prompt}"),
+    }
+}
+
+fn watch_messages(engine: &Engine, chat_id: &str) -> mpsc::UnboundedReceiver<MessagesUpdate> {
+    let (tx, rx) = mpsc::unbounded_channel();
+    engine
+        .watch_messages(chat_id, move |u| tx.send(u).is_ok())
+        .unwrap();
+    rx
+}
+
+fn watch_chats(engine: &Engine) -> mpsc::UnboundedReceiver<ChatsUpdate> {
+    let (tx, rx) = mpsc::unbounded_channel();
+    engine.watch_chats(move |u| tx.send(u).is_ok()).unwrap();
+    rx
+}
+
+/// Receives until `stop` matches, returning everything seen.
+async fn until<T>(rx: &mut mpsc::UnboundedReceiver<T>, stop: impl Fn(&T) -> bool) -> Vec<T> {
+    let mut seen = Vec::new();
+    timeout(WAIT, async {
+        while let Some(update) = rx.recv().await {
+            let done = stop(&update);
+            seen.push(update);
+            if done {
+                return;
+            }
+        }
+        panic!("the watcher closed");
+    })
+    .await
+    .expect("timed out");
+    seen
+}
+
+fn is_input(u: &MessagesUpdate) -> bool {
+    matches!(
+        u,
+        MessagesUpdate::Event {
+            event: AgentEvent::InputRequested { .. },
+            ..
+        }
+    )
+}
+
+fn is_done(u: &MessagesUpdate) -> bool {
+    matches!(
+        u,
+        MessagesUpdate::Event {
+            event: AgentEvent::Done { .. },
+            ..
+        }
+    )
+}
+
+fn request_id(updates: &[MessagesUpdate]) -> String {
+    updates
+        .iter()
+        .rev()
+        .find_map(|u| match u {
+            MessagesUpdate::Event {
+                event: AgentEvent::InputRequested { request_id, .. },
+                ..
+            } => Some(request_id.clone()),
+            _ => None,
+        })
+        .unwrap()
+}
+
+fn answer(request_id: String) -> CommandPayload {
+    CommandPayload::Answer {
+        request_id,
+        answers: vec![UserInputAnswer {
+            question_id: "fix".into(),
+            labels: vec!["Change the test".into()],
+        }],
+    }
+}
+
+/// What a UI holding this watcher's updates would show.
+#[derive(Default)]
+struct View {
+    messages: Vec<Message>,
+    commands: Vec<Command>,
+}
+
+impl View {
+    fn apply(&mut self, update: MessagesUpdate) {
+        match update {
+            MessagesUpdate::Snapshot { messages, pending } => {
+                self.messages = messages;
+                self.commands = pending;
+            }
+            MessagesUpdate::Message { message } => {
+                match self.messages.iter_mut().find(|m| m.id == message.id) {
+                    Some(m) => *m = message,
+                    None => self.messages.push(message),
+                }
+            }
+            MessagesUpdate::Event { message_id, event } => {
+                let message = self.messages.iter_mut().find(|m| m.id == message_id);
+                fold_event(
+                    &mut message.expect("event for an unknown message").parts,
+                    &event,
+                );
+            }
+            MessagesUpdate::Command { command } => {
+                match self.commands.iter_mut().find(|c| c.id == command.id) {
+                    Some(c) => *c = command,
+                    None => self.commands.push(command),
+                }
+            }
+        }
+    }
+}
+
+#[tokio::test]
+async fn a_turn_runs_answers_and_matches_the_store() {
+    let (_dir, engine) = engine(0.0);
+    let chat = engine
+        .create_chat("/demo", config(HarnessId::Mock))
+        .unwrap();
+    let mut chats = watch_chats(&engine);
+    let mut updates = watch_messages(&engine, &chat.id);
+
+    let sent = engine.queue_command(&chat.id, send("hi")).unwrap();
+    assert_eq!(sent.status, CommandStatus::Applied);
+
+    let mut seen = until(&mut updates, is_input).await;
+    let applied = engine
+        .queue_command(&chat.id, answer(request_id(&seen)))
+        .unwrap();
+    assert_eq!(applied.status, CommandStatus::Applied);
+    seen.extend(until(&mut updates, is_done).await);
+    // The finished reply, whole.
+    seen.extend(
+        until(&mut updates, |u| {
+            matches!(u, MessagesUpdate::Message { .. })
+        })
+        .await,
+    );
+
+    let mut view = View::default();
+    for update in seen {
+        view.apply(update);
+    }
+    let stored = engine.store().messages(&chat.id).unwrap();
+    assert_eq!(view.messages, stored);
+    assert_eq!(stored[0].id, "user-hi");
+    assert_eq!(stored[1].status, Some(MessageStatus::Complete));
+    assert!(stored[1].duration_ms.is_some());
+
+    let mut statuses: Vec<SessionStatus> = until(&mut chats, |u| {
+        matches!(u, ChatsUpdate::Session { session: Some(s), .. } if s.status == SessionStatus::Idle)
+    })
+    .await
+    .into_iter()
+    .filter_map(|u| match u {
+        ChatsUpdate::Session { session, .. } => session.map(|s| s.status),
+        _ => None,
+    })
+    .collect();
+    // Context updates re-send the session with its status unchanged.
+    statuses.dedup();
+    use SessionStatus::{AwaitingInput, Idle, Working};
+    assert_eq!(statuses, [Working, AwaitingInput, Working, Idle]);
+    assert_eq!(
+        engine.chats().unwrap()[0].harness_session_id.as_deref(),
+        Some("mock-session")
+    );
+}
+
+#[tokio::test]
+async fn a_prompt_sent_mid_turn_waits_for_its_own_turn() {
+    let (_dir, engine) = engine(0.0);
+    let chat = engine
+        .create_chat("/demo", config(HarnessId::Mock))
+        .unwrap();
+    let mut updates = watch_messages(&engine, &chat.id);
+
+    engine.queue_command(&chat.id, send("first")).unwrap();
+    let seen = until(&mut updates, is_input).await;
+    let steer = engine.queue_command(&chat.id, send("second")).unwrap();
+    assert_eq!(steer.status, CommandStatus::Pending);
+
+    engine
+        .queue_command(&chat.id, answer(request_id(&seen)))
+        .unwrap();
+    until(&mut updates, |u| {
+        matches!(u, MessagesUpdate::Command { command } if command.id == steer.id && command.status == CommandStatus::Applied)
+    })
+    .await;
+    let seen = until(&mut updates, is_input).await;
+    engine
+        .queue_command(&chat.id, answer(request_id(&seen)))
+        .unwrap();
+    until(&mut updates, is_done).await;
+
+    let messages = engine.store().messages(&chat.id).unwrap();
+    let roles: Vec<MessageRole> = messages.iter().map(|m| m.role).collect();
+    use MessageRole::{Assistant, User};
+    assert_eq!(roles, [User, Assistant, User, Assistant]);
+    assert_eq!(messages[2].id, "user-second");
+    assert!(messages
+        .iter()
+        .filter(|m| m.role == Assistant)
+        .all(|m| m.status == Some(MessageStatus::Complete)));
+}
+
+#[tokio::test]
+async fn interrupt_stops_the_turn_and_is_rejected_when_idle() {
+    let (_dir, engine) = engine(1.0);
+    let chat = engine
+        .create_chat("/demo", config(HarnessId::Mock))
+        .unwrap();
+    let mut updates = watch_messages(&engine, &chat.id);
+
+    let idle = engine
+        .queue_command(&chat.id, CommandPayload::Interrupt)
+        .unwrap();
+    assert_eq!(idle.status, CommandStatus::Rejected);
+
+    engine.queue_command(&chat.id, send("hi")).unwrap();
+    until(&mut updates, |u| matches!(u, MessagesUpdate::Event { .. })).await;
+    let interrupt = engine
+        .queue_command(&chat.id, CommandPayload::Interrupt)
+        .unwrap();
+    assert_eq!(interrupt.status, CommandStatus::Applied);
+    let seen = until(&mut updates, is_done).await;
+    assert!(matches!(
+        seen.last(),
+        Some(MessagesUpdate::Event {
+            event: AgentEvent::Done {
+                status: DoneStatus::Interrupted,
+                ..
+            },
+            ..
+        })
+    ));
+    let reply = &engine.store().messages(&chat.id).unwrap()[1];
+    assert_eq!(reply.status, Some(MessageStatus::Aborted));
+}
+
+#[tokio::test]
+async fn bad_commands_are_rejected() {
+    let (_dir, engine) = engine(0.0);
+    let chat = engine
+        .create_chat("/demo", config(HarnessId::ClaudeCode))
+        .unwrap();
+    let unsupported = engine.queue_command(&chat.id, send("hi")).unwrap();
+    assert_eq!(unsupported.status, CommandStatus::Rejected);
+    assert!(engine.store().messages(&chat.id).unwrap().is_empty());
+
+    let stale = engine
+        .queue_command(&chat.id, answer("nope".into()))
+        .unwrap();
+    assert_eq!(stale.status, CommandStatus::Rejected);
+    assert!(engine.queue_command("missing", send("hi")).is_err());
+}
+
+#[tokio::test]
+async fn a_late_watcher_snapshot_joins_the_stream_without_gaps() {
+    let (_dir, engine) = engine(0.2);
+    let chat = engine
+        .create_chat("/demo", config(HarnessId::Mock))
+        .unwrap();
+    let mut early = watch_messages(&engine, &chat.id);
+    engine.queue_command(&chat.id, send("hi")).unwrap();
+    // Mid-stream: some text folded, little of it saved yet.
+    until(&mut early, |u| {
+        matches!(
+            u,
+            MessagesUpdate::Event {
+                event: AgentEvent::TextDelta { .. },
+                ..
+            }
+        )
+    })
+    .await;
+
+    let mut late = watch_messages(&engine, &chat.id);
+    let mut seen = until(&mut late, is_input).await;
+    engine
+        .queue_command(&chat.id, answer(request_id(&seen)))
+        .unwrap();
+    seen.extend(until(&mut late, is_done).await);
+
+    let mut view = View::default();
+    for update in seen {
+        view.apply(update);
+    }
+    let stored = engine.store().messages(&chat.id).unwrap();
+    assert_eq!(view.messages[1].parts, stored[1].parts);
+}
+
+#[tokio::test]
+async fn an_idle_run_closes_and_the_next_prompt_starts_another() {
+    let dir = tempfile::tempdir().unwrap();
+    let engine = engine_in(
+        &dir,
+        0.0,
+        EngineConfig {
+            idle_timeout: Duration::from_millis(50),
+            ..Default::default()
+        },
+    );
+    let chat = engine
+        .create_chat("/demo", config(HarnessId::Mock))
+        .unwrap();
+    let mut chats = watch_chats(&engine);
+    let mut updates = watch_messages(&engine, &chat.id);
+
+    for prompt in ["first", "second"] {
+        engine.queue_command(&chat.id, send(prompt)).unwrap();
+        let seen = until(&mut updates, is_input).await;
+        // A fresh run opens with its session.
+        assert!(seen.iter().any(|u| matches!(
+            u,
+            MessagesUpdate::Event {
+                event: AgentEvent::SessionStarted { .. },
+                ..
+            }
+        )));
+        engine
+            .queue_command(&chat.id, answer(request_id(&seen)))
+            .unwrap();
+        until(&mut updates, is_done).await;
+        until(&mut chats, |u| {
+            matches!(u, ChatsUpdate::Session { session: None, .. })
+        })
+        .await;
+    }
+    assert_eq!(engine.store().messages(&chat.id).unwrap().len(), 4);
+}
+
+#[tokio::test]
+async fn start_resumes_a_turn_cut_short_by_exit() {
+    let dir = tempfile::tempdir().unwrap();
+    let chat_id = {
+        let store = Store::open(dir.path()).unwrap();
+        let chat = store.create_chat("/demo", config(HarnessId::Mock)).unwrap();
+        let mut turn = store.start_turn(&chat.id, "hi", None).unwrap();
+        for event in [
+            AgentEvent::SessionStarted {
+                harness: HarnessId::Mock,
+                model: "mock-1".into(),
+                cwd: "/demo".into(),
+                session_id: "mock-session".into(),
+                tools: vec![],
+            },
+            AgentEvent::TextDelta {
+                text: "partial".into(),
+            },
+        ] {
+            store.record(&mut turn, &event).unwrap();
+        }
+        chat.id
+        // Dropped mid-turn: Hive "crashed".
+    };
+
+    let engine = engine_in(
+        &dir,
+        0.0,
+        EngineConfig {
+            resume_interrupted: true,
+            ..Default::default()
+        },
+    );
+    let recovery = engine.start().unwrap();
+    assert_eq!(recovery.aborted_messages.len(), 1);
+
+    let messages = engine.store().messages(&chat_id).unwrap();
+    assert_eq!(messages.len(), 4);
+    assert_eq!(messages[1].status, Some(MessageStatus::Aborted));
+    assert!(matches!(
+        &messages[2].parts[0],
+        MessagePart::Text { text, .. } if text == RESUME_PROMPT
+    ));
+    let commands = engine.store().commands(&chat_id).unwrap();
+    assert_eq!(commands.len(), 1);
+    assert_eq!(commands[0].status, CommandStatus::Applied);
+}

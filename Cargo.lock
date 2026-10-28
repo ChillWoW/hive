@@ -68,6 +68,7 @@ checksum = "330a5ed07fa54e4702c9d6c4174f74427fc0ef6e214bbd677ae50a5099946470"
 name = "app"
 version = "0.0.1"
 dependencies = [
+ "hive-engine",
  "hive-harness",
  "hive-proto",
  "hive-store",
@@ -1294,6 +1295,19 @@ name = "hex"
 version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
+
+[[package]]
+name = "hive-engine"
+version = "0.0.1"
+dependencies = [
+ "hive-harness",
+ "hive-proto",
+ "hive-store",
+ "log",
+ "tempfile",
+ "thiserror 2.0.19",
+ "tokio",
+]
 
 [[package]]
 name = "hive-harness"

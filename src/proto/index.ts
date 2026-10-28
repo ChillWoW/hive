@@ -3,6 +3,8 @@
 export type { AgentEvent } from "./AgentEvent";
 export type { Chat } from "./Chat";
 export type { ChatConfig } from "./ChatConfig";
+export type { ChatsSettings } from "./ChatsSettings";
+export type { ChatsUpdate } from "./ChatsUpdate";
 export type { Command } from "./Command";
 export type { CommandPayload } from "./CommandPayload";
 export type { CommandStatus } from "./CommandStatus";
@@ -13,6 +15,7 @@ export type { Message } from "./Message";
 export type { MessagePart } from "./MessagePart";
 export type { MessageRole } from "./MessageRole";
 export type { MessageStatus } from "./MessageStatus";
+export type { MessagesUpdate } from "./MessagesUpdate";
 export type { Model } from "./Model";
 export type { ModelOption } from "./ModelOption";
 export type { ModelOptionChoice } from "./ModelOptionChoice";

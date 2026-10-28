@@ -1,0 +1,17 @@
+[package]
+name = "hive-engine"
+version = "0.0.1"
+edition = "2021"
+license = "GPL-3.0-only"
+publish = false
+
+[dependencies]
+hive-harness.workspace = true
+hive-proto.workspace = true
+hive-store.workspace = true
+log = "0.4"
+thiserror.workspace = true
+tokio.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

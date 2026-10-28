@@ -1,6 +1,6 @@
 //! App settings: one JSON document, owned by `hive-store`'s `SettingsFile`.
 //!
-//! There are no settings yet. Add one only once something reads it: a section
+//! Add a setting only once something reads it: a section
 //! struct (`#[serde(rename_all = "camelCase", default)]` + `Default`) as a field
 //! of [`Settings`], then a row on a page in `src/settings/pages/`.
 //!
@@ -23,14 +23,24 @@ pub const SETTINGS_VERSION: u32 = 1;
 #[serde(rename_all = "camelCase", default)]
 pub struct Settings {
     pub version: u32,
+    pub chats: ChatsSettings,
 }
 
 impl Default for Settings {
     fn default() -> Self {
         Self {
             version: SETTINGS_VERSION,
+            chats: ChatsSettings::default(),
         }
     }
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase", default)]
+pub struct ChatsSettings {
+    /// At launch, send turns that Hive closed mid-run back to their agent to
+    /// finish. Off by default: it spends tokens unasked.
+    pub resume_interrupted: bool,
 }
 
 impl Settings {

@@ -2,5 +2,8 @@
 import type { Settings } from "./Settings";
 
 export const DEFAULT_SETTINGS: Settings = {
-  "version": 1
+  "version": 1,
+  "chats": {
+    "resumeInterrupted": false
+  }
 };

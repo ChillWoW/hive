@@ -9,6 +9,7 @@ pub mod command;
 pub mod fold;
 pub mod message;
 pub mod settings;
+pub mod watch;
 
 pub use agent::*;
 pub use chat::*;
@@ -16,6 +17,7 @@ pub use command::*;
 pub use fold::fold_event;
 pub use message::*;
 pub use settings::*;
+pub use watch::*;
 
 #[cfg(test)]
 mod export {
@@ -48,6 +50,8 @@ mod export {
         Session::export_all(&cfg).unwrap();
         Command::export_all(&cfg).unwrap();
         Settings::export_all(&cfg).unwrap();
+        MessagesUpdate::export_all(&cfg).unwrap();
+        ChatsUpdate::export_all(&cfg).unwrap();
 
         let mut modules = Vec::new();
         collect_modules(&dir, "", &mut modules);
