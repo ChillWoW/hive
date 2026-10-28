@@ -230,8 +230,8 @@ impl Harness for ClaudeHarness {
         HarnessId::ClaudeCode
     }
 
-    /// The CLI's model aliases (`--model`), which track the latest of each
-    /// family, so the list doesn't go stale with releases.
+    /// Claude's models by their full ids, as zeron's curated catalog lists
+    /// them: the current default first, then newest to oldest per family.
     fn catalog(&self) -> HarnessCatalog {
         HarnessCatalog {
             id: HarnessId::ClaudeCode,
@@ -239,16 +239,34 @@ impl Harness for ClaudeHarness {
             installed: self.executable.is_some() || find_on_path("claude").is_some(),
             models: vec![
                 model(
-                    "default",
-                    "Default",
-                    "The model Claude Code recommends for your account",
+                    "claude-opus-5-5",
+                    "Opus 5.5",
+                    "Best for everyday, complex tasks",
                     &EFFORTS,
                 ),
-                model("opus", "Opus", "Most capable, for complex work", &EFFORTS),
-                model("sonnet", "Sonnet", "Fast and capable, for everyday tasks", &EFFORTS),
-                model("haiku", "Haiku", "Fastest, for quick answers", &[]),
+                model(
+                    "claude-fable-5-1",
+                    "Fable 5.1",
+                    "Most intelligent model for building agents",
+                    &EFFORTS,
+                ),
+                model("claude-fable-5", "Fable 5", "Previous generation Fable", &EFFORTS),
+                model("claude-opus-4-8", "Opus 4.8", "Previous generation Opus", &EFFORTS),
+                model("claude-opus-4-7", "Opus 4.7", "Older generation Opus", &EFFORTS),
+                model(
+                    "claude-sonnet-5",
+                    "Sonnet 5",
+                    "Balanced speed and intelligence",
+                    &EFFORTS,
+                ),
+                model(
+                    "claude-haiku-4-5",
+                    "Haiku 4.5",
+                    "Fastest model for everyday tasks",
+                    &[],
+                ),
             ],
-            default_model: Some("default".into()),
+            default_model: Some("claude-opus-5-5".into()),
             commands: vec![
                 command("compact", "Summarize the conversation to free up context"),
                 command("init", "Write a CLAUDE.md describing the codebase"),

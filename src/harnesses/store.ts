@@ -7,6 +7,7 @@ import type {
     HarnessCatalog,
     HarnessId,
     Model,
+    ReasoningLevel,
     SlashCommand
 } from "@/proto";
 import { isTauri } from "@/lib/platform";
@@ -24,30 +25,26 @@ const BROWSER_CATALOGS: HarnessCatalog[] = [
         id: "claude-code",
         label: "Claude Code",
         installed: true,
-        models: [
-            {
-                id: "default",
-                label: "Default",
-                description: "The model Claude Code recommends for your account",
-                reasoningLevels: ["low", "medium", "high", "xhigh", "max"],
-                options: []
-            },
-            {
-                id: "opus",
-                label: "Opus",
-                description: "Most capable, for complex work",
-                reasoningLevels: ["low", "medium", "high", "xhigh", "max"],
-                options: []
-            },
-            {
-                id: "haiku",
-                label: "Haiku",
-                description: "Fastest, for quick answers",
-                reasoningLevels: [],
-                options: []
-            }
-        ],
-        defaultModel: "default",
+        // Mirrors the Claude harness's catalog (crates/harness/src/claude/mod.rs).
+        models: (
+            [
+                ["claude-opus-5-5", "Opus 5.5", "Best for everyday, complex tasks"],
+                ["claude-fable-5-1", "Fable 5.1", "Most intelligent model for building agents"],
+                ["claude-fable-5", "Fable 5", "Previous generation Fable"],
+                ["claude-opus-4-8", "Opus 4.8", "Previous generation Opus"],
+                ["claude-opus-4-7", "Opus 4.7", "Older generation Opus"],
+                ["claude-sonnet-5", "Sonnet 5", "Balanced speed and intelligence"],
+                ["claude-haiku-4-5", "Haiku 4.5", "Fastest model for everyday tasks"]
+            ] as const
+        ).map(([id, label, description]) => ({
+            id,
+            label,
+            description,
+            reasoningLevels:
+                id === "claude-haiku-4-5" ? [] : ["low", "medium", "high", "xhigh", "max"],
+            options: []
+        })),
+        defaultModel: "claude-opus-5-5",
         commands: [
             {
                 name: "compact",
@@ -117,9 +114,25 @@ export function resolveModel(
     return catalog.models.find((m) => m.id === id) ?? catalog.models[0];
 }
 
+/** A model's effort when none is picked: High, else Medium, else its first level. */
+export function defaultReasoning(model: Model | undefined): ReasoningLevel | undefined {
+    const levels = model?.reasoningLevels ?? [];
+    return levels.find((l) => l === "high") ?? levels.find((l) => l === "medium") ?? levels[0];
+}
+
+/** The effort a config runs at: its own pick if the model takes it, else the default. */
+export function resolveReasoning(
+    model: Model | undefined,
+    config: ChatConfig
+): ReasoningLevel | undefined {
+    return config.reasoning && model?.reasoningLevels.includes(config.reasoning)
+        ? config.reasoning
+        : defaultReasoning(model);
+}
+
 /**
  * `config` made valid for `catalog`: a model it has, a reasoning level that
- * model takes, an access mode the harness honors, plan mode only where it
+ * model takes (its default when none is picked), an access mode the harness honors, plan mode only where it
  * has one. Used when switching harness or model, and on remembered new-chat
  * settings that went stale. The sandbox level is kept as is; nothing in the
  * UI picks it.
@@ -129,14 +142,10 @@ export function fitConfig(
     config: ChatConfig
 ): ChatConfig {
     const model = resolveModel(catalog, config);
-    const reasoning =
-        config.reasoning && model?.reasoningLevels.includes(config.reasoning)
-            ? config.reasoning
-            : undefined;
     return {
         harness: catalog.id,
         model: model?.id,
-        reasoning,
+        reasoning: resolveReasoning(model, config),
         modelOptions: config.harness === catalog.id ? config.modelOptions : {},
         sandbox: config.sandbox,
         access: resolveAccess(config.access, catalog.accessModes),

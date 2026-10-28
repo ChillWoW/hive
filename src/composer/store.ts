@@ -23,9 +23,12 @@ type ComposerState = {
     /** Bumped to ask the composer for the caret back. */
     focusToken: number;
     newChat: NewChatSettings;
+    /** Starred models as `harness/model`, listed first in the model picker. */
+    favorites: string[];
     setDraft: (chatId: string | null, text: string) => void;
     focus: () => void;
     setNewChat: (patch: Partial<NewChatSettings>) => void;
+    toggleFavorite: (key: string) => void;
 };
 
 /**
@@ -58,21 +61,34 @@ export const useComposerStore = create<ComposerState>()(
                 }),
             focus: () => set((s) => ({ focusToken: s.focusToken + 1 })),
             setNewChat: (patch) =>
-                set((s) => ({ newChat: { ...s.newChat, ...patch } }))
+                set((s) => ({ newChat: { ...s.newChat, ...patch } })),
+            favorites: [],
+            toggleFavorite: (key) =>
+                set((s) => ({
+                    favorites: s.favorites.includes(key)
+                        ? s.favorites.filter((k) => k !== key)
+                        : [...s.favorites, key]
+                }))
         }),
         {
             name: "hive.composer",
             storage: createJSONStorage(() => localStorage),
             // The access mode is remembered; plan mode is for the chat at hand.
             partialize: (s) => ({
-                newChat: { ...s.newChat, config: { ...s.newChat.config, plan: false } }
+                newChat: { ...s.newChat, config: { ...s.newChat.config, plan: false } },
+                favorites: s.favorites
             }),
             // Settings saved before access modes existed lack them.
             merge: (saved, current) => {
-                const newChat = (saved as Partial<ComposerState> | undefined)?.newChat;
-                if (!newChat) return current;
+                const persisted = saved as Partial<ComposerState> | undefined;
+                const favorites = Array.isArray(persisted?.favorites)
+                    ? persisted.favorites
+                    : current.favorites;
+                const newChat = persisted?.newChat;
+                if (!newChat) return { ...current, favorites };
                 return {
                     ...current,
+                    favorites,
                     newChat: {
                         ...current.newChat,
                         ...newChat,

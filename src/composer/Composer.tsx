@@ -11,7 +11,6 @@ import { cn } from "@/lib/cn";
 import { Tooltip } from "@/ui";
 import { ModelPicker } from "./ModelPicker";
 import { AccessPicker } from "./AccessPicker";
-import { ReasoningPicker } from "./ReasoningPicker";
 import { SlashMenu } from "./SlashMenu";
 import { useSlashMenu } from "./useSlashMenu";
 import { composer, useComposerStore, useDraft } from "./store";
@@ -56,7 +55,7 @@ type ComposerProps = {
 };
 
 /**
- * The prompt box: the field, the model, reasoning and access pickers, and
+ * The prompt box: the field, the model (with reasoning) and access pickers, and
  * one button that is Send while idle, Queue (or Steer, when the harness
  * takes prompts mid-turn) once something is typed during a turn, and Stop
  * while a turn runs with nothing typed.
@@ -345,7 +344,6 @@ export function Composer({
                             onChange={onConfigChange}
                             locked={lockedHarness}
                         />
-                        <ReasoningPicker config={config} onChange={onConfigChange} />
                         <AccessPicker config={config} onChange={onConfigChange} />
                         <Tooltip>
                             <Tooltip.Trigger
