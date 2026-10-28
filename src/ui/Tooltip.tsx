@@ -2,6 +2,8 @@ import { forwardRef } from "react";
 import type { ComponentProps, FC, ReactNode } from "react";
 import { Tooltip as BaseTooltip } from "@base-ui/react/tooltip";
 import { usePortalContainer } from "./PortalContainer";
+import { useBinding, type ShortcutRef } from "@/keybindings/runtime";
+import { ShortcutKeys } from "@/keybindings/ShortcutKeys";
 import { cn } from "@/lib/cn";
 
 type BaseTooltipProviderProps = ComponentProps<
@@ -129,6 +131,16 @@ export interface TooltipContentProps
     className?: string;
     positionerClassName?: string;
     arrowClassName?: string;
+    /**
+     * Shown as muted text right of the label: an action id (its current
+     * binding, nothing while unbound) or a fixed combo like `Escape`.
+     */
+    shortcut?: ShortcutRef;
+}
+
+function TooltipShortcut({ shortcut }: { shortcut: ShortcutRef }) {
+    const binding = useBinding(shortcut);
+    return <ShortcutKeys shortcut={binding} variant="plain" className="shrink-0" />;
 }
 
 const TooltipContent = forwardRef<HTMLDivElement, TooltipContentProps>(
@@ -145,6 +157,7 @@ const TooltipContent = forwardRef<HTMLDivElement, TooltipContentProps>(
             className,
             positionerClassName,
             arrowClassName,
+            shortcut,
             ...popupProps
         },
         ref
@@ -172,7 +185,14 @@ const TooltipContent = forwardRef<HTMLDivElement, TooltipContentProps>(
                         className={cn(popupBaseClassName, className)}
                         {...popupProps}
                     >
-                        {children}
+                        {shortcut ? (
+                            <span className="flex items-center gap-2">
+                                <span className="min-w-0">{children}</span>
+                                <TooltipShortcut shortcut={shortcut} />
+                            </span>
+                        ) : (
+                            children
+                        )}
                     </BaseTooltip.Popup>
                 </BaseTooltip.Positioner>
             </BaseTooltip.Portal>

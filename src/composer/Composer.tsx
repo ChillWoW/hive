@@ -383,7 +383,18 @@ export function Composer({
                                     </button>
                                 }
                             />
-                            <Tooltip.Content side="top">{label}</Tooltip.Content>
+                            <Tooltip.Content
+                                side="top"
+                                shortcut={
+                                    mode === "stop"
+                                        ? "Escape"
+                                        : sendWith === "mod-enter"
+                                          ? "Mod+Enter"
+                                          : "Enter"
+                                }
+                            >
+                                {label}
+                            </Tooltip.Content>
                         </Tooltip>
                     </div>
                 </div>

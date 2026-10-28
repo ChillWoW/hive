@@ -2,11 +2,11 @@ export { ACTIONS, actionById, type Action, type ActionId } from "./actions";
 export { ShortcutKeys } from "./ShortcutKeys";
 export {
     COMPOSER_SCOPE,
+    useBinding,
     useKeybindingsRuntime,
     useShortcut,
-    useShortcutLabel,
-    useShortcutTitle,
-    type ShortcutHandler
+    type ShortcutHandler,
+    type ShortcutRef
 } from "./runtime";
 export {
     canonical,
@@ -14,7 +14,6 @@ export {
     parseShortcut,
     shortcutFromEvent,
     shortcutKeys,
-    shortcutLabel,
     stringifyShortcut,
     type Shortcut
 } from "./shortcut";

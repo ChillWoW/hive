@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef } from "react";
 import { useSettingsStore } from "@/settings/store";
 import { ACTIONS, type ActionId } from "./actions";
-import { canonical, shortcutFromEvent, shortcutLabel, stringifyShortcut } from "./shortcut";
+import { canonical, shortcutFromEvent, stringifyShortcut } from "./shortcut";
 
 /**
  * Returns false when it didn't apply (nothing to do here), so the key goes
@@ -72,14 +72,12 @@ export function useKeybindingsRuntime() {
     }, []);
 }
 
-/** The action's shortcut as the platform writes it (`Ctrl+N`, `⌘N`); null if unbound. */
-export function useShortcutLabel(id: ActionId): string | null {
-    const text = useSettingsStore((s) => s.settings.keyboard[id]);
-    return shortcutLabel(text);
-}
+/** An action id, or a fixed combo the app doesn't let you rebind (`Escape`, `Mod+Enter`). */
+export type ShortcutRef = ActionId | (string & {});
 
-/** `label`, with the action's shortcut after it when bound: for titles. */
-export function useShortcutTitle(id: ActionId, label: string): string {
-    const shortcut = useShortcutLabel(id);
-    return shortcut ? `${label} (${shortcut})` : label;
+const isActionId = (ref: string): ref is ActionId => ACTIONS.some((a) => a.id === ref);
+
+/** What `ref` is bound to now: the action's current binding, or the fixed combo itself. */
+export function useBinding(ref: ShortcutRef): string {
+    return useSettingsStore((s) => (isActionId(ref) ? s.settings.keyboard[ref] : ref));
 }

@@ -202,10 +202,3 @@ export function shortcutKeys(s: Shortcut): string[] {
         KEYS[s.key] ?? s.key
     ].filter((k): k is string => !!k);
 }
-
-/** For tooltips and titles: `Ctrl+N`, or `⌘N` on macOS. */
-export function shortcutLabel(text: string): string | null {
-    const shortcut = text.trim() ? parseShortcut(text) : null;
-    if (!shortcut) return null;
-    return shortcutKeys(shortcut).join(isMac ? "" : "+");
-}

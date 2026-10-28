@@ -3,10 +3,10 @@ import { useWindowState } from "./useWindowState";
 import { WindowControls } from "./WindowControls";
 import { chats } from "@/chats";
 import { composer } from "@/composer";
-import { useShortcut, useShortcutTitle } from "@/keybindings";
+import { useShortcut } from "@/keybindings";
 import { cn } from "@/lib/cn";
 import { isMac } from "@/lib/platform";
-import { Button } from "@/ui";
+import { Button, Tooltip } from "@/ui";
 import {
     ArrowLeftIcon,
     ArrowRightIcon,
@@ -39,8 +39,6 @@ export function TopBar({ title, className }: TopBarProps) {
     };
     useShortcut("toggleSidebar", toggleSidebar);
     useShortcut("newChat", newChat);
-    const sidebarTitle = useShortcutTitle("toggleSidebar", "Toggle sidebar");
-    const newChatTitle = useShortcutTitle("newChat", "New chat");
 
     return (
         <header
@@ -66,15 +64,23 @@ export function TopBar({ title, className }: TopBarProps) {
                     data-tauri-drag-region
                     className="flex h-full items-center gap-0.5 px-2"
                 >
-                    <Button
-                        variant="ghost"
-                        onClick={toggleSidebar}
-                        aria-label="Toggle sidebar"
-                        title={sidebarTitle}
-                        className="p-0 size-6"
-                    >
-                        <SidebarSimpleIcon className="size-4" />
-                    </Button>
+                    <Tooltip>
+                        <Tooltip.Trigger
+                            render={
+                                <Button
+                                    variant="ghost"
+                                    onClick={toggleSidebar}
+                                    aria-label="Toggle sidebar"
+                                    className="p-0 size-6"
+                                >
+                                    <SidebarSimpleIcon className="size-4" />
+                                </Button>
+                            }
+                        />
+                        <Tooltip.Content side="bottom" shortcut="toggleSidebar">
+                            Toggle sidebar
+                        </Tooltip.Content>
+                    </Tooltip>
 
                     <Button variant="ghost" className="p-0 size-6">
                         <ArrowLeftIcon className="size-4" />
@@ -84,15 +90,23 @@ export function TopBar({ title, className }: TopBarProps) {
                         <ArrowRightIcon className="size-4" />
                     </Button>
 
-                    <Button
-                        variant="ghost"
-                        aria-label="New chat"
-                        title={newChatTitle}
-                        onClick={newChat}
-                        className="p-0 size-6"
-                    >
-                        <PlusIcon className="size-4" />
-                    </Button>
+                    <Tooltip>
+                        <Tooltip.Trigger
+                            render={
+                                <Button
+                                    variant="ghost"
+                                    aria-label="New chat"
+                                    onClick={newChat}
+                                    className="p-0 size-6"
+                                >
+                                    <PlusIcon className="size-4" />
+                                </Button>
+                            }
+                        />
+                        <Tooltip.Content side="bottom" shortcut="newChat">
+                            New chat
+                        </Tooltip.Content>
+                    </Tooltip>
                 </div>
             </div>
 
