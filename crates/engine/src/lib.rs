@@ -288,6 +288,12 @@ impl Engine {
         // Another CLI can't resume this one's session.
         if chat.config.harness != config.harness {
             chat.harness_session_id = None;
+            chat.context = None;
+        } else if chat.config.model != config.model {
+            // Another model, another window; the next turn reports it.
+            if let Some(context) = &mut chat.context {
+                context.window = None;
+            }
         }
         chat.config = config;
         self.store().save_chat(&chat)?;
@@ -826,13 +832,22 @@ impl Engine {
                 self.set_status(chat_id, st, SessionStatus::Working)
             }
             AgentEvent::ContextUsage { tokens, window } => {
-                if let Some(session) = &mut st.session {
-                    let context = session.context.get_or_insert_with(ContextUsage::default);
+                // On the chat, so the ring outlives the run.
+                let mut changed = false;
+                let edited = self.store().update_chat(chat_id, |chat| {
+                    let before = chat.context;
+                    let context = chat.context.get_or_insert_with(ContextUsage::default);
                     context.tokens = tokens.or(context.tokens);
-                    context.window = window.or(context.window);
-                    session.updated_at = now_ms();
-                    let session = session.clone();
-                    self.publish_session(chat_id, Some(session));
+                    context.window = window.filter(|n| *n > 0).or(context.window);
+                    changed = chat.context != before;
+                });
+                match edited {
+                    Ok(chat) if changed => publish(
+                        &mut lock(&self.inner.list).watchers,
+                        ChatsUpdate::Chat { chat },
+                    ),
+                    Ok(_) => {}
+                    Err(e) => log::warn!("chat {chat_id}: saving context usage: {e}"),
                 }
             }
             AgentEvent::AvailableCommands { commands } => {
@@ -940,7 +955,6 @@ impl Engine {
                 status,
                 started_at: Some(now),
                 updated_at: now,
-                context: None,
                 commands: st.commands.clone(),
             }),
         };

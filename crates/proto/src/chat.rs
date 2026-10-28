@@ -57,6 +57,9 @@ pub struct Chat {
     /// Epoch millis; compared with `last_message_at` for the unread dot.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_seen_at: Option<i64>,
+    /// Latest context-window occupancy; outlives the run.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context: Option<ContextUsage>,
 }
 
 impl Chat {
@@ -91,9 +94,6 @@ pub struct Session {
     pub started_at: Option<i64>,
     /// Epoch millis.
     pub updated_at: i64,
-    /// Latest context-window occupancy.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub context: Option<ContextUsage>,
     /// Slash commands the session reported, the user's own included.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     #[ts(as = "Option<Vec<SlashCommand>>")]

@@ -23,6 +23,7 @@ import { useShortcut } from "@/keybindings";
 import type { ChatConfig, MessagePart } from "@/proto";
 import { Transcript } from "@/transcript";
 import { MorphHeight } from "@/ui";
+import { ContextRing } from "./ContextRing";
 import { QueuedTray } from "./QueuedTray";
 
 type InputPart = Extract<MessagePart, { kind: "input" }>;
@@ -154,6 +155,9 @@ export function ChatView() {
                             Choose a folder for the agent to work in
                         </span>
                     )}
+                    <div className="ml-auto flex shrink-0 items-center">
+                        <ContextRing usage={chat?.context} />
+                    </div>
                 </div>
             </div>
         </div>

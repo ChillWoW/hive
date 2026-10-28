@@ -137,6 +137,7 @@ impl Store {
             created_at: now_ms(),
             last_message_at: None,
             last_seen_at: None,
+            context: None,
         };
         self.save_chat(&chat)?;
         Ok(chat)

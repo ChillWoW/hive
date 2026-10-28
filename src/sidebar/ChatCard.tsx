@@ -39,7 +39,7 @@ export function ChatCard({
     const model = resolveModel(catalog, chat.config);
     const reasoning = resolveReasoning(model, chat.config);
     const status = statusOf(chat, session);
-    const context = session?.context;
+    const context = chat.context;
     const used =
         context?.tokens != null && context.window
             ? Math.round((context.tokens / context.window) * 100)
