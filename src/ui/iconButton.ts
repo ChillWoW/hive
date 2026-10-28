@@ -7,7 +7,7 @@ import { cn } from "@/lib/cn";
  * next. The glyph is the caller's (`size-3.5`, or `size-4` in the top bar).
  */
 export const iconButtonClassName = cn(
-    "inline-flex size-6 shrink-0 items-center justify-center rounded-sm text-dark-200 outline-none",
+    "inline-flex size-6 shrink-0 items-center justify-center rounded-md text-dark-200 outline-none",
     "transition-colors duration-150",
     "hover:bg-dark-700 hover:text-dark-50 active:bg-dark-600",
     "focus-visible:bg-dark-700 focus-visible:text-dark-50",

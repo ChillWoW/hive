@@ -75,7 +75,7 @@ const SegmentedControlRoot = forwardRef<
                     defaultValue={groupDefaultValue}
                     onValueChange={handleValueChange}
                     className={cn(
-                        "inline-flex select-none items-stretch rounded-sm",
+                        "inline-flex select-none items-stretch rounded-md",
                         "border border-dark-500 bg-dark-700",
                         "data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
                         rootSizeStyles[size],
@@ -112,7 +112,7 @@ const SegmentedControlItem = forwardRef<
             render={<button type="button" />}
             disabled={disabled}
             className={cn(
-                "relative inline-flex min-w-0 shrink-0 items-center justify-center rounded-xs",
+                "relative inline-flex min-w-0 shrink-0 items-center justify-center rounded-sm",
                 "font-medium whitespace-nowrap text-dark-200",
                 "transition-[background-color,color,box-shadow,transform]",
                 "hover:text-dark-50 active:scale-[0.98]",

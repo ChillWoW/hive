@@ -34,7 +34,7 @@ const SwitchRoot = forwardRef<HTMLButtonElement, SwitchProps>(
                 render={<button type="button" />}
                 disabled={disabled}
                 className={cn(
-                    "group relative inline-flex shrink-0 items-center rounded-sm",
+                    "group relative inline-flex shrink-0 items-center rounded-md",
                     "border border-dark-500 bg-dark-700",
                     "transition-colors duration-150 ease-out",
                     "hover:border-dark-400",
@@ -50,7 +50,7 @@ const SwitchRoot = forwardRef<HTMLButtonElement, SwitchProps>(
             >
                 <BaseSwitch.Thumb
                     className={cn(
-                        "block rounded-xs bg-dark-50 shadow-sm",
+                        "block rounded-sm bg-dark-50 shadow-sm",
                         "transition-all duration-200 ease-out",
                         "data-[checked]:bg-dark-950",
                         thumbSizeStyles[size],

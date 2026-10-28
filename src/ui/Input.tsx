@@ -129,7 +129,7 @@ const InputControl = forwardRef<HTMLInputElement, InputProps>(
                     data-disabled={disabled || undefined}
                     data-invalid={invalid || undefined}
                     className={cn(
-                        "group relative inline-flex w-full items-center rounded-sm",
+                        "group relative inline-flex w-full items-center rounded-md",
                         baseSurface,
                         "focus-within:border-dark-400",
                         "data-[invalid]:focus-within:border-danger",
@@ -174,7 +174,7 @@ const InputControl = forwardRef<HTMLInputElement, InputProps>(
                 disabled={disabled}
                 aria-invalid={invalid || undefined}
                 className={cn(
-                    "block w-full rounded-sm",
+                    "block w-full rounded-md",
                     baseSurface,
                     "placeholder:text-dark-200",
                     "focus:border-dark-400 data-[focused]:border-dark-400",

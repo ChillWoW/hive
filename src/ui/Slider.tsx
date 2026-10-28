@@ -153,7 +153,7 @@ const SliderTrack = forwardRef<HTMLDivElement, SliderTrackProps>(
             <BaseSlider.Track
                 ref={ref}
                 className={cn(
-                    "relative w-full overflow-hidden rounded-sm bg-dark-600",
+                    "relative w-full overflow-hidden rounded-md bg-dark-600",
                     "transition-colors group-hover:bg-dark-500",
                     "data-[orientation=vertical]:h-full data-[orientation=vertical]:w-auto",
                     trackSizeStyles[size],
@@ -175,7 +175,7 @@ const SliderIndicator = forwardRef<HTMLDivElement, SliderIndicatorProps>(
     ({ className, ...props }, ref) => (
         <BaseSlider.Indicator
             ref={ref}
-            className={cn("rounded-sm bg-primary-100", className)}
+            className={cn("rounded-md bg-primary-100", className)}
             {...props}
         />
     )
@@ -197,7 +197,7 @@ const SliderThumb = forwardRef<HTMLDivElement, SliderThumbProps>(
             <BaseSlider.Thumb
                 ref={ref}
                 className={cn(
-                    "rounded-xs bg-primary-100 shadow-sm shadow-black/40",
+                    "rounded-sm bg-primary-100 shadow-sm shadow-black/40",
                     "transition-[transform,background-color,box-shadow] duration-150 ease-out",
                     "hover:scale-110 data-[dragging]:scale-110",
                     "data-[disabled]:pointer-events-none data-[disabled]:hover:scale-100",

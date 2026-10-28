@@ -43,7 +43,7 @@ export function Button({
     return (
         <BaseButton
             className={cn(
-                "inline-flex items-center justify-center font-medium transition-colors rounded-sm",
+                "inline-flex items-center justify-center font-medium transition-colors rounded-md",
                 "active:scale-[0.98]",
                 "data-[disabled]:opacity-50 data-[disabled]:active:scale-100 data-[disabled]:pointer-events-none",
                 variantStyles[variant],

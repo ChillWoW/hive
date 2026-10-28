@@ -27,7 +27,7 @@ const popupBaseClassName = cn(
     // The overlay layer it portals into is click-through; the popup is not.
     "pointer-events-auto min-w-[12rem] outline-none",
     "bg-dark-850 text-dark-50 border border-dark-600",
-    "rounded-sm shadow-lg shadow-black/40",
+    "rounded-md shadow-lg shadow-black/40",
     "p-3",
     "[transform-origin:var(--transform-origin)]",
     "transition-[opacity,transform,scale] duration-150 ease-out",
@@ -212,7 +212,7 @@ const PopoverClose = forwardRef<HTMLButtonElement, PopoverCloseProps>(
         <BasePopover.Close
             ref={ref}
             className={cn(
-                "inline-flex items-center justify-center rounded-sm px-2 py-1 text-xs text-dark-50 outline-none",
+                "inline-flex items-center justify-center rounded-md px-2 py-1 text-xs text-dark-50 outline-none",
                 "transition-colors duration-150 ease-out",
                 "hover:bg-dark-700 focus-visible:bg-dark-700",
                 className

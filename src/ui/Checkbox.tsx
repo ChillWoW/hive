@@ -33,7 +33,7 @@ function CheckboxRoot({
             <BaseCheckbox.Root
                 id={id}
                 className={cn(
-                    "flex size-4 items-center justify-center rounded-sm border transition-colors duration-150 ease-out",
+                    "flex size-4 items-center justify-center rounded-md border transition-colors duration-150 ease-out",
                     "border-dark-500 bg-dark-700 hover:border-dark-400",
                     "data-[checked]:border-primary-100 data-[checked]:bg-primary-100",
                     "data-[indeterminate]:border-primary-100 data-[indeterminate]:bg-primary-100",

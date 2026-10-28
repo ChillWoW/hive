@@ -20,7 +20,7 @@ const alignStyles: Record<Align, string> = {
 
 // Surface matches Select.Trigger — one bordered shell, transparent field inside.
 const wrapperBaseClassName = cn(
-    "inline-flex w-full items-center rounded-sm",
+    "inline-flex w-full items-center rounded-md",
     "bg-dark-700 text-dark-50 border border-dark-500",
     "transition-[background-color,border-color,color]",
     "hover:border-dark-400",

@@ -94,7 +94,7 @@ const ModalRoot = ({
                     className={cn(
                         "pointer-events-auto absolute top-1/2 left-1/2 z-50 w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2",
                         "bg-dark-850 text-dark-50 border border-dark-600",
-                        "rounded-sm shadow-lg shadow-black/40",
+                        "rounded-md shadow-lg shadow-black/40",
                         "p-4 outline-none",
                         "transition-[opacity,transform,scale] duration-200 ease-out",
                         "data-[starting-style]:opacity-0 data-[starting-style]:scale-95",

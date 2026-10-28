@@ -50,7 +50,7 @@ type BaseSelectSeparatorProps = ComponentProps<
 >;
 
 const triggerBaseClassName = cn(
-    "inline-flex w-full select-none items-center justify-between rounded-sm",
+    "inline-flex w-full select-none items-center justify-between rounded-md",
     "bg-dark-700 text-dark-50 border border-dark-500",
     "transition-[background-color,border-color,color]",
     "hover:border-dark-400",
@@ -65,7 +65,7 @@ const triggerBaseClassName = cn(
 const popupBaseClassName = cn(
     "pointer-events-auto min-w-[var(--anchor-width)] max-h-[var(--available-height)] overflow-y-auto outline-none",
     "bg-dark-850 text-dark-50 border border-dark-600",
-    "rounded-sm shadow-lg shadow-black/40",
+    "rounded-md shadow-lg shadow-black/40",
     "p-1",
     "[transform-origin:var(--transform-origin)]",
     "transition-[opacity,transform,scale] duration-150 ease-out",
@@ -75,7 +75,7 @@ const popupBaseClassName = cn(
 
 const itemBaseClassName = cn(
     "relative flex w-full cursor-pointer select-none items-center gap-2",
-    "rounded-xs py-1.5 pr-7 pl-2.5 text-xs text-dark-50 outline-none",
+    "rounded-sm py-1.5 pr-7 pl-2.5 text-xs text-dark-50 outline-none",
     "transition-colors",
     "data-[highlighted]:bg-dark-700",
     "data-[disabled]:pointer-events-none data-[disabled]:opacity-50"

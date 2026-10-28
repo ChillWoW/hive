@@ -6,7 +6,7 @@ type Variant = "text" | "circular" | "rectangular" | "rounded";
 type Animation = "pulse" | "shimmer" | "none";
 
 const variantStyles: Record<Variant, string> = {
-    text: "rounded-sm",
+    text: "rounded-md",
     circular: "rounded-full",
     rectangular: "rounded-none",
     rounded: "rounded-md"

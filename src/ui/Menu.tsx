@@ -13,7 +13,7 @@ type ItemVariant = "default" | "danger";
 const popupBaseClassName = cn(
     "pointer-events-auto min-w-[10rem] max-h-[var(--available-height)] overflow-y-auto outline-none p-1",
     "bg-dark-850 text-dark-50 border border-dark-600",
-    "rounded-sm shadow-lg shadow-black/40",
+    "rounded-md shadow-lg shadow-black/40",
     "[transform-origin:var(--transform-origin)]",
     "transition-[opacity,transform,scale] duration-150 ease-out",
     "data-[starting-style]:opacity-0 data-[starting-style]:scale-95",
@@ -24,7 +24,7 @@ const positionerBaseClassName = "z-50 outline-none";
 
 const itemBaseClassName = cn(
     "relative flex w-full cursor-pointer select-none items-center gap-2",
-    "rounded-xs px-2.5 py-1.5 text-xs text-dark-50 outline-none transition-colors",
+    "rounded-sm px-2.5 py-1.5 text-xs text-dark-50 outline-none transition-colors",
     "data-[highlighted]:bg-dark-700",
     "data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
 );

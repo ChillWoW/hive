@@ -21,7 +21,7 @@ type BaseTooltipViewportProps = ComponentProps<
 const popupBaseClassName = cn(
     "max-w-xs outline-none",
     "bg-dark-850 text-dark-50 border border-dark-600",
-    "rounded-sm shadow-lg shadow-black/40",
+    "rounded-md shadow-lg shadow-black/40",
     "px-2 py-1 text-xs font-medium leading-snug",
     "[transform-origin:var(--transform-origin)]",
     "transition-[opacity,transform,scale] duration-150 ease-out",
