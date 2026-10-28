@@ -13,6 +13,7 @@ use tokio::sync::mpsc;
 pub mod approval;
 pub mod claude;
 pub mod mock;
+pub mod provider;
 
 pub use claude::ClaudeHarness;
 pub use mock::MockHarness;

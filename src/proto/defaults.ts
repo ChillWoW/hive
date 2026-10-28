@@ -25,5 +25,9 @@ export const DEFAULT_SETTINGS: Settings = {
     "goBack": "Alt+Left",
     "goForward": "Alt+Right",
     "togglePlan": "Shift+Tab"
+  },
+  "providers": {
+    "claudeCode": true,
+    "mock": true
   }
 };

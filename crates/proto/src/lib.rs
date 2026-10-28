@@ -9,6 +9,7 @@ pub mod chat;
 pub mod command;
 pub mod fold;
 pub mod message;
+pub mod provider;
 pub mod settings;
 pub mod watch;
 
@@ -18,6 +19,7 @@ pub use chat::*;
 pub use command::*;
 pub use fold::fold_event;
 pub use message::*;
+pub use provider::*;
 pub use settings::*;
 pub use watch::*;
 
@@ -55,6 +57,9 @@ mod export {
         MessagesUpdate::export_all(&cfg).unwrap();
         ChatsUpdate::export_all(&cfg).unwrap();
         HarnessCatalog::export_all(&cfg).unwrap();
+        ProviderStatus::export_all(&cfg).unwrap();
+        SignInMethod::export_all(&cfg).unwrap();
+        SignInStarted::export_all(&cfg).unwrap();
 
         let mut modules = Vec::new();
         collect_modules(&dir, "", &mut modules);

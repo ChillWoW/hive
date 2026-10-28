@@ -7,10 +7,12 @@ import type {
     HarnessCatalog,
     HarnessId,
     Model,
+    ProvidersSettings,
     ReasoningLevel,
     SlashCommand
 } from "@/proto";
 import { isTauri } from "@/lib/platform";
+import { useSettingsStore } from "@/settings/store";
 import { ACCESS_MODES } from "./labels";
 
 /**
@@ -94,10 +96,33 @@ export function refreshCatalogs(): Promise<void> {
 /** Mock plays a scripted turn; it's for building the UI, not for users. */
 const shown = (c: HarnessCatalog) => c.id !== "mock" || import.meta.env.DEV;
 
-/** The harnesses pickers offer. */
-export function useCatalogs(): HarnessCatalog[] {
+/** Every harness the user can see, on or off: what Settings › Providers lists. */
+export function useHarnesses(): HarnessCatalog[] {
     const catalogs = useHarnessesStore((s) => s.catalogs);
     return useMemo(() => catalogs.filter(shown), [catalogs]);
+}
+
+/** `claude-code` → `claudeCode`, its key in the `providers` settings section. */
+export function providerKey(id: HarnessId): string {
+    return id.replace(/-(\w)/g, (_, c: string) => c.toUpperCase());
+}
+
+/** Turned on in Settings › Providers; a harness with no switch counts as on. */
+export function isEnabled(providers: ProvidersSettings, id: HarnessId): boolean {
+    return (providers as Record<string, boolean | undefined>)[providerKey(id)] ?? true;
+}
+
+/**
+ * The harnesses pickers offer: those turned on. If a hand-edited settings
+ * file turns them all off, all of them, so a new chat still has one.
+ */
+export function useCatalogs(): HarnessCatalog[] {
+    const harnesses = useHarnesses();
+    const providers = useSettingsStore((s) => s.settings.providers);
+    return useMemo(() => {
+        const on = harnesses.filter((c) => isEnabled(providers, c.id));
+        return on.length > 0 ? on : harnesses;
+    }, [harnesses, providers]);
 }
 
 export function useCatalog(id: HarnessId | undefined) {

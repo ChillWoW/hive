@@ -33,10 +33,13 @@ function Highlight({ text }: { text: string }) {
  */
 export function SettingsSection({
     title,
+    action,
     children,
     className
 }: {
     title?: string;
+    /** Beside the title, on the right. */
+    action?: ReactNode;
     children: ReactNode;
     className?: string;
 }) {
@@ -47,10 +50,13 @@ export function SettingsSection({
                 className
             )}
         >
-            {title && (
-                <h3 className="px-1 text-[13px] font-medium text-dark-100">
-                    {title}
-                </h3>
+            {(title || action) && (
+                <div className={cn("flex items-center gap-2 px-1", action && "min-h-6")}>
+                    <h3 className="min-w-0 flex-1 text-[13px] font-medium text-dark-100">
+                        {title}
+                    </h3>
+                    {action}
+                </div>
             )}
             <div className="flex flex-col rounded-md bg-dark-800">
                 {children}

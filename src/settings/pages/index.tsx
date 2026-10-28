@@ -4,6 +4,7 @@ import {
     ChatsIcon,
     InfoIcon,
     KeyboardIcon,
+    PlugsConnectedIcon,
     type Icon
 } from "@phosphor-icons/react";
 import type { SettingsPageId } from "../store";
@@ -11,6 +12,7 @@ import { AboutPage } from "./AboutPage";
 import { ChatsPage } from "./ChatsPage";
 import { KeyboardPage } from "./KeyboardPage";
 import { NotificationsPage } from "./NotificationsPage";
+import { ProvidersPage } from "./ProvidersPage";
 
 export type SettingsPage = {
     id: SettingsPageId;
@@ -26,6 +28,12 @@ export const SETTINGS_PAGES: readonly SettingsPage[] = [
         label: "Chats",
         icon: ChatsIcon,
         Component: ChatsPage
+    },
+    {
+        id: "providers",
+        label: "Providers",
+        icon: PlugsConnectedIcon,
+        Component: ProvidersPage
     },
     {
         id: "notifications",

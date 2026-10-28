@@ -2,13 +2,12 @@ import { useEffect, useState } from "react";
 import { getVersion } from "@tauri-apps/api/app";
 import {
     ArrowCounterClockwiseIcon,
-    CheckIcon,
-    CopyIcon,
     FolderOpenIcon
 } from "@phosphor-icons/react";
 import { isTauri } from "@/lib/platform";
 import { Button } from "@/ui";
 import { settingsApi } from "../api";
+import { CopyButton } from "../CopyButton";
 import { SettingRow, SettingsSection } from "../SettingsSection";
 import { useSettingsStore } from "../store";
 
@@ -75,38 +74,6 @@ export function AboutPage() {
                 <ResetRow />
             </SettingsSection>
         </>
-    );
-}
-
-function CopyButton({ text }: { text: string }) {
-    const [copied, setCopied] = useState(false);
-
-    useEffect(() => {
-        if (!copied) return;
-        const timer = setTimeout(() => setCopied(false), 1500);
-        return () => clearTimeout(timer);
-    }, [copied]);
-
-    return (
-        <Button
-            size="sm"
-            variant="ghost"
-            aria-label="Copy path"
-            title="Copy path"
-            className="w-6 px-0"
-            onClick={() =>
-                navigator.clipboard.writeText(text).then(
-                    () => setCopied(true),
-                    () => {}
-                )
-            }
-        >
-            {copied ? (
-                <CheckIcon className="size-3.5" weight="bold" />
-            ) : (
-                <CopyIcon className="size-3.5" />
-            )}
-        </Button>
     );
 }
 

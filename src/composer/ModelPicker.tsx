@@ -17,6 +17,7 @@ import {
     useCatalogs
 } from "@/harnesses";
 import { cn } from "@/lib/cn";
+import { settings } from "@/settings/store";
 import { Popover, Tooltip, usePortalContainer } from "@/ui";
 import {
     footerButtonClassName,
@@ -53,7 +54,7 @@ function matches(row: Row, query: string) {
  * else its first level); there is no "let the CLI decide". Picking a model
  * keeps the card open so its effort can be set next. A chat
  * already started is `locked` to its harness and lists only its models; a
- * harness whose CLI isn't installed is listed but can't be picked.
+ * harness whose CLI isn't installed is listed, and picking it opens Settings › Providers.
  */
 export function ModelPicker({
     config,
@@ -224,7 +225,8 @@ function ModelCard({
     }, [active]);
 
     const pick = (row: Row) => {
-        if (!row.harness.installed) return;
+        // Settings › Providers can install it.
+        if (!row.harness.installed) return settings.open("providers");
         if (row.key !== selectedKey) {
             onChange(
                 fitConfig(row.harness, {
@@ -399,7 +401,7 @@ function ModelRow({
 }) {
     const disabled = !row.harness.installed;
     const description = disabled
-        ? `${row.harness.label} isn't installed`
+        ? `${row.harness.label} isn't installed · set it up in Settings`
         : row.model.description;
     return (
         <div
@@ -416,7 +418,7 @@ function ModelRow({
                 selected
                     ? "bg-dark-700"
                     : active && "bg-dark-800",
-                disabled && "cursor-default opacity-50"
+                disabled && "opacity-50"
             )}
         >
             <HarnessIcon harness={row.harness.id} className="size-3.5 shrink-0" />

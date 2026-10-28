@@ -6,6 +6,8 @@ export {
 } from "./labels";
 export {
     fitConfig,
+    isEnabled,
+    providerKey,
     refreshCatalogs,
     resolveAccess,
     resolveModel,
@@ -13,5 +15,6 @@ export {
     slashCommands,
     useCatalog,
     useCatalogs,
+    useHarnesses,
     useHarnessesStore
 } from "./store";

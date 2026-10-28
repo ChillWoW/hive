@@ -165,3 +165,14 @@ async fn a_title_run_answers_with_text_only() {
     assert!((1..=8).contains(&words), "not a title: {text:?}");
     eprintln!("title: {text}");
 }
+
+/// No tokens: `claude --version` and `claude auth status`.
+#[tokio::test]
+#[ignore]
+async fn provider_status_reads_version_and_login() {
+    let status = hive_harness::provider::status(HarnessId::ClaudeCode).await;
+    println!("{status:#?}");
+    assert!(status.installed, "claude isn't installed");
+    assert!(status.version.is_some(), "{:?}", status.error);
+    assert!(status.account.is_some(), "{:?}", status.error);
+}

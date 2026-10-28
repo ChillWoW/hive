@@ -2,5 +2,6 @@
 import type { ChatsSettings } from "./ChatsSettings";
 import type { KeyboardSettings } from "./KeyboardSettings";
 import type { NotificationsSettings } from "./NotificationsSettings";
+import type { ProvidersSettings } from "./ProvidersSettings";
 
-export type Settings = { version: number, chats: ChatsSettings, notifications: NotificationsSettings, keyboard: KeyboardSettings, };
+export type Settings = { version: number, chats: ChatsSettings, notifications: NotificationsSettings, keyboard: KeyboardSettings, providers: ProvidersSettings, };

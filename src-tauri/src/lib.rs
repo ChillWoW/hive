@@ -1,5 +1,6 @@
 mod engine;
 mod folders;
+mod providers;
 mod settings;
 
 use std::sync::Arc;
@@ -47,6 +48,13 @@ pub fn run() {
       engine::mark_chat_seen,
       engine::delete_chat,
       folders::folder_icon,
+      providers::provider_status,
+      providers::provider_install,
+      providers::provider_update,
+      providers::provider_sign_in,
+      providers::provider_finish_sign_in,
+      providers::provider_cancel_sign_in,
+      providers::provider_sign_out,
       settings::settings_get,
       settings::settings_update,
       settings::settings_reset,
@@ -100,6 +108,7 @@ pub fn run() {
       );
       app.manage(engine);
       app.manage(engine::Watches::default());
+      app.manage(providers::SignIns::default());
       Ok(())
     })
     .run(tauri::generate_context!())

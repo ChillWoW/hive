@@ -22,6 +22,7 @@
 //!   interrupted `result` and the process keeps running.
 
 mod normalize;
+pub(crate) mod provider;
 mod wire;
 
 use std::collections::HashMap;
@@ -236,7 +237,7 @@ impl Harness for ClaudeHarness {
         HarnessCatalog {
             id: HarnessId::ClaudeCode,
             label: "Claude Code".into(),
-            installed: self.executable.is_some() || find_on_path("claude").is_some(),
+            installed: self.executable.is_some() || find_claude().is_some(),
             models: vec![
                 model(
                     "claude-opus-5-5",
@@ -321,7 +322,7 @@ impl ClaudeHarness {
     fn spawn(&self, request: RunRequest, title: bool) -> Result<Run, HarnessError> {
         let exe = match &self.executable {
             Some(path) => path.clone(),
-            None => find_on_path("claude").ok_or(HarnessError::NotInstalled("claude"))?,
+            None => find_claude().ok_or(HarnessError::NotInstalled("claude"))?,
         };
         let mut cmd = command_for(&exe);
         cmd.args(Self::launch_args(&request));
@@ -772,6 +773,35 @@ fn managed_mcp_config() -> bool {
         "/etc/claude-code/managed-mcp.json"
     };
     Path::new(path).is_file()
+}
+
+/// `claude` on PATH, else where its installers put it. An app started from
+/// Finder or the Start menu may not see the shell's PATH, and one running
+/// when the CLI was installed never sees the new entry.
+pub(crate) fn find_claude() -> Option<PathBuf> {
+    find_on_path("claude").or_else(|| install_locations().into_iter().find(|p| p.is_file()))
+}
+
+fn install_locations() -> Vec<PathBuf> {
+    let mut paths = Vec::new();
+    let home = std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" })
+        .map(PathBuf::from);
+    if cfg!(windows) {
+        if let Some(home) = &home {
+            paths.push(home.join(r".local\bin\claude.exe"));
+        }
+        if let Some(appdata) = std::env::var_os("APPDATA") {
+            paths.push(PathBuf::from(appdata).join(r"npm\claude.cmd"));
+        }
+    } else {
+        if let Some(home) = &home {
+            paths.push(home.join(".local/bin/claude"));
+            paths.push(home.join(".claude/local/claude"));
+        }
+        paths.push("/opt/homebrew/bin/claude".into());
+        paths.push("/usr/local/bin/claude".into());
+    }
+    paths
 }
 
 fn find_on_path(name: &str) -> Option<PathBuf> {

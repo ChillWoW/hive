@@ -26,6 +26,7 @@ pub struct Settings {
     pub chats: ChatsSettings,
     pub notifications: NotificationsSettings,
     pub keyboard: KeyboardSettings,
+    pub providers: ProvidersSettings,
 }
 
 impl Default for Settings {
@@ -35,6 +36,7 @@ impl Default for Settings {
             chats: ChatsSettings::default(),
             notifications: NotificationsSettings::default(),
             keyboard: KeyboardSettings::default(),
+            providers: ProvidersSettings::default(),
         }
     }
 }
@@ -132,6 +134,25 @@ impl Default for KeyboardSettings {
             go_back: "Alt+Left".into(),
             go_forward: "Alt+Right".into(),
             toggle_plan: "Shift+Tab".into(),
+        }
+    }
+}
+
+/// Which harnesses the pickers offer, one switch per registered harness, keyed
+/// by its id in camelCase. Read by the frontend (`src/harnesses/`); chats
+/// already on a turned-off harness keep running on it.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase", default)]
+pub struct ProvidersSettings {
+    pub claude_code: bool,
+    pub mock: bool,
+}
+
+impl Default for ProvidersSettings {
+    fn default() -> Self {
+        Self {
+            claude_code: true,
+            mock: true,
         }
     }
 }
