@@ -260,9 +260,15 @@ impl Harness for ClaudeHarness {
                     &EFFORTS,
                 ),
                 model(
+                    "claude-haiku-5-5",
+                    "Haiku 5.5",
+                    "Fastest for quick answers",
+                    &EFFORTS,
+                ),
+                model(
                     "claude-haiku-4-5",
                     "Haiku 4.5",
-                    "Fastest model for everyday tasks",
+                    "Previous generation Haiku",
                     &[],
                 ),
             ],

@@ -34,7 +34,8 @@ const BROWSER_CATALOGS: HarnessCatalog[] = [
                 ["claude-opus-4-8", "Opus 4.8", "Previous generation Opus"],
                 ["claude-opus-4-7", "Opus 4.7", "Older generation Opus"],
                 ["claude-sonnet-5", "Sonnet 5", "Balanced speed and intelligence"],
-                ["claude-haiku-4-5", "Haiku 4.5", "Fastest model for everyday tasks"]
+                ["claude-haiku-5-5", "Haiku 5.5", "Fastest for quick answers"],
+                ["claude-haiku-4-5", "Haiku 4.5", "Previous generation Haiku"]
             ] as const
         ).map(([id, label, description]) => ({
             id,
