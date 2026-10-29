@@ -55,6 +55,7 @@ pub fn run() {
       engine::mark_chat_seen,
       engine::delete_chat,
       files::list_files,
+      files::list_directory,
       folders::folder_icon,
       git::git_repo,
       git::git_switch_branch,

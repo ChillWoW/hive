@@ -3,15 +3,68 @@ import {
     EyeSlashIcon,
     MagnifyingGlassIcon
 } from "@phosphor-icons/react";
+import { useEffect, useRef } from "react";
+import { useChat, useChatsStore, workDir } from "@/chats";
+import { useComposerStore } from "@/composer/store";
+import { useFolderBusy } from "@/git/store";
 import { cn } from "@/lib/cn";
 import { iconButtonClassName, Tooltip } from "@/ui";
+import { FileTree } from "./FileTree";
 import { useFilesPanelStore } from "./panel";
+import { SearchResults } from "./SearchResults";
+import { refreshFiles } from "./store";
+import { reloadTree } from "./tree";
+
+/** The folder the open chat works in, or the new-chat view's folder. */
+function useActiveFolder() {
+    const chat = useChat(useChatsStore((s) => s.activeChatId));
+    const newChatCwd = useComposerStore((s) => s.newChat.cwd);
+    return chat ? workDir(chat) : newChatCwd;
+}
+
+/**
+ * Re-lists `cwd`'s tree (and its search listing) when the window regains
+ * focus or an agent's turn there ends: either may have changed files.
+ */
+function useRefreshOnChange(cwd: string | null | undefined, all: boolean) {
+    const busy = useFolderBusy(cwd);
+    const wasBusy = useRef(busy);
+
+    useEffect(() => {
+        const turnEnded = wasBusy.current && !busy;
+        wasBusy.current = busy;
+        if (!cwd || !turnEnded) return;
+        reloadTree(cwd, all);
+        void refreshFiles(cwd, all, true);
+    }, [cwd, all, busy]);
+
+    useEffect(() => {
+        if (!cwd) return;
+        const onFocus = () => reloadTree(cwd, all);
+        window.addEventListener("focus", onFocus);
+        return () => window.removeEventListener("focus", onFocus);
+    }, [cwd, all]);
+}
 
 /** The file panel: search and the show-all toggle over the folder's files. */
 export function FilesPanel() {
+    const cwd = useActiveFolder();
+    const all = useFilesPanelStore((s) => s.showAll);
+    const query = useFilesPanelStore((s) => s.query.trim());
+    useRefreshOnChange(cwd, all);
+
     return (
         <div className="flex min-h-0 flex-1 flex-col">
             <FilesHeader />
+            {!cwd ? (
+                <div className="px-3 py-2 text-[11.5px] text-dark-250">
+                    Pick a folder to see its files
+                </div>
+            ) : query ? (
+                <SearchResults cwd={cwd} all={all} query={query} />
+            ) : (
+                <FileTree cwd={cwd} all={all} />
+            )}
         </div>
     );
 }

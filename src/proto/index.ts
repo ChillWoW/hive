@@ -12,6 +12,7 @@ export type { CommandKind } from "./CommandKind";
 export type { CommandPayload } from "./CommandPayload";
 export type { CommandStatus } from "./CommandStatus";
 export type { ContextUsage } from "./ContextUsage";
+export type { DirectoryEntry } from "./DirectoryEntry";
 export type { DoneStatus } from "./DoneStatus";
 export type { GitBranch } from "./GitBranch";
 export type { GitRepo } from "./GitRepo";

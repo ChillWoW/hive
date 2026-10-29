@@ -67,6 +67,7 @@ mod export {
         GitRepo::export_all(&cfg).unwrap();
         NewWorktree::export_all(&cfg).unwrap();
         WorkspaceEntry::export_all(&cfg).unwrap();
+        DirectoryEntry::export_all(&cfg).unwrap();
 
         let mut modules = Vec::new();
         collect_modules(&dir, "", &mut modules);

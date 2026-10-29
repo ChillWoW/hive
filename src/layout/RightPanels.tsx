@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { usePanelLayout, useLayoutStore } from "@/stores/useLayoutStore";
 import { FilesPanel } from "@/files";
 import { SidePanel } from "./SidePanel";
@@ -7,6 +8,9 @@ export function RightPanels() {
     const layout = usePanelLayout();
     const setFilesWidth = useLayoutStore((s) => s.setFilesWidth);
     const setRightWidth = useLayoutStore((s) => s.setRightWidth);
+    // Mounted on first open, then kept, so closing slides its content away.
+    const [filesMounted, setFilesMounted] = useState(layout.visible.files);
+    if (layout.visible.files && !filesMounted) setFilesMounted(true);
 
     return (
         <>
@@ -26,7 +30,7 @@ export function RightPanels() {
                     setFilesWidth(Math.min(width, layout.filesMax))
                 }
             >
-                <FilesPanel />
+                {filesMounted && <FilesPanel />}
             </SidePanel>
         </>
     );

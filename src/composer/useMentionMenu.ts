@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { WorkspaceEntry } from "@/proto";
-import { fileMention } from "@/files";
-import { fuzzyScore, rankBy } from "@/lib/fuzzy";
+import { fileMention, rankEntries } from "@/files";
 
 /** Rows the menu shows at most. */
 const LIMIT = 50;
@@ -30,21 +29,6 @@ function tokenAt(draft: string, caret: number): Token | null {
     let end = at;
     while (end < draft.length && !/\s/.test(draft[end]!)) end++;
     return { start: sign, end, query };
-}
-
-/**
- * How well a path matches: by the whole path, a path that starts with the
- * query (`src/comp`) ahead of the rest, else by its name when that scores
- * better, since a name is what people type. Shallower first among equals.
- */
-function score(query: string, entry: WorkspaceEntry): number | null {
-    const path = entry.path;
-    const byPath = fuzzyScore(query, path);
-    if (byPath === null) return null;
-    const depth = path.split("/").length - 1;
-    if (path.toLowerCase().startsWith(query.toLowerCase())) return byPath + 100 - depth;
-    const byName = fuzzyScore(query, path.slice(path.lastIndexOf("/") + 1));
-    return (byName === null ? byPath : Math.max(byPath, byName + 20)) - depth * 0.5;
 }
 
 export type MentionMenuState = {
@@ -92,7 +76,7 @@ export function useMentionMenu({
     const matches = useMemo(() => {
         if (query === undefined || !entries) return [];
         if (query === "") return entries.slice(0, LIMIT);
-        return rankBy(entries, (entry) => score(query, entry), LIMIT);
+        return rankEntries(query, entries, LIMIT);
     }, [entries, query]);
 
     // A new filter starts from the top.
