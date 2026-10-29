@@ -176,3 +176,25 @@ async fn provider_status_reads_version_and_login() {
     assert!(status.version.is_some(), "{:?}", status.error);
     assert!(status.account.is_some(), "{:?}", status.error);
 }
+
+/// No turn, no tokens: the CLI is started for its command list and stopped.
+#[tokio::test]
+#[ignore]
+async fn commands_are_listed_without_a_run() {
+    let dir = scratch("commands");
+    let started = std::time::Instant::now();
+    let commands = ClaudeHarness::new()
+        .commands(&dir.display().to_string())
+        .await
+        .unwrap();
+    let skills = commands
+        .iter()
+        .filter(|c| c.kind == hive_proto::CommandKind::Skill)
+        .count();
+    eprintln!(
+        "{} commands, {skills} skills in {:?}",
+        commands.len() - skills,
+        started.elapsed()
+    );
+    assert!(commands.iter().any(|c| c.name == "compact"));
+}

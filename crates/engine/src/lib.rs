@@ -334,6 +334,19 @@ impl Engine {
     }
 
     /// Every registered harness's catalog, in registration order.
+    /// What `harness` would offer in `cwd` before a run reports its own
+    /// commands ([`Harness::commands`]); none for an unknown harness.
+    pub async fn commands(
+        &self,
+        harness: HarnessId,
+        cwd: &str,
+    ) -> std::result::Result<Vec<SlashCommand>, hive_harness::HarnessError> {
+        match self.inner.harnesses.get(&harness) {
+            Some(h) => h.commands(cwd).await,
+            None => Ok(Vec::new()),
+        }
+    }
+
     pub fn catalogs(&self) -> Vec<HarnessCatalog> {
         self.inner
             .order

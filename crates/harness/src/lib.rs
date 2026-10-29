@@ -7,7 +7,12 @@
 //! handle is closed or dropped, and the event stream ends when the process
 //! exits.
 
-use hive_proto::{AgentEvent, HarnessCatalog, HarnessId, RunRequest, UserInputAnswer};
+use std::future::Future;
+use std::pin::Pin;
+
+use hive_proto::{
+    AgentEvent, HarnessCatalog, HarnessId, RunRequest, SlashCommand, UserInputAnswer,
+};
 use tokio::sync::mpsc;
 
 pub mod approval;
@@ -27,7 +32,12 @@ pub enum HarnessError {
     Spawn(&'static str, std::io::Error),
     #[error("this harness can't write titles")]
     NoTitles,
+    #[error("{0}")]
+    Probe(String),
 }
+
+/// What [`Harness::commands`] returns.
+pub type CommandsFuture = Pin<Box<dyn Future<Output = Result<Vec<SlashCommand>, HarnessError>> + Send>>;
 
 pub trait Harness: Send + Sync {
     fn id(&self) -> HarnessId;
@@ -40,6 +50,15 @@ pub trait Harness: Send + Sync {
     /// Starts a session and sends `request.prompt` as its first turn. Must be
     /// called from inside a tokio runtime.
     fn run(&self, request: RunRequest) -> Result<Run, HarnessError>;
+
+    /// The commands and skills a run in `cwd` would offer, without one: what
+    /// the composer lists before a session reports its own. The catalog's
+    /// built-in ones by default.
+    fn commands(&self, cwd: &str) -> CommandsFuture {
+        let _ = cwd;
+        let commands = self.catalog().commands;
+        Box::pin(async move { Ok(commands) })
+    }
 
     /// Whether [`Harness::run_title`] works.
     fn supports_titles(&self) -> bool {

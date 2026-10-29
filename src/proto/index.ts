@@ -8,6 +8,7 @@ export type { ChatConfig } from "./ChatConfig";
 export type { ChatsSettings } from "./ChatsSettings";
 export type { ChatsUpdate } from "./ChatsUpdate";
 export type { Command } from "./Command";
+export type { CommandKind } from "./CommandKind";
 export type { CommandPayload } from "./CommandPayload";
 export type { CommandStatus } from "./CommandStatus";
 export type { ContextUsage } from "./ContextUsage";

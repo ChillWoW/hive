@@ -43,6 +43,12 @@ pub(crate) struct SystemFrame {
     /// `task_notification`: terminal status (`completed`, `failed`, …).
     #[serde(default)]
     pub status: Option<String>,
+    /// `init`: the names of the commands that are skills.
+    #[serde(default)]
+    pub skills: Option<Vec<String>>,
+    /// `commands_changed`: the full list again, as `initialize` gave it.
+    #[serde(default)]
+    pub commands: Option<Vec<Value>>,
 }
 
 #[derive(Debug, Default, Deserialize)]

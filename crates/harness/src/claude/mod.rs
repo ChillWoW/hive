@@ -2,8 +2,10 @@
 //! protocol over stdin/stdout.
 //!
 //! - The session opens with an `initialize` control request (its response
-//!   lists the slash commands), then each turn is a user line on stdin. The
-//!   process stays up between turns until stdin closes.
+//!   lists the slash commands, split into commands and skills by
+//!   [`commands`]); the first prompt waits for it. Each turn is a user line
+//!   on stdin, `$skill` rewritten to what Claude takes. The process stays up
+//!   between turns until stdin closes.
 //! - Permissions ride the stdio control channel (`--permission-prompt-tool
 //!   stdio`, undocumented but what the Agent SDK uses): the CLI sends
 //!   `can_use_tool` and blocks until it gets an answer. The run's access mode
@@ -24,6 +26,7 @@
 //! - Interrupt sends the `interrupt` control request: the turn ends with an
 //!   interrupted `result` and the process keeps running.
 
+mod commands;
 mod normalize;
 pub(crate) mod provider;
 mod wire;
@@ -35,9 +38,9 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use hive_proto::{
-    AccessMode, AgentEvent, DoneStatus, HarnessCapabilities, HarnessCatalog, HarnessId, Model,
-    ModelOption, ModelOptionChoice, ReasoningLevel, RunRequest, SlashCommand, UserInputAnswer,
-    UserInputQuestion,
+    AccessMode, AgentEvent, CommandKind, DoneStatus, HarnessCapabilities, HarnessCatalog,
+    HarnessId, Model, ModelOption, ModelOptionChoice, ReasoningLevel, RunRequest, SlashCommand,
+    UserInputAnswer, UserInputQuestion,
 };
 use serde_json::Value;
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
@@ -57,10 +60,22 @@ const INTERRUPT_SETTLE: Duration = Duration::from_secs(5);
 /// How long the CLI gets to exit after stdin closes before it's killed.
 const EXIT_GRACE: Duration = Duration::from_secs(3);
 const STDERR_TAIL_BYTES: usize = 4096;
+/// How long a command probe may take.
+const PROBE_TIMEOUT: Duration = Duration::from_secs(20);
+/// How long a probe's answer is reused for the same folder.
+const PROBE_TTL: Duration = Duration::from_secs(30);
+/// How long the first prompt waits on the `initialize` response.
+const INITIALIZE_WAIT: Duration = Duration::from_secs(5);
+
+/// The skills' names from the last `system:init` any run saw.
+type KnownSkills = Arc<Mutex<Option<HashSet<String>>>>;
 
 #[derive(Default)]
 pub struct ClaudeHarness {
     executable: Option<PathBuf>,
+    skills: KnownSkills,
+    /// The last probe's command list per folder.
+    probes: Arc<Mutex<HashMap<String, (std::time::Instant, Vec<commands::Advertised>)>>>,
 }
 
 impl ClaudeHarness {
@@ -72,6 +87,7 @@ impl ClaudeHarness {
     pub fn with_executable(path: impl Into<PathBuf>) -> Self {
         Self {
             executable: Some(path.into()),
+            ..Self::default()
         }
     }
 
@@ -262,6 +278,7 @@ fn command(name: &str, description: &str) -> SlashCommand {
         name: name.into(),
         description: description.into(),
         input_hint: None,
+        kind: CommandKind::Command,
     }
 }
 
@@ -342,6 +359,39 @@ impl Harness for ClaudeHarness {
 
     fn supports_titles(&self) -> bool {
         true
+    }
+
+    /// Starts the CLI in `cwd` for its `initialize` response alone — no
+    /// prompt, so no model turn and no MCP servers — then stops it.
+    fn commands(&self, cwd: &str) -> crate::CommandsFuture {
+        let exe = self.executable.clone().or_else(find_claude);
+        let skills = Arc::clone(&self.skills);
+        let probes = Arc::clone(&self.probes);
+        let cwd = cwd.to_owned();
+        Box::pin(async move {
+            let cached = probes
+                .lock()
+                .unwrap()
+                .get(&cwd)
+                .filter(|(at, _)| at.elapsed() < PROBE_TTL)
+                .map(|(_, advertised)| advertised.clone());
+            let advertised = match cached {
+                Some(advertised) => advertised,
+                None => {
+                    let exe = exe.ok_or(HarnessError::NotInstalled("claude"))?;
+                    let advertised = tokio::time::timeout(PROBE_TIMEOUT, probe(&exe, &cwd))
+                        .await
+                        .map_err(|_| HarnessError::Probe("claude didn't list its commands".into()))??;
+                    probes
+                        .lock()
+                        .unwrap()
+                        .insert(cwd, (std::time::Instant::now(), advertised.clone()));
+                    advertised
+                }
+            };
+            let known = skills.lock().unwrap();
+            Ok(commands::classify(&advertised, known.as_ref()))
+        })
     }
 
     /// The chat's modes don't apply: its tools are off, and anything it
@@ -432,11 +482,66 @@ impl ClaudeHarness {
                 interrupts_sent: 0,
                 attachments: HashSet::new(),
                 stderr_tail,
+                advertised: Vec::new(),
+                listed: Vec::new(),
+                known_skills: Arc::clone(&self.skills),
+                first: None,
+                first_deadline: (!title).then(|| tokio::time::Instant::now() + INITIALIZE_WAIT),
             }
             .run(first),
         );
         Ok(Run { events, handle })
     }
+}
+
+/// The CLI's command list, from an `initialize` sent to a CLI started
+/// just for it.
+async fn probe(exe: &Path, cwd: &str) -> Result<Vec<commands::Advertised>, HarnessError> {
+    let mut cmd = command_for(exe);
+    cmd.args([
+        "--print",
+        "--input-format",
+        "stream-json",
+        "--output-format",
+        "stream-json",
+        "--verbose",
+        "--mcp-config",
+        r#"{"mcpServers":{}}"#,
+    ]);
+    if !managed_mcp_config() {
+        cmd.arg("--strict-mcp-config");
+    }
+    cmd.env_remove("CLAUDECODE")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .kill_on_drop(true);
+    if !cwd.is_empty() {
+        cmd.current_dir(cwd);
+    }
+    #[cfg(windows)]
+    cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+    let mut child = cmd.spawn().map_err(|e| HarnessError::Spawn("claude", e))?;
+    // Kept open until the answer: closing stdin ends the CLI first.
+    let mut stdin = child.stdin.take().expect("piped stdin");
+    let mut line = wire::initialize_line(INITIALIZE_ID);
+    line.push('\n');
+    stdin
+        .write_all(line.as_bytes())
+        .await
+        .map_err(|e| HarnessError::Spawn("claude", e))?;
+    let mut lines = BufReader::new(child.stdout.take().expect("piped stdout")).lines();
+    while let Ok(Some(line)) = lines.next_line().await {
+        let Ok(Frame::ControlResponse(response)) = wire::parse_frame(line.trim()) else {
+            continue;
+        };
+        if response.response.request_id != INITIALIZE_ID {
+            continue;
+        }
+        let list = response.response.response.get("commands").and_then(Value::as_array);
+        return Ok(list.map(|l| commands::parse(l)).unwrap_or_default());
+    }
+    Err(HarnessError::Probe("claude exited before listing its commands".into()))
 }
 
 /// A `can_use_tool` request waiting on the user.
@@ -478,6 +583,15 @@ struct Session {
     /// Paths of every file sent this session: reading one never asks.
     attachments: HashSet<String>,
     stderr_tail: Arc<Mutex<String>>,
+    /// The CLI's command list, as last given.
+    advertised: Vec<commands::Advertised>,
+    /// The commands as last reported.
+    listed: Vec<SlashCommand>,
+    known_skills: KnownSkills,
+    /// The first prompt, held until `initialize` answers: it needs the
+    /// skills' names.
+    first: Option<(String, Vec<String>)>,
+    first_deadline: Option<tokio::time::Instant>,
 }
 
 /// The consumer dropped the event stream; tear the session down.
@@ -485,7 +599,11 @@ struct Gone;
 
 impl Session {
     async fn run(mut self, (prompt, files): (String, Vec<String>)) {
-        self.write_prompt(&prompt, files).await;
+        if self.first_deadline.is_some() {
+            self.first = Some((prompt, files));
+        } else {
+            self.write_prompt(&prompt, files).await;
+        }
         let mut commands_open = true;
         loop {
             let outcome = tokio::select! {
@@ -504,6 +622,10 @@ impl Session {
                     }
                 },
                 _ = sleep_until(self.interrupt_deadline) => self.settle_interrupt().await,
+                _ = sleep_until(self.first_deadline) => {
+                    self.write_first().await;
+                    Ok(())
+                }
             };
             if outcome.is_err() {
                 return; // `kill_on_drop` takes the process down.
@@ -524,11 +646,23 @@ impl Session {
             Frame::ControlRequest(request) => self.on_control_request(request).await,
             Frame::ControlResponse(response) => {
                 if response.response.request_id == INITIALIZE_ID {
-                    let commands = parse_commands(&response.response.response);
-                    if !commands.is_empty() {
-                        self.emit(AgentEvent::AvailableCommands { commands })
-                            .await?;
+                    if let Some(list) = response
+                        .response
+                        .response
+                        .get("commands")
+                        .and_then(Value::as_array)
+                    {
+                        self.advertised = commands::parse(list);
                     }
+                    self.write_first().await;
+                    self.report_commands().await?;
+                }
+                Ok(())
+            }
+            Frame::System(frame) if frame.subtype == "commands_changed" => {
+                if let Some(list) = &frame.commands {
+                    self.advertised = commands::parse(list);
+                    self.report_commands().await?;
                 }
                 Ok(())
             }
@@ -536,6 +670,12 @@ impl Session {
             // reported (an interrupt that settled without it).
             Frame::Result(_) if self.turns == 0 => Ok(()),
             frame => {
+                if let Frame::System(f) = &frame {
+                    if let (Some(skills), "init") = (&f.skills, f.subtype.as_str()) {
+                        *self.known_skills.lock().unwrap() = Some(skills.iter().cloned().collect());
+                        self.report_commands().await?;
+                    }
+                }
                 let ends_turn = matches!(frame, Frame::Result(_));
                 let interrupted = self.interrupt_deadline.is_some();
                 for event in self.normalizer.normalize(frame, interrupted) {
@@ -617,11 +757,40 @@ impl Session {
         }
     }
 
-    /// Writes a user turn: the attachments' paths listed under the prompt,
-    /// and those that are images also sent inline.
+    /// Reports the commands, split by the skills known now, when that
+    /// changed what was last reported.
+    async fn report_commands(&mut self) -> Result<(), Gone> {
+        let listed = {
+            let known = self.known_skills.lock().unwrap();
+            commands::classify(&self.advertised, known.as_ref())
+        };
+        if listed.is_empty() || listed == self.listed {
+            return Ok(());
+        }
+        self.listed = listed.clone();
+        self.emit(AgentEvent::AvailableCommands { commands: listed })
+            .await
+    }
+
+    /// Writes the held first prompt, if it's still held.
+    async fn write_first(&mut self) {
+        self.first_deadline = None;
+        if let Some((prompt, files)) = self.first.take() {
+            self.write_prompt(&prompt, files).await;
+        }
+    }
+
+    /// Writes a user turn: `$skill`s as Claude takes them, the attachments'
+    /// paths listed under the prompt, and those that are images also sent
+    /// inline.
     async fn write_prompt(&mut self, prompt: &str, files: Vec<String>) {
+        let skills = {
+            let known = self.known_skills.lock().unwrap();
+            commands::skill_names(&self.advertised, known.as_ref())
+        };
+        let prompt = commands::skill_prompt(prompt, &skills);
         let images = attachments::load_images(&files).await;
-        let text = attachments::prompt_with_attachments(prompt, &files);
+        let text = attachments::prompt_with_attachments(&prompt, &files);
         self.attachments.extend(files);
         self.write(wire::user_line(&text, &images));
     }
@@ -653,6 +822,7 @@ impl Session {
                 attachments,
             } => {
                 if self.stdin.is_some() {
+                    self.write_first().await;
                     // A prompt sent mid-turn waits for it; `end_turn` puts
                     // plan mode back before that one starts.
                     if self.turns == 0 {
@@ -948,33 +1118,6 @@ fn input_with_answers(
         .collect();
     updated.insert("answers".into(), Value::Object(by_question));
     Value::Object(updated)
-}
-
-/// The `initialize` response's slash commands.
-fn parse_commands(response: &Value) -> Vec<SlashCommand> {
-    response
-        .get("commands")
-        .and_then(Value::as_array)
-        .map(Vec::as_slice)
-        .unwrap_or_default()
-        .iter()
-        .filter_map(|c| {
-            let name = c.get("name").and_then(Value::as_str)?;
-            Some(SlashCommand {
-                name: name.trim_start_matches('/').into(),
-                description: c
-                    .get("description")
-                    .and_then(Value::as_str)
-                    .unwrap_or("")
-                    .into(),
-                input_hint: c
-                    .get("argumentHint")
-                    .and_then(Value::as_str)
-                    .filter(|h| !h.is_empty())
-                    .map(Into::into),
-            })
-        })
-        .collect()
 }
 
 #[cfg(test)]

@@ -46,6 +46,7 @@ pub fn run() {
       engine::watch_chats,
       engine::unwatch,
       engine::list_harnesses,
+      engine::list_commands,
       engine::update_chat_config,
       engine::rename_chat,
       engine::set_chat_archived,

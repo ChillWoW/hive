@@ -1,4 +1,5 @@
 export { HarnessIcon } from "./HarnessIcon";
+export { refreshCommands, useCommands } from "./commands";
 export {
     ACCESS_LABELS,
     ACCESS_MODES,
@@ -15,7 +16,6 @@ export {
     resolveAccess,
     resolveModel,
     resolveReasoning,
-    slashCommands,
     useCatalog,
     useCatalogs,
     useHarnesses,

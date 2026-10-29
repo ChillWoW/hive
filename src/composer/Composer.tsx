@@ -129,16 +129,18 @@ export function Composer({
     const [morphing, setMorphing] = useState(false);
     const [, setWidth] = useState(0);
     const [focused, setFocused] = useState(false);
+    const [caret, setCaret] = useState(0);
 
     const slash = useSlashMenu({
         draft,
+        caret,
         commands,
         enabled: focused,
-        complete: (text) => {
+        complete: (text, at) => {
             setDraft(text);
+            setCaret(at);
             requestAnimationFrame(() => {
-                const el = textareaRef.current;
-                el?.setSelectionRange(text.length, text.length);
+                textareaRef.current?.setSelectionRange(at, at);
             });
         }
     });
@@ -488,7 +490,13 @@ export function Composer({
                     <TextareaAutosize
                         ref={textareaRef}
                         value={draft}
-                        onChange={(event) => setDraft(event.target.value)}
+                        onChange={(event) => {
+                            setDraft(event.target.value);
+                            setCaret(event.target.selectionStart);
+                        }}
+                        onSelect={(event) =>
+                            setCaret(event.currentTarget.selectionStart)
+                        }
                         onFocus={() => setFocused(true)}
                         onBlur={() => setFocused(false)}
                         onKeyDown={onKeyDown}

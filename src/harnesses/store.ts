@@ -8,8 +8,7 @@ import type {
     HarnessId,
     Model,
     ProvidersSettings,
-    ReasoningLevel,
-    SlashCommand
+    ReasoningLevel
 } from "@/proto";
 import { isTauri } from "@/lib/platform";
 import { useSettingsStore } from "@/settings/store";
@@ -64,7 +63,8 @@ const BROWSER_CATALOGS: HarnessCatalog[] = [
         commands: [
             {
                 name: "compact",
-                description: "Summarize the conversation to free up context"
+                description: "Summarize the conversation to free up context",
+                kind: "command"
             }
         ],
         accessModes: ["supervised", "auto-accept-edits", "full-access"],
@@ -242,10 +242,3 @@ export function resolveAccess(wanted: AccessMode, offered: AccessMode[]): Access
     return asking.reduce((best, mode) => (rank(mode) > rank(best) ? mode : best));
 }
 
-/** A live session's own list when it has one, else the harness's built-ins. */
-export function slashCommands(
-    catalog: HarnessCatalog | undefined,
-    live: SlashCommand[] | undefined
-): SlashCommand[] {
-    return live?.length ? live : (catalog?.commands ?? []);
-}

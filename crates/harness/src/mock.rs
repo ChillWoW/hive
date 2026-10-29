@@ -9,14 +9,32 @@ use std::collections::VecDeque;
 use std::time::Duration;
 
 use hive_proto::{
-    AccessMode, AgentEvent, DoneStatus, HarnessCapabilities, HarnessCatalog, HarnessId, Model,
-    ReasoningLevel, RunRequest, SlashCommand, TodoItem, TodoStatus, ToolCall,
+    AccessMode, AgentEvent, CommandKind, DoneStatus, HarnessCapabilities, HarnessCatalog,
+    HarnessId, Model, ReasoningLevel, RunRequest, SlashCommand, TodoItem, TodoStatus, ToolCall,
     ToolDiff, UserInputAnswer, UserInputQuestion,
 };
 use tokio::sync::mpsc;
 use tokio::time::Instant;
 
 use crate::{Harness, HarnessError, Run, RunCommand, RunHandle};
+
+/// A command and a skill, for both menus.
+fn commands() -> Vec<SlashCommand> {
+    vec![
+        SlashCommand {
+            name: "review".into(),
+            description: "Review the current diff".into(),
+            input_hint: Some("focus area".into()),
+            kind: CommandKind::Command,
+        },
+        SlashCommand {
+            name: "frontend-design".into(),
+            description: "Distinctive, production-grade interfaces".into(),
+            input_hint: None,
+            kind: CommandKind::Skill,
+        },
+    ]
+}
 
 const SESSION_ID: &str = "mock-session";
 
@@ -67,11 +85,7 @@ impl Harness for MockHarness {
                 model("mock-mini", "Mock Mini", &[]),
             ],
             default_model: Some("mock-1".into()),
-            commands: vec![SlashCommand {
-                name: "review".into(),
-                description: "Review the current diff".into(),
-                input_hint: Some("focus area".into()),
-            }],
+            commands: commands(),
             // A script can't ask before acting.
             access_modes: vec![AccessMode::FullAccess],
             capabilities: HarnessCapabilities {
@@ -322,11 +336,7 @@ fn script(request: &RunRequest, prompt: &str, turn: usize) -> Vec<Step> {
         s.emit(
             0,
             AgentEvent::AvailableCommands {
-                commands: vec![SlashCommand {
-                    name: "review".into(),
-                    description: "Review the current diff".into(),
-                    input_hint: Some("focus area".into()),
-                }],
+                commands: commands(),
             },
         );
     }

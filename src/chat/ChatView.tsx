@@ -16,8 +16,8 @@ import {
 } from "@/composer";
 import {
     fitConfig,
-    slashCommands,
     useCatalog,
+    useCommands,
     useCatalogs
 } from "@/harnesses";
 import { BranchPicker, useGitRepo, WorkspaceChip, WorkspacePicker } from "@/git";
@@ -67,6 +67,7 @@ export function ChatView() {
     const newCatalog =
         visible.find((c) => c.id === newChat.config.harness) ?? visible[0];
     const catalog = chat ? chatCatalog : newCatalog;
+    const commands = useCommands(catalog, chat ? workDir(chat) : newChat.cwd, session?.commands);
     // New chats always get workspace-write; nothing in the UI picks it.
     const remembered: ChatConfig = { ...newChat.config, sandbox: "workspace-write" };
     const config: ChatConfig = chat
@@ -153,7 +154,7 @@ export function ChatView() {
                             canStop={!!chat && streaming && !!catalog?.capabilities.interrupt}
                             steering={!!catalog?.capabilities.steering}
                             canAttach={!!catalog?.capabilities.attachments}
-                            commands={slashCommands(catalog, session?.commands)}
+                            commands={commands}
                             onSend={sendTo}
                             onStop={chat ? () => void chats.interrupt(chat.id).catch(() => {}) : undefined}
                             placeholder={hero ? "What should we work on?" : "Reply…"}

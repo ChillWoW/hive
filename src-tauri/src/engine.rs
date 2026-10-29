@@ -7,8 +7,8 @@ use std::sync::Mutex;
 
 use hive_engine::{Engine, WatchId};
 use hive_proto::{
-    Chat, ChatConfig, ChatsUpdate, Command, CommandPayload, HarnessCatalog, MessagesUpdate,
-    NewWorktree,
+    Chat, ChatConfig, ChatsUpdate, Command, CommandPayload, HarnessCatalog, HarnessId, MessagesUpdate,
+    NewWorktree, SlashCommand,
 };
 use tauri::ipc::Channel;
 use tauri::{State, Webview};
@@ -119,6 +119,20 @@ pub async fn unwatch(
 #[tauri::command]
 pub async fn list_harnesses(engine: State<'_, Engine>) -> Result<Vec<HarnessCatalog>, String> {
     Ok(engine.catalogs())
+}
+
+/// A harness's commands and skills in `cwd`, for the composer before a
+/// session reports its own.
+#[tauri::command]
+pub async fn list_commands(
+    engine: State<'_, Engine>,
+    harness: HarnessId,
+    cwd: String,
+) -> Result<Vec<SlashCommand>, String> {
+    engine
+        .commands(harness, &cwd)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 /// Saves a chat's run settings; a live run picks them up from its next turn.

@@ -244,7 +244,8 @@ pub struct ToolDiff {
     pub new_text: String,
 }
 
-/// A slash command the agent advertises, typed as `/name` in the composer.
+/// A command the agent advertises: typed as `/name` at the start of the
+/// composer, or `$name` anywhere for a skill.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(optional_fields)]
@@ -255,6 +256,17 @@ pub struct SlashCommand {
     /// Placeholder for the command's argument, when it takes one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub input_hint: Option<String>,
+    #[serde(default)]
+    pub kind: CommandKind,
+}
+
+/// Whether a [`SlashCommand`] is one of the CLI's own commands or a skill.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub enum CommandKind {
+    #[default]
+    Command,
+    Skill,
 }
 
 /// One question in an agent's request for user input (Claude's

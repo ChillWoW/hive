@@ -302,7 +302,14 @@ fn describe(event: &AgentEvent) -> String {
             output_tokens,
         } => format!("{DIM}  usage {input_tokens} in · {output_tokens} out{RESET}"),
         AgentEvent::AvailableCommands { commands } => {
-            format!("{DIM}● {} slash commands{RESET}", commands.len())
+            let skills = commands
+                .iter()
+                .filter(|c| c.kind == hive_proto::CommandKind::Skill)
+                .count();
+            format!(
+                "{DIM}● {} slash commands, {skills} skills{RESET}",
+                commands.len() - skills
+            )
         }
         AgentEvent::Error { message } => format!("{RED}! {message}{RESET}"),
         AgentEvent::Subagent {
