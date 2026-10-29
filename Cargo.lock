@@ -74,6 +74,7 @@ dependencies = [
  "hive-harness",
  "hive-proto",
  "hive-store",
+ "hive-usage",
  "ignore",
  "log",
  "portable-pty",
@@ -1683,6 +1684,20 @@ dependencies = [
  "thiserror 2.0.19",
  "tokio",
  "uuid",
+]
+
+[[package]]
+name = "hive-usage"
+version = "0.0.1"
+dependencies = [
+ "hive-proto",
+ "reqwest",
+ "rusqlite",
+ "rustls",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
 ]
 
 [[package]]

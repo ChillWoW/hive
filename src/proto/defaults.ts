@@ -19,6 +19,7 @@ export const DEFAULT_SETTINGS: Settings = {
     "newChat": "Mod+N",
     "toggleSidebar": "Mod+B",
     "openSettings": "Mod+,",
+    "openUsage": "Mod+U",
     "focusComposer": "Mod+L",
     "previousChat": "Ctrl+Shift+Tab",
     "nextChat": "Ctrl+Tab",

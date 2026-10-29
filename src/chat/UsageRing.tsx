@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
-import { ArrowClockwiseIcon } from "@phosphor-icons/react";
+import { ArrowClockwiseIcon, ChartBarIcon } from "@phosphor-icons/react";
+import { ShortcutKeys, useBinding } from "@/keybindings";
+import { useUsageStore } from "@/usage/store";
 import { chipTriggerClassName, popupClassName } from "@/composer/chip";
 import { HarnessIcon, useCatalog } from "@/harnesses";
 import { cn } from "@/lib/cn";
@@ -49,6 +51,7 @@ export function UsageRing({ harness }: { harness: HarnessId }) {
     const { usage } = entry;
     const container = usePortalContainer();
     const [open, setOpen] = useState(false);
+    const usageBinding = useBinding("openUsage");
     const fraction = usage ? mostUsed(usage.windows) : undefined;
     const failed = usage === undefined && !!entry.error;
     if (fraction == null && !failed) return null;
@@ -86,6 +89,18 @@ export function UsageRing({ harness }: { harness: HarnessId }) {
                         className={cn(popupClassName, "w-80 min-w-0 rounded-xl p-0")}
                     >
                         <UsageCard harness={harness} entry={entry} />
+                        <button
+                            type="button"
+                            onClick={() => {
+                                setOpen(false);
+                                useUsageStore.getState().setOpen(true);
+                            }}
+                            className="flex w-full items-center gap-2 border-t border-dark-700 px-3 py-2 text-left text-[11.5px] text-dark-200 outline-none transition-colors hover:bg-dark-700 hover:text-dark-50 focus-visible:bg-dark-700"
+                        >
+                            <ChartBarIcon className="size-3.5" />
+                            <span className="flex-1">Tokens and cost across agents</span>
+                            <ShortcutKeys shortcut={usageBinding} variant="plain" />
+                        </button>
                     </Popover.Popup>
                 </Popover.Positioner>
             </Popover.Portal>
@@ -93,7 +108,7 @@ export function UsageRing({ harness }: { harness: HarnessId }) {
     );
 }
 
-function UsageCard({ harness, entry }: { harness: HarnessId; entry: UsageEntry }) {
+export function UsageCard({ harness, entry }: { harness: HarnessId; entry: UsageEntry }) {
     const catalog = useCatalog(harness);
     const { usage, error, loading, fetchedAt } = entry;
     const provider = useProvider(harness);

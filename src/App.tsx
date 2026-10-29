@@ -8,6 +8,7 @@ import { useNotificationsRuntime } from "@/notifications";
 import { SettingsModal, useSettingsRuntime } from "@/settings";
 import { PortalContainerProvider } from "@/ui";
 import { useUpdaterRuntime } from "@/updater";
+import { UsageModal, useUsageRuntime } from "@/usage";
 
 export function App() {
     useKeybindingsRuntime();
@@ -15,6 +16,7 @@ export function App() {
     useChatsRuntime();
     useNotificationsRuntime();
     useUpdaterRuntime();
+    useUsageRuntime();
     const chat = useChat(useChatsStore((s) => s.activeChatId));
     const title = chat ? (chat.title ?? folderName(chat.cwd)) : undefined;
     // Overlays mount here, below the top bar, so an open modal never covers
@@ -38,6 +40,7 @@ export function App() {
                 />
             </div>
             <SettingsModal />
+            <UsageModal />
         </PortalContainerProvider>
     );
 }

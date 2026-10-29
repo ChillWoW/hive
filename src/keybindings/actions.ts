@@ -81,6 +81,13 @@ export const ACTIONS: readonly Action[] = [
         scope: "global"
     },
     {
+        id: "openUsage",
+        label: "Usage",
+        description: "Tokens and cost across your agents",
+        keywords: "usage cost tokens spend limits billing open close",
+        scope: "global"
+    },
+    {
         id: "togglePlan",
         label: "Toggle plan mode",
         description: "While typing a prompt",

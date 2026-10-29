@@ -13,6 +13,7 @@ pub mod git;
 pub mod message;
 pub mod provider;
 pub mod settings;
+pub mod usage;
 pub mod watch;
 
 pub use agent::*;
@@ -25,6 +26,7 @@ pub use git::*;
 pub use message::*;
 pub use provider::*;
 pub use settings::*;
+pub use usage::*;
 pub use watch::*;
 
 #[cfg(test)]
@@ -72,6 +74,8 @@ mod export {
         FileText::export_all(&cfg).unwrap();
         WriteOutcome::export_all(&cfg).unwrap();
         TaskOutput::export_all(&cfg).unwrap();
+        UsageQuery::export_all(&cfg).unwrap();
+        UsageReport::export_all(&cfg).unwrap();
 
         let mut modules = Vec::new();
         collect_modules(&dir, "", &mut modules);

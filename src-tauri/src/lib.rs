@@ -8,6 +8,7 @@ mod providers;
 mod settings;
 mod terminals;
 mod updater;
+mod usage;
 
 use std::sync::Arc;
 
@@ -92,6 +93,7 @@ pub fn run() {
       terminals::terminal_kill,
       updater::update_check,
       updater::update_install,
+      usage::usage_report,
     ])
     // A reload takes the page's channels (and so its terminals) with it.
     .on_page_load(|webview, payload| {
@@ -126,6 +128,7 @@ pub fn run() {
         ..EngineConfig::default()
       };
       app.manage(settings);
+      app.manage(hive_usage::Usage::new(&data_dir));
 
       let harnesses: Vec<Arc<dyn Harness>> =
         vec![

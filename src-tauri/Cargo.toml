@@ -23,6 +23,7 @@ hive-git.workspace = true
 hive-harness.workspace = true
 hive-proto.workspace = true
 hive-store.workspace = true
+hive-usage.workspace = true
 tokio = { workspace = true }
 serde_json = "1.0"
 base64 = "0.22"
