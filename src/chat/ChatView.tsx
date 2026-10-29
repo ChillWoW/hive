@@ -177,7 +177,7 @@ export function ChatView() {
                     />
                     {chat ? (
                         <>
-                            <BranchPicker cwd={workDir(chat)} />
+                            <BranchPicker cwd={workDir(chat)} locked />
                             <WorkspaceChip chat={chat} />
                         </>
                     ) : (

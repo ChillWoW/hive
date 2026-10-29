@@ -10,6 +10,7 @@ import {
     TrashIcon
 } from "@phosphor-icons/react";
 import {
+    chipClassName,
     chipTriggerClassName,
     footerButtonClassName,
     popupClassName,
@@ -36,18 +37,41 @@ const BUSY_NOTE = "An agent is working in this folder. Branches can change once 
  *
  * With `onBaseChange` it picks a new worktree's base instead (`base`, null
  * for the checked-out branch): nothing is checked out, and any branch will do.
+ *
+ * A chat already started is `locked`: the branch shows, but can't change.
  */
 export function BranchPicker({
     cwd,
     base,
-    onBaseChange
+    onBaseChange,
+    locked = false
 }: {
     cwd: string | null;
     base?: string | null;
     onBaseChange?: (base: string | null) => void;
+    locked?: boolean;
 }) {
     const repo = useGitRepo(cwd)?.repo;
     if (!cwd || !repo) return null;
+    if (locked) {
+        return (
+            <Tooltip>
+                <Tooltip.Trigger
+                    render={
+                        <span className={cn(chipClassName, "cursor-default")}>
+                            <GitBranchIcon className="size-3.5 shrink-0" />
+                            <span className="truncate">
+                                {repo.branch ?? repo.commit ?? "No commits"}
+                            </span>
+                        </span>
+                    }
+                />
+                <Tooltip.Content side="top">
+                    {repo.branch ? "Branch" : `Detached at ${repo.commit ?? "HEAD"}`}
+                </Tooltip.Content>
+            </Tooltip>
+        );
+    }
     return (
         <BranchCombobox cwd={cwd} repo={repo} base={base ?? null} onBaseChange={onBaseChange} />
     );
