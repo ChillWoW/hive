@@ -2,7 +2,7 @@
     "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
     "productName": "Hive",
     "mainBinaryName": "Hive",
-    "version": "0.0.1",
+    "version": "0.0.2",
     "identifier": "com.hive",
     "build": {
         "frontendDist": "../build",

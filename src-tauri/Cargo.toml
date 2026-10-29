@@ -1,6 +1,6 @@
 [package]
 name = "app"
-version = "0.0.1"
+version = "0.0.2"
 description = "Hive desktop app"
 authors = ["ChillWoW"]
 license = "GPL-3.0-only"
