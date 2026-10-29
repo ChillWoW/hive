@@ -4,9 +4,11 @@ import { WindowControls } from "./WindowControls";
 import { chats, useChatsStore } from "@/chats";
 import { composer } from "@/composer";
 import { useEffect } from "react";
+import { HarnessIcon } from "@/harnesses";
 import { useShortcut } from "@/keybindings";
 import { cn } from "@/lib/cn";
 import { isMac } from "@/lib/platform";
+import type { HarnessId } from "@/proto";
 import { Button, Tooltip } from "@/ui";
 import {
     ArrowLeftIcon,
@@ -17,6 +19,8 @@ import {
 
 type TopBarProps = {
     title?: string;
+    /** The open chat's harness, marked before the title. */
+    harness?: HarnessId;
     className?: string;
 };
 
@@ -42,7 +46,7 @@ function useMouseNavigation() {
     }, []);
 }
 
-export function TopBar({ title, className }: TopBarProps) {
+export function TopBar({ title, harness, className }: TopBarProps) {
     const { fullscreen } = useWindowState();
     const insetForTrafficLights = isMac && !fullscreen;
 
@@ -165,6 +169,12 @@ export function TopBar({ title, className }: TopBarProps) {
                 data-tauri-drag-region
                 className="flex h-full min-w-0 flex-1 items-center gap-1 px-3"
             >
+                {harness && (
+                    <HarnessIcon
+                        harness={harness}
+                        className="size-3.5 shrink-0"
+                    />
+                )}
                 {title && (
                     <span className="truncate text-[13px] text-dark-50">
                         {title}

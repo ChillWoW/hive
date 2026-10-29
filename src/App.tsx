@@ -28,7 +28,7 @@ export function App() {
                 <main className="flex min-w-0 flex-1 flex-col overflow-hidden pt-9">
                     <ChatView />
                 </main>
-                <TopBar title={title} />
+                <TopBar title={title} harness={chat?.config.harness} />
                 <div
                     ref={setOverlayLayer}
                     className="pointer-events-none absolute inset-x-0 top-9 bottom-0 z-40"
