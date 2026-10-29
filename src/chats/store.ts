@@ -560,16 +560,47 @@ async function editChat(
     }
 }
 
+/** The open chat, kept across a page reload (not a restart). */
+const ACTIVE_KEY = "hive.activeChat";
+
+function readActive(): string | null {
+    try {
+        return sessionStorage.getItem(ACTIVE_KEY);
+    } catch {
+        return null;
+    }
+}
+
+/** The chat open before a reload, reopened by the first snapshot. */
+let restoring = readActive();
+
+useChatsStore.subscribe((s, prev) => {
+    if (s.activeChatId === prev.activeChatId) return;
+    try {
+        if (s.activeChatId) sessionStorage.setItem(ACTIVE_KEY, s.activeChatId);
+        else sessionStorage.removeItem(ACTIVE_KEY);
+    } catch {
+        // Not kept, then.
+    }
+});
+
 function applyChats(update: ChatsUpdate) {
     set((s) => {
         switch (update.type) {
-            case "snapshot":
+            case "snapshot": {
                 s.chats = update.chats;
                 s.sessions = Object.fromEntries(
                     update.sessions.map((session) => [session.chatId, session])
                 );
                 s.loaded = true;
+                // Unless the user already went elsewhere.
+                const id = restoring;
+                restoring = null;
+                if (id && s.activeChatId === null && s.chats.some((c) => c.id === id)) {
+                    s.activeChatId = id;
+                }
                 return;
+            }
             case "chat":
                 upsertChat(s, update.chat);
                 return;
