@@ -1,9 +1,9 @@
 import { SettingsButton } from "@/settings";
 import { ChatList } from "@/sidebar";
-import { SIDEBAR_WIDTH, useLayoutStore } from "@/stores/useLayoutStore";
+import { SIDEBAR_WIDTH, usePanelLayout } from "@/stores/useLayoutStore";
 
 export function Sidebar() {
-    const open = useLayoutStore((state) => state.sidebarOpen);
+    const open = usePanelLayout().visible.sidebar;
 
     return (
         <aside

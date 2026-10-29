@@ -1,4 +1,8 @@
-import { SIDEBAR_WIDTH, useLayoutStore } from "@/stores/useLayoutStore";
+import {
+    SIDEBAR_WIDTH,
+    useLayoutStore,
+    usePanelLayout
+} from "@/stores/useLayoutStore";
 import { useWindowState } from "./useWindowState";
 import { WindowControls } from "./WindowControls";
 import { chats, useChatsStore } from "@/chats";
@@ -50,11 +54,14 @@ export function TopBar({ title, harness, className }: TopBarProps) {
     const { fullscreen } = useWindowState();
     const insetForTrafficLights = isMac && !fullscreen;
 
-    const open = useLayoutStore((state) => state.sidebarOpen);
+    // What's shown, not what's open: a panel hidden for room reads as closed.
+    const {
+        sidebar: open,
+        files: filePanelOpen,
+        right: rightOpen
+    } = usePanelLayout().visible;
     const toggleSidebar = useLayoutStore((state) => state.toggleSidebar);
-    const filePanelOpen = useLayoutStore((state) => state.filePanelOpen);
     const toggleFilePanel = useLayoutStore((state) => state.toggleFilePanel);
-    const rightOpen = useLayoutStore((state) => state.rightSidebarOpen);
     const toggleRightSidebar = useLayoutStore(
         (state) => state.toggleRightSidebar
     );
