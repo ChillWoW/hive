@@ -4,11 +4,13 @@ import {
     ArrowCounterClockwiseIcon,
     DotsThreeIcon,
     PencilSimpleIcon,
+    PencilSimpleLineIcon,
     PushPinIcon,
     PushPinSlashIcon,
     TrashIcon
 } from "@phosphor-icons/react";
 import { activity, chats, useChatsStore } from "@/chats";
+import { useHasDraft } from "@/composer";
 import { HarnessIcon } from "@/harnesses";
 import { cn } from "@/lib/cn";
 import type { Chat } from "@/proto";
@@ -40,6 +42,7 @@ export function ChatRow({
     const active = useChatsStore((s) => s.activeChatId === chat.id);
     const session = useChatsStore((s) => s.sessions[chat.id]);
     const renaming = useSidebarStore((s) => s.renaming === chat.id);
+    const drafted = useHasDraft(chat.id) && !active;
     const setRenaming = useSidebarStore((s) => s.setRenaming);
     const now = useMinuteClock();
     // Rename puts the caret in the field; the closing menu mustn't take it back.
@@ -105,11 +108,20 @@ export function ChatRow({
                             </span>
                             <span
                                 className={cn(
-                                    "w-7 shrink-0 text-right text-[11px] text-dark-250 tabular-nums",
+                                    "flex w-7 shrink-0 justify-end text-[11px] text-dark-250 tabular-nums",
                                     "group-hover/chat:invisible group-has-[[data-popup-open]]/chat:invisible"
                                 )}
                             >
-                                {timeAgo(activity(chat), now)}
+                                {/* An unsent prompt waits in the chat's composer. */}
+                                {drafted ? (
+                                    <PencilSimpleLineIcon
+                                        role="img"
+                                        aria-label="Draft"
+                                        className="size-3 text-dark-200"
+                                    />
+                                ) : (
+                                    timeAgo(activity(chat), now)
+                                )}
                             </span>
                             <HarnessIcon
                                 harness={chat.config.harness}

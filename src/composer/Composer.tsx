@@ -8,7 +8,7 @@ import {
 } from "@phosphor-icons/react";
 import TextareaAutosize from "react-textarea-autosize";
 import type { Attachment, ChatConfig, SlashCommand } from "@/proto";
-import { AttachmentTile } from "@/attachments";
+import { AttachmentTile, useAttachmentUrl } from "@/attachments";
 import { COMPOSER_SCOPE, useShortcut } from "@/keybindings/runtime";
 import { cn } from "@/lib/cn";
 import { isMac } from "@/lib/platform";
@@ -430,16 +430,24 @@ export function Composer({
             />
             {attachments.length > 0 && (
                 <div className="flex flex-wrap items-end gap-2 px-1 pt-1">
-                    {attachments.map((a) => (
-                        <AttachmentTile
-                            key={a.id}
-                            name={a.name}
-                            imageUrl={a.previewUrl}
-                            uploading={!a.attachment && !a.error}
-                            error={a.error}
-                            onRemove={() => removeAttachment(chatId, a.id)}
-                        />
-                    ))}
+                    {attachments.map((a) =>
+                        !a.previewUrl && a.attachment ? (
+                            <SavedTile
+                                key={a.id}
+                                attachment={a.attachment}
+                                onRemove={() => removeAttachment(chatId, a.id)}
+                            />
+                        ) : (
+                            <AttachmentTile
+                                key={a.id}
+                                name={a.name}
+                                imageUrl={a.previewUrl}
+                                uploading={!a.attachment && !a.error}
+                                error={a.error}
+                                onRemove={() => removeAttachment(chatId, a.id)}
+                            />
+                        )
+                    )}
                 </div>
             )}
             {/* Anchors the deck to its bottom, so while the height animates
@@ -597,4 +605,10 @@ export function Composer({
             </div>
         </form>
     );
+}
+
+/** A file already copied in without a preview (a restored draft): images read back. */
+function SavedTile({ attachment, onRemove }: { attachment: Attachment; onRemove: () => void }) {
+    const imageUrl = useAttachmentUrl(attachment);
+    return <AttachmentTile name={attachment.name} imageUrl={imageUrl} onRemove={onRemove} />;
 }

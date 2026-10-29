@@ -84,6 +84,7 @@ export function TopBar({ title, harness, className }: TopBarProps) {
         (state) => state.toggleRightSidebar
     );
     const newChat = () => {
+        composer.startNewChat();
         chats.select(null);
         composer.focus();
     };

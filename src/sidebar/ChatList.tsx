@@ -1,7 +1,13 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { ArchiveIcon, CaretRightIcon, PlusIcon } from "@phosphor-icons/react";
 import { chats, useChatsStore } from "@/chats";
-import { composer, folderName, useComposerStore } from "@/composer";
+import {
+    composer,
+    folderName,
+    useComposerStore,
+    useNewChatDrafts,
+    type NewChatDraft
+} from "@/composer";
 import { ProjectIcon } from "@/composer/ProjectIcon";
 import { useShortcut } from "@/keybindings";
 import { cn } from "@/lib/cn";
@@ -9,8 +15,16 @@ import type { Chat } from "@/proto";
 import { Tooltip } from "@/ui";
 import { CARD_DWELL, ChatRow } from "./ChatRow";
 import { DeleteChatDialog } from "./DeleteChatDialog";
+import { DraftRow } from "./DraftRow";
 import { useSidebarGroups, type ProjectGroup } from "./groups";
-import { ARCHIVED, isCollapsed, PINNED, projectKey, useSidebarStore } from "./store";
+import {
+    ARCHIVED,
+    DRAFTS,
+    isCollapsed,
+    PINNED,
+    projectKey,
+    useSidebarStore
+} from "./store";
 
 /** Chats a group lists before "Show more". */
 const GROUP_LIMIT = 6;
@@ -19,9 +33,37 @@ type Row = (chat: Chat) => ReactNode;
 
 /** Pinned chats, then each project's, then Archived. */
 export function ChatList() {
-    const { pinned, projects, archived } = useSidebarGroups();
+    const { pinned, projects: listed, archived } = useSidebarGroups();
     const loaded = useChatsStore((s) => s.loaded);
+    const allChats = useChatsStore((s) => s.chats);
     const [deleting, setDeleting] = useState<Chat | null>(null);
+    const newDrafts = useNewChatDrafts();
+
+    // A deleted chat's draft goes with it.
+    useEffect(() => {
+        if (loaded) composer.pruneDrafts(new Set(allChats.map((c) => c.id)));
+    }, [loaded, allChats]);
+
+    // New-chat drafts sit at the top of their folder's project (listed at the
+    // bottom if it isn't one); drafts with no folder picked yet in Drafts.
+    const { projects, draftsByPath, looseDrafts } = useMemo(() => {
+        const draftsByPath = new Map<string, NewChatDraft[]>();
+        const looseDrafts: NewChatDraft[] = [];
+        for (const draft of newDrafts) {
+            if (!draft.cwd) {
+                looseDrafts.push(draft);
+                continue;
+            }
+            const list = draftsByPath.get(draft.cwd) ?? [];
+            list.push(draft);
+            draftsByPath.set(draft.cwd, list);
+        }
+        const paths = new Set(listed.map((p) => p.path));
+        const extra = [...draftsByPath.keys()]
+            .filter((path) => !paths.has(path))
+            .map((path) => ({ path, chats: [] }));
+        return { projects: [...listed, ...extra], draftsByPath, looseDrafts };
+    }, [listed, newDrafts]);
 
     // Sidebar order, folded groups included; Archived only while in it.
     const step = (by: 1 | -1) => {
@@ -45,7 +87,13 @@ export function ChatList() {
         <ChatRow key={chat.id} chat={chat} onDelete={setDeleting} />
     );
 
-    if (loaded && !pinned.length && !projects.length && !archived.length) {
+    if (
+        loaded &&
+        !pinned.length &&
+        !projects.length &&
+        !archived.length &&
+        !newDrafts.length
+    ) {
         return (
             <p className="px-2 py-6 text-center text-xs text-dark-250">
                 No chats yet. Pick a folder and send a prompt to start one.
@@ -58,6 +106,14 @@ export function ChatList() {
         // the pointer rests off the list for a moment (as in zeron).
         <Tooltip.Provider delay={CARD_DWELL} timeout={400}>
             <div className="flex flex-col gap-3">
+                {looseDrafts.length > 0 && (
+                    <Section sectionKey={DRAFTS} label="Drafts">
+                        {looseDrafts.map((draft) => (
+                            <DraftRow key={draft.key} draft={draft} />
+                        ))}
+                    </Section>
+                )}
+
                 {pinned.length > 0 && (
                     <Section sectionKey={PINNED} label="Pinned">
                         {pinned.map(row)}
@@ -67,7 +123,12 @@ export function ChatList() {
                 {(projects.length > 0 || archived.length > 0) && (
                     <div className="flex flex-col gap-1">
                         {projects.map((project) => (
-                            <Project key={project.path} project={project} row={row} />
+                            <Project
+                                key={project.path}
+                                project={project}
+                                drafts={draftsByPath.get(project.path)}
+                                row={row}
+                            />
                         ))}
                         {archived.length > 0 && (
                             <Group
@@ -138,7 +199,16 @@ function Caret({ open, className }: { open: boolean; className?: string }) {
 }
 
 /** A project's group, with a "+" for a new chat in its folder. */
-function Project({ project, row }: { project: ProjectGroup; row: Row }) {
+function Project({
+    project,
+    drafts,
+    row
+}: {
+    project: ProjectGroup;
+    /** New-chat drafts in this folder. */
+    drafts?: NewChatDraft[];
+    row: Row;
+}) {
     const { path } = project;
     // The new-chat view is open on this project.
     const pickedForNewChat = useComposerStore((s) => s.newChat.cwd === path);
@@ -146,7 +216,7 @@ function Project({ project, row }: { project: ProjectGroup; row: Row }) {
     const name = folderName(path);
 
     const startChat = () => {
-        useComposerStore.getState().setNewChat({ cwd: path });
+        composer.startNewChat(path);
         chats.select(null);
         composer.focus();
     };
@@ -157,6 +227,7 @@ function Project({ project, row }: { project: ProjectGroup; row: Row }) {
             icon={<ProjectIcon path={path} selected={pickedForNewChat && inNewChat} />}
             name={name}
             list={project.chats}
+            drafts={drafts}
             row={row}
             action={
                 <button
@@ -187,6 +258,7 @@ function Group({
     icon,
     name,
     list,
+    drafts = [],
     row,
     count,
     action
@@ -195,6 +267,8 @@ function Group({
     icon: ReactNode;
     name: string;
     list: Chat[];
+    /** Listed above the chats, all of them. */
+    drafts?: NewChatDraft[];
     row: Row;
     /** Shown after the name, muted. */
     count?: number;
@@ -235,7 +309,10 @@ function Group({
 
             {!collapsed && (
                 <div className="flex flex-col gap-px">
-                    {list.length === 0 && (
+                    {drafts.map((draft) => (
+                        <DraftRow key={draft.key} draft={draft} />
+                    ))}
+                    {list.length === 0 && drafts.length === 0 && (
                         <p className="py-1 pl-8 text-[11px] text-dark-250">No chats</p>
                     )}
                     {list.slice(0, shown).map(row)}

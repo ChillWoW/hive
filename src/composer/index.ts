@@ -5,7 +5,10 @@ export { QuestionWizard } from "./QuestionWizard";
 export {
     composer,
     useComposerStore,
+    useHasDraft,
+    useNewChatDrafts,
     type DraftAttachment,
+    type NewChatDraft,
     type NewChatSettings,
     type Workspace
 } from "./store";

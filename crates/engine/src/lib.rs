@@ -43,6 +43,10 @@ mod titles;
 
 pub use hive_store;
 
+/// How long a file attached to a draft but never sent is kept: the app keeps
+/// drafts across restarts.
+const DRAFT_FILES_GRACE: Duration = Duration::from_secs(30 * 24 * 60 * 60);
+
 /// Sent in place of the user when a turn Hive's exit cut short is resumed.
 pub const RESUME_PROMPT: &str =
     "Hive closed while you were working on this. Pick up where you left off.";
@@ -264,7 +268,7 @@ impl Engine {
     pub fn start(&self) -> Result<Recovery> {
         let store = self.store();
         let recovery = store.recover()?;
-        match store.sweep_attachments() {
+        match store.sweep_attachments(DRAFT_FILES_GRACE) {
             Ok(0) => {}
             Ok(n) => log::info!("removed {n} unused attachments"),
             Err(e) => log::warn!("sweeping attachments: {e}"),

@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 
+export const DRAFTS = "drafts";
 export const PINNED = "pinned";
 export const ARCHIVED = "archived";
 export const projectKey = (path: string) => `project:${path}`;

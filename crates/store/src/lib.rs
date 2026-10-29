@@ -202,11 +202,19 @@ impl Store {
     }
 
     /// Deletes attachments no message or command refers to: ones attached
-    /// and then removed, or left in a draft Hive closed with. Run at boot,
-    /// when no draft is open. Returns how many went.
-    pub fn sweep_attachments(&self) -> Result<usize> {
+    /// and then removed, or left in a draft. Drafts outlive a restart (the
+    /// app keeps them), so an unused copy goes only once it's older than
+    /// `grace`. Run at boot. Returns how many went.
+    pub fn sweep_attachments(&self, grace: Duration) -> Result<usize> {
         let mut swept = 0;
         for (id, folder) in self.attachments.folders()? {
+            let age = std::fs::metadata(&folder)
+                .and_then(|m| m.modified())
+                .ok()
+                .and_then(|at| at.elapsed().ok());
+            if age.is_none_or(|age| age < grace) {
+                continue;
+            }
             let used: bool = self.db().query_row(
                 "SELECT EXISTS(SELECT 1 FROM messages WHERE instr(data, ?1) > 0)
                      OR EXISTS(SELECT 1 FROM commands WHERE instr(data, ?1) > 0)",
@@ -655,7 +663,8 @@ mod tests {
             )
             .unwrap();
 
-        assert_eq!(store.sweep_attachments().unwrap(), 1);
+        assert_eq!(store.sweep_attachments(Duration::from_secs(3600)).unwrap(), 0);
+        assert_eq!(store.sweep_attachments(Duration::ZERO).unwrap(), 1);
         assert!(!Path::new(&unused.path).exists());
         assert!(Path::new(&sent.path).exists() && Path::new(&queued.path).exists());
 
