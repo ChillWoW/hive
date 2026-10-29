@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { openFileTab } from "@/rightbar/actions";
 import { FileIcon } from "@/ui";
 import { useFilesPanelStore } from "./panel";
 import { rankEntries } from "./rank";
@@ -51,7 +52,10 @@ export function SearchResults({
                         type="button"
                         role="option"
                         aria-selected={false}
-                        onClick={() => revealPath(cwd, entry.path, entry.dir)}
+                        onClick={() => {
+                            revealPath(cwd, entry.path, entry.dir);
+                            if (!entry.dir) openFileTab(cwd, entry.path);
+                        }}
                         className="flex h-[27px] w-full items-center gap-1.5 px-2 text-left text-dark-100 outline-none hover:bg-white/[0.055] focus-visible:bg-white/[0.055]"
                     >
                         <FileIcon name={name} folder={entry.dir} className="size-3.5" />

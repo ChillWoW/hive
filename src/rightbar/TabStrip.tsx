@@ -1,7 +1,10 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { CubeIcon, PlusIcon, XIcon } from "@phosphor-icons/react";
+import { PlusIcon, XIcon } from "@phosphor-icons/react";
 import { cn } from "@/lib/cn";
-import { iconButtonClassName, Menu, Tooltip } from "@/ui";
+import { useDocsStore } from "@/editor";
+import { FileIcon, iconButtonClassName, Menu, Tooltip } from "@/ui";
+import { closeTab } from "./actions";
+import { NEW_TABS } from "./kinds";
 import { useRightbarStore, type RightTab } from "./store";
 
 // Zeron's chip metrics (crates/ui/src/surface_chrome.rs): fixed width, so
@@ -21,12 +24,6 @@ function slideOffset(index: number, { from, over }: Drag) {
     return 0;
 }
 
-/** What the "+" menu opens; mock tabs only for now. */
-const NEW_TABS = [
-    { label: "Mock tab", title: "Mock tab" },
-    { label: "Mock tab, long title", title: "A mock tab with a long title" }
-] as const;
-
 /**
  * The right sidebar's tabs, as in zeron: one chip per tab (icon, title, ✕ on
  * hover), the strip scrolling sideways with faded edges, drag to reorder
@@ -35,7 +32,7 @@ const NEW_TABS = [
 export function TabStrip() {
     const tabs = useRightbarStore((s) => s.tabs);
     const activeId = useRightbarStore((s) => s.activeId);
-    const { activate, close, move, open } = useRightbarStore.getState();
+    const { activate, move } = useRightbarStore.getState();
 
     const strip = useRef<HTMLDivElement>(null);
     const [fade, setFade] = useState({ left: false, right: false });
@@ -141,7 +138,7 @@ export function TabStrip() {
                                         setDrag(null);
                                     }}
                                     onActivate={() => activate(tab.id)}
-                                    onClose={() => close(tab.id)}
+                                    onClose={() => void closeTab(tab.id)}
                                 />
                             );
                         })}
@@ -155,26 +152,28 @@ export function TabStrip() {
                 )}
             </div>
 
-            <Menu>
-                <Tooltip>
-                    <Tooltip.Trigger
-                        render={
-                            <Menu.Trigger aria-label="New tab" className={iconButtonClassName}>
-                                <PlusIcon className="size-3.5" />
-                            </Menu.Trigger>
-                        }
-                    />
-                    <Tooltip.Content side="bottom">New tab</Tooltip.Content>
-                </Tooltip>
-                <Menu.Content side="bottom" align="end" sideOffset={6} className="w-48 min-w-0">
-                    {NEW_TABS.map((item) => (
-                        <Menu.Item key={item.label} onClick={() => open("mock", item.title)}>
-                            <CubeIcon className="size-3.5 text-dark-200" />
-                            {item.label}
-                        </Menu.Item>
-                    ))}
-                </Menu.Content>
-            </Menu>
+            {NEW_TABS.length > 0 && (
+                <Menu>
+                    <Tooltip>
+                        <Tooltip.Trigger
+                            render={
+                                <Menu.Trigger aria-label="New tab" className={iconButtonClassName}>
+                                    <PlusIcon className="size-3.5" />
+                                </Menu.Trigger>
+                            }
+                        />
+                        <Tooltip.Content side="bottom">New tab</Tooltip.Content>
+                    </Tooltip>
+                    <Menu.Content side="bottom" align="end" sideOffset={6} className="w-48 min-w-0">
+                        {NEW_TABS.map(({ label, icon: TabIcon, open }) => (
+                            <Menu.Item key={label} onClick={open}>
+                                <TabIcon className="size-3.5 text-dark-200" />
+                                {label}
+                            </Menu.Item>
+                        ))}
+                    </Menu.Content>
+                </Menu>
+            )}
         </div>
     );
 }
@@ -206,6 +205,8 @@ function TabChip({
     onPointerUp: (event: React.PointerEvent<HTMLDivElement>) => void;
     onPointerCancel: (event: React.PointerEvent<HTMLDivElement>) => void;
 }) {
+    // Unsaved changes: a dot where the ✕ shows on hover, as in zeron.
+    const dirty = useDocsStore((s) => !!s.docs[tab.id]?.dirty);
     const chip = (
         <div
             role="tab"
@@ -233,12 +234,12 @@ function TabChip({
             )}
         >
             <span className="flex size-[18px] shrink-0 items-center justify-center">
-                <CubeIcon className={cn("size-3", active ? "text-dark-100" : "text-dark-250")} />
+                <FileIcon name={tab.title} className={cn("size-3.5", !active && "opacity-80")} />
             </span>
             <span className="min-w-0 flex-1 truncate text-[11.5px]">{tab.title}</span>
             <button
                 type="button"
-                aria-label="Close tab"
+                aria-label={dirty ? "Close tab (unsaved changes)" : "Close tab"}
                 // Not a drag of the tab, and not its activation.
                 onPointerDown={(event) => event.stopPropagation()}
                 onClick={(event) => {
@@ -246,21 +247,23 @@ function TabChip({
                     onClose();
                 }}
                 className={cn(
-                    "flex size-[18px] shrink-0 items-center justify-center rounded text-dark-200 outline-none",
-                    "opacity-0 transition-opacity group-hover/tab:opacity-100 focus-visible:opacity-100",
+                    "relative flex size-[18px] shrink-0 items-center justify-center rounded text-dark-200 outline-none",
                     "hover:bg-white/[0.12] hover:text-dark-50"
                 )}
             >
-                <XIcon className="size-3" />
+                {dirty && (
+                    <span className="absolute size-1.5 rounded-full bg-dark-100 transition-opacity group-hover/tab:opacity-0" />
+                )}
+                <XIcon className="size-3 opacity-0 transition-opacity group-hover/tab:opacity-100 group-focus-within/tab:opacity-100" />
             </button>
         </div>
     );
 
-    // The full title on hover, as zeron shows a tab's detail.
+    // The file's path on hover, as zeron shows a tab's detail.
     return (
         <Tooltip disabled={dragging}>
             <Tooltip.Trigger delay={350} render={chip} />
-            <Tooltip.Content side="bottom">{tab.title}</Tooltip.Content>
+            <Tooltip.Content side="bottom">{tab.path}</Tooltip.Content>
         </Tooltip>
     );
 }

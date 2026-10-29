@@ -1,4 +1,5 @@
 mod attachments;
+mod editor;
 mod engine;
 mod files;
 mod folders;
@@ -56,6 +57,10 @@ pub fn run() {
       engine::delete_chat,
       files::list_files,
       files::list_directory,
+      editor::read_file,
+      editor::read_file_bytes,
+      editor::write_file,
+      editor::open_file,
       folders::folder_icon,
       git::git_repo,
       git::git_switch_branch,

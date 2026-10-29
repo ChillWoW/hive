@@ -68,6 +68,8 @@ mod export {
         NewWorktree::export_all(&cfg).unwrap();
         WorkspaceEntry::export_all(&cfg).unwrap();
         DirectoryEntry::export_all(&cfg).unwrap();
+        FileText::export_all(&cfg).unwrap();
+        WriteOutcome::export_all(&cfg).unwrap();
 
         let mut modules = Vec::new();
         collect_modules(&dir, "", &mut modules);

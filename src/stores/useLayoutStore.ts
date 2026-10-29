@@ -29,6 +29,8 @@ type LayoutState = {
     toggleSidebar: () => void;
     toggleFilePanel: () => void;
     toggleRightSidebar: () => void;
+    /** Opens a column, or brings it back when it was hidden for room. */
+    show: (column: Column) => void;
     setFilesWidth: (width: number) => void;
     setRightWidth: (width: number) => void;
     setResizing: (resizing: boolean) => void;
@@ -146,6 +148,11 @@ export const useLayoutStore = create<LayoutState>()(
                 toggleSidebar: () => toggle("sidebar"),
                 toggleFilePanel: () => toggle("files"),
                 toggleRightSidebar: () => toggle("right"),
+                show: (column) => {
+                    const state = get();
+                    if (state[OPEN_KEY[column]] && fitColumns(window.innerWidth, state)[column]) return;
+                    toggle(column);
+                },
                 setFilesWidth: (width) =>
                     set({
                         filesWidth: clamp(

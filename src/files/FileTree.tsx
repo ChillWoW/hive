@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef } from "react";
 import { CaretRightIcon } from "@phosphor-icons/react";
 import type { DirectoryEntry } from "@/proto";
 import { cn } from "@/lib/cn";
+import { openFileTab } from "@/rightbar/actions";
 import { FileIcon } from "@/ui";
 import { useFilesPanelStore } from "./panel";
 import { dirKey, loadDir, nameOf, useTreeStore, type DirListing } from "./tree";
@@ -104,7 +105,9 @@ export function FileTree({ cwd, all }: { cwd: string; all: boolean }) {
                             selected={selected === row.entry.path}
                             onClick={() => {
                                 select(row.entry.path);
+                                // A folder opens or closes; a file opens in a tab, as in zeron.
                                 if (row.entry.dir) toggleExpanded(cwd, row.entry.path);
+                                else openFileTab(cwd, row.entry.path);
                             }}
                         />
                     ) : (

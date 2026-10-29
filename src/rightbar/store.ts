@@ -1,37 +1,35 @@
 import { create } from "zustand";
 
-/** What a tab shows. Only mock tabs so far, to try the strip with. */
-export type TabKind = "mock";
+/** What a tab shows: a file of a chat's folder in the editor. */
+export type TabContent = { kind: "file"; cwd: string; path: string };
 
-export type RightTab = { id: string; kind: TabKind; title: string };
+export type RightTab = { id: string; title: string } & TabContent;
 
 type RightbarState = {
     tabs: RightTab[];
     activeId: string | null;
-    /** Adds a tab after the others and shows it. */
-    open: (kind: TabKind, title: string) => void;
+    /** Adds a tab after the others and shows it; its id. */
+    add: (content: TabContent, title: string) => string;
     activate: (id: string) => void;
-    /** Closes a tab; closing the shown one shows its right neighbour, else its left. */
-    close: (id: string) => void;
+    /** Takes a tab away; the shown one passes to its right neighbour, else its left. */
+    remove: (id: string) => void;
     /** Moves the tab at `from` to `to`. */
     move: (from: number, to: number) => void;
 };
 
 let nextId = 0;
-const mock = (title: string): RightTab => ({ id: `tab-${++nextId}`, kind: "mock", title });
-
-const SEED = [mock("Mock tab 1"), mock("Mock tab 2"), mock("A mock tab with a long title")];
 
 /** The right sidebar's tabs, as zeron's right pane keeps its surfaces. */
 export const useRightbarStore = create<RightbarState>()((set) => ({
-    tabs: SEED,
-    activeId: SEED[0]!.id,
-    open: (kind, title) => {
-        const tab = { id: `tab-${++nextId}`, kind, title };
+    tabs: [],
+    activeId: null,
+    add: (content, title) => {
+        const tab: RightTab = { id: `tab-${++nextId}`, title, ...content };
         set((s) => ({ tabs: [...s.tabs, tab], activeId: tab.id }));
+        return tab.id;
     },
     activate: (activeId) => set({ activeId }),
-    close: (id) =>
+    remove: (id) =>
         set((s) => {
             const index = s.tabs.findIndex((t) => t.id === id);
             if (index === -1) return s;
