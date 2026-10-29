@@ -104,6 +104,34 @@ const BROWSER_CATALOGS: HarnessCatalog[] = [
         ],
         accessModes: ["supervised", "auto-accept-edits", "full-access"],
         capabilities: { steering: false, interrupt: true, attachments: true, plan: true }
+    },
+    {
+        id: "opencode",
+        label: "OpenCode",
+        installed: true,
+        // The real list comes from `opencode serve` (`/api/model`): the providers set up there.
+        models: (
+            [
+                ["opencode/big-pickle", "Big Pickle", "OpenCode", []],
+                ["openrouter/particle-ai/particle-1", "Particle-1", "OpenRouter", ["low", "medium", "high"]]
+            ] as const
+        ).map(([id, label, description, levels]) => ({
+            id,
+            label,
+            description,
+            reasoningLevels: [...levels],
+            options: []
+        })),
+        defaultModel: "opencode/big-pickle",
+        commands: [
+            {
+                name: "compact",
+                description: "Summarize the conversation to free up context",
+                kind: "command"
+            }
+        ],
+        accessModes: ["supervised", "auto-accept-edits", "full-access"],
+        capabilities: { steering: false, interrupt: true, attachments: true, plan: true }
     }
 ];
 

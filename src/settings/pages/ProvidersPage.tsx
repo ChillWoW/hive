@@ -34,7 +34,8 @@ import { SignInDialog } from "./SignInDialog";
 /** The CLI each harness runs, for install hints. */
 const CLI_NAMES: Partial<Record<HarnessCatalog["id"], string>> = {
     "claude-code": "claude",
-    codex: "codex"
+    codex: "codex",
+    opencode: "opencode"
 };
 
 /**

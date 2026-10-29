@@ -148,6 +148,7 @@ impl Default for KeyboardSettings {
 pub struct ProvidersSettings {
     pub claude_code: bool,
     pub codex: bool,
+    pub opencode: bool,
     pub mock: bool,
 }
 
@@ -156,6 +157,7 @@ impl Default for ProvidersSettings {
         Self {
             claude_code: true,
             codex: true,
+            opencode: true,
             mock: true,
         }
     }

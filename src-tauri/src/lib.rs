@@ -11,7 +11,7 @@ mod terminals;
 use std::sync::Arc;
 
 use hive_engine::{Engine, EngineConfig};
-use hive_harness::{ClaudeHarness, CodexHarness, Harness, MockHarness};
+use hive_harness::{ClaudeHarness, CodexHarness, Harness, MockHarness, OpencodeHarness};
 use tauri::webview::PageLoadEvent;
 use tauri::Manager;
 use tauri_plugin_window_state::StateFlags;
@@ -126,6 +126,7 @@ pub fn run() {
         vec![
           Arc::new(ClaudeHarness::new()),
           Arc::new(CodexHarness::new()),
+          Arc::new(OpencodeHarness::new()),
           Arc::new(MockHarness::new()),
         ];
       let engine = Engine::new(

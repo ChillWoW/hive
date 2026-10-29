@@ -30,6 +30,7 @@ export const DEFAULT_SETTINGS: Settings = {
   "providers": {
     "claudeCode": true,
     "codex": true,
+    "opencode": true,
     "mock": true
   }
 };

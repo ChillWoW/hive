@@ -88,7 +88,8 @@ export const providersApi = {
 /** npm packages that publish each CLI, for the newest-release check. */
 const NPM_PACKAGES: Partial<Record<HarnessId, string>> = {
     "claude-code": "@anthropic-ai/claude-code",
-    codex: "@openai/codex"
+    codex: "@openai/codex",
+    opencode: "@opencode/cli"
 };
 
 /** The newest release on `channel` (an npm dist-tag); undefined if the harness has no such check. */

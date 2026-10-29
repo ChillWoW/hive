@@ -20,11 +20,13 @@ pub mod attachments;
 pub mod claude;
 pub mod codex;
 pub mod mock;
+pub mod opencode;
 pub mod provider;
 
 pub use claude::ClaudeHarness;
 pub use codex::CodexHarness;
 pub use mock::MockHarness;
+pub use opencode::OpencodeHarness;
 
 #[derive(Debug, thiserror::Error)]
 pub enum HarnessError {

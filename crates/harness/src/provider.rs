@@ -10,6 +10,7 @@ use tokio::sync::Notify;
 
 use crate::claude::{provider as claude, usage as claude_usage};
 use crate::codex::provider as codex;
+use crate::opencode::provider as opencode;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ProviderError {
@@ -28,9 +29,10 @@ pub async fn status(harness: HarnessId) -> ProviderStatus {
     match harness {
         HarnessId::ClaudeCode => claude::status().await,
         HarnessId::Codex => codex::status().await,
+        HarnessId::Opencode => opencode::status().await,
         _ => ProviderStatus {
             harness,
-            // Mock runs in-process; the others aren't wired up yet.
+            // Mock runs in-process.
             installed: harness == HarnessId::Mock,
             path: None,
             version: None,
@@ -58,6 +60,7 @@ pub async fn install(harness: HarnessId) -> Result<(), ProviderError> {
     match harness {
         HarnessId::ClaudeCode => claude::install().await,
         HarnessId::Codex => codex::install().await,
+        HarnessId::Opencode => opencode::install().await,
         _ => Err(ProviderError::Unsupported),
     }
 }
@@ -66,6 +69,7 @@ pub async fn update(harness: HarnessId) -> Result<(), ProviderError> {
     match harness {
         HarnessId::ClaudeCode => claude::update().await,
         HarnessId::Codex => codex::update().await,
+        HarnessId::Opencode => opencode::update().await,
         _ => Err(ProviderError::Unsupported),
     }
 }

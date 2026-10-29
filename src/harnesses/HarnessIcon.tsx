@@ -30,6 +30,21 @@ function OpenAIMark({ className }: { className?: string }) {
     );
 }
 
+/** OpenCode's mark (a framed block), in the text colour. */
+function OpenCodeMark({ className }: { className?: string }) {
+    return (
+        <svg
+            viewBox="0 0 24 24"
+            fill="currentColor"
+            aria-hidden="true"
+            className={cn("text-dark-50", className)}
+        >
+            <path fillRule="evenodd" d="M4 2h16v20H4V2Zm4 4v12h8V6H8Z" />
+            <path d="M8 12h8v6H8z" opacity="0.45" />
+        </svg>
+    );
+}
+
 /** The harness's brand mark, for the model chip, list rows and provider tabs. */
 export function HarnessIcon({
     harness,
@@ -43,6 +58,8 @@ export function HarnessIcon({
             return <ClaudeMark className={className} />;
         case "codex":
             return <OpenAIMark className={className} />;
+        case "opencode":
+            return <OpenCodeMark className={className} />;
         default:
             return <FlaskIcon className={cn("text-dark-200", className)} />;
     }
