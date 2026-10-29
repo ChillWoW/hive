@@ -10,6 +10,8 @@ export type ProviderEntry = {
     status?: ProviderStatus;
     /** A probe is in flight. */
     probing: boolean;
+    /** When the last probe finished. */
+    checkedAt?: number;
     /** Newest release on the CLI's channel; null when the check failed. */
     latest?: string | null;
     latestCheckedAt?: number;
@@ -50,14 +52,19 @@ const probes = new Map<HarnessId, Promise<void>>();
 
 /**
  * Probes `harness`'s CLI and, when it's installed, looks up its newest
- * release. Concurrent calls share one probe.
+ * release. Concurrent calls share one probe; with `maxAge`, none runs when
+ * the last one finished that recently.
  */
 export function refreshProvider(
     harness: HarnessId,
-    { force = false }: { force?: boolean } = {}
+    { force = false, maxAge }: { force?: boolean; maxAge?: number } = {}
 ): Promise<void> {
     const running = probes.get(harness);
     if (running) return running;
+    const { checkedAt } = entry(harness);
+    if (!force && maxAge !== undefined && checkedAt && Date.now() - checkedAt < maxAge) {
+        return Promise.resolve();
+    }
 
     const probe = (async () => {
         patch(harness, { probing: true });
@@ -68,7 +75,7 @@ export function refreshProvider(
         } catch (error) {
             console.warn("[providers] status failed", harness, error);
         } finally {
-            patch(harness, { probing: false });
+            patch(harness, { probing: false, checkedAt: Date.now() });
             probes.delete(harness);
         }
     })();

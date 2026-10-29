@@ -25,6 +25,7 @@ import { useShortcut } from "@/keybindings";
 import type { Attachment, ChatConfig, MessagePart } from "@/proto";
 import { Transcript } from "@/transcript";
 import { MorphHeight } from "@/ui";
+import { AgentUpdates } from "./AgentUpdates";
 import { BackgroundTasks } from "./BackgroundTasks";
 import { ContextRing } from "./ContextRing";
 import { QueuedTray } from "./QueuedTray";
@@ -220,11 +221,12 @@ export function ChatView() {
 
     if (hero) {
         return (
-            <div className="flex h-full w-full flex-col items-center justify-center pb-16">
+            <div className="relative flex h-full w-full flex-col items-center justify-center pb-16">
                 <h1 className="mb-8 text-center text-2xl font-medium tracking-tight text-dark-50">
                     What should we build?
                 </h1>
                 <div className="w-full">{bottom}</div>
+                <AgentUpdates />
             </div>
         );
     }

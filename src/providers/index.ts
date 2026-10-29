@@ -5,6 +5,7 @@ export {
     providers,
     refreshProvider,
     useProvider,
+    useProvidersStore,
     type ProviderAction,
     type ProviderEntry
 } from "./store";
