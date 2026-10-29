@@ -118,29 +118,34 @@ export function TabStrip() {
                     style={{ gap: GAP }}
                     className="hide-scrollbar flex h-full min-w-0 items-center overflow-x-auto"
                 >
-                    {tabs.map((tab, index) => {
-                        const dragged = drag?.id === tab.id;
-                        const offset = drag ? (dragged ? drag.dx : slideOffset(index, drag)) : 0;
-                        return (
-                            <TabChip
-                                key={tab.id}
-                                tab={tab}
-                                active={tab.id === activeId}
-                                dragged={dragged}
-                                offset={offset}
-                                animate={!!drag && !dragged}
-                                onPointerDown={(event) => onPointerDown(event, tab, index)}
-                                onPointerMove={onPointerMove}
-                                onPointerUp={onPointerUp}
-                                onPointerCancel={() => {
-                                    press.current = null;
-                                    setDrag(null);
-                                }}
-                                onActivate={() => activate(tab.id)}
-                                onClose={() => close(tab.id)}
-                            />
-                        );
-                    })}
+                    {/* Once a tab's title has shown, the next tab's follows at
+                        once, without the fade, until the pointer rests off them. */}
+                    <Tooltip.Provider delay={350} timeout={400}>
+                        {tabs.map((tab, index) => {
+                            const dragged = drag?.id === tab.id;
+                            const offset = drag ? (dragged ? drag.dx : slideOffset(index, drag)) : 0;
+                            return (
+                                <TabChip
+                                    key={tab.id}
+                                    tab={tab}
+                                    active={tab.id === activeId}
+                                    dragged={dragged}
+                                    offset={offset}
+                                    animate={!!drag && !dragged}
+                                    dragging={!!drag}
+                                    onPointerDown={(event) => onPointerDown(event, tab, index)}
+                                    onPointerMove={onPointerMove}
+                                    onPointerUp={onPointerUp}
+                                    onPointerCancel={() => {
+                                        press.current = null;
+                                        setDrag(null);
+                                    }}
+                                    onActivate={() => activate(tab.id)}
+                                    onClose={() => close(tab.id)}
+                                />
+                            );
+                        })}
+                    </Tooltip.Provider>
                 </div>
                 {fade.left && (
                     <div className="pointer-events-none absolute inset-y-0 left-0 w-9 bg-linear-to-r from-dark-850 to-transparent" />
@@ -180,6 +185,7 @@ function TabChip({
     dragged,
     offset,
     animate,
+    dragging,
     onActivate,
     onClose,
     ...pointer
@@ -191,6 +197,8 @@ function TabChip({
     offset: number;
     /** Slides to `offset` rather than jumping (the chips a drag passes over). */
     animate: boolean;
+    /** A tab is being dragged: no tooltips meanwhile. */
+    dragging: boolean;
     onActivate: () => void;
     onClose: () => void;
     onPointerDown: (event: React.PointerEvent<HTMLDivElement>) => void;
@@ -198,7 +206,7 @@ function TabChip({
     onPointerUp: (event: React.PointerEvent<HTMLDivElement>) => void;
     onPointerCancel: (event: React.PointerEvent<HTMLDivElement>) => void;
 }) {
-    return (
+    const chip = (
         <div
             role="tab"
             tabIndex={0}
@@ -246,5 +254,13 @@ function TabChip({
                 <XIcon className="size-3" />
             </button>
         </div>
+    );
+
+    // The full title on hover, as zeron shows a tab's detail.
+    return (
+        <Tooltip disabled={dragging}>
+            <Tooltip.Trigger delay={350} render={chip} />
+            <Tooltip.Content side="bottom">{tab.title}</Tooltip.Content>
+        </Tooltip>
     );
 }
