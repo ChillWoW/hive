@@ -37,6 +37,6 @@ jobs:
           args: --bundles nsis
           tagName: ${{ github.ref_name }}
           releaseName: Hive ${{ github.ref_name }}
-          releaseBody: ""
+          generateReleaseNotes: true
           releaseDraft: false
           prerelease: false
