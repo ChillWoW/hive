@@ -9,9 +9,12 @@ import {
     PencilSimpleIcon,
     PuzzlePieceIcon,
     TerminalWindowIcon,
-    type Icon
+    ToolboxIcon
 } from "@phosphor-icons/react";
+import type { ComponentType } from "react";
 import type { MessagePart, ToolCall } from "@/proto";
+import type { JsonValue } from "@/proto/serde_json/JsonValue";
+import { HiveMark } from "@/ui";
 
 export type ToolPart = Extract<MessagePart, { kind: "tool" }>;
 export type ReasoningPart = Extract<MessagePart, { kind: "reasoning" }>;
@@ -58,7 +61,46 @@ export function pathOf(call: ToolCall): string | undefined {
     }
 }
 
-export function iconOf(call: ToolCall): Icon {
+/** A rail icon: a phosphor icon or one of ours, sized and coloured by `className`. */
+export type ToolIcon = ComponentType<{ className?: string }>;
+
+/** The server name Hive's own MCP tools come from (`McpServer::HIVE`). */
+export const HIVE_SERVER = "hive";
+
+/** How one of Hive's own tools shows: its label (the tool name otherwise) and detail. */
+type HiveTool = { label?: string; detail?: (input: JsonValue | undefined) => string };
+
+/**
+ * Hive's MCP tools (`src-tauri/src/mcp.rs`) by name. Every one gets Hive's
+ * mark and its name; an entry here can give it a label and a detail line.
+ */
+const HIVE_TOOLS: Record<string, HiveTool> = {};
+
+function isHiveTool(call: ToolCall): boolean {
+    return call.kind === "mcp" && call.server === HIVE_SERVER;
+}
+
+/** Claude's deferred-tool loader: `select:A,B` loads those tools, anything else searches. */
+function toolSearch(call: ToolCall): { select: string[] | undefined; query: string } | undefined {
+    if (call.kind !== "unknown" || call.name !== "ToolSearch") return undefined;
+    const input = call.input;
+    const raw =
+        input && typeof input === "object" && !Array.isArray(input) && typeof input.query === "string"
+            ? input.query.trim()
+            : "";
+    const select = raw.startsWith("select:")
+        ? raw
+              .slice("select:".length)
+              .split(",")
+              .map((name) => name.trim())
+              .filter(Boolean)
+        : undefined;
+    return { select, query: raw };
+}
+
+export function iconOf(call: ToolCall): ToolIcon {
+    if (isHiveTool(call)) return HiveMark;
+    if (toolSearch(call)) return ToolboxIcon;
     switch (call.kind) {
         case "exec":
             return TerminalWindowIcon;
@@ -96,6 +138,16 @@ export function chipContent(
     cwd?: string
 ): { label: string; detail: string } {
     const chip = (label: string, detail: string) => ({ label, detail: singleLine(detail) });
+    if (call.kind === "mcp" && isHiveTool(call)) {
+        const tool = HIVE_TOOLS[call.tool];
+        return chip(tool?.label ?? call.tool, tool?.detail?.(call.input) ?? "");
+    }
+    const search = toolSearch(call);
+    if (search) {
+        return search.select
+            ? chip("Load tools", search.select.join(", "))
+            : chip("Find tools", search.query);
+    }
     switch (call.kind) {
         case "exec":
             return chip("Run", call.command);

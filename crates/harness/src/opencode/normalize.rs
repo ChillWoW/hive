@@ -12,7 +12,7 @@
 
 use std::collections::{HashMap, HashSet, VecDeque};
 
-use hive_proto::{AgentEvent, DoneStatus, TodoItem, TodoStatus, ToolCall};
+use hive_proto::{AgentEvent, DoneStatus, McpServer, TodoItem, TodoStatus, ToolCall};
 use serde_json::Value;
 
 /// Tool output kept on a result; the agent saw all of it.
@@ -436,9 +436,21 @@ pub(super) fn tool_call(name: &str, input: &Value) -> ToolCall {
                 .unwrap_or_else(|| "Subagent".into()),
             model: None,
         },
-        _ => ToolCall::Unknown {
-            name: name.to_owned(),
-            input: (!input.is_null()).then(|| input.clone()),
+        // MCP tools arrive as `<server>_<tool>`; only Hive's own server is
+        // known, the rest can't be told from built-in tools.
+        _ => match name
+            .strip_prefix(McpServer::HIVE)
+            .and_then(|rest| rest.strip_prefix('_'))
+        {
+            Some(tool) if !tool.is_empty() => ToolCall::Mcp {
+                server: McpServer::HIVE.into(),
+                tool: tool.to_owned(),
+                input: (!input.is_null()).then(|| input.clone()),
+            },
+            _ => ToolCall::Unknown {
+                name: name.to_owned(),
+                input: (!input.is_null()).then(|| input.clone()),
+            },
         },
     }
 }
@@ -447,6 +459,20 @@ pub(super) fn tool_call(name: &str, input: &Value) -> ToolCall {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn hive_tools_are_mcp_calls() {
+        assert_eq!(
+            tool_call("hive_whoami", &json!({})),
+            ToolCall::Mcp {
+                server: "hive".into(),
+                tool: "whoami".into(),
+                input: Some(json!({})),
+            }
+        );
+        assert!(matches!(tool_call("hive_", &Value::Null), ToolCall::Unknown { .. }));
+        assert!(matches!(tool_call("hivemind", &Value::Null), ToolCall::Unknown { .. }));
+    }
 
     fn frame(kind: &str, data: Value) -> Value {
         json!({ "id": "evt", "type": kind, "data": data })

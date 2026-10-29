@@ -5,8 +5,7 @@ import {
     CaretRightIcon,
     CheckIcon,
     CircleIcon,
-    CircleNotchIcon,
-    type Icon
+    CircleNotchIcon
 } from "@phosphor-icons/react";
 import type { JsonValue } from "@/proto/serde_json/JsonValue";
 import { cn } from "@/lib/cn";
@@ -25,6 +24,7 @@ import {
     summarize,
     THOUGHT_ICON,
     type GroupItem,
+    type ToolIcon,
     type ToolPart
 } from "./tools";
 
@@ -96,7 +96,7 @@ export function ToolGroup({
  * icon, and the trunk carrying on past an open item's body to the next.
  * Opaque strokes, so the joints don't double up the way alpha would.
  */
-function Rail({ icon: RailIcon, failed, last }: { icon: Icon; failed: boolean; last: boolean }) {
+function Rail({ icon: RailIcon, failed, last }: { icon: ToolIcon; failed: boolean; last: boolean }) {
     return (
         <div aria-hidden className="relative w-12 shrink-0 self-stretch">
             <span className="absolute top-0 left-3 h-2.5 w-px bg-dark-600" />
@@ -262,8 +262,11 @@ function Lines({ text, className }: { text: string; className?: string }) {
     );
 }
 
+/** Input as pretty JSON; nothing for none or `{}`. */
 function json(value: JsonValue | undefined) {
-    return value === undefined ? "" : JSON.stringify(value, null, 2);
+    if (value === undefined || value === null) return "";
+    if (typeof value === "object" && !Array.isArray(value) && Object.keys(value).length === 0) return "";
+    return JSON.stringify(value, null, 2);
 }
 
 /** What exactly was asked: the whole command, pattern, URL or input the header cut to one line. */
@@ -286,8 +289,15 @@ function invocationOf(part: ToolPart, cwd: string | undefined): string {
             return call.prompt ? `${call.url}\n${call.prompt}` : call.url;
         case "webSearch":
             return call.query;
-        case "mcp":
         case "unknown":
+            if (call.name === "ToolSearch") {
+                const input = call.input;
+                if (input && typeof input === "object" && !Array.isArray(input) && typeof input.query === "string") {
+                    return input.query;
+                }
+            }
+            return json(call.input);
+        case "mcp":
             return json(call.input);
         case "todo":
         case "subagent":
