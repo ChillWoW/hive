@@ -196,7 +196,7 @@ fn approval_question(
         return None;
     }
     let field = |key: &str| input.get(key).and_then(Value::as_str);
-    Some(if tool == "Bash" {
+    Some(if matches!(tool, "Bash" | "PowerShell") {
         approval::command("Claude", field("command").unwrap_or_default())
     } else if edit {
         let paths: Vec<&str> = field("file_path")
@@ -1268,6 +1268,10 @@ mod tests {
         assert_eq!(
             ask("Bash", &json!({"command": "rm -rf build"}), AutoAcceptEdits).as_deref(),
             Some("Claude wants to run `rm -rf build`. Allow it?")
+        );
+        assert_eq!(
+            ask("PowerShell", &json!({"command": "ls"}), Supervised).as_deref(),
+            Some("Claude wants to run `ls`. Allow it?")
         );
         assert_eq!(
             ask("Write", &json!({"file_path": "a.rs"}), Supervised).as_deref(),

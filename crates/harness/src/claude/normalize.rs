@@ -275,7 +275,8 @@ fn raw_input(input: &Value) -> Option<Value> {
 /// Claude's tool names and inputs → typed [`ToolCall`]s.
 pub(crate) fn decode_tool_use(name: &str, input: &Value) -> ToolCall {
     match name {
-        "Bash" => ToolCall::Exec {
+        // On Windows the CLI offers `PowerShell` beside (or instead of) `Bash`.
+        "Bash" | "PowerShell" => ToolCall::Exec {
             command: str_field(input, "command"),
         },
         "Read" => ToolCall::ReadFile {
