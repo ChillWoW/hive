@@ -8,7 +8,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
 
 use hive_harness::provider::{self, SignIn};
-use hive_proto::{HarnessId, ProviderStatus, SignInMethod, SignInStarted};
+use hive_proto::{HarnessId, ProviderStatus, ProviderUsage, SignInMethod, SignInStarted};
 use tauri::State;
 
 #[derive(Default)]
@@ -26,6 +26,11 @@ impl SignIns {
 #[tauri::command]
 pub async fn provider_status(harness: HarnessId) -> ProviderStatus {
     provider::status(harness).await
+}
+
+#[tauri::command]
+pub async fn provider_usage(harness: HarnessId) -> Result<Option<ProviderUsage>, String> {
+    provider::usage(harness).await.map_err(|e| e.to_string())
 }
 
 #[tauri::command]

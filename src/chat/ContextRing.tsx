@@ -2,9 +2,7 @@ import type { ContextUsage } from "@/proto";
 import { cn } from "@/lib/cn";
 import { chipClassName } from "@/composer/chip";
 import { Tooltip } from "@/ui";
-
-const RADIUS = 6;
-const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
+import { Ring } from "./Ring";
 
 const count = (n: number) => n.toLocaleString("en-US");
 
@@ -39,30 +37,7 @@ export function ContextRing({ usage }: { usage: ContextUsage | undefined }) {
                             tone
                         )}
                     >
-                        <svg viewBox="0 0 16 16" className="size-4 -rotate-90" aria-hidden="true">
-                            <circle
-                                cx="8"
-                                cy="8"
-                                r={RADIUS}
-                                fill="none"
-                                strokeWidth="1.8"
-                                className="stroke-dark-600"
-                            />
-                            {fraction != null && fraction > 0 && (
-                                <circle
-                                    cx="8"
-                                    cy="8"
-                                    r={RADIUS}
-                                    fill="none"
-                                    stroke="currentColor"
-                                    strokeWidth="1.8"
-                                    strokeLinecap="round"
-                                    strokeDasharray={CIRCUMFERENCE}
-                                    strokeDashoffset={CIRCUMFERENCE * (1 - fraction)}
-                                    className="transition-[stroke-dashoffset] duration-300 ease-out"
-                                />
-                            )}
-                        </svg>
+                        <Ring fraction={fraction} />
                         {fraction == null ? "—" : `${Math.round(fraction * 100)}%`}
                     </span>
                 }

@@ -27,6 +27,7 @@ import { Transcript } from "@/transcript";
 import { MorphHeight } from "@/ui";
 import { ContextRing } from "./ContextRing";
 import { QueuedTray } from "./QueuedTray";
+import { UsageRing } from "./UsageRing";
 
 type InputPart = Extract<MessagePart, { kind: "input" }>;
 
@@ -200,7 +201,8 @@ export function ChatView() {
                             Choose a folder for the agent to work in
                         </span>
                     )}
-                    <div className="ml-auto flex shrink-0 items-center">
+                    <div className="ml-auto flex shrink-0 items-center gap-1">
+                        <UsageRing harness={config.harness} />
                         <ContextRing usage={chat?.context} />
                     </div>
                 </div>

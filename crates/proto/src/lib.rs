@@ -62,6 +62,7 @@ mod export {
         ChatsUpdate::export_all(&cfg).unwrap();
         HarnessCatalog::export_all(&cfg).unwrap();
         ProviderStatus::export_all(&cfg).unwrap();
+        ProviderUsage::export_all(&cfg).unwrap();
         SignInMethod::export_all(&cfg).unwrap();
         SignInStarted::export_all(&cfg).unwrap();
         GitRepo::export_all(&cfg).unwrap();

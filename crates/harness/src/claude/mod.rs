@@ -29,6 +29,7 @@
 mod commands;
 mod normalize;
 pub(crate) mod provider;
+pub(crate) mod usage;
 mod wire;
 
 use std::collections::{HashMap, HashSet};

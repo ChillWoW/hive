@@ -75,3 +75,24 @@ pub struct SignInStarted {
     /// The page to approve access on; the CLI already tried to open it.
     pub url: String,
 }
+
+/// How much of a subscription's rate limits the signed-in account has used,
+/// one meter per window (as Claude's `/usage` shows them).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct ProviderUsage {
+    pub windows: Vec<UsageWindow>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(optional_fields)]
+pub struct UsageWindow {
+    /// e.g. `"Session"`, `"Week"`, `"Week · Opus"`.
+    pub label: String,
+    /// Share of the window used, 0–1.
+    pub used: f64,
+    /// When it starts over, RFC 3339.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resets_at: Option<String>,
+}

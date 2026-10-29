@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type {
     HarnessId,
     ProviderStatus,
+    ProviderUsage,
     SignInMethod,
     SignInStarted
 } from "@/proto";
@@ -32,6 +33,19 @@ function browserStatus(harness: HarnessId): ProviderStatus {
     };
 }
 
+/** Made-up usage under `bun run dev`, so the composer's ring renders. */
+function browserUsage(harness: HarnessId): ProviderUsage | null {
+    if (harness !== "claude-code") return null;
+    const at = (hours: number) => new Date(Date.now() + hours * 3_600_000).toISOString();
+    return {
+        windows: [
+            { label: "Session", used: 0.22, resetsAt: at(2.3) },
+            { label: "Week", used: 0.15, resetsAt: at(110) },
+            { label: "Week · Opus", used: 0.04, resetsAt: at(110) }
+        ]
+    };
+}
+
 const reject = () => Promise.reject(new Error(NO_BACKEND));
 
 export const providersApi = {
@@ -39,6 +53,11 @@ export const providersApi = {
         isTauri
             ? invoke("provider_status", { harness })
             : Promise.resolve(browserStatus(harness)),
+    /** The signed-in account's plan usage; null when there's none to show. */
+    usage: (harness: HarnessId): Promise<ProviderUsage | null> =>
+        isTauri
+            ? invoke("provider_usage", { harness })
+            : Promise.resolve(browserUsage(harness)),
     install: (harness: HarnessId): Promise<void> =>
         isTauri ? invoke("provider_install", { harness }) : reject(),
     update: (harness: HarnessId): Promise<void> =>

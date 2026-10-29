@@ -3,9 +3,9 @@
 //! [`HarnessId`]; a harness without a CLI to manage answers
 //! [`ProviderError::Unsupported`].
 
-use hive_proto::{HarnessId, ProviderStatus, SignInMethod};
+use hive_proto::{HarnessId, ProviderStatus, ProviderUsage, SignInMethod};
 
-use crate::claude::provider as claude;
+use crate::claude::{provider as claude, usage as claude_usage};
 
 #[derive(Debug, thiserror::Error)]
 pub enum ProviderError {
@@ -36,6 +36,15 @@ pub async fn status(harness: HarnessId) -> ProviderStatus {
             can_update: false,
             can_sign_in: false,
         },
+    }
+}
+
+/// The signed-in account's plan usage; `None` when there's nothing to
+/// show (no subscription login, or a harness that doesn't report usage).
+pub async fn usage(harness: HarnessId) -> Result<Option<ProviderUsage>, ProviderError> {
+    match harness {
+        HarnessId::ClaudeCode => claude_usage::usage().await,
+        _ => Ok(None),
     }
 }
 

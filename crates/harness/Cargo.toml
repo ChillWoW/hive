@@ -9,6 +9,9 @@ publish = false
 base64.workspace = true
 hive-proto.workspace = true
 serde.workspace = true
+reqwest = { version = "0.13", default-features = false, features = ["json", "rustls-no-provider"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 serde_json.workspace = true
+sha2 = "0.10"
 thiserror.workspace = true
 tokio.workspace = true

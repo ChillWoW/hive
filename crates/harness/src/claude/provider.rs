@@ -27,7 +27,7 @@ const SIGN_IN_START_TIMEOUT: Duration = Duration::from_secs(30);
 /// How long it gets to trade a pasted code for a login.
 const SIGN_IN_FINISH_TIMEOUT: Duration = Duration::from_secs(60);
 
-fn cli(exe: &Path) -> Command {
+pub(super) fn cli(exe: &Path) -> Command {
     let mut cmd = command_for(exe);
     // Set when Hive itself runs inside Claude Code.
     cmd.env_remove("CLAUDECODE")
@@ -50,9 +50,9 @@ fn installed() -> Result<PathBuf, ProviderError> {
     find_claude().ok_or(ProviderError::NotInstalled("claude"))
 }
 
-struct Output {
-    success: bool,
-    stdout: String,
+pub(super) struct Output {
+    pub(super) success: bool,
+    pub(super) stdout: String,
     stderr: String,
 }
 
@@ -68,7 +68,7 @@ impl Output {
     }
 }
 
-async fn run(mut cmd: Command, timeout: Duration) -> Result<Output, ProviderError> {
+pub(super) async fn run(mut cmd: Command, timeout: Duration) -> Result<Output, ProviderError> {
     let child = cmd.spawn().map_err(|e| ProviderError::Failed(e.to_string()))?;
     match tokio::time::timeout(timeout, child.wait_with_output()).await {
         Ok(Ok(out)) => Ok(Output {
@@ -132,7 +132,7 @@ pub async fn status() -> ProviderStatus {
 }
 
 /// `"2.1.312 (Claude Code)"` → `"2.1.312"`.
-fn parse_version(text: &str) -> Option<String> {
+pub(super) fn parse_version(text: &str) -> Option<String> {
     text.split_whitespace()
         .find(|word| word.starts_with(|c: char| c.is_ascii_digit()) && word.contains('.'))
         .map(str::to_owned)
@@ -156,7 +156,7 @@ fn parse_account(text: &str) -> Option<ProviderAccount> {
     })
 }
 
-fn config_dir() -> Option<PathBuf> {
+pub(super) fn config_dir() -> Option<PathBuf> {
     if let Some(dir) = std::env::var_os("CLAUDE_CONFIG_DIR") {
         return Some(dir.into());
     }
