@@ -7,11 +7,20 @@ const NEW_CHAT = "";
 
 const keyOf = (chatId: string | null) => chatId ?? NEW_CHAT;
 
+/**
+ * Where a new chat works: the folder's own checkout, or a worktree made for
+ * it (a new branch in a folder of its own).
+ */
+export type Workspace = "local" | "worktree";
+
 /** What the next new chat is created with. */
 export type NewChatSettings = {
     /** Null until a folder is picked. */
     cwd: string | null;
     config: ChatConfig;
+    workspace: Workspace;
+    /** The branch a worktree starts from; null for the checked-out one. */
+    base: string | null;
 };
 
 type ComposerState = {
@@ -44,6 +53,8 @@ export const useComposerStore = create<ComposerState>()(
             focusToken: 0,
             newChat: {
                 cwd: null,
+                workspace: "local",
+                base: null,
                 config: {
                     harness: "claude-code",
                     modelOptions: {},
@@ -73,9 +84,14 @@ export const useComposerStore = create<ComposerState>()(
         {
             name: "hive.composer",
             storage: createJSONStorage(() => localStorage),
-            // The access mode is remembered; plan mode is for the chat at hand.
+            // The access mode and workspace are remembered; plan mode and the
+            // worktree's base are for the chat at hand.
             partialize: (s) => ({
-                newChat: { ...s.newChat, config: { ...s.newChat.config, plan: false } },
+                newChat: {
+                    ...s.newChat,
+                    base: null,
+                    config: { ...s.newChat.config, plan: false }
+                },
                 favorites: s.favorites
             }),
             // Settings saved before access modes existed lack them.

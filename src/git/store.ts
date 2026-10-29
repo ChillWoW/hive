@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { create } from "zustand";
-import { useChatsStore } from "@/chats";
+import { useChatsStore, workDir } from "@/chats";
 import type { GitRepo } from "@/proto";
 import { gitApi } from "./api";
 
@@ -84,12 +84,15 @@ export function useGitRepo(cwd: string | null | undefined) {
     return entry;
 }
 
-/** An agent is mid-turn in `cwd`, so its branch shouldn't move under it. */
+/**
+ * An agent is mid-turn in `cwd` (its folder, or its worktree's), so the
+ * branch there shouldn't move under it.
+ */
 export function useFolderBusy(cwd: string | null | undefined) {
     return useChatsStore((s) =>
         !!cwd &&
         s.chats.some((c) => {
-            if (c.cwd !== cwd) return false;
+            if (workDir(c) !== cwd) return false;
             const status = s.sessions[c.id]?.status;
             return status === "working" || status === "awaitingInput";
         })

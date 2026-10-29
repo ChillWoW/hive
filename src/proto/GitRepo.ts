@@ -6,6 +6,10 @@ import type { GitBranch } from "./GitBranch";
  */
 export type GitRepo = { 
 /**
+ * The checkout's top folder.
+ */
+root: string, 
+/**
  * The checked-out branch; missing on a detached HEAD.
  */
 branch?: string, 
@@ -13,6 +17,10 @@ branch?: string,
  * HEAD's short hash; missing before the first commit.
  */
 commit?: string, 
+/**
+ * Files with uncommitted changes, untracked ones included.
+ */
+changes: number, 
 /**
  * Local branches, most recently committed first.
  */

@@ -46,7 +46,12 @@ export type Transcript = {
 /** Where a prompt goes: an existing chat, or a new one created first. */
 export type SendTarget =
     | { chatId: string }
-    | { cwd: string; config: ChatConfig };
+    | {
+          cwd: string;
+          config: ChatConfig;
+          /** Give the chat a worktree; its branch is named after the prompt. */
+          worktree?: { base: string | null };
+      };
 
 type ChatsState = {
     /** Most recently active first, as the backend orders them. */
@@ -109,6 +114,11 @@ const NOT_SENT = "This message wasn't sent.";
 /** When the chat last had activity: its latest turn, else its creation. */
 export function activity(chat: Chat) {
     return chat.lastMessageAt ?? chat.createdAt;
+}
+
+/** Where the chat's agent works: its worktree, else its folder (`Chat::work_dir`). */
+export function workDir(chat: Chat) {
+    return chat.worktree?.path ?? chat.cwd;
 }
 
 /** The chat has activity the user hasn't opened yet (`Chat::unseen`). */
@@ -301,7 +311,11 @@ export const useChatsStore = create<ChatsState>()(
                 if ("chatId" in target) {
                     chatId = target.chatId;
                 } else {
-                    const chat = await chatsApi.create(target.cwd, target.config);
+                    const worktree = target.worktree && {
+                        base: target.worktree.base ?? undefined,
+                        hint: prompt
+                    };
+                    const chat = await chatsApi.create(target.cwd, target.config, worktree);
                     chatId = chat.id;
                     // One update, so the prompt never drops out of view.
                     set((s) => {

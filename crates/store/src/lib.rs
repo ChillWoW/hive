@@ -138,6 +138,7 @@ impl Store {
             last_message_at: None,
             last_seen_at: None,
             context: None,
+            worktree: None,
         };
         self.save_chat(&chat)?;
         Ok(chat)

@@ -5,7 +5,8 @@ import type {
     ChatsUpdate,
     Command,
     CommandPayload,
-    MessagesUpdate
+    MessagesUpdate,
+    NewWorktree
 } from "@/proto";
 import { isTauri } from "@/lib/platform";
 
@@ -40,9 +41,10 @@ function watch<T>(
 }
 
 export const chatsApi = {
-    create: (cwd: string, config: ChatConfig): Promise<Chat> =>
+    /** With `worktree`, the chat works in a worktree of its own. */
+    create: (cwd: string, config: ChatConfig, worktree?: NewWorktree): Promise<Chat> =>
         isTauri
-            ? invoke<Chat>("create_chat", { cwd, config })
+            ? invoke<Chat>("create_chat", { cwd, config, worktree: worktree ?? null })
             : Promise.reject(new Error(NO_BACKEND)),
 
     /** A live run picks the new settings up from its next turn. */

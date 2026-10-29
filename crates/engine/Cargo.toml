@@ -6,6 +6,7 @@ license = "GPL-3.0-only"
 publish = false
 
 [dependencies]
+hive-git.workspace = true
 hive-harness.workspace = true
 hive-proto.workspace = true
 hive-store.workspace = true

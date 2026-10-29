@@ -5,6 +5,7 @@ import {
     useChatMessages,
     useChatsStore,
     useSession,
+    workDir,
     type TranscriptMessage
 } from "@/chats";
 import {
@@ -19,7 +20,7 @@ import {
     useCatalog,
     useCatalogs
 } from "@/harnesses";
-import { BranchPicker } from "@/git";
+import { BranchPicker, useGitRepo, WorkspaceChip, WorkspacePicker } from "@/git";
 import { useShortcut } from "@/keybindings";
 import type { ChatConfig, MessagePart } from "@/proto";
 import { Transcript } from "@/transcript";
@@ -51,6 +52,14 @@ export function ChatView() {
     const newChat = useComposerStore((s) => s.newChat);
     const setNewChat = useComposerStore((s) => s.setNewChat);
     const [needFolder, setNeedFolder] = useState(false);
+    // A new chat gets a worktree only in a checkout with a commit to start from.
+    const newRepo = useGitRepo(chat ? null : newChat.cwd)?.repo;
+    const worktreeMode = !chat && newChat.workspace === "worktree" && !!newRepo?.commit;
+    // A base deleted since it was picked falls back to the checked-out branch.
+    const base =
+        newChat.base && newRepo?.branches.some((b) => b.name === newChat.base)
+            ? newChat.base
+            : null;
 
     const visible = useCatalogs();
     const chatCatalog = useCatalog(chat?.config.harness);
@@ -98,7 +107,14 @@ export function ChatView() {
             setNeedFolder(true);
             return false;
         }
-        void chats.send({ cwd: newChat.cwd, config }, prompt);
+        void chats.send(
+            {
+                cwd: newChat.cwd,
+                config,
+                worktree: worktreeMode ? { base } : undefined
+            },
+            prompt
+        );
         return true;
     };
 
@@ -148,10 +164,33 @@ export function ChatView() {
                         locked={!!chat}
                         onChange={(cwd) => {
                             setNeedFolder(false);
-                            setNewChat({ cwd });
+                            // A base belongs to the folder it was picked in.
+                            setNewChat({ cwd, base: null });
                         }}
                     />
-                    <BranchPicker cwd={chat ? chat.cwd : newChat.cwd} />
+                    {chat ? (
+                        <>
+                            <BranchPicker cwd={workDir(chat)} />
+                            <WorkspaceChip chat={chat} />
+                        </>
+                    ) : (
+                        <>
+                            {worktreeMode ? (
+                                <BranchPicker
+                                    cwd={newChat.cwd}
+                                    base={base}
+                                    onBaseChange={(next) => setNewChat({ base: next })}
+                                />
+                            ) : (
+                                <BranchPicker cwd={newChat.cwd} />
+                            )}
+                            <WorkspacePicker
+                                cwd={newChat.cwd}
+                                value={newChat.workspace}
+                                onChange={(workspace) => setNewChat({ workspace })}
+                            />
+                        </>
+                    )}
                     {needFolder && !chat && !newChat.cwd && (
                         <span className="truncate text-xs text-warning">
                             Choose a folder for the agent to work in
@@ -184,7 +223,7 @@ export function ChatView() {
                 <Transcript
                     key={chatId ?? "new"}
                     messages={shown}
-                    cwd={chat?.cwd ?? newChat.cwd ?? undefined}
+                    cwd={chat ? workDir(chat) : (newChat.cwd ?? undefined)}
                     waiting={!!input}
                     error={error}
                     onRetry={retry}

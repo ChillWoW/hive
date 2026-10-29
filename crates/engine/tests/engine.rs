@@ -713,3 +713,82 @@ async fn chats_are_renamed_pinned_archived_seen_and_deleted() {
     .await;
     assert!(engine.delete_chat(&chat.id).is_err());
 }
+
+/// Runs git in `dir`; false when git isn't there or fails.
+fn git(dir: &std::path::Path, args: &[&str]) -> bool {
+    std::process::Command::new("git")
+        .args(args)
+        .current_dir(dir)
+        .output()
+        .is_ok_and(|o| o.status.success())
+}
+
+#[tokio::test]
+async fn a_worktree_chat_runs_in_its_worktree_and_takes_it_when_deleted() {
+    let project = tempfile::tempdir().unwrap();
+    let p = project.path();
+    std::fs::write(p.join("a.txt"), "a").unwrap();
+    let ready = git(p, &["init", "-q", "-b", "main"])
+        && git(p, &["config", "user.email", "hive@example.com"])
+        && git(p, &["config", "user.name", "Hive"])
+        && git(p, &["config", "commit.gpgsign", "false"])
+        && git(p, &["add", "."])
+        && git(p, &["commit", "-q", "-m", "first"]);
+    if !ready {
+        return; // No git here.
+    }
+    let data = tempfile::tempdir().unwrap();
+    let worktrees = tempfile::tempdir().unwrap();
+    let engine = engine_in(
+        &data,
+        0.0,
+        EngineConfig {
+            worktrees_dir: worktrees.path().to_path_buf(),
+            ..Default::default()
+        },
+    );
+    let cwd = p.to_string_lossy().into_owned();
+    let chat = engine
+        .create_chat_in_worktree(
+            cwd.clone(),
+            config(HarnessId::Mock),
+            hive_proto::NewWorktree {
+                base: Some("main".into()),
+                hint: Some("Add a README".into()),
+            },
+        )
+        .await
+        .unwrap();
+    let worktree = chat.worktree.clone().unwrap();
+    assert_eq!(chat.cwd, cwd, "the project stays the chat's folder");
+    assert_eq!(worktree.branch, "hive/add-a-readme");
+    assert_eq!(chat.work_dir(), worktree.path);
+
+    // Gone by hand: the next turn brings it back, and runs there.
+    std::fs::remove_dir_all(&worktree.root).unwrap();
+    let mut updates = watch_messages(&engine, &chat.id);
+    let sent = engine.queue_command(&chat.id, send("hello")).unwrap();
+    assert_eq!(sent.status, CommandStatus::Applied);
+    // The mock turn stops at its question; it has started by then.
+    let seen = until(&mut updates, is_input).await;
+    let ran_in = seen.iter().find_map(|u| match u {
+        MessagesUpdate::Event {
+            event: AgentEvent::SessionStarted { cwd, .. },
+            ..
+        } => Some(cwd.clone()),
+        _ => None,
+    });
+    assert_eq!(ran_in.as_deref(), Some(worktree.path.as_str()));
+    assert!(std::path::Path::new(&worktree.root).join(".git").exists());
+
+    engine.delete_chat(&chat.id).unwrap();
+    timeout(WAIT, async {
+        while std::path::Path::new(&worktree.root).exists() {
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+    })
+    .await
+    .expect("the worktree is removed");
+    // Its branch is kept.
+    assert!(git(p, &["show-ref", "--verify", "--quiet", "refs/heads/hive/add-a-readme"]));
+}

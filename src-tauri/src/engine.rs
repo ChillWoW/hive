@@ -8,6 +8,7 @@ use std::sync::Mutex;
 use hive_engine::{Engine, WatchId};
 use hive_proto::{
     Chat, ChatConfig, ChatsUpdate, Command, CommandPayload, HarnessCatalog, MessagesUpdate,
+    NewWorktree,
 };
 use tauri::ipc::Channel;
 use tauri::{State, Webview};
@@ -41,13 +42,20 @@ impl Watches {
     }
 }
 
+/// With `worktree`, the chat gets a worktree of its own in `cwd`'s
+/// repository to work in.
 #[tauri::command]
 pub async fn create_chat(
     engine: State<'_, Engine>,
     cwd: String,
     config: ChatConfig,
+    worktree: Option<NewWorktree>,
 ) -> Result<Chat, String> {
-    engine.create_chat(cwd, config).map_err(|e| e.to_string())
+    match worktree {
+        Some(worktree) => engine.create_chat_in_worktree(cwd, config, worktree).await,
+        None => engine.create_chat(cwd, config),
+    }
+    .map_err(|e| e.to_string())
 }
 
 #[tauri::command]

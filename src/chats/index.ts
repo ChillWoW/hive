@@ -8,6 +8,7 @@ export {
     useChatMessages,
     useChatsStore,
     useSession,
+    workDir,
     type Delivery,
     type Outgoing,
     type SendTarget,

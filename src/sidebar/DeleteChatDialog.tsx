@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { chats, useSession } from "@/chats";
+import { useGitRepo } from "@/git";
 import type { Chat } from "@/proto";
 import { Button, Modal } from "@/ui";
 import { UNTITLED } from "./ChatRow";
@@ -18,6 +19,8 @@ export function DeleteChatDialog({
         if (chat) setShown(chat);
     }, [chat]);
     const running = useSession(shown?.id ?? null) !== undefined;
+    const worktree = shown?.worktree;
+    const changes = useGitRepo(worktree?.path)?.repo?.changes ?? 0;
     const [error, setError] = useState<string | null>(null);
     const [busy, setBusy] = useState(false);
 
@@ -50,6 +53,22 @@ export function DeleteChatDialog({
                 and its transcript will be deleted.
                 {running && " Its agent will be stopped."} This can't be undone.
             </p>
+            {worktree && (
+                <p className="mt-2">
+                    Its worktree is removed too; the branch{" "}
+                    <span className="font-medium break-all text-dark-50">{worktree.branch}</span>{" "}
+                    is kept.
+                    {changes > 0 && (
+                        <span className="text-warning">
+                            {" "}
+                            {changes === 1
+                                ? "1 file with uncommitted changes"
+                                : `${changes} files with uncommitted changes`}{" "}
+                            in it will be lost.
+                        </span>
+                    )}
+                </p>
+            )}
             {error && <p className="mt-2 text-xs text-danger">{error}</p>}
             <div className="mt-4 flex justify-end gap-2">
                 <Modal.Close render={<Button size="sm" variant="ghost" />}>

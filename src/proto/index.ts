@@ -25,6 +25,7 @@ export type { MessagesUpdate } from "./MessagesUpdate";
 export type { Model } from "./Model";
 export type { ModelOption } from "./ModelOption";
 export type { ModelOptionChoice } from "./ModelOptionChoice";
+export type { NewWorktree } from "./NewWorktree";
 export type { NotificationsSettings } from "./NotificationsSettings";
 export type { ProviderAccount } from "./ProviderAccount";
 export type { ProviderStatus } from "./ProviderStatus";
@@ -46,6 +47,7 @@ export type { ToolCall } from "./ToolCall";
 export type { ToolDiff } from "./ToolDiff";
 export type { UserInputAnswer } from "./UserInputAnswer";
 export type { UserInputQuestion } from "./UserInputQuestion";
+export type { Worktree } from "./Worktree";
 export type { JsonValue } from "./serde_json/JsonValue";
 
 export { DEFAULT_SETTINGS } from "./defaults";

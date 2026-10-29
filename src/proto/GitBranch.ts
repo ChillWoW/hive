@@ -26,6 +26,11 @@ behind: number,
  */
 committedAt?: number, 
 /**
+ * The other worktree it's checked out in, which keeps it from being
+ * checked out or deleted here.
+ */
+worktree?: string, 
+/**
  * Its last commit's subject line.
  */
 subject?: string, };

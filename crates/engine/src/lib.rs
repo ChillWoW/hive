@@ -19,6 +19,7 @@
 //! [`Run`]: hive_harness::Run
 
 use std::collections::{HashMap, HashSet, VecDeque};
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
@@ -27,7 +28,7 @@ use hive_harness::{Harness, RunHandle};
 use hive_proto::{
     AgentEvent, Chat, ChatConfig, ChatsUpdate, Command, CommandPayload, CommandStatus,
     ContextUsage, DoneStatus, HarnessCatalog, HarnessId, MessageStatus, MessagesUpdate,
-    RunRequest, Session, SessionStatus, SlashCommand, UserInputAnswer,
+    NewWorktree, RunRequest, Session, SessionStatus, SlashCommand, UserInputAnswer,
 };
 use hive_store::{new_id, now_ms, Recovery, Store, StoreError, Turn};
 use tokio::sync::mpsc;
@@ -50,6 +51,8 @@ pub struct EngineConfig {
     /// Name untitled chats with a title run; off, the first prompt's opening
     /// words name them. Changed live with [`Engine::set_auto_title`].
     pub auto_title: bool,
+    /// Where chats' worktrees go, a folder each.
+    pub worktrees_dir: PathBuf,
 }
 
 impl Default for EngineConfig {
@@ -58,6 +61,7 @@ impl Default for EngineConfig {
             idle_timeout: Duration::from_secs(10 * 60),
             resume_interrupted: false,
             auto_title: true,
+            worktrees_dir: std::env::temp_dir().join("hive-worktrees"),
         }
     }
 }
@@ -70,6 +74,8 @@ pub enum EngineError {
     ChatNotFound(String),
     #[error("That prompt is no longer queued.")]
     NotQueued,
+    #[error(transparent)]
+    Git(#[from] hive_git::GitError),
 }
 
 pub type Result<T> = std::result::Result<T, EngineError>;
@@ -260,6 +266,49 @@ impl Engine {
         Ok(chat)
     }
 
+    /// A chat in a worktree of its own: a new branch off `worktree.base`,
+    /// checked out under [`EngineConfig::worktrees_dir`]. The chat keeps
+    /// `cwd` as its project; its agent runs in the worktree.
+    pub async fn create_chat_in_worktree(
+        &self,
+        cwd: impl Into<String>,
+        config: ChatConfig,
+        worktree: NewWorktree,
+    ) -> Result<Chat> {
+        let cwd = cwd.into();
+        // Short, since the path shows in every tool call.
+        let key: String = new_id()
+            .chars()
+            .filter(char::is_ascii_alphanumeric)
+            .take(8)
+            .collect();
+        let dir = self.inner.config.worktrees_dir.join(key);
+        let made = hive_git::add_worktree(
+            Path::new(&cwd),
+            &dir,
+            worktree.base.as_deref(),
+            worktree.hint.as_deref().unwrap_or_default(),
+        )
+        .await?;
+        let saved = self.store().create_chat(cwd.clone(), config).and_then(|mut chat| {
+            chat.worktree = Some(made.clone());
+            self.store().save_chat(&chat)?;
+            Ok(chat)
+        });
+        let chat = match saved {
+            Ok(chat) => chat,
+            Err(e) => {
+                let _ = hive_git::remove_worktree(Path::new(&cwd), &made).await;
+                return Err(e.into());
+            }
+        };
+        publish(
+            &mut lock(&self.inner.list).watchers,
+            ChatsUpdate::Chat { chat: chat.clone() },
+        );
+        Ok(chat)
+    }
+
     /// Most recently active first.
     pub fn chats(&self) -> Result<Vec<Chat>> {
         Ok(self.store().chats()?)
@@ -351,11 +400,12 @@ impl Engine {
     }
 
     /// Deletes the chat with its transcript, journal and commands, closing
-    /// its run first.
+    /// its run first. Its worktree is removed in the background, once the
+    /// run has let go of it; the worktree's branch is kept.
     pub fn delete_chat(&self, chat_id: &str) -> Result<()> {
         let runtime = self.runtime_for(chat_id);
         let mut st = lock(&runtime.state);
-        self.chat(chat_id)?;
+        let chat = self.chat(chat_id)?;
         self.end_run(chat_id, &mut st);
         st.turn = None;
         st.queued.clear();
@@ -369,6 +419,13 @@ impl Engine {
                 chat_id: chat_id.to_owned(),
             },
         );
+        if let Some(worktree) = chat.worktree {
+            self.inner.runtime.spawn(async move {
+                if let Err(e) = hive_git::remove_worktree(Path::new(&chat.cwd), &worktree).await {
+                    log::warn!("removing worktree {}: {e}", worktree.root);
+                }
+            });
+        }
         Ok(())
     }
 
@@ -671,11 +728,23 @@ impl Engine {
                 chat.config.harness
             )));
         };
+        // Its folder may have been deleted since; bring it back first.
+        if let Some(worktree) = &chat.worktree {
+            match hive_git::restore_worktree(Path::new(&chat.cwd), worktree) {
+                Ok(true) => log::info!("restored worktree {}", worktree.root),
+                Ok(false) => {}
+                Err(e) => {
+                    return Ok(Outcome::Rejected(format!(
+                        "The chat's worktree is missing and couldn't be restored: {e}"
+                    )))
+                }
+            }
+        }
         let config = &chat.config;
         let request = RunRequest {
             harness: config.harness,
             prompt: prompt.clone(),
-            cwd: chat.cwd.clone(),
+            cwd: chat.work_dir().to_owned(),
             sandbox: config.sandbox,
             model: config.model.clone(),
             reasoning: config.reasoning,

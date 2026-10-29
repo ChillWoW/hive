@@ -93,6 +93,7 @@ pub fn run() {
       let config = EngineConfig {
         resume_interrupted: chats.resume_interrupted,
         auto_title: chats.auto_title,
+        worktrees_dir: data_dir.join("worktrees"),
         ..EngineConfig::default()
       };
       app.manage(settings);

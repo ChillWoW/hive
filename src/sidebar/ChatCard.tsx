@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
-import { GitBranchIcon } from "@phosphor-icons/react";
-import { activity } from "@/chats";
+import { GitBranchIcon, GitForkIcon } from "@phosphor-icons/react";
+import { activity, workDir } from "@/chats";
 import { folderName } from "@/composer";
 import { ProjectIcon } from "@/composer/ProjectIcon";
 import { useGitRepo } from "@/git";
@@ -41,8 +41,10 @@ export function ChatCard({
     const model = resolveModel(catalog, chat.config);
     const reasoning = resolveReasoning(model, chat.config);
     const status = statusOf(chat, session);
-    const repo = useGitRepo(chat.cwd)?.repo;
-    const branch = repo ? (repo.branch ?? repo.commit) : undefined;
+    const worktree = chat.worktree;
+    const repo = useGitRepo(workDir(chat))?.repo;
+    // A worktree's own branch even while its folder can't be read.
+    const branch = repo ? (repo.branch ?? repo.commit) : worktree?.branch;
     const context = chat.context;
     const used =
         context?.tokens != null && context.window
@@ -63,9 +65,19 @@ export function ChatCard({
                     <span className="text-dark-100">{folderName(chat.cwd)}</span>
                 </Meta>
                 {branch && (
-                    <Meta icon={<GitBranchIcon className="size-3.5 text-dark-200" />}>
+                    <Meta
+                        icon={
+                            worktree ? (
+                                <GitForkIcon className="size-3.5 text-dark-200" />
+                            ) : (
+                                <GitBranchIcon className="size-3.5 text-dark-200" />
+                            )
+                        }
+                    >
                         <span className="text-dark-100">{branch}</span>
-                        {!repo?.branch && <span className="text-dark-250"> · detached</span>}
+                        {!worktree && !repo?.branch && (
+                            <span className="text-dark-250"> · detached</span>
+                        )}
                     </Meta>
                 )}
                 <Meta icon={<HarnessIcon harness={chat.config.harness} className="size-3.5" />}>

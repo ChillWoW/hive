@@ -14,11 +14,12 @@ const fake = {
     branches: [
         { name: "main", subject: "feat: providers settings page", age: 2 },
         { name: "feat/git-branches", subject: "wip: branch picker", age: 0.2 },
-        { name: "fix/sidebar-scroll", subject: "fix: keep the open chat in view", age: 30 }
+        { name: "fix/sidebar-scroll", subject: "fix: keep the open chat in view", age: 30 },
+        { name: "hive/add-dark-mode", subject: "feat: dark mode toggle", age: 5 }
     ]
 };
 
-function fakeRepo(): GitRepo {
+function fakeRepo(cwd: string): GitRepo {
     const now = Date.now();
     const branches: GitBranch[] = fake.branches
         .map((b) => ({
@@ -29,10 +30,11 @@ function fakeRepo(): GitRepo {
             ahead: 0,
             behind: 0,
             committedAt: now - b.age * HOUR,
-            subject: b.subject
+            subject: b.subject,
+            worktree: b.name.startsWith("hive/") ? "~/hive/worktrees/x/repo" : undefined
         }))
         .sort((a, b) => (b.committedAt ?? 0) - (a.committedAt ?? 0));
-    return { branch: fake.current, commit: "5c93f90", branches };
+    return { root: cwd, branch: fake.current, commit: "5c93f90", changes: 2, branches };
 }
 
 function fakeChange(change: () => void): Promise<void> {
@@ -46,7 +48,7 @@ function fakeChange(change: () => void): Promise<void> {
 
 export const gitApi = {
     repo: (cwd: string): Promise<GitRepo | null> =>
-        isTauri ? invoke("git_repo", { cwd }) : Promise.resolve(fakeRepo()),
+        isTauri ? invoke("git_repo", { cwd }) : Promise.resolve(fakeRepo(cwd)),
     switchBranch: (cwd: string, name: string): Promise<void> =>
         isTauri
             ? invoke("git_switch_branch", { cwd, name })
