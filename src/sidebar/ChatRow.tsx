@@ -152,7 +152,6 @@ export function ChatRow({
             </ContextMenu>
             <Tooltip.Content
                 side="right"
-                align="start"
                 sideOffset={10}
                 collisionPadding={12}
                 className="w-[284px] max-w-none p-3 font-normal"

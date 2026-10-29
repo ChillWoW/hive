@@ -51,7 +51,7 @@ export function FolderPicker({
                         </span>
                     }
                 />
-                <Tooltip.Content side="top" align="start">
+                <Tooltip.Content side="top">
                     {cwd}
                 </Tooltip.Content>
             </Tooltip>
@@ -133,7 +133,7 @@ function FolderCombobox({
                         </Combobox.Trigger>
                     }
                 />
-                <Tooltip.Content side="top" align="start">
+                <Tooltip.Content side="top">
                     {cwd}
                 </Tooltip.Content>
             </Tooltip>

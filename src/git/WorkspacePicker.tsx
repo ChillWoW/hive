@@ -67,7 +67,7 @@ export function WorkspacePicker({
                         </Menu.Trigger>
                     }
                 />
-                <Tooltip.Content side="top" align="start">
+                <Tooltip.Content side="top">
                     Where the agent works
                 </Tooltip.Content>
             </Tooltip>
@@ -156,7 +156,7 @@ export function WorkspaceChip({ chat }: { chat: Chat }) {
                         </Menu.Trigger>
                     }
                 />
-                <Tooltip.Content side="top" align="start">
+                <Tooltip.Content side="top">
                     Where the agent works
                 </Tooltip.Content>
             </Tooltip>

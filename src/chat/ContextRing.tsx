@@ -67,7 +67,7 @@ export function ContextRing({ usage }: { usage: ContextUsage | undefined }) {
                     </span>
                 }
             />
-            <Tooltip.Content side="top" align="end">
+            <Tooltip.Content side="top">
                 <span className="tabular-nums">
                     {tokens != null
                         ? `${count(tokens)} / ${count(capacity)} tokens`

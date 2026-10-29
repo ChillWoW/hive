@@ -170,7 +170,7 @@ function BranchCombobox({
                             </Combobox.Trigger>
                         }
                     />
-                    <Tooltip.Content side="top" align="start">
+                    <Tooltip.Content side="top">
                         {baseMode
                             ? "Branch the worktree starts from"
                             : repo.branch
