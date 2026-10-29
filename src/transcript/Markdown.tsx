@@ -15,6 +15,8 @@ const plugins = {
     })
 };
 
+const CONTROLS = { code: { copy: true, download: false }, table: false } as const;
+
 /** A link would navigate the webview itself away; the system browser opens it instead. */
 function openLinksExternally(event: MouseEvent) {
     if (!isTauri) return;
@@ -49,6 +51,10 @@ export function Markdown({
                 caret="block"
                 // Links already leave for the system browser.
                 linkSafety={{ enabled: false }}
+                // As zeron: code gets a copy button only, no line numbers;
+                // tables no toolbar (see the `.markdown` rules).
+                controls={CONTROLS}
+                lineNumbers={false}
             >
                 {children}
             </Streamdown>

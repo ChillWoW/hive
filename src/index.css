@@ -203,19 +203,129 @@
     border-radius: 0.25rem;
 }
 
-.markdown [data-streamdown="code-block"],
-.markdown [data-streamdown="table-wrapper"] {
-    border-radius: 0.375rem;
+/* Code blocks as zeron draws them: one rounded frame (faint fill, hairline
+   border), a 28px header with the language and the copy button, then the
+   code at 12.5/18 — no inner panel, no line numbers. */
+.markdown [data-streamdown="code-block"] {
+    gap: 0;
+    padding: 0;
+    margin: 0.75rem 0;
+    border: 1px solid var(--color-dark-600);
+    border-radius: var(--radius-md);
+    background: rgb(255 255 255 / 0.035);
+    overflow: hidden;
+}
+
+.markdown [data-streamdown="code-block-header"] {
+    height: 28px;
+    padding: 0 5px 0 12px;
+    border-bottom: 1px solid var(--color-dark-600);
+    background: rgb(255 255 255 / 0.02);
+    font-size: 11px;
+    color: var(--color-dark-200);
+}
+
+.markdown [data-streamdown="code-block-header"] > span {
+    margin: 0;
+    font-family: inherit;
+}
+
+/* The copy button sits in the header's right end. */
+.markdown [data-streamdown="code-block-actions"] {
+    gap: 2px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    backdrop-filter: none;
+}
+
+.markdown [data-streamdown="code-block-actions"]:has(> *) {
+    margin: -5px -3px 0 0;
+}
+
+.markdown [data-streamdown="code-block-copy-button"] {
+    display: flex;
+    width: 22px;
+    height: 22px;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border-radius: 6px;
+    color: var(--color-dark-200);
+    transition: background-color 150ms, color 150ms;
+}
+
+.markdown [data-streamdown="code-block-copy-button"]:hover {
+    background: rgb(255 255 255 / 0.08);
+    color: var(--color-dark-50);
+}
+
+.markdown [data-streamdown="code-block-copy-button"] svg {
+    width: 13px;
+    height: 13px;
 }
 
 .markdown [data-streamdown="code-block-body"] {
-    font-size: 0.8125rem;
-    line-height: 1.35rem;
+    padding: 10px 12px;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    font-size: 12.5px;
+    line-height: 18px;
 }
 
-/* The Shiki theme brings its own background; the block's panel is the app's. */
+/* The Shiki theme brings its own background; the block's frame is the app's. */
 .markdown [data-streamdown="code-block-body"] pre {
     background: transparent;
+}
+
+/* Tables as zeron draws them: frameless, a hairline under the header and
+   between rows the only rules, 12px cells, a bold header; wide ones scroll. */
+.markdown [data-streamdown="table-wrapper"] {
+    gap: 0;
+    padding: 0;
+    margin: 0.75rem 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+}
+
+.markdown [data-streamdown="table-wrapper"] > div {
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+}
+
+.markdown [data-streamdown="table"],
+.markdown [data-streamdown="table"] > *,
+.markdown [data-streamdown="table-body"] > * {
+    border-width: 0;
+}
+
+.markdown [data-streamdown="table-header"] {
+    background: transparent;
+}
+
+.markdown [data-streamdown="table-header"] > tr,
+.markdown [data-streamdown="table-body"] > tr:not(:last-child) {
+    border-bottom: 1px solid rgb(255 255 255 / 0.1);
+}
+
+.markdown [data-streamdown="table-header-cell"],
+.markdown [data-streamdown="table-cell"] {
+    padding: 12px;
+    font-size: inherit;
+    line-height: inherit;
+    vertical-align: top;
+    /* Not `anywhere` (nor `break-word`, which Chrome sizes table columns by
+       the same way): a column keeps its longest word; past that the table scrolls. */
+    overflow-wrap: normal;
+}
+
+.markdown [data-streamdown="table-header-cell"] {
+    white-space: normal;
+    font-weight: 700;
+    color: var(--color-dark-50);
 }
 
 /* Streamdown's streaming caret is an `::after` on the last block. */
