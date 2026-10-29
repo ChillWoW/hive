@@ -98,7 +98,10 @@ export function TopBar({ title, harness, className }: TopBarProps) {
                                     aria-label="Toggle sidebar"
                                     className="p-0 size-6"
                                 >
-                                    <SidebarSimpleIcon className="size-4" />
+                                    <SidebarSimpleIcon
+                                        weight={open ? "fill" : "regular"}
+                                        className="size-4"
+                                    />
                                 </Button>
                             }
                         />
