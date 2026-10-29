@@ -1,4 +1,5 @@
 import { usePanelLayout, useLayoutStore } from "@/stores/useLayoutStore";
+import { FilesPanel } from "@/files";
 import { SidePanel } from "./SidePanel";
 
 /** The right sidebar, then the file panel at the window's edge. */
@@ -24,7 +25,9 @@ export function RightPanels() {
                 onResize={(width) =>
                     setFilesWidth(Math.min(width, layout.filesMax))
                 }
-            />
+            >
+                <FilesPanel />
+            </SidePanel>
         </>
     );
 }
