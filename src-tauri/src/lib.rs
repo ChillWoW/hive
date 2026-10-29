@@ -7,6 +7,7 @@ mod git;
 mod providers;
 mod settings;
 mod terminals;
+mod updater;
 
 use std::sync::Arc;
 
@@ -35,6 +36,8 @@ pub fn run() {
     .plugin(tauri_plugin_opener::init())
     // Turns that finish or ask something while the window is in the background.
     .plugin(tauri_plugin_notification::init())
+    // Updates from GitHub Releases, installed when the user asks.
+    .plugin(tauri_plugin_updater::Builder::new().build())
     .invoke_handler(tauri::generate_handler![
       attachments::save_attachment,
       attachments::attachment_bytes,
@@ -87,6 +90,8 @@ pub fn run() {
       terminals::terminal_write,
       terminals::terminal_resize,
       terminals::terminal_kill,
+      updater::update_check,
+      updater::update_install,
     ])
     // A reload takes the page's channels (and so its terminals) with it.
     .on_page_load(|webview, payload| {
@@ -145,6 +150,7 @@ pub fn run() {
       app.manage(engine::Watches::default());
       app.manage(providers::SignIns::default());
       app.manage(terminals::Terminals::default());
+      app.manage(updater::Updates::default());
       Ok(())
     })
     .run(tauri::generate_context!())

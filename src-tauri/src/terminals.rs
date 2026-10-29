@@ -49,6 +49,13 @@ impl Terminals {
             }
         }
     }
+
+    /// Kills every terminal.
+    pub fn kill_all(&self) {
+        for session in self.sessions.lock().unwrap().values_mut() {
+            let _ = session.killer.kill();
+        }
+    }
 }
 
 #[derive(Serialize)]

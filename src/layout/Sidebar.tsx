@@ -1,6 +1,7 @@
 import { SettingsButton } from "@/settings";
 import { ChatList } from "@/sidebar";
 import { SIDEBAR_WIDTH, usePanelLayout } from "@/stores/useLayoutStore";
+import { UpdateButton } from "@/updater";
 
 export function Sidebar() {
     const open = usePanelLayout().visible.sidebar;
@@ -21,7 +22,8 @@ export function Sidebar() {
                 >
                     <ChatList />
                 </nav>
-                <div className="flex h-11 shrink-0 items-center px-2">
+                <div className="flex min-h-11 shrink-0 flex-col justify-center gap-1 px-2 py-1.5">
+                    <UpdateButton />
                     <SettingsButton />
                 </div>
             </div>

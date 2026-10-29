@@ -27,8 +27,20 @@
             "csp": null
         }
     },
+    "plugins": {
+        "updater": {
+            "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IERBMzM1N0M4RDY5Njg3QzYKUldUR2g1Yld5RmN6Mm1tYmExckxUUmNkdmRaYm14ZUt6MjVnZDdDelBRekZRZVdKOGFoTVhvYlUK",
+            "endpoints": [
+                "https://github.com/ChillWoW/hive/releases/latest/download/latest.json"
+            ],
+            "windows": {
+                "installMode": "passive"
+            }
+        }
+    },
     "bundle": {
         "active": true,
+        "createUpdaterArtifacts": true,
         "targets": ["app", "dmg", "nsis"],
         "icon": [
             "icons/prod/32x32.png",

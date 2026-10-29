@@ -1,0 +1,42 @@
+# Builds Hive for a pushed `v*` tag (`bun run release <version>`) and
+# publishes it as a GitHub release, with the signed installer and the
+# `latest.json` the in-app updater reads.
+#
+# Secrets: TAURI_SIGNING_PRIVATE_KEY, TAURI_SIGNING_PRIVATE_KEY_PASSWORD.
+
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: swatinem/rust-cache@v2
+
+      - run: bun install --frozen-lockfile
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          tauriScript: bunx tauri
+          args: --bundles nsis
+          tagName: ${{ github.ref_name }}
+          releaseName: Hive ${{ github.ref_name }}
+          releaseBody: ""
+          releaseDraft: false
+          prerelease: false

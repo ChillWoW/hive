@@ -712,6 +712,45 @@ async fn start_resumes_a_turn_cut_short_by_exit() {
 }
 
 #[tokio::test]
+async fn shutdown_stops_runs_and_leaves_turns_to_resume() {
+    let dir = tempfile::tempdir().unwrap();
+    let chat_id = {
+        let engine = engine_in(&dir, 1.0, EngineConfig::default());
+        let chat = engine
+            .create_chat("/demo", config(HarnessId::Mock))
+            .unwrap();
+        let mut updates = watch_messages(&engine, &chat.id);
+        let mut chats = watch_chats(&engine);
+        engine.queue_command(&chat.id, send("hi")).unwrap();
+        until(&mut updates, |u| matches!(u, MessagesUpdate::Event { .. })).await;
+
+        timeout(WAIT, engine.shutdown(WAIT))
+            .await
+            .expect("shutdown waits for the agents");
+        until(&mut chats, |u| {
+            matches!(u, ChatsUpdate::Session { session: None, .. })
+        })
+        .await;
+        let reply = &engine.store().messages(&chat.id).unwrap()[1];
+        assert_eq!(reply.status, Some(MessageStatus::Streaming));
+        chat.id
+    };
+
+    let engine = engine_in(
+        &dir,
+        0.0,
+        EngineConfig {
+            resume_interrupted: true,
+            ..Default::default()
+        },
+    );
+    let recovery = engine.start().unwrap();
+    assert_eq!(recovery.aborted_messages.len(), 1);
+    let messages = engine.store().messages(&chat_id).unwrap();
+    assert_eq!(messages[1].status, Some(MessageStatus::Aborted));
+}
+
+#[tokio::test]
 async fn catalogs_list_registered_harnesses() {
     let (_dir, engine) = engine(0.0);
     let catalogs = engine.catalogs();

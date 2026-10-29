@@ -37,7 +37,7 @@ use hive_proto::{
     TaskOutput, UserInputAnswer,
 };
 use hive_store::{new_id, now_ms, Recovery, Store, StoreError, Turn};
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, watch};
 
 mod titles;
 
@@ -131,6 +131,24 @@ struct Inner {
     titling: Mutex<HashSet<String>>,
     /// Starts as `config.auto_title`; follows the setting.
     auto_title: AtomicBool,
+    /// How many runs' event loops are still going.
+    pumps: Arc<watch::Sender<usize>>,
+}
+
+/// Held by a run's event loop; counts it in [`Inner::pumps`].
+struct Pumping(Arc<watch::Sender<usize>>);
+
+impl Pumping {
+    fn new(pumps: &Arc<watch::Sender<usize>>) -> Self {
+        pumps.send_modify(|n| *n += 1);
+        Self(pumps.clone())
+    }
+}
+
+impl Drop for Pumping {
+    fn drop(&mut self) {
+        self.0.send_modify(|n| *n -= 1);
+    }
 }
 
 #[derive(Default)]
@@ -250,6 +268,7 @@ impl Engine {
                 list: Mutex::default(),
                 next_id: AtomicU64::new(1),
                 titling: Mutex::default(),
+                pumps: Arc::new(watch::channel(0).0),
             }),
         }
     }
@@ -303,6 +322,33 @@ impl Engine {
             }
         }
         Ok(recovery)
+    }
+
+    /// Stops every live run (turns interrupted, background tasks ended) and
+    /// waits up to `grace` for the agents to exit. For when Hive is about to
+    /// quit without running destructors (an update). Their turns stay
+    /// unfinished in the store, so the next [`Engine::start`] recovers and,
+    /// if configured, resumes them.
+    pub async fn shutdown(&self, grace: Duration) {
+        let chats: Vec<_> = lock(&self.inner.chats)
+            .iter()
+            .map(|(id, runtime)| (id.clone(), runtime.clone()))
+            .collect();
+        for (chat_id, runtime) in chats {
+            let mut st = lock(&runtime.state);
+            if let Some(run) = &st.run {
+                // `close` alone lets the turn finish first.
+                run.handle.interrupt();
+            }
+            self.end_run(&chat_id, &mut st);
+        }
+        let mut pumps = self.inner.pumps.subscribe();
+        if tokio::time::timeout(grace, pumps.wait_for(|n| *n == 0))
+            .await
+            .is_err()
+        {
+            log::warn!("{} agents still running at shutdown", *pumps.borrow());
+        }
     }
 
     // Chats
@@ -879,12 +925,15 @@ impl Engine {
             inputs: HashSet::new(),
             activity: 0,
         });
-        self.inner.runtime.spawn(self.clone().pump(
-            chat.id.clone(),
-            runtime.clone(),
-            id,
-            run.events,
-        ));
+        // Counted before it's spawned, so `shutdown` can't miss it.
+        let pumping = Pumping::new(&self.inner.pumps);
+        let pump = self
+            .clone()
+            .pump(chat.id.clone(), runtime.clone(), id, run.events);
+        self.inner.runtime.spawn(async move {
+            let _pumping = pumping;
+            pump.await;
+        });
         self.set_status(&chat.id, st, SessionStatus::Working);
         Ok(Outcome::Applied)
     }
