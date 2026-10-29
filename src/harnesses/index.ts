@@ -6,7 +6,10 @@ export {
 } from "./labels";
 export {
     fitConfig,
+    hasFastMode,
     isEnabled,
+    isFastMode,
+    withFastMode,
     providerKey,
     refreshCatalogs,
     resolveAccess,

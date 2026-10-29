@@ -2,19 +2,23 @@ import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
     CaretRightIcon,
     CheckIcon,
+    LightningIcon,
     MagnifyingGlassIcon,
     StarIcon
 } from "@phosphor-icons/react";
-import type { ChatConfig, HarnessCatalog, Model, ReasoningLevel } from "@/proto";
+import type { ChatConfig, HarnessCatalog, Model } from "@/proto";
 import {
     fitConfig,
+    hasFastMode,
     HarnessIcon,
+    isFastMode,
     REASONING_LABELS,
     refreshCatalogs,
     resolveModel,
     resolveReasoning,
     useCatalog,
-    useCatalogs
+    useCatalogs,
+    withFastMode
 } from "@/harnesses";
 import { cn } from "@/lib/cn";
 import { settings } from "@/settings/store";
@@ -50,7 +54,8 @@ function matches(row: Row, query: string) {
  *
  * The card lists models under provider tabs (starred models first), with a
  * search above and a Reasoning row below, which opens the picked model's
- * levels in a card beside it. A model's effort defaults to High (else Medium,
+ * levels in a card beside it; models with fast mode (Opus) get a Fast mode
+ * row above it that opens On / Off the same way; while it's on, a bolt replaces the chip's harness mark. A model's effort defaults to High (else Medium,
  * else its first level); there is no "let the CLI decide". Picking a model
  * keeps the card open so its effort can be set next. A chat
  * already started is `locked` to its harness and lists only its models; a
@@ -69,9 +74,10 @@ export function ModelPicker({
     const current = useCatalog(config.harness);
     const model = resolveModel(current, config);
     const reasoning = resolveReasoning(model, config);
+    const fast = isFastMode(model, config);
     const container = usePortalContainer();
     const [open, setOpen] = useState(false);
-    const [effortOpen, setEffortOpen] = useState(false);
+    const [side, setSide] = useState<Side | null>(null);
 
     if (!current || !model) {
         return (
@@ -89,14 +95,23 @@ export function ModelPicker({
             onOpenChange={(next) => {
                 setOpen(next);
                 if (next) void refreshCatalogs();
-                else setEffortOpen(false);
+                else setSide(null);
             }}
         >
             <Popover.Trigger
                 aria-label={`Model: ${model.label}`}
                 className={cn(pickerTriggerClassName, "gap-1.5")}
             >
-                <HarnessIcon harness={current.id} className="size-3.5 shrink-0" />
+                {/* Fast mode takes the harness mark's place. */}
+                {fast ? (
+                    <LightningIcon
+                        weight="fill"
+                        aria-label="Fast mode"
+                        className="size-3.5 shrink-0"
+                    />
+                ) : (
+                    <HarnessIcon harness={current.id} className="size-3.5 shrink-0" />
+                )}
                 <span className="truncate">{model.label}</span>
                 {reasoning && (
                     // Yields first under pressure, so the model name truncates last.
@@ -125,19 +140,36 @@ export function ModelPicker({
                             current={current}
                             model={model}
                             onChange={onChange}
-                            effortOpen={effortOpen}
-                            onToggleEffort={() => setEffortOpen((o) => !o)}
+                            side={side}
+                            onToggleSide={(next) => setSide((s) => (s === next ? null : next))}
                         />
                     </Popover.Popup>
-                    {/* A sibling of the popup, which clips its overflow; the
-                        positioner is what it's placed against. */}
-                    {effortOpen && model.reasoningLevels.length > 0 && (
-                        <EffortCard
-                            levels={model.reasoningLevels}
+                    {/* Siblings of the popup, which clips its overflow; the
+                        positioner is what they're placed against. */}
+                    {side === "fast" && hasFastMode(model) && (
+                        <SideCard
+                            label="Fast mode"
+                            options={FAST_CHOICES}
+                            value={fast ? "on" : "off"}
+                            // Level with the Fast mode row, one above Reasoning.
+                            lift={model.reasoningLevels.length > 0}
+                            onSelect={(choice) => {
+                                onChange(withFastMode(config, choice === "on"));
+                                setSide(null);
+                            }}
+                        />
+                    )}
+                    {side === "effort" && model.reasoningLevels.length > 0 && (
+                        <SideCard
+                            label="Reasoning effort"
+                            // Highest first, so the list reads the way the effort grows.
+                            options={[...model.reasoningLevels]
+                                .reverse()
+                                .map((level) => ({ id: level, label: REASONING_LABELS[level] }))}
                             value={reasoning}
                             onSelect={(reasoning) => {
                                 onChange({ ...config, reasoning });
-                                setEffortOpen(false);
+                                setSide(null);
                             }}
                         />
                     )}
@@ -149,24 +181,33 @@ export function ModelPicker({
 
 const SEARCH_ID = "model-picker-search";
 
+/** The footer row whose card is open beside the picker. */
+type Side = "fast" | "effort";
+
+const FAST_CHOICES = [
+    { id: "on", label: "On" },
+    { id: "off", label: "Off" }
+] as const;
+
 function ModelCard({
     catalogs,
     config,
     current,
     model,
     onChange,
-    effortOpen,
-    onToggleEffort
+    side,
+    onToggleSide
 }: {
     catalogs: HarnessCatalog[];
     config: ChatConfig;
     current: HarnessCatalog;
     model: Model;
     onChange: (config: ChatConfig) => void;
-    effortOpen: boolean;
-    onToggleEffort: () => void;
+    side: Side | null;
+    onToggleSide: (side: Side) => void;
 }) {
     const reasoning = resolveReasoning(model, config);
+    const fast = isFastMode(model, config);
     const favorites = useComposerStore((s) => s.favorites);
     const toggleFavorite = useComposerStore((s) => s.toggleFavorite);
     const [query, setQuery] = useState("");
@@ -357,25 +398,42 @@ function ModelCard({
                 ))}
             </div>
 
-            {/* Effort belongs to the picked model, not the highlighted one:
-                each model has its own levels. */}
-            {model.reasoningLevels.length > 0 && (
-                <div className="mt-1 border-t border-dark-600 pt-1">
-                    <button
-                        type="button"
-                        aria-expanded={effortOpen}
-                        onClick={onToggleEffort}
-                        className={cn(
-                            footerButtonClassName,
-                            "h-8 rounded-[7px] px-2 text-sm text-dark-50 hover:bg-dark-800 aria-expanded:bg-dark-700"
-                        )}
-                    >
-                        <span>Reasoning</span>
-                        <span className="ml-auto text-dark-300">
-                            {reasoning && REASONING_LABELS[reasoning]}
-                        </span>
-                        <CaretRightIcon className="size-3 text-dark-300" weight="bold" />
-                    </button>
+            {/* Fast mode and effort belong to the picked model, not the
+                highlighted one: each model has its own. */}
+            {(hasFastMode(model) || model.reasoningLevels.length > 0) && (
+                <div className="mt-1 flex flex-col gap-0.5 border-t border-dark-600 pt-1">
+                    {hasFastMode(model) && (
+                        <button
+                            type="button"
+                            aria-expanded={side === "fast"}
+                            onClick={() => onToggleSide("fast")}
+                            className={cn(
+                                footerButtonClassName,
+                                "h-8 rounded-[7px] px-2 text-sm text-dark-50 hover:bg-dark-800 aria-expanded:bg-dark-700"
+                            )}
+                        >
+                            <span>Fast mode</span>
+                            <span className="ml-auto text-dark-300">{fast ? "On" : "Off"}</span>
+                            <CaretRightIcon className="size-3 text-dark-300" weight="bold" />
+                        </button>
+                    )}
+                    {model.reasoningLevels.length > 0 && (
+                        <button
+                            type="button"
+                            aria-expanded={side === "effort"}
+                            onClick={() => onToggleSide("effort")}
+                            className={cn(
+                                footerButtonClassName,
+                                "h-8 rounded-[7px] px-2 text-sm text-dark-50 hover:bg-dark-800 aria-expanded:bg-dark-700"
+                            )}
+                        >
+                            <span>Reasoning</span>
+                            <span className="ml-auto text-dark-300">
+                                {reasoning && REASONING_LABELS[reasoning]}
+                            </span>
+                            <CaretRightIcon className="size-3 text-dark-300" weight="bold" />
+                        </button>
+                    )}
                 </div>
             )}
         </div>
@@ -458,46 +516,50 @@ function ModelRow({
 }
 
 /**
- * The picked model's reasoning levels, opened from the card's footer and set
- * beside the card's bottom edge, level with the button that opened it.
- * Highest first, so the list reads the way the effort grows.
+ * A footer row's choices (reasoning levels, fast mode on/off), opened from
+ * the card's footer and set beside the card's bottom edge, level with the
+ * row that opened it: `lift` raises it one row, for the row above the last.
  */
-function EffortCard({
-    levels,
+function SideCard<T extends string>({
+    label,
+    options,
     value,
+    lift = false,
     onSelect
 }: {
-    levels: ReasoningLevel[];
-    value: ReasoningLevel | undefined;
-    onSelect: (level: ReasoningLevel) => void;
+    label: string;
+    options: readonly { id: T; label: string }[];
+    value: T | undefined;
+    lift?: boolean;
+    onSelect: (value: T) => void;
 }) {
-    const options = [...levels].reverse();
     return (
         <div
             role="radiogroup"
-            aria-label="Reasoning effort"
+            aria-label={label}
+            style={lift ? { bottom: ROW_PITCH } : undefined}
             className={cn(
                 "pointer-events-auto absolute right-full bottom-0 mr-2 w-44",
                 "rounded-xl border border-dark-600 bg-dark-850 p-1 shadow-lg shadow-black/40",
                 "transition-opacity duration-150 ease-out starting:opacity-0"
             )}
         >
-            {options.map((level) => {
-                const checked = level === value;
+            {options.map((option) => {
+                const checked = option.id === value;
                 return (
                     <button
-                        key={level}
+                        key={option.id}
                         type="button"
                         role="radio"
                         aria-checked={checked}
-                        onClick={() => onSelect(level)}
+                        onClick={() => onSelect(option.id)}
                         className={cn(
                             "grid h-8 w-full grid-cols-[1fr_1rem] items-center gap-x-2 rounded-[7px] px-2.5",
                             "text-left text-sm text-dark-50 outline-none select-none",
                             "hover:bg-dark-700 focus-visible:bg-dark-700"
                         )}
                     >
-                        <span>{REASONING_LABELS[level]}</span>
+                        <span>{option.label}</span>
                         {checked && <CheckIcon className="size-3" weight="bold" />}
                     </button>
                 );

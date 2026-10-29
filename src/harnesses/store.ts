@@ -46,7 +46,19 @@ const BROWSER_CATALOGS: HarnessCatalog[] = [
             description,
             reasoningLevels:
                 id === "claude-haiku-4-5" ? [] : ["low", "medium", "high", "xhigh", "max"],
-            options: []
+            options: id.startsWith("claude-opus-")
+                ? [
+                      {
+                          id: "fastMode",
+                          label: "Fast mode",
+                          choices: [
+                              { id: "off", label: "Off" },
+                              { id: "on", label: "On" }
+                          ],
+                          defaultChoice: "off"
+                      }
+                  ]
+                : []
         })),
         defaultModel: "claude-opus-5-5",
         commands: [
@@ -157,9 +169,44 @@ export function resolveReasoning(
         : defaultReasoning(model);
 }
 
+/** The picks in `options` that `model` offers, each one of its choices. */
+function fitOptions(
+    model: Model | undefined,
+    options: ChatConfig["modelOptions"]
+): ChatConfig["modelOptions"] {
+    const fitted: ChatConfig["modelOptions"] = {};
+    for (const option of model?.options ?? []) {
+        const value = options[option.id];
+        if (value !== undefined && option.choices.some((c) => c.id === value)) {
+            fitted[option.id] = value;
+        }
+    }
+    return fitted;
+}
+
+/** Claude's fast mode, on the models whose catalog entry offers it. */
+export const FAST_MODE = "fastMode";
+
+/** Whether `model` offers fast mode. */
+export function hasFastMode(model: Model | undefined): boolean {
+    return !!model?.options.some((o) => o.id === FAST_MODE);
+}
+
+/** Whether `config` runs `model` in fast mode. */
+export function isFastMode(model: Model | undefined, config: ChatConfig): boolean {
+    return hasFastMode(model) && config.modelOptions[FAST_MODE] === "on";
+}
+
+/** `config` with fast mode turned `on` or off (off drops the pick). */
+export function withFastMode(config: ChatConfig, on: boolean): ChatConfig {
+    const { [FAST_MODE]: _, ...rest } = config.modelOptions;
+    return { ...config, modelOptions: on ? { ...rest, [FAST_MODE]: "on" } : rest };
+}
+
 /**
  * `config` made valid for `catalog`: a model it has, a reasoning level that
- * model takes (its default when none is picked), an access mode the harness honors, plan mode only where it
+ * model takes (its default when none is picked), only options that model
+ * offers, an access mode the harness honors, plan mode only where it
  * has one. Used when switching harness or model, and on remembered new-chat
  * settings that went stale. The sandbox level is kept as is; nothing in the
  * UI picks it.
@@ -173,7 +220,7 @@ export function fitConfig(
         harness: catalog.id,
         model: model?.id,
         reasoning: resolveReasoning(model, config),
-        modelOptions: config.harness === catalog.id ? config.modelOptions : {},
+        modelOptions: fitOptions(model, config.harness === catalog.id ? config.modelOptions : {}),
         sandbox: config.sandbox,
         access: resolveAccess(config.access, catalog.accessModes),
         plan: config.plan && catalog.capabilities.plan

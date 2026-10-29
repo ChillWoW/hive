@@ -36,7 +36,8 @@ use std::time::Duration;
 
 use hive_proto::{
     AccessMode, AgentEvent, DoneStatus, HarnessCapabilities, HarnessCatalog, HarnessId, Model,
-    ReasoningLevel, RunRequest, SlashCommand, UserInputAnswer, UserInputQuestion,
+    ModelOption, ModelOptionChoice, ReasoningLevel, RunRequest, SlashCommand, UserInputAnswer,
+    UserInputQuestion,
 };
 use serde_json::Value;
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
@@ -109,6 +110,9 @@ impl ClaudeHarness {
         }
         if let Some(session) = &request.resume {
             args.extend(["--resume".into(), session.clone()]);
+        }
+        if fast_mode(request) {
+            args.extend(["--settings".into(), r#"{"fastMode":true}"#.into()]);
         }
         args
     }
@@ -212,6 +216,29 @@ const EFFORTS: [ReasoningLevel; 5] = [
     ReasoningLevel::Max,
 ];
 
+/// The model option for Claude's fast mode (its `fastMode` setting), offered
+/// on Opus as in zeron.
+const FAST_MODE: &str = "fastMode";
+
+fn fast_mode_option() -> ModelOption {
+    let choice = |id: &str, label: &str| ModelOptionChoice {
+        id: id.into(),
+        label: label.into(),
+    };
+    ModelOption {
+        id: FAST_MODE.into(),
+        label: "Fast mode".into(),
+        choices: vec![choice("off", "Off"), choice("on", "On")],
+        default_choice: "off".into(),
+    }
+}
+
+/// On launches with `--settings {"fastMode":true}`; off leaves the user's
+/// own setting alone.
+fn fast_mode(request: &RunRequest) -> bool {
+    request.model_options.get(FAST_MODE).map(String::as_str) == Some("on")
+}
+
 fn model(id: &str, label: &str, description: &str, reasoning: &[ReasoningLevel]) -> Model {
     Model {
         id: id.into(),
@@ -219,6 +246,14 @@ fn model(id: &str, label: &str, description: &str, reasoning: &[ReasoningLevel])
         description: Some(description.into()),
         reasoning_levels: reasoning.to_vec(),
         options: Vec::new(),
+    }
+}
+
+/// An Opus model: these take fast mode.
+fn opus(id: &str, label: &str, description: &str) -> Model {
+    Model {
+        options: vec![fast_mode_option()],
+        ..model(id, label, description, &EFFORTS)
     }
 }
 
@@ -243,11 +278,10 @@ impl Harness for ClaudeHarness {
             label: "Claude Code".into(),
             installed: self.executable.is_some() || find_claude().is_some(),
             models: vec![
-                model(
+                opus(
                     "claude-opus-5-5",
                     "Opus 5.5",
                     "Best for everyday, complex tasks",
-                    &EFFORTS,
                 ),
                 model(
                     "claude-fable-5-1",
@@ -268,8 +302,8 @@ impl Harness for ClaudeHarness {
                     &EFFORTS,
                 ),
                 model("claude-fable-5", "Fable 5", "Previous generation Fable", &EFFORTS),
-                model("claude-opus-5", "Opus 5", "Previous generation Opus", &EFFORTS),
-                model("claude-opus-4-8", "Opus 4.8", "Older generation Opus", &EFFORTS),
+                opus("claude-opus-5", "Opus 5", "Previous generation Opus"),
+                opus("claude-opus-4-8", "Opus 4.8", "Older generation Opus"),
                 model(
                     "claude-sonnet-5",
                     "Sonnet 5",
@@ -996,6 +1030,12 @@ mod tests {
         let args = ClaudeHarness::launch_args(&request).join(" ");
         assert!(args.contains("--permission-mode bypassPermissions"));
         assert!(args.contains("--dangerously-skip-permissions"));
+        assert!(!args.contains("--settings"));
+
+        request.model_options.insert("fastMode".into(), "on".into());
+        let args = ClaudeHarness::launch_args(&request);
+        let at = args.iter().position(|a| a == "--settings").unwrap();
+        assert_eq!(args[at + 1], r#"{"fastMode":true}"#);
     }
 
     fn mode_request(access: AccessMode, auto_approve: bool, plan: bool) -> RunRequest {
