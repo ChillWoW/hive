@@ -8,7 +8,7 @@ use std::sync::Mutex;
 use hive_engine::{Engine, WatchId};
 use hive_proto::{
     Chat, ChatConfig, ChatsUpdate, Command, CommandPayload, HarnessCatalog, HarnessId, MessagesUpdate,
-    NewWorktree, SlashCommand,
+    NewWorktree, SlashCommand, TaskOutput,
 };
 use tauri::ipc::Channel;
 use tauri::{State, Webview};
@@ -213,6 +213,31 @@ pub async fn reorder_queue(
 ) -> Result<(), String> {
     engine
         .reorder_queue(&chat_id, &command_ids)
+        .map_err(|e| e.to_string())
+}
+
+/// Stops one of a chat's background tasks (a subagent, a shell).
+#[tauri::command]
+pub async fn stop_background_task(
+    engine: State<'_, Engine>,
+    chat_id: String,
+    task_id: String,
+) -> Result<(), String> {
+    engine
+        .stop_background_task(&chat_id, &task_id)
+        .map_err(|e| e.to_string())
+}
+
+/// The end of a background shell's output.
+#[tauri::command]
+pub async fn background_task_output(
+    engine: State<'_, Engine>,
+    chat_id: String,
+    task_id: String,
+) -> Result<TaskOutput, String> {
+    engine
+        .background_task_output(&chat_id, &task_id)
+        .await
         .map_err(|e| e.to_string())
 }
 

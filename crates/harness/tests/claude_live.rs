@@ -198,3 +198,46 @@ async fn commands_are_listed_without_a_run() {
     );
     assert!(commands.iter().any(|c| c.name == "compact"));
 }
+
+#[tokio::test]
+#[ignore = "spends tokens on the real claude CLI"]
+async fn a_background_shell_is_listed_read_and_stopped() {
+    let dir = scratch("background");
+    let mut req = request(
+        "Use the Bash tool with run_in_background set to true to run exactly: \
+         for i in $(seq 1 120); do echo tick $i; sleep 1; done \
+         Then end your turn at once with the single word STARTED. Do not check on it.",
+        &dir,
+    );
+    req.access = hive_proto::AccessMode::FullAccess;
+    let mut run = ClaudeHarness::new().run(req).unwrap();
+
+    let mut task = None;
+    let mut done = false;
+    while task.is_none() || !done {
+        match next(&mut run).await {
+            AgentEvent::BackgroundTasks { tasks } => {
+                if let Some(t) = tasks.first() {
+                    assert_eq!(t.kind, hive_proto::BackgroundTaskKind::Shell);
+                    task = Some(t.id.clone());
+                }
+            }
+            AgentEvent::Done { .. } => done = true,
+            _ => {}
+        }
+    }
+    let task = task.unwrap();
+
+    tokio::time::sleep(Duration::from_secs(3)).await;
+    let output = run.handle.task_output(&task).await.unwrap();
+    assert!(output.output.contains("tick 1"), "{output:?}");
+
+    run.handle.stop_task(&task);
+    loop {
+        if let AgentEvent::BackgroundTasks { tasks } = next(&mut run).await {
+            if tasks.is_empty() {
+                break;
+            }
+        }
+    }
+}

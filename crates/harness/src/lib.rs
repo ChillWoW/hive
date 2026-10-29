@@ -11,9 +11,9 @@ use std::future::Future;
 use std::pin::Pin;
 
 use hive_proto::{
-    AgentEvent, HarnessCatalog, HarnessId, RunRequest, SlashCommand, UserInputAnswer,
+    AgentEvent, HarnessCatalog, HarnessId, RunRequest, SlashCommand, TaskOutput, UserInputAnswer,
 };
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, oneshot};
 
 pub mod approval;
 pub mod attachments;
@@ -85,6 +85,8 @@ pub struct Run {
     pub handle: RunHandle,
 }
 
+const SESSION_ENDED: &str = "The agent's session has ended.";
+
 /// Controls a live run. Clones share the run; when the last one is dropped
 /// the session closes as if [`RunHandle::close`] were called.
 #[derive(Clone)]
@@ -104,6 +106,15 @@ pub(crate) enum RunCommand {
         answers: Vec<UserInputAnswer>,
     },
     Interrupt,
+    /// Stops one background task.
+    StopTask {
+        task_id: String,
+    },
+    /// Reads the end of a background shell's output.
+    TaskOutput {
+        task_id: String,
+        reply: oneshot::Sender<Result<TaskOutput, String>>,
+    },
     Close,
 }
 
@@ -140,6 +151,28 @@ impl RunHandle {
     /// The session stays open.
     pub fn interrupt(&self) {
         let _ = self.commands.send(RunCommand::Interrupt);
+    }
+
+    /// Stops one of the session's background tasks
+    /// ([`AgentEvent::BackgroundTasks`]); the set is reported again once it
+    /// has stopped.
+    pub fn stop_task(&self, task_id: impl Into<String>) {
+        let _ = self.commands.send(RunCommand::StopTask {
+            task_id: task_id.into(),
+        });
+    }
+
+    /// The end of a background shell's (or monitor's) output. Fails for
+    /// other tasks, and once the session has ended.
+    pub async fn task_output(&self, task_id: impl Into<String>) -> Result<TaskOutput, String> {
+        let (reply, answer) = oneshot::channel();
+        self.commands
+            .send(RunCommand::TaskOutput {
+                task_id: task_id.into(),
+                reply,
+            })
+            .map_err(|_| SESSION_ENDED.to_owned())?;
+        answer.await.map_err(|_| SESSION_ENDED.to_owned())?
     }
 
     /// Ends the session once the current turn finishes.

@@ -289,6 +289,58 @@ pub struct UserInputAnswer {
     pub labels: Vec<String>,
 }
 
+/// Work the agent left running in the background: a subagent, a shell
+/// command, a monitor. Lives until it ends or is stopped, across turns.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(optional_fields)]
+pub struct BackgroundTask {
+    /// The harness's task id: what stopping it or reading its output names.
+    pub id: String,
+    pub kind: BackgroundTaskKind,
+    pub description: String,
+    /// The tool call that started it, once known.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tool_call_id: Option<String>,
+    /// The background task that launched this one (a subagent's shell).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent_id: Option<String>,
+    /// A subagent's type (`general-purpose`, a custom agent's name).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent_type: Option<String>,
+    /// Epoch millis the engine first saw it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub started_at: Option<i64>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub enum BackgroundTaskKind {
+    Agent,
+    Shell,
+    Monitor,
+    Workflow,
+    Other,
+}
+
+impl BackgroundTaskKind {
+    /// Whether its output can be read ([`TaskOutput`]).
+    pub fn has_output(self) -> bool {
+        matches!(self, Self::Shell | Self::Monitor)
+    }
+}
+
+/// The end of a background shell's output.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct TaskOutput {
+    /// The last few KiB the command wrote, escape sequences included.
+    pub output: String,
+    pub total_bytes: u64,
+    /// `output` is only the end of a longer output.
+    pub truncated: bool,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub enum DoneStatus {
@@ -356,6 +408,12 @@ pub enum AgentEvent {
     },
     AvailableCommands {
         commands: Vec<SlashCommand>,
+    },
+    /// Every background task the session holds now (agents, shells,
+    /// monitors), replacing the last set. Session state, not transcript: the
+    /// engine keeps it on [`crate::Session::background`] and never records it.
+    BackgroundTasks {
+        tasks: Vec<BackgroundTask>,
     },
     /// A non-fatal error the run continues past; fatal ones end in
     /// [`AgentEvent::Done`] with `status: errored`.

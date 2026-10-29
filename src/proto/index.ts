@@ -3,6 +3,8 @@
 export type { AccessMode } from "./AccessMode";
 export type { AgentEvent } from "./AgentEvent";
 export type { Attachment } from "./Attachment";
+export type { BackgroundTask } from "./BackgroundTask";
+export type { BackgroundTaskKind } from "./BackgroundTaskKind";
 export type { Chat } from "./Chat";
 export type { ChatConfig } from "./ChatConfig";
 export type { ChatsSettings } from "./ChatsSettings";
@@ -48,6 +50,7 @@ export type { SignInMethod } from "./SignInMethod";
 export type { SignInStarted } from "./SignInStarted";
 export type { SlashCommand } from "./SlashCommand";
 export type { SubagentStatus } from "./SubagentStatus";
+export type { TaskOutput } from "./TaskOutput";
 export type { TodoItem } from "./TodoItem";
 export type { TodoStatus } from "./TodoStatus";
 export type { ToolCall } from "./ToolCall";

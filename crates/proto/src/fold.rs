@@ -162,7 +162,8 @@ pub fn fold_event(parts: &mut Vec<MessagePart>, event: &AgentEvent) {
         AgentEvent::Done { error: None, .. }
         | AgentEvent::ContextUsage { .. }
         | AgentEvent::Usage { .. }
-        | AgentEvent::AvailableCommands { .. } => {}
+        | AgentEvent::AvailableCommands { .. }
+        | AgentEvent::BackgroundTasks { .. } => {}
     }
 }
 

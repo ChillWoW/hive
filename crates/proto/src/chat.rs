@@ -5,7 +5,9 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::agent::{AccessMode, HarnessId, ReasoningLevel, SandboxLevel, SlashCommand};
+use crate::agent::{
+    AccessMode, BackgroundTask, HarnessId, ReasoningLevel, SandboxLevel, SlashCommand,
+};
 
 /// The run settings a chat sends with each turn; the composer edits these.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
@@ -137,6 +139,10 @@ pub struct Session {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     #[ts(as = "Option<Vec<SlashCommand>>")]
     pub commands: Vec<SlashCommand>,
+    /// Background tasks running now; the run stays open while there are any.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[ts(as = "Option<Vec<BackgroundTask>>")]
+    pub background: Vec<BackgroundTask>,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]

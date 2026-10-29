@@ -24,7 +24,11 @@
 //!   base64 image blocks. Reading an attached file never asks.
 //! - Each turn ends with the CLI's own `result` frame.
 //! - Interrupt sends the `interrupt` control request: the turn ends with an
-//!   interrupted `result` and the process keeps running.
+//!   interrupted `result` and the process keeps running. Background agents
+//!   and shells survive it (`perTaskStopAffordance`).
+//! - Background tasks: `background_tasks_changed` (the whole live set) becomes
+//!   [`AgentEvent::BackgroundTasks`]; `stop_task` stops one and
+//!   `get_task_output` reads a shell's last 8 KiB, both control requests.
 
 mod commands;
 mod normalize;
@@ -41,12 +45,12 @@ use std::time::Duration;
 use hive_proto::{
     AccessMode, AgentEvent, CommandKind, DoneStatus, HarnessCapabilities, HarnessCatalog,
     HarnessId, Model, ModelOption, ModelOptionChoice, ReasoningLevel, RunRequest, SlashCommand,
-    UserInputAnswer, UserInputQuestion,
+    TaskOutput, UserInputAnswer, UserInputQuestion,
 };
 use serde_json::Value;
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, ChildStderr, ChildStdin, Command};
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, oneshot};
 
 use crate::approval::{self, Action};
 use crate::attachments;
@@ -488,6 +492,7 @@ impl ClaudeHarness {
                 known_skills: Arc::clone(&self.skills),
                 first: None,
                 first_deadline: (!title).then(|| tokio::time::Instant::now() + INITIALIZE_WAIT),
+                task_outputs: HashMap::new(),
             }
             .run(first),
         );
@@ -545,6 +550,19 @@ async fn probe(exe: &Path, cwd: &str) -> Result<Vec<commands::Advertised>, Harne
     Err(HarnessError::Probe("claude exited before listing its commands".into()))
 }
 
+/// A `get_task_output` answer.
+fn task_output(body: wire::ControlResponseBody) -> Result<TaskOutput, String> {
+    if body.subtype == "error" {
+        return Err(body.error.unwrap_or_else(|| "Claude couldn't read that task's output.".into()));
+    }
+    let r = &body.response;
+    Ok(TaskOutput {
+        output: r.get("output").and_then(Value::as_str).unwrap_or_default().to_owned(),
+        total_bytes: r.get("total_bytes").and_then(Value::as_u64).unwrap_or_default(),
+        truncated: r.get("truncated").and_then(Value::as_bool).unwrap_or_default(),
+    })
+}
+
 /// A `can_use_tool` request waiting on the user.
 enum Pending {
     /// `AskUserQuestion`: the agent's own questions.
@@ -593,6 +611,8 @@ struct Session {
     /// skills' names.
     first: Option<(String, Vec<String>)>,
     first_deadline: Option<tokio::time::Instant>,
+    /// `get_task_output` requests waiting on the CLI, by request id.
+    task_outputs: HashMap<String, oneshot::Sender<Result<TaskOutput, String>>>,
 }
 
 /// The consumer dropped the event stream; tear the session down.
@@ -657,6 +677,8 @@ impl Session {
                     }
                     self.write_first().await;
                     self.report_commands().await?;
+                } else if let Some(reply) = self.task_outputs.remove(&response.response.request_id) {
+                    let _ = reply.send(task_output(response.response));
                 }
                 Ok(())
             }
@@ -871,11 +893,32 @@ impl Session {
                 }
                 Ok(())
             }
+            RunCommand::StopTask { task_id } => {
+                let id = self.control_id("hive_stop");
+                self.write(wire::stop_task_line(&id, &task_id));
+                Ok(())
+            }
+            RunCommand::TaskOutput { task_id, reply } => {
+                if self.stdin.is_none() {
+                    let _ = reply.send(Err("The agent's session is closing.".into()));
+                    return Ok(());
+                }
+                let id = self.control_id("hive_output");
+                self.task_outputs.insert(id.clone(), reply);
+                self.write(wire::task_output_line(&id, &task_id));
+                Ok(())
+            }
             RunCommand::Close => {
                 self.stdin = None;
                 Ok(())
             }
         }
+    }
+
+    /// A fresh id for one of our control requests.
+    fn control_id(&mut self, prefix: &str) -> String {
+        self.controls_sent += 1;
+        format!("{prefix}_{}", self.controls_sent)
     }
 
     /// The interrupted turn never reported; end it ourselves.

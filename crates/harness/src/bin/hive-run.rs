@@ -311,6 +311,16 @@ fn describe(event: &AgentEvent) -> String {
                 commands.len() - skills
             )
         }
+        AgentEvent::BackgroundTasks { tasks } if tasks.is_empty() => {
+            format!("{DIM}● no background tasks{RESET}")
+        }
+        AgentEvent::BackgroundTasks { tasks } => {
+            let list: Vec<String> = tasks
+                .iter()
+                .map(|t| format!("{:?} {} ({})", t.kind, t.description, t.id))
+                .collect();
+            format!("{DIM}● background: {}{RESET}", list.join(", "))
+        }
         AgentEvent::Error { message } => format!("{RED}! {message}{RESET}"),
         AgentEvent::Subagent {
             parent_tool_id,

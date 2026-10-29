@@ -1,8 +1,11 @@
 //! Claude stdout frames → [`AgentEvent`]s.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
-use hive_proto::{AgentEvent, DoneStatus, HarnessId, TodoItem, TodoStatus, ToolCall};
+use hive_proto::{
+    AgentEvent, BackgroundTask, BackgroundTaskKind, DoneStatus, HarnessId, TodoItem, TodoStatus,
+    ToolCall,
+};
 use serde_json::Value;
 
 use super::wire::{ContentBlock, Frame};
@@ -19,6 +22,11 @@ pub(crate) struct Normalizer {
     /// background shells through the same subtype, so only these may be
     /// settled as subagents.
     spawns: HashSet<String>,
+    /// The live background tasks, as last reported.
+    background: Vec<BackgroundTask>,
+    /// Task id → the tool call that started it, from `task_started` (which
+    /// may come before or after the task is first listed).
+    task_tools: HashMap<String, String>,
     pub session_id: Option<String>,
 }
 
@@ -41,6 +49,10 @@ impl Normalizer {
                 // A background subagent's only terminal signal: the stream
                 // just stops, then this arrives untagged.
                 "task_notification" => {
+                    // Ended: its id is never listed again.
+                    if let Some(task) = &f.task_id {
+                        self.task_tools.remove(task);
+                    }
                     let Some(parent) = f.tool_use_id.filter(|id| self.spawns.contains(id)) else {
                         return Vec::new();
                     };
@@ -60,6 +72,37 @@ impl Normalizer {
                             session_id: None,
                         },
                     )]
+                }
+                "background_tasks_changed" => {
+                    let Some(entries) = f.tasks else {
+                        return Vec::new();
+                    };
+                    self.background = entries
+                        .into_iter()
+                        .filter(|e| !e.task_id.is_empty())
+                        .map(|e| BackgroundTask {
+                            kind: task_kind(&e.task_type),
+                            description: e.description,
+                            tool_call_id: self.task_tools.get(&e.task_id).cloned(),
+                            parent_id: e.parent_task_id,
+                            agent_type: e.subagent_type,
+                            started_at: None,
+                            id: e.task_id,
+                        })
+                        .collect();
+                    vec![self.background_event()]
+                }
+                "task_started" => {
+                    let (Some(task), Some(tool)) = (f.task_id, f.tool_use_id) else {
+                        return Vec::new();
+                    };
+                    // Listed already: report it again with its tool call.
+                    let listed = self.background.iter_mut().find(|t| t.id == task);
+                    let event = listed.filter(|t| t.tool_call_id.is_none()).map(|t| {
+                        t.tool_call_id = Some(tool.clone());
+                    });
+                    self.task_tools.insert(task, tool);
+                    event.map(|()| vec![self.background_event()]).unwrap_or_default()
                 }
                 _ => Vec::new(),
             },
@@ -223,6 +266,23 @@ impl Normalizer {
             .get("contextWindow")
             .and_then(Value::as_u64)
             .filter(|n| *n > 0)
+    }
+
+    fn background_event(&self) -> AgentEvent {
+        AgentEvent::BackgroundTasks {
+            tasks: self.background.clone(),
+        }
+    }
+}
+
+/// A `background_tasks_changed` entry's `task_type`.
+fn task_kind(task_type: &str) -> BackgroundTaskKind {
+    match task_type {
+        "local_agent" | "remote_agent" | "in_process_teammate" => BackgroundTaskKind::Agent,
+        "local_bash" => BackgroundTaskKind::Shell,
+        "monitor" | "monitor_mcp" => BackgroundTaskKind::Monitor,
+        "local_workflow" => BackgroundTaskKind::Workflow,
+        _ => BackgroundTaskKind::Other,
     }
 }
 
@@ -496,6 +556,67 @@ mod tests {
             json!({"type":"system","subtype":"task_notification","tool_use_id":"bash1","status":"completed"}),
         )
         .is_empty());
+    }
+
+    /// Live shape (CLI 2.1.312): the set is listed before the shell's
+    /// `task_started`, and emptied when it ends.
+    #[test]
+    fn background_tasks_are_reported_as_a_set_with_their_tool_call() {
+        let mut n = Normalizer::default();
+        let listed = normalize(
+            &mut n,
+            json!({"type":"system","subtype":"background_tasks_changed","tasks":[
+                {"task_id":"bed41","run_id":"r1","task_type":"local_bash","description":"Run dev server"}
+            ]}),
+        );
+        let [AgentEvent::BackgroundTasks { tasks }] = listed.as_slice() else {
+            panic!("{listed:?}");
+        };
+        assert_eq!(tasks.len(), 1);
+        assert_eq!(tasks[0].id, "bed41");
+        assert_eq!(tasks[0].kind, BackgroundTaskKind::Shell);
+        assert_eq!(tasks[0].description, "Run dev server");
+        assert_eq!(tasks[0].tool_call_id, None);
+
+        let started = normalize(
+            &mut n,
+            json!({"type":"system","subtype":"task_started","task_id":"bed41","tool_use_id":"toolu_1","task_type":"local_bash","is_backgrounded":true}),
+        );
+        let [AgentEvent::BackgroundTasks { tasks }] = started.as_slice() else {
+            panic!("{started:?}");
+        };
+        assert_eq!(tasks[0].tool_call_id.as_deref(), Some("toolu_1"));
+        // Nothing new to say the second time.
+        assert!(normalize(
+            &mut n,
+            json!({"type":"system","subtype":"task_started","task_id":"bed41","tool_use_id":"toolu_1"}),
+        )
+        .is_empty());
+
+        // An agent started first, then listed, keeps its tool call.
+        normalize(
+            &mut n,
+            json!({"type":"system","subtype":"task_started","task_id":"a1","tool_use_id":"toolu_2","task_type":"local_agent"}),
+        );
+        let both = normalize(
+            &mut n,
+            json!({"type":"system","subtype":"background_tasks_changed","tasks":[
+                {"task_id":"bed41","task_type":"local_bash","description":"Run dev server"},
+                {"task_id":"a1","task_type":"local_agent","subagent_type":"general-purpose","description":"Scan"}
+            ]}),
+        );
+        let [AgentEvent::BackgroundTasks { tasks }] = both.as_slice() else {
+            panic!("{both:?}");
+        };
+        assert_eq!(tasks[1].kind, BackgroundTaskKind::Agent);
+        assert_eq!(tasks[1].tool_call_id.as_deref(), Some("toolu_2"));
+        assert_eq!(tasks[1].agent_type.as_deref(), Some("general-purpose"));
+
+        let empty = normalize(
+            &mut n,
+            json!({"type":"system","subtype":"background_tasks_changed","tasks":[]}),
+        );
+        assert_eq!(empty, vec![AgentEvent::BackgroundTasks { tasks: vec![] }]);
     }
 
     #[test]

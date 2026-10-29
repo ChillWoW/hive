@@ -25,6 +25,7 @@ import { useShortcut } from "@/keybindings";
 import type { Attachment, ChatConfig, MessagePart } from "@/proto";
 import { Transcript } from "@/transcript";
 import { MorphHeight } from "@/ui";
+import { BackgroundTasks } from "./BackgroundTasks";
 import { ContextRing } from "./ContextRing";
 import { QueuedTray } from "./QueuedTray";
 import { UsageRing } from "./UsageRing";
@@ -202,6 +203,13 @@ export function ChatView() {
                         </span>
                     )}
                     <div className="ml-auto flex shrink-0 items-center gap-1">
+                        {chat && (
+                            <BackgroundTasks
+                                chatId={chat.id}
+                                tasks={session?.background}
+                                messages={shown}
+                            />
+                        )}
                         <UsageRing harness={config.harness} />
                         <ContextRing usage={chat?.context} />
                     </div>

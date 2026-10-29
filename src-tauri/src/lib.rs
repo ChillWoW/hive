@@ -45,6 +45,8 @@ pub fn run() {
       engine::cancel_queued,
       engine::reorder_queue,
       engine::send_queued_now,
+      engine::stop_background_task,
+      engine::background_task_output,
       engine::watch_messages,
       engine::watch_chats,
       engine::unwatch,

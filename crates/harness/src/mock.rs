@@ -4,14 +4,18 @@
 //!
 //! Every prompt plays the same turn. It stops at one question and waits for
 //! [`RunHandle::answer`]; [`RunHandle::interrupt`] ends the turn early.
+//! A prompt that mentions "background" plays a short turn instead that
+//! leaves a dev server running (until stopped) and a subagent working for a
+//! while, reported as [`AgentEvent::BackgroundTasks`].
 
 use std::collections::VecDeque;
 use std::time::Duration;
 
 use hive_proto::{
-    AccessMode, AgentEvent, CommandKind, DoneStatus, HarnessCapabilities, HarnessCatalog,
-    HarnessId, Model, ReasoningLevel, RunRequest, SlashCommand, TodoItem, TodoStatus, ToolCall,
-    ToolDiff, UserInputAnswer, UserInputQuestion,
+    AccessMode, AgentEvent, BackgroundTask, BackgroundTaskKind, CommandKind, DoneStatus,
+    HarnessCapabilities, HarnessCatalog, HarnessId, Model, ReasoningLevel, RunRequest,
+    SlashCommand, TaskOutput, TodoItem, TodoStatus, ToolCall, ToolDiff, UserInputAnswer,
+    UserInputQuestion,
 };
 use tokio::sync::mpsc;
 use tokio::time::Instant;
@@ -107,6 +111,7 @@ impl Harness for MockHarness {
             queue: VecDeque::from([request.prompt.clone()]),
             closing: false,
             speed: self.speed,
+            background: Vec::new(),
         };
         tokio::spawn(player.run(request));
         Ok(Run { events, handle })
@@ -169,6 +174,16 @@ enum Step {
     Emit(u64, AgentEvent),
     /// Emit `InputRequested` and wait for the answer.
     Ask(UserInputQuestion),
+    /// Leave this task running in the background; `None` runs until stopped,
+    /// else it ends after that many ms (scaled).
+    Background(BackgroundTask, Option<u64>),
+}
+
+/// A background task the mock keeps.
+struct MockTask {
+    task: BackgroundTask,
+    started: Instant,
+    ends: Option<Instant>,
 }
 
 struct Player {
@@ -180,6 +195,7 @@ struct Player {
     /// Close was asked for: finish the queue, then end.
     closing: bool,
     speed: f64,
+    background: Vec<MockTask>,
 }
 
 struct Gone;
@@ -209,10 +225,20 @@ impl Player {
     /// should end.
     async fn idle(&mut self) -> bool {
         while self.queue.is_empty() {
-            match self.next_command().await {
+            let expiry = self.next_expiry();
+            let command = tokio::select! {
+                command = self.next_command() => command,
+                _ = sleep_until(expiry) => {
+                    if self.expire().await.is_err() {
+                        return false;
+                    }
+                    continue;
+                }
+            };
+            match command {
                 Some(RunCommand::Send { prompt, .. }) => self.queue.push_back(prompt),
                 Some(RunCommand::Close) | None => return false,
-                Some(RunCommand::Answer { .. } | RunCommand::Interrupt) => {}
+                Some(_) => {}
             }
         }
         true
@@ -234,6 +260,13 @@ impl Player {
                     yes => yes,
                 },
                 Step::Ask(question) => self.ask(turn, question).await?,
+                Step::Background(task, lasts) => {
+                    let started = Instant::now();
+                    let ends = lasts.map(|ms| started + self.scaled(ms));
+                    self.background.push(MockTask { task, started, ends });
+                    self.report_background().await?;
+                    Interrupted::No
+                }
             };
             if let Interrupted::Yes = interrupted {
                 return self
@@ -268,7 +301,7 @@ impl Player {
                     self.emit(AgentEvent::InputResolved { request_id }).await?;
                     return Ok(Interrupted::Yes);
                 }
-                Some(RunCommand::Answer { .. }) => {}
+                Some(_) => {}
             }
         };
         self.emit(AgentEvent::InputResolved { request_id }).await?;
@@ -285,36 +318,193 @@ impl Player {
 
     /// Waits `ms` (scaled), handling commands that arrive meanwhile.
     async fn pause(&mut self, ms: u64) -> Interrupted {
-        let deadline = Instant::now() + Duration::from_secs_f64(ms as f64 * self.speed / 1000.0);
+        let deadline = Instant::now() + self.scaled(ms);
         loop {
+            let expiry = self.next_expiry();
             tokio::select! {
                 _ = tokio::time::sleep_until(deadline) => return Interrupted::No,
-                command = self.commands.recv(), if self.commands_open => match command {
+                _ = sleep_until(expiry) => {
+                    let _ = self.expire().await;
+                }
+                command = self.next_command(), if self.commands_open => match command {
                     Some(RunCommand::Send { prompt, .. }) => self.queue.push_back(prompt),
                     Some(RunCommand::Interrupt) => return Interrupted::Yes,
                     Some(RunCommand::Close) => self.closing = true,
-                    Some(RunCommand::Answer { .. }) => {}
-                    None => {
-                        self.commands_open = false;
-                        self.closing = true;
-                    }
+                    Some(_) => {}
+                    None => self.closing = true,
                 },
             }
         }
     }
 
+    fn scaled(&self, ms: u64) -> Duration {
+        Duration::from_secs_f64(ms as f64 * self.speed / 1000.0)
+    }
+
+    /// The next command for the turn; background-task commands are handled
+    /// here, whatever the turn is doing.
     async fn next_command(&mut self) -> Option<RunCommand> {
-        if !self.commands_open {
-            return None;
+        loop {
+            if !self.commands_open {
+                return None;
+            }
+            let command = self.commands.recv().await;
+            self.commands_open = command.is_some();
+            match command? {
+                RunCommand::StopTask { task_id } => {
+                    let Some(i) = self.background.iter().position(|t| t.task.id == task_id) else {
+                        continue;
+                    };
+                    let task = self.background.remove(i).task;
+                    if let (BackgroundTaskKind::Agent, Some(parent)) = (task.kind, task.tool_call_id) {
+                        self.emit(subagent_done(parent, DoneStatus::Interrupted)).await.ok()?;
+                    }
+                    self.report_background().await.ok()?;
+                }
+                RunCommand::TaskOutput { task_id, reply } => {
+                    let output = self
+                        .background
+                        .iter()
+                        .find(|t| t.task.id == task_id && t.task.kind.has_output())
+                        .map(|t| dev_server_log(t.started.elapsed()))
+                        .ok_or_else(|| format!("No shell task {task_id}."));
+                    let _ = reply.send(output);
+                }
+                command => return Some(command),
+            }
         }
-        let command = self.commands.recv().await;
-        self.commands_open = command.is_some();
-        command
+    }
+
+    fn next_expiry(&self) -> Option<Instant> {
+        self.background.iter().filter_map(|t| t.ends).min()
+    }
+
+    /// Ends the tasks whose time is up.
+    async fn expire(&mut self) -> Result<(), Gone> {
+        let now = Instant::now();
+        let (ended, live): (Vec<_>, Vec<_>) = std::mem::take(&mut self.background)
+            .into_iter()
+            .partition(|t| t.ends.is_some_and(|at| at <= now));
+        self.background = live;
+        for task in ended {
+            if let (BackgroundTaskKind::Agent, Some(parent)) = (task.task.kind, task.task.tool_call_id) {
+                self.emit(subagent_done(parent, DoneStatus::Completed)).await?;
+            }
+        }
+        self.report_background().await
+    }
+
+    async fn report_background(&self) -> Result<(), Gone> {
+        let tasks = self.background.iter().map(|t| t.task.clone()).collect();
+        self.emit(AgentEvent::BackgroundTasks { tasks }).await
     }
 
     async fn emit(&self, event: AgentEvent) -> Result<(), Gone> {
         self.events.send(event).await.map_err(|_| Gone)
     }
+}
+
+async fn sleep_until(deadline: Option<Instant>) {
+    match deadline {
+        Some(at) => tokio::time::sleep_until(at).await,
+        None => std::future::pending().await,
+    }
+}
+
+fn subagent_done(parent_tool_id: String, status: DoneStatus) -> AgentEvent {
+    AgentEvent::Subagent {
+        parent_tool_id,
+        event: Box::new(AgentEvent::Done {
+            status,
+            error: None,
+            session_id: None,
+        }),
+    }
+}
+
+/// What the mock dev server has printed after running `elapsed`.
+fn dev_server_log(elapsed: Duration) -> TaskOutput {
+    let mut output = String::from(
+        "$ bun run dev\n\n  VITE v6.3.5  ready in 312 ms\n\n  \u{279c}  Local:   http://localhost:1421/\n  \u{279c}  Network: use --host to expose\n",
+    );
+    for i in 0..elapsed.as_secs() / 3 {
+        let file = ["src/App.tsx", "src/chat/ChatView.tsx", "src/index.css"][i as usize % 3];
+        output.push_str(&format!("[vite] hmr update /{file}\n"));
+    }
+    TaskOutput {
+        total_bytes: output.len() as u64,
+        output,
+        truncated: false,
+    }
+}
+
+/// A turn that leaves a dev server and a subagent running in the background.
+fn background_script(turn: usize) -> Vec<Step> {
+    let mut s = Script::default();
+    let (shell, agent) = (format!("bg-shell-{turn}"), format!("bg-agent-{turn}"));
+    s.text("Starting the dev server in the background, and sending an agent to look around meanwhile.");
+    s.tool(
+        &shell,
+        ToolCall::Exec {
+            command: "bun run dev".into(),
+        },
+        Some("Command running in background."),
+        None,
+        false,
+    );
+    s.0.push(Step::Background(
+        BackgroundTask {
+            id: format!("mock-shell-{turn}"),
+            kind: BackgroundTaskKind::Shell,
+            description: "Start the dev server".into(),
+            tool_call_id: Some(shell),
+            parent_id: None,
+            agent_type: None,
+            started_at: None,
+        },
+        None,
+    ));
+    s.emit(
+        250,
+        AgentEvent::ToolCall {
+            id: agent.clone(),
+            call: ToolCall::Subagent {
+                description: "Survey the codebase".into(),
+                model: None,
+            },
+        },
+    );
+    s.emit(
+        300,
+        AgentEvent::ToolResult {
+            id: agent.clone(),
+            is_error: false,
+            output: Some("Async agent launched in the background.".into()),
+            diff: None,
+        },
+    );
+    s.0.push(Step::Background(
+        BackgroundTask {
+            id: format!("mock-agent-{turn}"),
+            kind: BackgroundTaskKind::Agent,
+            description: "Survey the codebase".into(),
+            tool_call_id: Some(agent),
+            parent_id: None,
+            agent_type: Some("general-purpose".into()),
+            started_at: None,
+        },
+        Some(15_000),
+    ));
+    s.text(" Both are running; I'll pick up where they leave off.");
+    s.emit(
+        200,
+        AgentEvent::Done {
+            status: DoneStatus::Completed,
+            error: None,
+            session_id: Some(SESSION_ID.into()),
+        },
+    );
+    s.0
 }
 
 fn script(request: &RunRequest, prompt: &str, turn: usize) -> Vec<Step> {
@@ -339,6 +529,10 @@ fn script(request: &RunRequest, prompt: &str, turn: usize) -> Vec<Step> {
                 commands: commands(),
             },
         );
+    }
+    if prompt.to_lowercase().contains("background") {
+        s.0.extend(background_script(turn));
+        return s.0;
     }
     s.reasoning(
         "The user wants a quick look at the project. I'll plan the steps, read the \

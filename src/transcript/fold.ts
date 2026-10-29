@@ -120,6 +120,7 @@ export function foldEvent(parts: MessagePart[], event: AgentEvent) {
         case "contextUsage":
         case "usage":
         case "availableCommands":
+        case "backgroundTasks":
             return;
 
         default:

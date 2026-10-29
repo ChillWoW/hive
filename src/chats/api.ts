@@ -6,7 +6,8 @@ import type {
     Command,
     CommandPayload,
     MessagesUpdate,
-    NewWorktree
+    NewWorktree,
+    TaskOutput
 } from "@/proto";
 import { isTauri } from "@/lib/platform";
 
@@ -105,6 +106,18 @@ export const chatsApi = {
     sendQueuedNow: (chatId: string, commandId: string): Promise<void> =>
         isTauri
             ? invoke<void>("send_queued_now", { chatId, commandId })
+            : Promise.reject(new Error(NO_BACKEND)),
+
+    /** Stops one of the session's background tasks (`Session.background`). */
+    stopTask: (chatId: string, taskId: string): Promise<void> =>
+        isTauri
+            ? invoke<void>("stop_background_task", { chatId, taskId })
+            : Promise.reject(new Error(NO_BACKEND)),
+
+    /** The end of a background shell's output (its last 8 KiB). */
+    taskOutput: (chatId: string, taskId: string): Promise<TaskOutput> =>
+        isTauri
+            ? invoke<TaskOutput>("background_task_output", { chatId, taskId })
             : Promise.reject(new Error(NO_BACKEND)),
 
     /** A snapshot, then every change to the list and live sessions. */

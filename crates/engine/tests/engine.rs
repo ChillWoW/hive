@@ -501,6 +501,130 @@ async fn an_idle_run_closes_and_the_next_prompt_starts_another() {
 }
 
 #[tokio::test]
+async fn background_tasks_keep_the_run_open_until_they_end() {
+    let dir = tempfile::tempdir().unwrap();
+    let engine = engine_in(
+        &dir,
+        0.0,
+        EngineConfig {
+            idle_timeout: Duration::from_millis(50),
+            ..Default::default()
+        },
+    );
+    let chat = engine
+        .create_chat("/demo", config(HarnessId::Mock))
+        .unwrap();
+    let mut chats = watch_chats(&engine);
+    let mut updates = watch_messages(&engine, &chat.id);
+
+    // The mock leaves a dev server running (until stopped) and an agent
+    // that ends at once at this speed.
+    engine
+        .queue_command(&chat.id, send("start it in the background"))
+        .unwrap();
+    let seen = until(&mut updates, is_done).await;
+    assert!(
+        !seen.iter().any(|u| matches!(
+            u,
+            MessagesUpdate::Event {
+                event: AgentEvent::BackgroundTasks { .. },
+                ..
+            }
+        )),
+        "background tasks are session state, not transcript"
+    );
+    let shell = until(&mut chats, |u| {
+        matches!(u, ChatsUpdate::Session { session: Some(s), .. }
+            if s.background.len() == 1 && s.background[0].id.starts_with("mock-shell"))
+    })
+    .await;
+    let Some(ChatsUpdate::Session {
+        session: Some(session),
+        ..
+    }) = shell.last()
+    else {
+        unreachable!()
+    };
+    let task = session.background[0].clone();
+    assert!(task.started_at.is_some());
+
+    // Well past the idle timeout, the run is still there.
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    while let Ok(update) = chats.try_recv() {
+        assert!(
+            !matches!(update, ChatsUpdate::Session { session: None, .. }),
+            "the run closed under a running task"
+        );
+    }
+    let output = engine
+        .background_task_output(&chat.id, &task.id)
+        .await
+        .unwrap();
+    assert!(output.output.contains("bun run dev"));
+
+    // Stopped, the task leaves the session and the run idles out.
+    engine.stop_background_task(&chat.id, &task.id).unwrap();
+    until(&mut chats, |u| {
+        matches!(u, ChatsUpdate::Session { session: Some(s), .. } if s.background.is_empty())
+    })
+    .await;
+    until(&mut chats, |u| {
+        matches!(u, ChatsUpdate::Session { session: None, .. })
+    })
+    .await;
+    assert!(engine.stop_background_task(&chat.id, &task.id).is_err());
+    assert!(engine
+        .background_task_output(&chat.id, &task.id)
+        .await
+        .is_err());
+}
+
+#[tokio::test]
+async fn a_config_change_waits_for_background_tasks() {
+    let (_dir, engine) = engine(0.0);
+    let chat = engine
+        .create_chat("/demo", config(HarnessId::Mock))
+        .unwrap();
+    let mut chats = watch_chats(&engine);
+    let mut updates = watch_messages(&engine, &chat.id);
+    engine
+        .queue_command(&chat.id, send("background please"))
+        .unwrap();
+    until(&mut updates, is_done).await;
+    let seen = until(&mut chats, |u| {
+        matches!(u, ChatsUpdate::Session { session: Some(s), .. } if s.background.len() == 1)
+    })
+    .await;
+    let Some(ChatsUpdate::Session {
+        session: Some(session),
+        ..
+    }) = seen.last()
+    else {
+        unreachable!()
+    };
+    let task = session.background[0].id.clone();
+
+    let changed = ChatConfig {
+        model: Some("mock-mini".into()),
+        ..config(HarnessId::Mock)
+    };
+    engine.update_config(&chat.id, changed).unwrap();
+    // The run (and its dev server) is still there.
+    assert!(engine.background_task_output(&chat.id, &task).await.is_ok());
+
+    // The next prompt starts a run on the new model.
+    engine.queue_command(&chat.id, send("next")).unwrap();
+    let seen = until(&mut updates, is_input).await;
+    assert!(seen.iter().any(|u| matches!(
+        u,
+        MessagesUpdate::Event {
+            event: AgentEvent::SessionStarted { model, .. },
+            ..
+        } if model == "mock-mini"
+    )));
+}
+
+#[tokio::test]
 async fn start_resumes_a_turn_cut_short_by_exit() {
     let dir = tempfile::tempdir().unwrap();
     let chat_id = {

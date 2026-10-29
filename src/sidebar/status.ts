@@ -1,7 +1,7 @@
 import { isUnseen } from "@/chats";
 import type { Chat, Session } from "@/proto";
 
-export type ChatStatus = "working" | "input" | "error" | "unseen" | "idle";
+export type ChatStatus = "working" | "input" | "error" | "unseen" | "background" | "idle";
 
 export function statusOf(chat: Chat, session: Session | undefined): ChatStatus {
     switch (session?.status) {
@@ -12,7 +12,9 @@ export function statusOf(chat: Chat, session: Session | undefined): ChatStatus {
         case "errored":
             return "error";
     }
-    return isUnseen(chat) ? "unseen" : "idle";
+    if (isUnseen(chat)) return "unseen";
+    // Between turns, with agents or shells still running.
+    return session?.background?.length ? "background" : "idle";
 }
 
 export const STATUS: Record<ChatStatus, { label: string; className: string }> = {
@@ -24,5 +26,7 @@ export const STATUS: Record<ChatStatus, { label: string; className: string }> = 
     error: { label: "Errored", className: "bg-danger" },
     // Finished while you were elsewhere: ready for you.
     unseen: { label: "New activity", className: "bg-success" },
+    // Cycling like working, dimmer and blue: work goes on without a turn.
+    background: { label: "Running in the background", className: "text-info/80" },
     idle: { label: "", className: "bg-dark-500" }
 };

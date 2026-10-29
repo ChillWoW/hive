@@ -37,18 +37,41 @@ pub(crate) struct SystemFrame {
     pub cwd: String,
     #[serde(default)]
     pub session_id: String,
-    /// `task_notification`: the spawning tool call's id.
+    /// `task_started`/`task_notification`: the spawning tool call's id.
     #[serde(default)]
     pub tool_use_id: Option<String>,
     /// `task_notification`: terminal status (`completed`, `failed`, …).
     #[serde(default)]
     pub status: Option<String>,
+    /// `task_started`: the task's id, as `background_tasks_changed` lists it.
+    #[serde(default)]
+    pub task_id: Option<String>,
+    /// `background_tasks_changed`: every live background task, replacing the
+    /// last set.
+    #[serde(default)]
+    pub tasks: Option<Vec<BackgroundTaskEntry>>,
     /// `init`: the names of the commands that are skills.
     #[serde(default)]
     pub skills: Option<Vec<String>>,
     /// `commands_changed`: the full list again, as `initialize` gave it.
     #[serde(default)]
     pub commands: Option<Vec<Value>>,
+}
+
+/// One task in `background_tasks_changed`.
+#[derive(Debug, Default, Deserialize)]
+pub(crate) struct BackgroundTaskEntry {
+    #[serde(default)]
+    pub task_id: String,
+    /// `local_agent`, `local_bash`, `monitor`, `local_workflow`, …
+    #[serde(default)]
+    pub task_type: String,
+    #[serde(default)]
+    pub description: String,
+    #[serde(default)]
+    pub subagent_type: Option<String>,
+    #[serde(default)]
+    pub parent_task_id: Option<String>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -210,10 +233,16 @@ pub(crate) struct ControlResponseFrame {
 
 #[derive(Debug, Default, Deserialize)]
 pub(crate) struct ControlResponseBody {
+    /// `success` or `error`.
+    #[serde(default)]
+    pub subtype: String,
     #[serde(default)]
     pub request_id: String,
     #[serde(default)]
     pub response: Value,
+    /// Why an `error` response failed.
+    #[serde(default)]
+    pub error: Option<String>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -287,9 +316,27 @@ pub(crate) fn user_line(text: &str, images: &[InlineImage]) -> String {
     .to_string()
 }
 
-/// The session's opening control request.
+/// The session's opening control request. `perTaskStopAffordance` makes an
+/// interrupt spare background agents (background shells survive either way),
+/// since each can be stopped on its own (`stop_task`).
 pub(crate) fn initialize_line(request_id: &str) -> String {
-    control_request_line(request_id, json!({ "subtype": "initialize" }))
+    control_request_line(
+        request_id,
+        json!({ "subtype": "initialize", "perTaskStopAffordance": true }),
+    )
+}
+
+/// Stops one background task.
+pub(crate) fn stop_task_line(request_id: &str, task_id: &str) -> String {
+    control_request_line(request_id, json!({ "subtype": "stop_task", "task_id": task_id }))
+}
+
+/// Asks for the end of a background shell's or monitor's output.
+pub(crate) fn task_output_line(request_id: &str, task_id: &str) -> String {
+    control_request_line(
+        request_id,
+        json!({ "subtype": "get_task_output", "task_id": task_id }),
+    )
 }
 
 /// Stops the in-flight turn; the process keeps reading stdin.

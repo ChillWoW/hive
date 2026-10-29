@@ -847,7 +847,10 @@ export const chats = {
     remove: (chatId: string) => useChatsStore.getState().remove(chatId),
     interrupt: (chatId: string) => useChatsStore.getState().interrupt(chatId),
     answer: (chatId: string, requestId: string, answers: UserInputAnswer[]) =>
-        useChatsStore.getState().answer(chatId, requestId, answers)
+        useChatsStore.getState().answer(chatId, requestId, answers),
+    /** Background tasks live on the session; nothing here to update. */
+    stopTask: (chatId: string, taskId: string) => chatsApi.stopTask(chatId, taskId),
+    taskOutput: (chatId: string, taskId: string) => chatsApi.taskOutput(chatId, taskId)
 };
 
 export function useChat(chatId: string | null) {

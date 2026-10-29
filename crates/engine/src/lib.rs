@@ -14,7 +14,9 @@
 //! - Every event is recorded through the store's turn (journal, fold,
 //!   save) and sent to the chat's watchers, under one per-chat lock, so a
 //!   watcher's snapshot and the updates after it never overlap or leave a
-//!   gap.
+//!   gap. Background tasks are the exception: session state, kept on
+//!   [`Session::background`] and never recorded. A run with background tasks
+//!   is never closed for idling, and a config change waits for them.
 //!
 //! [`Run`]: hive_harness::Run
 
@@ -26,9 +28,10 @@ use std::time::Duration;
 
 use hive_harness::{Harness, RunHandle};
 use hive_proto::{
-    AgentEvent, Attachment, Chat, ChatConfig, ChatsUpdate, Command, CommandPayload, CommandStatus,
-    ContextUsage, DoneStatus, HarnessCatalog, HarnessId, MessageStatus, MessagesUpdate,
-    NewWorktree, RunRequest, Session, SessionStatus, SlashCommand, UserInputAnswer,
+    AgentEvent, Attachment, BackgroundTask, Chat, ChatConfig, ChatsUpdate, Command,
+    CommandPayload, CommandStatus, ContextUsage, DoneStatus, HarnessCatalog, HarnessId,
+    MessageStatus, MessagesUpdate, NewWorktree, RunRequest, Session, SessionStatus, SlashCommand,
+    TaskOutput, UserInputAnswer,
 };
 use hive_store::{new_id, now_ms, Recovery, Store, StoreError, Turn};
 use tokio::sync::mpsc;
@@ -74,6 +77,10 @@ pub enum EngineError {
     ChatNotFound(String),
     #[error("That prompt is no longer queued.")]
     NotQueued,
+    #[error("That background task has already ended.")]
+    NoTask,
+    #[error("{0}")]
+    Task(String),
     #[error(transparent)]
     Git(#[from] hive_git::GitError),
 }
@@ -156,6 +163,23 @@ impl ChatState {
         self.turn
             .as_ref()
             .is_some_and(|t| t.assistant.status == Some(MessageStatus::Streaming))
+    }
+
+    fn background(&self) -> &[BackgroundTask] {
+        self.session.as_ref().map_or(&[], |s| &s.background)
+    }
+
+    /// The run is doing something: a turn, or work left in the background.
+    fn busy(&self) -> bool {
+        self.in_flight() || !self.background().is_empty()
+    }
+
+    /// The run, if `task_id` is one of its background tasks.
+    fn task_run(&self, task_id: &str) -> Result<&LiveRun> {
+        self.run
+            .as_ref()
+            .filter(|_| self.background().iter().any(|t| t.id == task_id))
+            .ok_or(EngineError::NoTask)
     }
 }
 
@@ -379,7 +403,7 @@ impl Engine {
         chat.config = config;
         self.store().save_chat(&chat)?;
         if st.run.is_some() {
-            if st.in_flight() {
+            if st.busy() {
                 st.restart = true;
             } else {
                 self.end_run(chat_id, &mut st);
@@ -459,6 +483,27 @@ impl Engine {
             });
         }
         Ok(())
+    }
+
+    /// Stops one of the chat's background tasks. The session's task list
+    /// drops it once the agent reports it stopped.
+    pub fn stop_background_task(&self, chat_id: &str, task_id: &str) -> Result<()> {
+        let runtime = self.runtime_for(chat_id);
+        let st = lock(&runtime.state);
+        self.chat(chat_id)?;
+        st.task_run(task_id)?.handle.stop_task(task_id);
+        Ok(())
+    }
+
+    /// The end of a background shell's output.
+    pub async fn background_task_output(&self, chat_id: &str, task_id: &str) -> Result<TaskOutput> {
+        let handle = {
+            let runtime = self.runtime_for(chat_id);
+            let st = lock(&runtime.state);
+            self.chat(chat_id)?;
+            st.task_run(task_id)?.handle.clone()
+        };
+        handle.task_output(task_id).await.map_err(EngineError::Task)
     }
 
     /// Changes the chat under its lock, publishing it if anything changed.
@@ -656,6 +701,11 @@ impl Engine {
         st: &mut ChatState,
         prompt: Prompt,
     ) -> Result<Outcome> {
+        // A config change was waiting on background work; this prompt
+        // starts a run with the new config, ending that work.
+        if st.restart {
+            self.end_run(&chat.id, st);
+        }
         if st.run.is_none() {
             return self.start_run(chat, runtime, st, prompt);
         }
@@ -913,6 +963,13 @@ impl Engine {
         event: AgentEvent,
     ) {
         let store = self.store();
+        if let AgentEvent::BackgroundTasks { tasks } = event {
+            if let Some(run) = &mut st.run {
+                run.activity += 1;
+            }
+            self.set_background(chat_id, runtime, st, tasks);
+            return;
+        }
         if let Some(run) = &mut st.run {
             run.activity += 1;
             match &event {
@@ -991,8 +1048,9 @@ impl Engine {
                     self.maybe_title(chat_id);
                 }
                 let handover = std::mem::take(&mut st.handover);
-                // The next turn starts a run with the new config.
-                if st.restart {
+                // The next turn starts a run with the new config, once
+                // background work is done.
+                if st.restart && st.background().is_empty() {
                     self.end_run(chat_id, st);
                 }
                 // A turn the user stopped holds the queue.
@@ -1027,6 +1085,41 @@ impl Engine {
         }
     }
 
+    /// Replaces the session's background tasks, keeping when each was first
+    /// seen. Once the last one ends between turns the run may idle out, or
+    /// close for a pending config change.
+    fn set_background(
+        &self,
+        chat_id: &str,
+        runtime: &Arc<ChatRuntime>,
+        st: &mut ChatState,
+        mut tasks: Vec<BackgroundTask>,
+    ) {
+        let Some(session) = &mut st.session else {
+            return;
+        };
+        let now = now_ms();
+        for task in &mut tasks {
+            let seen = session.background.iter().find(|t| t.id == task.id);
+            task.started_at = seen.and_then(|t| t.started_at).or(Some(now));
+        }
+        if session.background == tasks {
+            return;
+        }
+        session.background = tasks;
+        session.updated_at = now;
+        let session = session.clone();
+        self.publish_session(chat_id, Some(session));
+        if st.busy() {
+            return;
+        }
+        if st.restart {
+            self.end_run(chat_id, st);
+        } else {
+            self.arm_idle_timer(chat_id, runtime, st);
+        }
+    }
+
     // Session lifecycle
 
     /// Closes the run once it has sat idle for the configured timeout.
@@ -1046,7 +1139,8 @@ impl Engine {
                 .as_ref()
                 .is_some_and(|r| r.id == run_id && r.activity == activity);
             // A held queue doesn't need the process; its next turn starts one.
-            if still_idle && !st.in_flight() {
+            // Background work does.
+            if still_idle && !st.busy() {
                 engine.end_run(&chat_id, &mut st);
             }
         });
@@ -1078,6 +1172,7 @@ impl Engine {
                 started_at: Some(now),
                 updated_at: now,
                 commands: st.commands.clone(),
+                background: Vec::new(),
             }),
         };
         let session = session.clone();

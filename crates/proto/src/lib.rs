@@ -71,6 +71,7 @@ mod export {
         DirectoryEntry::export_all(&cfg).unwrap();
         FileText::export_all(&cfg).unwrap();
         WriteOutcome::export_all(&cfg).unwrap();
+        TaskOutput::export_all(&cfg).unwrap();
 
         let mut modules = Vec::new();
         collect_modules(&dir, "", &mut modules);

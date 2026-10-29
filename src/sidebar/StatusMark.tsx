@@ -7,10 +7,11 @@ export function StatusMark({ status }: { status: ChatStatus }) {
     const { label, className } = STATUS[status];
     return (
         <span className="flex w-4 shrink-0 justify-center">
-            {status === "working" || status === "input" ? (
+            {status === "working" || status === "input" || status === "background" ? (
                 <DotMatrixSpinner
                     label={label}
                     pattern={status === "input" ? DOT_MATRIX_FULL : undefined}
+                    interval={status === "background" ? 400 : undefined}
                     className={cn("size-2.5", className)}
                 />
             ) : (
