@@ -117,6 +117,10 @@ export function foldEvent(parts: MessagePart[], event: AgentEvent) {
             return;
         }
 
+        case "backgroundTurn":
+            parts.push({ kind: "wake", id: `w${parts.length}`, finished: event.finished });
+            return;
+
         case "contextUsage":
         case "usage":
         case "availableCommands":

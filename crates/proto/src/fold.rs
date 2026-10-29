@@ -159,6 +159,14 @@ pub fn fold_event(parts: &mut Vec<MessagePart>, event: &AgentEvent) {
             }
         }
 
+        AgentEvent::BackgroundTurn { finished } => {
+            let id = format!("w{}", parts.len());
+            parts.push(MessagePart::Wake {
+                id,
+                finished: finished.clone(),
+            });
+        }
+
         AgentEvent::Done { error: None, .. }
         | AgentEvent::ContextUsage { .. }
         | AgentEvent::Usage { .. }

@@ -43,6 +43,9 @@ pub(crate) struct SystemFrame {
     /// `task_notification`: terminal status (`completed`, `failed`, …).
     #[serde(default)]
     pub status: Option<String>,
+    /// `task_notification`: a one-line account of how the task ended.
+    #[serde(default)]
+    pub summary: Option<String>,
     /// `task_started`: the task's id, as `background_tasks_changed` lists it.
     #[serde(default)]
     pub task_id: Option<String>,

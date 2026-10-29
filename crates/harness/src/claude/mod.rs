@@ -29,6 +29,9 @@
 //! - Background tasks: `background_tasks_changed` (the whole live set) becomes
 //!   [`AgentEvent::BackgroundTasks`]; `stop_task` stops one and
 //!   `get_task_output` reads a shell's last 8 KiB, both control requests.
+//!   When one ends between turns the CLI starts a turn by itself (a fresh
+//!   `system:init`, then a `result`): that's [`AgentEvent::BackgroundTurn`],
+//!   naming the tasks whose `task_notification`s came since the last turn.
 
 mod commands;
 mod normalize;
@@ -698,6 +701,13 @@ impl Session {
                         *self.known_skills.lock().unwrap() = Some(skills.iter().cloned().collect());
                         self.report_commands().await?;
                     }
+                    // A turn we didn't start: background work ended between
+                    // turns and the CLI woke the model on its own.
+                    if f.subtype == "init" && self.turns == 0 && self.stdin.is_some() {
+                        self.turns = 1;
+                        let finished = self.normalizer.take_finished();
+                        self.emit(AgentEvent::BackgroundTurn { finished }).await?;
+                    }
                 }
                 let ends_turn = matches!(frame, Frame::Result(_));
                 let interrupted = self.interrupt_deadline.is_some();
@@ -936,6 +946,7 @@ impl Session {
     async fn end_turn(&mut self) -> Result<(), Gone> {
         self.turns = self.turns.saturating_sub(1);
         self.interrupt_deadline = None;
+        self.normalizer.clear_finished();
         // A queued prompt starts next.
         if self.turns > 0 {
             self.enter_plan();

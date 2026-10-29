@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::agent::{ToolCall, ToolDiff, UserInputQuestion};
+use crate::agent::{FinishedTask, ToolCall, ToolDiff, UserInputQuestion};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "lowercase")]
@@ -77,6 +77,12 @@ pub enum MessagePart {
         id: String,
         message: String,
     },
+    /// Opens a reply the agent started on its own, naming the background
+    /// tasks whose ending woke it.
+    Wake {
+        id: String,
+        finished: Vec<FinishedTask>,
+    },
 }
 
 impl MessagePart {
@@ -86,7 +92,8 @@ impl MessagePart {
             | MessagePart::Reasoning { id, .. }
             | MessagePart::Tool { id, .. }
             | MessagePart::Input { id, .. }
-            | MessagePart::Error { id, .. } => id,
+            | MessagePart::Error { id, .. }
+            | MessagePart::Wake { id, .. } => id,
         }
     }
 }

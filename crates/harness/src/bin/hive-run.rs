@@ -311,6 +311,10 @@ fn describe(event: &AgentEvent) -> String {
                 commands.len() - skills
             )
         }
+        AgentEvent::BackgroundTurn { finished } => {
+            let names: Vec<&str> = finished.iter().map(|t| t.description.as_str()).collect();
+            format!("{CYAN}● turn on its own after: {}{RESET}", names.join(", "))
+        }
         AgentEvent::BackgroundTasks { tasks } if tasks.is_empty() => {
             format!("{DIM}● no background tasks{RESET}")
         }

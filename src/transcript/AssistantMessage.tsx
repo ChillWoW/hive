@@ -4,7 +4,7 @@ import type { Message, MessagePart } from "@/proto";
 import { cn } from "@/lib/cn";
 import { DOT_MATRIX_FULL, DotMatrixSpinner, Tooltip } from "@/ui";
 import { Markdown } from "./Markdown";
-import { ErrorChip, InputRow, SubagentChip } from "./parts";
+import { ErrorChip, InputRow, SubagentChip, WakeRow } from "./parts";
 import { ToolGroup } from "./ToolGroup";
 import type { GroupItem, ToolPart } from "./tools";
 
@@ -189,6 +189,8 @@ export function AssistantMessage({
                 return <InputRow key={part.id} part={part} streaming={streaming} />;
             case "error":
                 return <ErrorChip key={part.id} message={part.message} />;
+            case "wake":
+                return <WakeRow key={part.id} part={part} />;
             default:
                 return null;
         }

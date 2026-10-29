@@ -1,10 +1,11 @@
 import {
+    ArrowElbowDownRightIcon,
     ChatCircleDotsIcon,
     CircleNotchIcon,
     RobotIcon,
     WarningCircleIcon
 } from "@phosphor-icons/react";
-import type { MessagePart } from "@/proto";
+import type { FinishedTask, MessagePart } from "@/proto";
 import { cn } from "@/lib/cn";
 import type { ToolPart } from "./tools";
 
@@ -55,6 +56,46 @@ export function ErrorChip({ message }: { message: string }) {
             <WarningCircleIcon className="size-3.5 shrink-0" weight="fill" />
             <span className="min-w-0 break-words whitespace-pre-wrap">{message}</span>
         </span>
+    );
+}
+
+const ENDED: Record<FinishedTask["status"], string> = {
+    completed: "finished",
+    failed: "failed",
+    stopped: "was stopped"
+};
+
+/**
+ * Opens a reply the agent started on its own: which background work ended
+ * and woke it ("After *Run the tests* finished").
+ */
+export function WakeRow({ part }: { part: Part<"wake"> }) {
+    const [first, ...rest] = part.finished;
+    const label = !first
+        ? "Continued on its own"
+        : rest.length === 0
+          ? `After`
+          : `After ${part.finished.length} background tasks ended`;
+    return (
+        <div className="flex h-[26px] min-w-0 items-center gap-1.5 text-xs">
+            <span className="flex w-[22px] shrink-0 justify-center">
+                <ArrowElbowDownRightIcon className="size-3.5 text-dark-200" />
+            </span>
+            <span className="shrink-0 text-dark-200">{label}</span>
+            {first && rest.length === 0 && (
+                <>
+                    <span className="min-w-0 truncate text-dark-100">{first.description || "a background task"}</span>
+                    <span className={cn("shrink-0", first.status === "failed" ? "text-danger" : "text-dark-200")}>
+                        {ENDED[first.status]}
+                    </span>
+                </>
+            )}
+            {rest.length > 0 && (
+                <span className="min-w-0 truncate text-dark-250">
+                    {part.finished.map((t) => t.description).join(", ")}
+                </span>
+            )}
+        </div>
     );
 }
 

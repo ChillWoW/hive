@@ -330,6 +330,22 @@ impl BackgroundTaskKind {
     }
 }
 
+/// A background task that ended, as the turn it woke names it.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct FinishedTask {
+    pub description: String,
+    pub status: TaskEnd,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub enum TaskEnd {
+    Completed,
+    Failed,
+    Stopped,
+}
+
 /// The end of a background shell's output.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
@@ -414,6 +430,13 @@ pub enum AgentEvent {
     /// engine keeps it on [`crate::Session::background`] and never records it.
     BackgroundTasks {
         tasks: Vec<BackgroundTask>,
+    },
+    /// The agent started a turn on its own, between the user's turns:
+    /// background work it was waiting on ended (`finished`, possibly empty
+    /// when something else woke it). Opens a reply with no prompt; it ends
+    /// with [`AgentEvent::Done`] like any turn.
+    BackgroundTurn {
+        finished: Vec<FinishedTask>,
     },
     /// A non-fatal error the run continues past; fatal ones end in
     /// [`AgentEvent::Done`] with `status: errored`.

@@ -580,6 +580,45 @@ async fn background_tasks_keep_the_run_open_until_they_end() {
 }
 
 #[tokio::test]
+async fn a_task_ending_between_turns_opens_a_reply_of_its_own() {
+    let (_dir, engine) = engine(0.0);
+    let chat = engine
+        .create_chat("/demo", config(HarnessId::Mock))
+        .unwrap();
+    let mut chats = watch_chats(&engine);
+    let mut updates = watch_messages(&engine, &chat.id);
+    engine
+        .queue_command(&chat.id, send("run it in the background"))
+        .unwrap();
+    // The prompt's own turn, then the one the agent starts when its
+    // background agent finishes.
+    until(&mut updates, is_done).await;
+    let woke = until(&mut updates, is_done).await;
+    assert!(woke.iter().any(|u| matches!(
+        u,
+        MessagesUpdate::Event {
+            event: AgentEvent::BackgroundTurn { finished },
+            ..
+        } if finished.len() == 1 && finished[0].description == "Survey the codebase"
+    )));
+    until(&mut chats, |u| {
+        matches!(u, ChatsUpdate::Session { session: Some(s), .. } if s.status == SessionStatus::Idle)
+    })
+    .await;
+
+    let messages = engine.store().messages(&chat.id).unwrap();
+    let roles: Vec<_> = messages.iter().map(|m| m.role).collect();
+    assert_eq!(
+        roles,
+        [MessageRole::User, MessageRole::Assistant, MessageRole::Assistant]
+    );
+    let reply = &messages[2];
+    assert_eq!(reply.status, Some(MessageStatus::Complete));
+    assert!(matches!(&reply.parts[0], MessagePart::Wake { finished, .. } if finished.len() == 1));
+    assert!(reply.parts.iter().any(|p| matches!(p, MessagePart::Text { .. })));
+}
+
+#[tokio::test]
 async fn a_config_change_waits_for_background_tasks() {
     let (_dir, engine) = engine(0.0);
     let chat = engine

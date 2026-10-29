@@ -93,7 +93,8 @@ pub struct Store {
 /// fold into.
 pub struct Turn {
     pub chat_id: String,
-    pub user: Message,
+    /// None for a reply the agent started on its own.
+    pub user: Option<Message>,
     pub assistant: Message,
     last_saved: Instant,
     /// Folded changes not yet saved.
@@ -376,6 +377,15 @@ impl Store {
             status: None,
             duration_ms: None,
         };
+        self.begin_turn(chat_id, Some(user), now)
+    }
+
+    /// Starts a reply with no prompt: a turn the agent began on its own.
+    pub fn start_reply(&self, chat_id: &str) -> Result<Turn> {
+        self.begin_turn(chat_id, None, now_ms())
+    }
+
+    fn begin_turn(&self, chat_id: &str, user: Option<Message>, now: i64) -> Result<Turn> {
         let assistant = Message {
             id: new_id(),
             chat_id: chat_id.to_owned(),
@@ -391,7 +401,9 @@ impl Store {
             // New work brings an archived chat back.
             chat.archived = false;
         })?;
-        self.save_message(&user)?;
+        if let Some(user) = &user {
+            self.save_message(user)?;
+        }
         self.save_message(&assistant)?;
         Ok(Turn {
             chat_id: chat_id.to_owned(),
@@ -631,7 +643,7 @@ mod tests {
         let turn = store
             .start_turn(&chat.id, "look", std::slice::from_ref(&sent), None)
             .unwrap();
-        assert_eq!(store.message(&turn.user.id).unwrap().unwrap().attachments, [sent.clone()]);
+        assert_eq!(store.message(&turn.user.as_ref().unwrap().id).unwrap().unwrap().attachments, [sent.clone()]);
         store
             .issue_command(
                 &chat.id,

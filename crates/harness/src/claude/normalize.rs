@@ -3,8 +3,8 @@
 use std::collections::{HashMap, HashSet};
 
 use hive_proto::{
-    AgentEvent, BackgroundTask, BackgroundTaskKind, DoneStatus, HarnessId, TodoItem, TodoStatus,
-    ToolCall,
+    AgentEvent, BackgroundTask, BackgroundTaskKind, DoneStatus, FinishedTask, HarnessId, TaskEnd,
+    TodoItem, TodoStatus, ToolCall,
 };
 use serde_json::Value;
 
@@ -27,6 +27,9 @@ pub(crate) struct Normalizer {
     /// Task id → the tool call that started it, from `task_started` (which
     /// may come before or after the task is first listed).
     task_tools: HashMap<String, String>,
+    /// Tasks that ended since the last turn: what a turn the CLI starts on
+    /// its own is about.
+    finished: Vec<FinishedTask>,
     pub session_id: Option<String>,
 }
 
@@ -52,6 +55,20 @@ impl Normalizer {
                     // Ended: its id is never listed again.
                     if let Some(task) = &f.task_id {
                         self.task_tools.remove(task);
+                        if let Some(end) = f.status.as_deref().and_then(task_end) {
+                            let description = self
+                                .background
+                                .iter()
+                                .find(|t| &t.id == task)
+                                .map(|t| t.description.clone())
+                                .filter(|d| !d.is_empty())
+                                .or_else(|| f.summary.clone())
+                                .unwrap_or_default();
+                            self.finished.push(FinishedTask {
+                                description,
+                                status: end,
+                            });
+                        }
                     }
                     let Some(parent) = f.tool_use_id.filter(|id| self.spawns.contains(id)) else {
                         return Vec::new();
@@ -268,11 +285,31 @@ impl Normalizer {
             .filter(|n| *n > 0)
     }
 
+    /// The tasks that ended since the last turn, for the turn they woke.
+    pub fn take_finished(&mut self) -> Vec<FinishedTask> {
+        std::mem::take(&mut self.finished)
+    }
+
+    /// A turn of ours ended: what ended during it was its to deal with.
+    pub fn clear_finished(&mut self) {
+        self.finished.clear();
+    }
+
     fn background_event(&self) -> AgentEvent {
         AgentEvent::BackgroundTasks {
             tasks: self.background.clone(),
         }
     }
+}
+
+/// A `task_notification` status; `None` while it hasn't ended.
+fn task_end(status: &str) -> Option<TaskEnd> {
+    Some(match status {
+        "completed" | "complete" | "succeeded" | "success" => TaskEnd::Completed,
+        "failed" | "errored" | "error" => TaskEnd::Failed,
+        "killed" | "cancelled" | "canceled" | "stopped" | "interrupted" => TaskEnd::Stopped,
+        _ => return None,
+    })
 }
 
 /// A `background_tasks_changed` entry's `task_type`.
@@ -617,6 +654,41 @@ mod tests {
             json!({"type":"system","subtype":"background_tasks_changed","tasks":[]}),
         );
         assert_eq!(empty, vec![AgentEvent::BackgroundTasks { tasks: vec![] }]);
+    }
+
+    #[test]
+    fn ended_tasks_are_kept_for_the_turn_they_wake() {
+        let mut n = Normalizer::default();
+        normalize(
+            &mut n,
+            json!({"type":"system","subtype":"background_tasks_changed","tasks":[
+                {"task_id":"b1","task_type":"local_bash","description":"Run tests"}
+            ]}),
+        );
+        normalize(
+            &mut n,
+            json!({"type":"system","subtype":"task_notification","task_id":"b1","tool_use_id":"toolu_1","status":"failed","summary":"Background command failed (exit code 1)"}),
+        );
+        // Not in the set: its summary names it.
+        normalize(
+            &mut n,
+            json!({"type":"system","subtype":"task_notification","task_id":"b2","status":"completed","summary":"Build done"}),
+        );
+        let finished = n.take_finished();
+        assert_eq!(
+            finished,
+            vec![
+                FinishedTask {
+                    description: "Run tests".into(),
+                    status: TaskEnd::Failed
+                },
+                FinishedTask {
+                    description: "Build done".into(),
+                    status: TaskEnd::Completed
+                },
+            ]
+        );
+        assert!(n.take_finished().is_empty());
     }
 
     #[test]

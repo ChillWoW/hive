@@ -16,7 +16,10 @@
 //!   watcher's snapshot and the updates after it never overlap or leave a
 //!   gap. Background tasks are the exception: session state, kept on
 //!   [`Session::background`] and never recorded. A run with background tasks
-//!   is never closed for idling, and a config change waits for them.
+//!   is never closed for idling, and a config change waits for them. When
+//!   one ends between turns the agent may start a turn by itself
+//!   ([`AgentEvent::BackgroundTurn`]): a reply with no prompt, run like any
+//!   other (status, queue, notifications).
 //!
 //! [`Run`]: hive_harness::Run
 
@@ -899,7 +902,24 @@ impl Engine {
             &prompt.attachments,
             Some(prompt.message_id.clone()),
         )?;
-        for message in [&turn.user, &turn.assistant] {
+        self.begin_turn(chat_id, st, turn);
+        Ok(())
+    }
+
+    /// Opens a reply with no prompt: the agent started a turn on its own.
+    fn start_reply(&self, chat_id: &str, st: &mut ChatState) -> Result<()> {
+        let store = self.store();
+        if let Some(previous) = &mut st.turn {
+            store.flush(previous)?;
+        }
+        let turn = store.start_reply(chat_id)?;
+        self.begin_turn(chat_id, st, turn);
+        Ok(())
+    }
+
+    /// Makes `turn` the live one and shows its messages.
+    fn begin_turn(&self, chat_id: &str, st: &mut ChatState, turn: Turn) {
+        for message in turn.user.iter().chain([&turn.assistant]) {
             publish(
                 &mut st.watchers,
                 MessagesUpdate::Message {
@@ -909,7 +929,6 @@ impl Engine {
         }
         st.turn = Some(turn);
         self.publish_chat(chat_id);
-        Ok(())
     }
 
     // Events
@@ -982,6 +1001,16 @@ impl Engine {
                 AgentEvent::Done { .. } => run.inputs.clear(),
                 _ => {}
             }
+        }
+
+        // Background work ended between turns and the agent took it up by
+        // itself: a reply of its own, which the turn's `Done` ends as usual.
+        if matches!(event, AgentEvent::BackgroundTurn { .. }) && !st.in_flight() {
+            if let Err(e) = self.start_reply(chat_id, st) {
+                log::warn!("chat {chat_id}: starting a reply: {e}");
+                return;
+            }
+            self.set_status(chat_id, st, SessionStatus::Working);
         }
 
         let Some(turn) = &mut st.turn else {

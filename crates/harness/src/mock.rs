@@ -12,9 +12,9 @@ use std::collections::VecDeque;
 use std::time::Duration;
 
 use hive_proto::{
-    AccessMode, AgentEvent, BackgroundTask, BackgroundTaskKind, CommandKind, DoneStatus,
+    AccessMode, AgentEvent, BackgroundTask, BackgroundTaskKind, CommandKind, DoneStatus, FinishedTask,
     HarnessCapabilities, HarnessCatalog, HarnessId, Model, ReasoningLevel, RunRequest,
-    SlashCommand, TaskOutput, TodoItem, TodoStatus, ToolCall, ToolDiff, UserInputAnswer,
+    SlashCommand, TaskEnd, TaskOutput, TodoItem, TodoStatus, ToolCall, ToolDiff, UserInputAnswer,
     UserInputQuestion,
 };
 use tokio::sync::mpsc;
@@ -229,7 +229,11 @@ impl Player {
             let command = tokio::select! {
                 command = self.next_command() => command,
                 _ = sleep_until(expiry) => {
-                    if self.expire().await.is_err() {
+                    let Ok(ended) = self.expire().await else {
+                        return false;
+                    };
+                    // Between turns, like the CLI: the model wakes on its own.
+                    if !ended.is_empty() && self.play(wake_script(&ended), 0).await.is_err() {
                         return false;
                     }
                     continue;
@@ -250,7 +254,11 @@ impl Player {
         prompt: &str,
         turn: usize,
     ) -> Result<(), Gone> {
-        for step in script(request, prompt, turn) {
+        self.play(script(request, prompt, turn), turn).await
+    }
+
+    async fn play(&mut self, steps: Vec<Step>, turn: usize) -> Result<(), Gone> {
+        for step in steps {
             let interrupted = match step {
                 Step::Emit(delay, event) => match self.pause(delay).await {
                     Interrupted::No => {
@@ -320,12 +328,10 @@ impl Player {
     async fn pause(&mut self, ms: u64) -> Interrupted {
         let deadline = Instant::now() + self.scaled(ms);
         loop {
-            let expiry = self.next_expiry();
+            // Background tasks end between turns (`idle`), which keeps the
+            // script deterministic: one that finishes wakes the model.
             tokio::select! {
                 _ = tokio::time::sleep_until(deadline) => return Interrupted::No,
-                _ = sleep_until(expiry) => {
-                    let _ = self.expire().await;
-                }
                 command = self.next_command(), if self.commands_open => match command {
                     Some(RunCommand::Send { prompt, .. }) => self.queue.push_back(prompt),
                     Some(RunCommand::Interrupt) => return Interrupted::Yes,
@@ -380,18 +386,20 @@ impl Player {
     }
 
     /// Ends the tasks whose time is up.
-    async fn expire(&mut self) -> Result<(), Gone> {
+    /// Ends the tasks whose time is up, returning them.
+    async fn expire(&mut self) -> Result<Vec<BackgroundTask>, Gone> {
         let now = Instant::now();
         let (ended, live): (Vec<_>, Vec<_>) = std::mem::take(&mut self.background)
             .into_iter()
             .partition(|t| t.ends.is_some_and(|at| at <= now));
         self.background = live;
-        for task in ended {
-            if let (BackgroundTaskKind::Agent, Some(parent)) = (task.task.kind, task.task.tool_call_id) {
-                self.emit(subagent_done(parent, DoneStatus::Completed)).await?;
+        for task in &ended {
+            if let (BackgroundTaskKind::Agent, Some(parent)) = (task.task.kind, &task.task.tool_call_id) {
+                self.emit(subagent_done(parent.clone(), DoneStatus::Completed)).await?;
             }
         }
-        self.report_background().await
+        self.report_background().await?;
+        Ok(ended.into_iter().map(|t| t.task).collect())
     }
 
     async fn report_background(&self) -> Result<(), Gone> {
@@ -436,6 +444,33 @@ fn dev_server_log(elapsed: Duration) -> TaskOutput {
         output,
         truncated: false,
     }
+}
+
+/// The turn the model starts on its own once `ended` finished.
+fn wake_script(ended: &[BackgroundTask]) -> Vec<Step> {
+    let mut s = Script::default();
+    s.emit(
+        0,
+        AgentEvent::BackgroundTurn {
+            finished: ended
+                .iter()
+                .map(|t| FinishedTask {
+                    description: t.description.clone(),
+                    status: TaskEnd::Completed,
+                })
+                .collect(),
+        },
+    );
+    s.text("The survey is back: a Vite + React frontend in `src/`, a Rust backend under `crates/`, and the Tauri shell in `src-tauri/`. The dev server is still running.");
+    s.emit(
+        200,
+        AgentEvent::Done {
+            status: DoneStatus::Completed,
+            error: None,
+            session_id: Some(SESSION_ID.into()),
+        },
+    );
+    s.0
 }
 
 /// A turn that leaves a dev server and a subagent running in the background.

@@ -241,3 +241,40 @@ async fn a_background_shell_is_listed_read_and_stopped() {
         }
     }
 }
+
+#[tokio::test]
+#[ignore = "spends tokens on the real claude CLI"]
+async fn a_shell_ending_between_turns_wakes_a_turn_of_its_own() {
+    let dir = scratch("wake");
+    let mut req = request(
+        "Use the Bash tool with run_in_background set to true to run exactly: sleep 4 \
+         Then end your turn at once with the single word STARTED. Do not wait for it. \
+         When it finishes, reply with the single word FINISHED.",
+        &dir,
+    );
+    req.access = hive_proto::AccessMode::FullAccess;
+    let mut run = ClaudeHarness::new().run(req).unwrap();
+
+    // The prompt's own turn.
+    while !matches!(next(&mut run).await, AgentEvent::Done { .. }) {}
+    // Then the one the CLI starts when the shell ends.
+    let finished = loop {
+        if let AgentEvent::BackgroundTurn { finished } = next(&mut run).await {
+            break finished;
+        }
+    };
+    assert_eq!(finished.len(), 1, "{finished:?}");
+    assert_eq!(finished[0].status, hive_proto::TaskEnd::Completed);
+    let mut text = String::new();
+    loop {
+        match next(&mut run).await {
+            AgentEvent::TextDelta { text: t } => text.push_str(&t),
+            AgentEvent::Done { status, .. } => {
+                assert_eq!(status, DoneStatus::Completed);
+                break;
+            }
+            _ => {}
+        }
+    }
+    assert!(text.contains("FINISHED"), "{text}");
+}
