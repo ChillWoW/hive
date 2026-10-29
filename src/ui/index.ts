@@ -7,6 +7,7 @@ export {
     DotMatrixSpinner,
     type DotMatrixSpinnerProps
 } from "./DotMatrixSpinner";
+export { FileIcon } from "./FileIcon";
 export { iconButtonClassName } from "./iconButton";
 export { Input } from "./Input";
 export { Menu } from "./Menu";

@@ -5,7 +5,6 @@ import { FileChip } from "./FileChip";
 
 type AttachmentTileProps = {
     name: string;
-    mimeType: string;
     /** An image's URL; without one the file is drawn as a `FileChip`. */
     imageUrl?: string;
     /** Still being copied in, or that failed (with why). */
@@ -26,7 +25,6 @@ type AttachmentTileProps = {
  */
 export function AttachmentTile({
     name,
-    mimeType,
     imageUrl,
     uploading,
     error,
@@ -85,7 +83,6 @@ export function AttachmentTile({
     ) : (
         <FileChip
             name={name}
-            mimeType={mimeType}
             className={cn("group/attachment", error && "border-danger/60")}
         >
             {status}

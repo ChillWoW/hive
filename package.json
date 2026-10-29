@@ -24,6 +24,7 @@
         "@tauri-apps/plugin-opener": "^2",
         "clsx": "^2.1.1",
         "immer": "^11.1.21",
+        "material-icon-theme": "^5.38.1",
         "react": "^19.2.7",
         "react-dom": "^19.2.7",
         "react-textarea-autosize": "^8.5.9",

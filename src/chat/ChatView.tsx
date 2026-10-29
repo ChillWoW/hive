@@ -155,6 +155,7 @@ export function ChatView() {
                             steering={!!catalog?.capabilities.steering}
                             canAttach={!!catalog?.capabilities.attachments}
                             commands={commands}
+                            cwd={chat ? workDir(chat) : newChat.cwd}
                             onSend={sendTo}
                             onStop={chat ? () => void chats.interrupt(chat.id).catch(() => {}) : undefined}
                             placeholder={hero ? "What should we work on?" : "Reply…"}

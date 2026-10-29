@@ -10,6 +10,7 @@ import {
 } from "@phosphor-icons/react";
 import type { JsonValue } from "@/proto/serde_json/JsonValue";
 import { cn } from "@/lib/cn";
+import { FileIcon } from "@/ui";
 import { ChatCwd } from "./context";
 import { countChanges, diffLines } from "./diff";
 import { DiffView } from "./DiffView";
@@ -120,10 +121,7 @@ function FileBadge({ path, failed }: { path: string; failed: boolean }) {
             )}
         >
             <span className="flex size-5 shrink-0 items-center justify-center rounded-[4px] bg-white/[0.05]">
-                {(() => {
-                    const FileGlyph = iconOf({ kind: "readFile", path });
-                    return <FileGlyph className="size-3.5 text-dark-200" />;
-                })()}
+                <FileIcon name={path} className={cn("size-3.5", failed && "opacity-60")} />
             </span>
             <span className="min-w-0 truncate">{fileName(path)}</span>
         </span>

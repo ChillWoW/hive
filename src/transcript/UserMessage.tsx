@@ -1,6 +1,8 @@
+import { Fragment } from "react";
 import { ArrowClockwiseIcon, WarningCircleIcon, XIcon } from "@phosphor-icons/react";
 import { AttachmentTile, openAttachment, useAttachmentUrl } from "@/attachments";
 import type { TranscriptMessage } from "@/chats";
+import { FileTag, splitMentions } from "@/files";
 import { cn } from "@/lib/cn";
 import type { Attachment } from "@/proto";
 
@@ -10,7 +12,6 @@ function SentAttachment({ attachment }: { attachment: Attachment }) {
     return (
         <AttachmentTile
             name={attachment.name}
-            mimeType={attachment.mimeType}
             imageUrl={url}
             size="lg"
             onOpen={() => void openAttachment(attachment).catch(() => {})}
@@ -59,7 +60,13 @@ export function UserMessage({
                         delivery?.state === "failed" && "ring-1 ring-danger/40"
                     )}
                 >
-                    {text}
+                    {splitMentions(text).map((piece, i) =>
+                        "path" in piece ? (
+                            <FileTag key={i} path={piece.path} />
+                        ) : (
+                            <Fragment key={i}>{piece.text}</Fragment>
+                        )
+                    )}
                 </div>
             )}
             {delivery?.state === "failed" && (

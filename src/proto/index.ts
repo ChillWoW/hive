@@ -49,6 +49,7 @@ export type { ToolCall } from "./ToolCall";
 export type { ToolDiff } from "./ToolDiff";
 export type { UserInputAnswer } from "./UserInputAnswer";
 export type { UserInputQuestion } from "./UserInputQuestion";
+export type { WorkspaceEntry } from "./WorkspaceEntry";
 export type { Worktree } from "./Worktree";
 export type { JsonValue } from "./serde_json/JsonValue";
 

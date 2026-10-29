@@ -13,10 +13,13 @@ import { COMPOSER_SCOPE, useShortcut } from "@/keybindings/runtime";
 import { cn } from "@/lib/cn";
 import { isMac } from "@/lib/platform";
 import { useSettingsStore } from "@/settings/store";
+import { useWorkspaceFiles } from "@/files";
 import { iconButtonClassName, Tooltip } from "@/ui";
 import { ModelPicker } from "./ModelPicker";
 import { AccessPicker } from "./AccessPicker";
+import { MentionMenu } from "./MentionMenu";
 import { SlashMenu } from "./SlashMenu";
+import { useMentionMenu } from "./useMentionMenu";
 import { useSlashMenu } from "./useSlashMenu";
 import { composer, useComposerStore, useDraft, useDraftAttachments } from "./store";
 
@@ -52,6 +55,8 @@ type ComposerProps = {
     steering?: boolean;
     /** Typed as `/name`; completed from a menu above the box. */
     commands?: SlashCommand[];
+    /** Where the agent works: its files are mentioned as `@path`. */
+    cwd?: string | null;
     /** The harness takes files with a prompt: the attach button, paste and drop. */
     canAttach?: boolean;
     /** False keeps the draft: the prompt couldn't be sent yet. */
@@ -87,6 +92,7 @@ export function Composer({
     canStop = false,
     steering = false,
     commands = [],
+    cwd,
     canAttach = false,
     onSend,
     onStop,
@@ -131,18 +137,31 @@ export function Composer({
     const [focused, setFocused] = useState(false);
     const [caret, setCaret] = useState(0);
 
+    /** Sets the field's text from a menu, with the caret at `at`. */
+    const complete = (text: string, at: number) => {
+        setDraft(text);
+        setCaret(at);
+        requestAnimationFrame(() => {
+            textareaRef.current?.setSelectionRange(at, at);
+        });
+    };
+
     const slash = useSlashMenu({
         draft,
         caret,
         commands,
         enabled: focused,
-        complete: (text, at) => {
-            setDraft(text);
-            setCaret(at);
-            requestAnimationFrame(() => {
-                textareaRef.current?.setSelectionRange(at, at);
-            });
-        }
+        complete
+    });
+
+    // Listed while the field has focus, so the first `@` rarely waits.
+    const files = useWorkspaceFiles(cwd, focused);
+    const mention = useMentionMenu({
+        draft,
+        caret,
+        entries: files,
+        enabled: focused && !!cwd,
+        complete
     });
 
     // Runs on mount too, so a fresh chat view starts with the caret here.
@@ -343,7 +362,7 @@ export function Composer({
     };
 
     const onKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
-        if (slash.onKeyDown(event)) {
+        if (mention.onKeyDown(event) || slash.onKeyDown(event)) {
             event.preventDefault();
             return;
         }
@@ -368,7 +387,7 @@ export function Composer({
                 submit();
             }}
             onKeyDown={(event) => {
-                if (event.key === "Escape" && mode === "stop" && !slash.open) {
+                if (event.key === "Escape" && mode === "stop" && !slash.open && !mention.open) {
                     event.preventDefault();
                     onStop?.();
                 }
@@ -405,13 +424,16 @@ export function Composer({
                 menu={slash}
                 className="absolute inset-x-0 bottom-full z-20 mb-2"
             />
+            <MentionMenu
+                menu={mention}
+                className="absolute inset-x-0 bottom-full z-20 mb-2"
+            />
             {attachments.length > 0 && (
                 <div className="flex flex-wrap items-end gap-2 px-1 pt-1">
                     {attachments.map((a) => (
                         <AttachmentTile
                             key={a.id}
                             name={a.name}
-                            mimeType={a.mimeType}
                             imageUrl={a.previewUrl}
                             uploading={!a.attachment && !a.error}
                             error={a.error}

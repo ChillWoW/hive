@@ -7,6 +7,7 @@ pub mod agent;
 pub mod catalog;
 pub mod chat;
 pub mod command;
+pub mod files;
 pub mod fold;
 pub mod git;
 pub mod message;
@@ -18,6 +19,7 @@ pub use agent::*;
 pub use catalog::*;
 pub use chat::*;
 pub use command::*;
+pub use files::*;
 pub use fold::fold_event;
 pub use git::*;
 pub use message::*;
@@ -64,6 +66,7 @@ mod export {
         SignInStarted::export_all(&cfg).unwrap();
         GitRepo::export_all(&cfg).unwrap();
         NewWorktree::export_all(&cfg).unwrap();
+        WorkspaceEntry::export_all(&cfg).unwrap();
 
         let mut modules = Vec::new();
         collect_modules(&dir, "", &mut modules);

@@ -1,5 +1,6 @@
 mod attachments;
 mod engine;
+mod files;
 mod folders;
 mod git;
 mod providers;
@@ -53,6 +54,7 @@ pub fn run() {
       engine::set_chat_pinned,
       engine::mark_chat_seen,
       engine::delete_chat,
+      files::list_files,
       folders::folder_icon,
       git::git_repo,
       git::git_switch_branch,
