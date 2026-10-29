@@ -60,7 +60,7 @@ await bump("package.json", JSON_VERSION, version);
 await bump("src-tauri/tauri.conf.json", JSON_VERSION, version);
 await bump("src-tauri/Cargo.toml", /^(version = ")[^"]*(")/m, version);
 // Writes the new version into Cargo.lock.
-run(["cargo", "metadata", "--format-version", "1", "--offline"], true);
+run(["cargo", "update", "--workspace", "--offline"], true);
 
 run(["git", "add", "package.json", "src-tauri/tauri.conf.json", "src-tauri/Cargo.toml", "Cargo.lock"]);
 run(["git", "commit", "-q", "-m", `chore: release v${version}`]);
