@@ -30,7 +30,7 @@ function ControlButton({ label, className, ...props }: ControlButtonProps) {
             type="button"
             aria-label={label}
             tabIndex={-1}
-            className={cn(iconButtonClassName, "size-5", className)}
+            className={cn(iconButtonClassName, className)}
             {...props}
         />
     );
@@ -49,7 +49,7 @@ export function WindowControls({ className }: { className?: string }) {
     return (
         <div
             className={cn(
-                "flex h-full shrink-0 items-center gap-1 pr-2 pl-1",
+                "flex h-full shrink-0 items-center gap-0.5 pr-2 pl-1",
                 className
             )}
         >
@@ -57,16 +57,16 @@ export function WindowControls({ className }: { className?: string }) {
                 label="Minimize"
                 onClick={() => runOnWindow((w) => w.minimize())}
             >
-                <MinusIcon className="size-3.5" />
+                <MinusIcon className="size-4" />
             </ControlButton>
             <ControlButton
                 label={maximized ? "Restore" : "Maximize"}
                 onClick={() => runOnWindow((w) => w.toggleMaximize())}
             >
                 {maximized ? (
-                    <ArrowsInSimpleIcon className="size-3.5" />
+                    <ArrowsInSimpleIcon className="size-4" />
                 ) : (
-                    <ArrowsOutSimpleIcon className="size-3.5" />
+                    <ArrowsOutSimpleIcon className="size-4" />
                 )}
             </ControlButton>
             <ControlButton
@@ -74,7 +74,7 @@ export function WindowControls({ className }: { className?: string }) {
                 className="hover:bg-danger/15 hover:text-danger active:bg-danger/25"
                 onClick={() => runOnWindow((w) => w.close())}
             >
-                <XIcon className="size-3.5" />
+                <XIcon className="size-4" />
             </ControlButton>
         </div>
     );
