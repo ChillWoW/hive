@@ -91,6 +91,26 @@ impl MessagePart {
     }
 }
 
+/// A file sent with a prompt. Hive keeps its own copy, so the message
+/// still has it after the original moves.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct Attachment {
+    /// Absolute path of Hive's copy.
+    pub path: String,
+    /// The file's name as it was attached.
+    pub name: String,
+    pub mime_type: String,
+    /// Bytes.
+    pub size: u64,
+}
+
+impl Attachment {
+    pub fn is_image(&self) -> bool {
+        self.mime_type.starts_with("image/")
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(optional_fields)]
@@ -99,6 +119,10 @@ pub struct Message {
     pub chat_id: String,
     pub role: MessageRole,
     pub parts: Vec<MessagePart>,
+    /// User messages only: files sent with the prompt.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[ts(as = "Option<Vec<Attachment>>")]
+    pub attachments: Vec<Attachment>,
     /// Epoch millis.
     pub created_at: i64,
     /// Assistant messages only; user messages are always complete.

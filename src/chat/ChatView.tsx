@@ -22,7 +22,7 @@ import {
 } from "@/harnesses";
 import { BranchPicker, useGitRepo, WorkspaceChip, WorkspacePicker } from "@/git";
 import { useShortcut } from "@/keybindings";
-import type { ChatConfig, MessagePart } from "@/proto";
+import type { Attachment, ChatConfig, MessagePart } from "@/proto";
 import { Transcript } from "@/transcript";
 import { MorphHeight } from "@/ui";
 import { ContextRing } from "./ContextRing";
@@ -98,9 +98,9 @@ export function ChatView() {
         messages.some((m) => m.delivery?.state === "sending");
     const input = pendingInput(shown);
 
-    const sendTo = (prompt: string) => {
+    const sendTo = (prompt: string, attachments: Attachment[] = []) => {
         if (chat) {
-            void chats.send({ chatId: chat.id }, prompt);
+            void chats.send({ chatId: chat.id }, prompt, attachments);
             return true;
         }
         if (!newChat.cwd) {
@@ -113,7 +113,8 @@ export function ChatView() {
                 config,
                 worktree: worktreeMode ? { base } : undefined
             },
-            prompt
+            prompt,
+            attachments
         );
         return true;
     };
@@ -123,7 +124,7 @@ export function ChatView() {
             .flatMap((p) => (p.kind === "text" ? [p.text] : []))
             .join("\n\n");
         chats.discard(message.id);
-        sendTo(text);
+        sendTo(text, message.attachments ?? []);
     };
 
     const hero = !chatId && shown.length === 0;
@@ -151,6 +152,7 @@ export function ChatView() {
                             busy={busy}
                             canStop={!!chat && streaming && !!catalog?.capabilities.interrupt}
                             steering={!!catalog?.capabilities.steering}
+                            canAttach={!!catalog?.capabilities.attachments}
                             commands={slashCommands(catalog, session?.commands)}
                             onSend={sendTo}
                             onStop={chat ? () => void chats.interrupt(chat.id).catch(() => {}) : undefined}

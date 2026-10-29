@@ -9,6 +9,7 @@
 //!     --sandbox <level>   read-only | workspace-write (default) | danger-full-access
 //!     --cwd <dir>         Working directory (default: current)
 //!     --resume <id>       Continue a Claude session
+//!     --attach <path>     Send a file with the prompt (repeatable)
 //!     --yes               Approve every permission prompt
 //!     --json              Print raw AgentEvent JSON lines
 //!
@@ -67,6 +68,11 @@ fn parse_args() -> Result<Options, String> {
             "--model" => request.model = Some(value()?),
             "--cwd" => request.cwd = value()?,
             "--resume" => request.resume = Some(value()?),
+            "--attach" => {
+                let path = std::path::PathBuf::from(value()?);
+                let path = std::path::absolute(&path).map_err(|e| format!("--attach {}: {e}", path.display()))?;
+                request.attachments.push(path.display().to_string());
+            }
             "--effort" => {
                 request.reasoning = Some(
                     serde_json::from_value::<ReasoningLevel>(value()?.into())
@@ -82,7 +88,7 @@ fn parse_args() -> Result<Options, String> {
         }
     }
     request.prompt = prompt.join(" ");
-    if request.prompt.trim().is_empty() {
+    if request.prompt.trim().is_empty() && request.attachments.is_empty() {
         return Err("missing prompt".into());
     }
     if mock {
@@ -100,7 +106,7 @@ async fn main() {
     let options = match parse_args() {
         Ok(options) => options,
         Err(error) => {
-            eprintln!("hive-run: {error}\nusage: hive-run [--mock] [--model id] [--effort level] [--sandbox level] [--cwd dir] [--resume id] [--yes] [--json] <prompt>");
+            eprintln!("hive-run: {error}\nusage: hive-run [--mock] [--model id] [--effort level] [--sandbox level] [--cwd dir] [--resume id] [--attach path] [--yes] [--json] <prompt>");
             std::process::exit(2);
         }
     };

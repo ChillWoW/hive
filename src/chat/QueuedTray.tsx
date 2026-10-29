@@ -3,6 +3,7 @@ import {
     ArrowBendDownRightIcon,
     ArrowUpIcon,
     DotsSixVerticalIcon,
+    PaperclipIcon,
     PencilSimpleIcon,
     PlayIcon,
     XIcon
@@ -68,7 +69,8 @@ export function QueuedTray({
         if (!withdrawn) return;
         const draft = composer.draft(chatId).trim();
         const text = promptText(message);
-        composer.setDraft(chatId, draft ? `${draft}\n\n${text}` : text);
+        composer.setDraft(chatId, draft && text ? `${draft}\n\n${text}` : draft || text);
+        composer.restoreAttachments(chatId, message.attachments ?? []);
         composer.focus();
     };
 
@@ -140,6 +142,22 @@ export function QueuedTray({
                             <span className="min-w-0 flex-1 truncate text-[13px] text-dark-100">
                                 {text.replace(/\s+/g, " ")}
                             </span>
+                            {(m.attachments?.length ?? 0) > 0 && (
+                                <span
+                                    className={cn(
+                                        "inline-flex shrink-0 items-center gap-0.5 text-xs text-dark-250",
+                                        // Files only: the name stands in for the text.
+                                        !text.trim() && "-order-1 min-w-0 flex-1 text-dark-100"
+                                    )}
+                                >
+                                    <PaperclipIcon className="size-3 shrink-0" />
+                                    <span className="truncate">
+                                        {text.trim()
+                                            ? m.attachments!.length
+                                            : m.attachments!.map((a) => a.name).join(", ")}
+                                    </span>
+                                </span>
+                            )}
                             <div
                                 className={cn(
                                     "flex shrink-0 items-center opacity-0 transition-opacity duration-150",

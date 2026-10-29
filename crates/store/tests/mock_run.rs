@@ -83,11 +83,11 @@ async fn two_mock_turns_persist_and_match_their_journal() {
             attachments: Vec::new(),
         })
         .unwrap();
-    let mut first = store.start_turn(&chat.id, "first", None).unwrap();
+    let mut first = store.start_turn(&chat.id, "first", &[], None).unwrap();
     record_turn(&store, &mut run, &mut first).await;
 
     run.handle.send("second");
-    let mut second = store.start_turn(&chat.id, "second", None).unwrap();
+    let mut second = store.start_turn(&chat.id, "second", &[], None).unwrap();
     record_turn(&store, &mut run, &mut second).await;
     run.handle.close();
 

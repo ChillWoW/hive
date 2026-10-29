@@ -2,6 +2,7 @@ import { useEffect, useMemo } from "react";
 import { create } from "zustand";
 import { immer } from "zustand/middleware/immer";
 import type {
+    Attachment,
     Chat,
     ChatConfig,
     ChatsUpdate,
@@ -28,6 +29,7 @@ export type Outgoing = {
     /** Null until a new chat's `create_chat` returns. */
     chatId: string | null;
     prompt: string;
+    attachments: Attachment[];
     createdAt: number;
     commandId?: string;
     /** Waiting behind the running turn. */
@@ -76,7 +78,7 @@ type ChatsState = {
     goBack: () => void;
     goForward: () => void;
     /** Shows the prompt now; creates the chat first for a new-chat target. */
-    send: (target: SendTarget, prompt: string) => Promise<void>;
+    send: (target: SendTarget, prompt: string, attachments?: Attachment[]) => Promise<void>;
     /** Drops a failed prompt from the outbox. */
     discard: (messageId: string) => void;
     /** Withdraws a queued prompt; gone at once, back if that's refused. */
@@ -220,6 +222,7 @@ function fromCommand(command: Command, queued: boolean): Outgoing | null {
         messageId: command.payload.messageId,
         chatId: command.chatId,
         prompt: command.payload.prompt,
+        attachments: command.payload.attachments ?? [],
         createdAt: command.issuedAt,
         queued: false
     };
@@ -288,7 +291,7 @@ export const useChatsStore = create<ChatsState>()(
         goBack: () => set((s) => step(s, s.back, s.forward)),
         goForward: () => set((s) => step(s, s.forward, s.back)),
 
-        send: async (target, prompt) => {
+        send: async (target, prompt, attachments = []) => {
             const messageId = crypto.randomUUID();
             const edit = (change: (o: Outgoing) => void) =>
                 set((s) => {
@@ -301,6 +304,7 @@ export const useChatsStore = create<ChatsState>()(
                     messageId,
                     chatId: "chatId" in target ? target.chatId : null,
                     prompt,
+                    attachments,
                     createdAt: Date.now(),
                     queued: false
                 });
@@ -313,7 +317,8 @@ export const useChatsStore = create<ChatsState>()(
                 } else {
                     const worktree = target.worktree && {
                         base: target.worktree.base ?? undefined,
-                        hint: prompt
+                        // A files-only prompt names the branch after its files.
+                        hint: prompt || attachments.map((a) => a.name).join(" ")
                     };
                     const chat = await chatsApi.create(target.cwd, target.config, worktree);
                     chatId = chat.id;
@@ -334,7 +339,8 @@ export const useChatsStore = create<ChatsState>()(
                 const command = await chatsApi.queueCommand(chatId, {
                     kind: "send",
                     prompt,
-                    messageId
+                    messageId,
+                    ...(attachments.length > 0 && { attachments })
                 });
                 edit((o) => track(o, command, true));
             } catch (error) {
@@ -744,6 +750,7 @@ function toMessage(o: Outgoing): TranscriptMessage {
         chatId: o.chatId ?? "",
         role: "user",
         parts: [{ kind: "text", id: "t0", text: o.prompt }],
+        attachments: o.attachments,
         createdAt: o.createdAt,
         delivery: o.error
             ? { state: "failed", error: o.error }
@@ -789,8 +796,8 @@ export const chats = {
         useChatsStore.getState().select(chatId),
     goBack: () => useChatsStore.getState().goBack(),
     goForward: () => useChatsStore.getState().goForward(),
-    send: (target: SendTarget, prompt: string) =>
-        useChatsStore.getState().send(target, prompt),
+    send: (target: SendTarget, prompt: string, attachments?: Attachment[]) =>
+        useChatsStore.getState().send(target, prompt, attachments),
     discard: (messageId: string) => useChatsStore.getState().discard(messageId),
     cancelQueued: (messageId: string) =>
         useChatsStore.getState().cancelQueued(messageId),

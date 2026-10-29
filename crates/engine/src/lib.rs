@@ -26,7 +26,7 @@ use std::time::Duration;
 
 use hive_harness::{Harness, RunHandle};
 use hive_proto::{
-    AgentEvent, Chat, ChatConfig, ChatsUpdate, Command, CommandPayload, CommandStatus,
+    AgentEvent, Attachment, Chat, ChatConfig, ChatsUpdate, Command, CommandPayload, CommandStatus,
     ContextUsage, DoneStatus, HarnessCatalog, HarnessId, MessageStatus, MessagesUpdate,
     NewWorktree, RunRequest, Session, SessionStatus, SlashCommand, UserInputAnswer,
 };
@@ -169,10 +169,23 @@ struct LiveRun {
     activity: u64,
 }
 
+/// A prompt on its way to the agent.
+struct Prompt {
+    text: String,
+    attachments: Vec<Attachment>,
+    /// The user message it becomes.
+    message_id: String,
+}
+
+impl Prompt {
+    fn paths(&self) -> Vec<String> {
+        self.attachments.iter().map(|a| a.path.clone()).collect()
+    }
+}
+
 struct Queued {
     command_id: String,
-    prompt: String,
-    message_id: String,
+    prompt: Prompt,
 }
 
 enum Outcome {
@@ -224,6 +237,11 @@ impl Engine {
     pub fn start(&self) -> Result<Recovery> {
         let store = self.store();
         let recovery = store.recover()?;
+        match store.sweep_attachments() {
+            Ok(0) => {}
+            Ok(n) => log::info!("removed {n} unused attachments"),
+            Err(e) => log::warn!("sweeping attachments: {e}"),
+        }
         if !self.inner.config.resume_interrupted {
             return Ok(recovery);
         }
@@ -247,6 +265,7 @@ impl Engine {
             let payload = CommandPayload::Send {
                 prompt: RESUME_PROMPT.into(),
                 message_id: new_id(),
+                attachments: Vec::new(),
             };
             if let Err(e) = self.queue_command(&chat_id, payload) {
                 log::warn!("resuming chat {chat_id}: {e}");
@@ -551,8 +570,17 @@ impl Engine {
         }
 
         let outcome = match payload {
-            CommandPayload::Send { prompt, message_id } => {
-                self.send(&chat, &runtime, &mut st, &command.id, prompt, message_id)
+            CommandPayload::Send {
+                prompt,
+                message_id,
+                attachments,
+            } => {
+                let prompt = Prompt {
+                    text: prompt,
+                    attachments,
+                    message_id,
+                };
+                self.send(&chat, &runtime, &mut st, &command.id, prompt)
             }
             CommandPayload::Answer {
                 request_id,
@@ -583,18 +611,28 @@ impl Engine {
         runtime: &Arc<ChatRuntime>,
         st: &mut ChatState,
         command_id: &str,
-        prompt: String,
-        message_id: String,
+        prompt: Prompt,
     ) -> Result<Outcome> {
+        if !prompt.attachments.is_empty() {
+            let takes_files = self
+                .inner
+                .harnesses
+                .get(&chat.config.harness)
+                .is_some_and(|h| h.catalog().capabilities.attachments);
+            if !takes_files {
+                return Ok(Outcome::Rejected(
+                    "This agent can't take attachments.".into(),
+                ));
+            }
+        }
         if st.in_flight() {
             st.queued.push_back(Queued {
                 command_id: command_id.to_owned(),
                 prompt,
-                message_id,
             });
             return Ok(Outcome::Queued);
         }
-        self.dispatch(chat, runtime, st, prompt, message_id)
+        self.dispatch(chat, runtime, st, prompt)
     }
 
     /// Starts a turn with `prompt` now, starting a run first if there's none.
@@ -603,15 +641,14 @@ impl Engine {
         chat: &Chat,
         runtime: &Arc<ChatRuntime>,
         st: &mut ChatState,
-        prompt: String,
-        message_id: String,
+        prompt: Prompt,
     ) -> Result<Outcome> {
         if st.run.is_none() {
-            return self.start_run(chat, runtime, st, prompt, message_id);
+            return self.start_run(chat, runtime, st, prompt);
         }
-        self.start_turn(&chat.id, st, &prompt, message_id)?;
+        self.start_turn(&chat.id, st, &prompt)?;
         if let Some(run) = &st.run {
-            run.handle.send(prompt);
+            run.handle.send_with(prompt.text.clone(), prompt.paths());
         }
         self.set_status(&chat.id, st, SessionStatus::Working);
         Ok(Outcome::Applied)
@@ -698,7 +735,7 @@ impl Engine {
     ) -> bool {
         let outcome = self
             .chat(chat_id)
-            .and_then(|chat| self.dispatch(&chat, runtime, st, q.prompt, q.message_id));
+            .and_then(|chat| self.dispatch(&chat, runtime, st, q.prompt));
         let (status, resolution) = match outcome {
             Ok(Outcome::Applied) => (CommandStatus::Applied, None),
             Ok(Outcome::Rejected(reason)) => (CommandStatus::Rejected, Some(reason)),
@@ -719,8 +756,7 @@ impl Engine {
         chat: &Chat,
         runtime: &Arc<ChatRuntime>,
         st: &mut ChatState,
-        prompt: String,
-        message_id: String,
+        prompt: Prompt,
     ) -> Result<Outcome> {
         let Some(harness) = self.inner.harnesses.get(&chat.config.harness) else {
             return Ok(Outcome::Rejected(format!(
@@ -743,7 +779,7 @@ impl Engine {
         let config = &chat.config;
         let request = RunRequest {
             harness: config.harness,
-            prompt: prompt.clone(),
+            prompt: prompt.text.clone(),
             cwd: chat.work_dir().to_owned(),
             sandbox: config.sandbox,
             model: config.model.clone(),
@@ -753,7 +789,7 @@ impl Engine {
             access: config.access,
             plan: config.plan,
             resume: chat.harness_session_id.clone(),
-            attachments: Vec::new(),
+            attachments: prompt.paths(),
         };
         let run = {
             let _runtime = self.inner.runtime.enter();
@@ -762,7 +798,7 @@ impl Engine {
                 Err(e) => return Ok(Outcome::Rejected(e.to_string())),
             }
         };
-        if let Err(e) = self.start_turn(&chat.id, st, &prompt, message_id) {
+        if let Err(e) = self.start_turn(&chat.id, st, &prompt) {
             run.handle.close();
             return Err(e);
         }
@@ -788,14 +824,18 @@ impl Engine {
         &self,
         chat_id: &str,
         st: &mut ChatState,
-        prompt: &str,
-        message_id: String,
+        prompt: &Prompt,
     ) -> Result<()> {
         let store = self.store();
         if let Some(previous) = &mut st.turn {
             store.flush(previous)?;
         }
-        let turn = store.start_turn(chat_id, prompt, Some(message_id))?;
+        let turn = store.start_turn(
+            chat_id,
+            &prompt.text,
+            &prompt.attachments,
+            Some(prompt.message_id.clone()),
+        )?;
         for message in [&turn.user, &turn.assistant] {
             publish(
                 &mut st.watchers,

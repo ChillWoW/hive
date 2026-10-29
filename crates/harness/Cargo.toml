@@ -6,6 +6,7 @@ license = "GPL-3.0-only"
 publish = false
 
 [dependencies]
+base64.workspace = true
 hive-proto.workspace = true
 serde.workspace = true
 serde_json.workspace = true

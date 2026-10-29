@@ -87,7 +87,12 @@ impl Engine {
             })
             .collect();
         let text = text.join("\n");
-        Ok((!text.trim().is_empty()).then_some(text))
+        if !text.trim().is_empty() {
+            return Ok(Some(text));
+        }
+        // Only files were sent: their names say what it's about.
+        let names: Vec<&str> = user.attachments.iter().map(|a| a.name.as_str()).collect();
+        Ok((!names.is_empty()).then(|| names.join(", ")))
     }
 
     /// The title model's answer, cleaned; `None` if every attempt failed.

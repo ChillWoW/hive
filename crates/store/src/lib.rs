@@ -10,6 +10,7 @@
 //! message saved (at most once a second while text streams). After a crash,
 //! [`Store::recover`] rebuilds unfinished messages from their journals.
 
+pub mod attachments;
 pub mod journal;
 pub mod settings;
 
@@ -18,11 +19,12 @@ use std::sync::{Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
 
 use hive_proto::{
-    fold_event, AgentEvent, Chat, ChatConfig, Command, CommandPayload, CommandStatus, DoneStatus,
+    fold_event, AgentEvent, Attachment, Chat, ChatConfig, Command, CommandPayload, CommandStatus, DoneStatus,
     Message, MessagePart, MessageRole, MessageStatus,
 };
 use rusqlite::{params, Connection, OptionalExtension};
 
+pub use attachments::{Attachments, MAX_ATTACHMENT_BYTES};
 pub use journal::{Journal, JournalLine};
 pub use settings::{SettingsFile, SETTINGS_FILE};
 
@@ -40,6 +42,9 @@ pub enum StoreError {
     Json(#[from] serde_json::Error),
     #[error("{0} not found")]
     NotFound(String),
+    /// A file that can't be attached; says why.
+    #[error("{0}")]
+    Attachment(String),
 }
 
 pub type Result<T> = std::result::Result<T, StoreError>;
@@ -81,6 +86,7 @@ r#"
 pub struct Store {
     db: Mutex<Connection>,
     journal: Journal,
+    attachments: Attachments,
 }
 
 /// One turn being recorded: the prompt and the assistant message its events
@@ -112,6 +118,7 @@ impl Store {
         Ok(Self {
             db: Mutex::new(db),
             journal: Journal::open(dir.join("journals"))?,
+            attachments: Attachments::open(dir.join("attachments"))?,
         })
     }
 
@@ -121,6 +128,10 @@ impl Store {
 
     pub fn journal(&self) -> &Journal {
         &self.journal
+    }
+
+    pub fn attachments(&self) -> &Attachments {
+        &self.attachments
     }
 
     // Chats
@@ -170,10 +181,42 @@ impl Store {
         Ok(chats)
     }
 
-    /// Deletes the chat with its messages, commands and journal.
+    /// Deletes the chat with its messages, commands, journal and attachments.
     pub fn delete_chat(&self, id: &str) -> Result<()> {
+        let mut paths: Vec<String> = self
+            .messages(id)?
+            .into_iter()
+            .flat_map(|m| m.attachments)
+            .map(|a| a.path)
+            .collect();
+        for command in self.commands(id)? {
+            if let CommandPayload::Send { attachments, .. } = command.payload {
+                paths.extend(attachments.into_iter().map(|a| a.path));
+            }
+        }
         self.db().execute("DELETE FROM chats WHERE id = ?1", [id])?;
-        self.journal.delete(id)
+        self.journal.delete(id)?;
+        self.attachments.remove(paths.iter().map(String::as_str));
+        Ok(())
+    }
+
+    /// Deletes attachments no message or command refers to: ones attached
+    /// and then removed, or left in a draft Hive closed with. Run at boot,
+    /// when no draft is open. Returns how many went.
+    pub fn sweep_attachments(&self) -> Result<usize> {
+        let mut swept = 0;
+        for (id, folder) in self.attachments.folders()? {
+            let used: bool = self.db().query_row(
+                "SELECT EXISTS(SELECT 1 FROM messages WHERE instr(data, ?1) > 0)
+                     OR EXISTS(SELECT 1 FROM commands WHERE instr(data, ?1) > 0)",
+                [&id],
+                |row| row.get(0),
+            )?;
+            if !used && std::fs::remove_dir_all(folder).is_ok() {
+                swept += 1;
+            }
+        }
+        Ok(swept)
     }
 
     /// Names the chat unless it already has a title (a rename wins). Returns
@@ -316,6 +359,7 @@ impl Store {
         &self,
         chat_id: &str,
         prompt: &str,
+        attachments: &[Attachment],
         user_message_id: Option<String>,
     ) -> Result<Turn> {
         let now = now_ms();
@@ -327,6 +371,7 @@ impl Store {
                 id: "t0".into(),
                 text: prompt.to_owned(),
             }],
+            attachments: attachments.to_vec(),
             created_at: now,
             status: None,
             duration_ms: None,
@@ -336,6 +381,7 @@ impl Store {
             chat_id: chat_id.to_owned(),
             role: MessageRole::Assistant,
             parts: Vec::new(),
+            attachments: Vec::new(),
             created_at: now,
             status: Some(MessageStatus::Streaming),
             duration_ms: None,
@@ -542,7 +588,7 @@ mod tests {
         b.created_at = a.created_at - 10;
         b.title = Some("B".into());
         store.save_chat(&b).unwrap();
-        store.start_turn(&b.id, "hi", None).unwrap();
+        store.start_turn(&b.id, "hi", &[], None).unwrap();
 
         let chats = store.chats().unwrap();
         assert_eq!(chats[0].id, b.id);
@@ -560,7 +606,7 @@ mod tests {
         let id = {
             let store = Store::open(dir.path()).unwrap();
             let chat = store.create_chat("/a", config()).unwrap();
-            store.start_turn(&chat.id, "hi", None).unwrap();
+            store.start_turn(&chat.id, "hi", &[], None).unwrap();
             store
                 .db()
                 .pragma_update(None, "user_version", 1)
@@ -571,6 +617,39 @@ mod tests {
         let chat = store.chat(&id).unwrap().unwrap();
         assert_eq!(chat.last_seen_at, chat.last_message_at);
         assert!(!chat.unseen());
+    }
+
+    #[test]
+    fn attachments_go_with_their_chat_or_when_unused() {
+        let (_dir, store) = store();
+        let files = store.attachments();
+        let sent = files.save("shot.png", b"\x89PNG").unwrap();
+        let queued = files.save("notes.md", b"# hi").unwrap();
+        let unused = files.save("left.txt", b"x").unwrap();
+
+        let chat = store.create_chat("/a", config()).unwrap();
+        let turn = store
+            .start_turn(&chat.id, "look", std::slice::from_ref(&sent), None)
+            .unwrap();
+        assert_eq!(store.message(&turn.user.id).unwrap().unwrap().attachments, [sent.clone()]);
+        store
+            .issue_command(
+                &chat.id,
+                CommandPayload::Send {
+                    prompt: String::new(),
+                    message_id: "m2".into(),
+                    attachments: vec![queued.clone()],
+                },
+            )
+            .unwrap();
+
+        assert_eq!(store.sweep_attachments().unwrap(), 1);
+        assert!(!Path::new(&unused.path).exists());
+        assert!(Path::new(&sent.path).exists() && Path::new(&queued.path).exists());
+
+        store.delete_chat(&chat.id).unwrap();
+        assert!(!Path::new(&sent.path).exists() && !Path::new(&queued.path).exists());
+        assert!(files.folders().unwrap().is_empty());
     }
 
     #[test]
@@ -594,7 +673,7 @@ mod tests {
         let (_dir, store) = store();
         let chat = store.create_chat("/a", config()).unwrap();
         let mut turn = store
-            .start_turn(&chat.id, "hello", Some("u1".into()))
+            .start_turn(&chat.id, "hello", &[], Some("u1".into()))
             .unwrap();
         for event in [
             AgentEvent::SessionStarted {
@@ -677,7 +756,7 @@ mod tests {
             store
                 .issue_command(&chat.id, CommandPayload::Interrupt)
                 .unwrap();
-            let mut turn = store.start_turn(&chat.id, "hello", None).unwrap();
+            let mut turn = store.start_turn(&chat.id, "hello", &[], None).unwrap();
             store.record(&mut turn, &text("partial ")).unwrap();
             // Within the save interval: journaled, not yet saved.
             store.record(&mut turn, &text("reply")).unwrap();

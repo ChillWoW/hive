@@ -2,21 +2,23 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
     ArrowBendDownRightIcon,
     ArrowUpIcon,
+    PaperclipIcon,
     QueueIcon,
     StopIcon
 } from "@phosphor-icons/react";
 import TextareaAutosize from "react-textarea-autosize";
-import type { ChatConfig, SlashCommand } from "@/proto";
+import type { Attachment, ChatConfig, SlashCommand } from "@/proto";
+import { AttachmentTile } from "@/attachments";
 import { COMPOSER_SCOPE, useShortcut } from "@/keybindings/runtime";
 import { cn } from "@/lib/cn";
 import { isMac } from "@/lib/platform";
 import { useSettingsStore } from "@/settings/store";
-import { Tooltip } from "@/ui";
+import { iconButtonClassName, Tooltip } from "@/ui";
 import { ModelPicker } from "./ModelPicker";
 import { AccessPicker } from "./AccessPicker";
 import { SlashMenu } from "./SlashMenu";
 import { useSlashMenu } from "./useSlashMenu";
-import { composer, useComposerStore, useDraft } from "./store";
+import { composer, useComposerStore, useDraft, useDraftAttachments } from "./store";
 
 /** Past this the field scrolls. */
 const MAX_ROWS = 12;
@@ -50,8 +52,10 @@ type ComposerProps = {
     steering?: boolean;
     /** Typed as `/name`; completed from a menu above the box. */
     commands?: SlashCommand[];
+    /** The harness takes files with a prompt: the attach button, paste and drop. */
+    canAttach?: boolean;
     /** False keeps the draft: the prompt couldn't be sent yet. */
-    onSend: (prompt: string) => boolean | void;
+    onSend: (prompt: string, attachments: Attachment[]) => boolean | void;
     onStop?: () => void;
     placeholder?: string;
     className?: string;
@@ -83,6 +87,7 @@ export function Composer({
     canStop = false,
     steering = false,
     commands = [],
+    canAttach = false,
     onSend,
     onStop,
     placeholder = "Ask anything",
@@ -90,8 +95,19 @@ export function Composer({
 }: ComposerProps) {
     const draft = useDraft(chatId);
     const setDraft = (text: string) => composer.setDraft(chatId, text);
+    const attachments = useDraftAttachments(chatId);
+    const addFiles = useComposerStore((s) => s.addFiles);
+    const removeAttachment = useComposerStore((s) => s.removeAttachment);
+    const takeAttachments = useComposerStore((s) => s.takeAttachments);
     const focusToken = useComposerStore((s) => s.focusToken);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
+    const [dragging, setDragging] = useState(false);
+    /**
+     * dragenter/dragleave fire for every child the pointer crosses, so the
+     * box counts them rather than trusting any one leave to mean it's gone.
+     */
+    const dragDepthRef = useRef(0);
     const frameRef = useRef<HTMLDivElement>(null);
     const deckRef = useRef<HTMLDivElement>(null);
     const measureRef = useRef<HTMLSpanElement>(null);
@@ -131,6 +147,20 @@ export function Composer({
     useEffect(() => {
         textareaRef.current?.focus();
     }, [focusToken, chatId]);
+
+    // The window has `dragDropEnabled: false`, so the webview handles drops
+    // itself, and a file dropped where nothing takes it navigates the webview
+    // to that file, replacing the app. While the composer is here, stray
+    // drops are eaten.
+    useEffect(() => {
+        const swallow = (event: DragEvent) => event.preventDefault();
+        window.addEventListener("dragover", swallow);
+        window.addEventListener("drop", swallow);
+        return () => {
+            window.removeEventListener("dragover", swallow);
+            window.removeEventListener("drop", swallow);
+        };
+    }, []);
 
     useShortcut("focusComposer", () => {
         const el = textareaRef.current;
@@ -236,7 +266,10 @@ export function Composer({
     }, []);
 
     const prompt = draft.trim();
-    const mode: Mode = prompt
+    const content = prompt !== "" || attachments.length > 0;
+    /** Every file is copied in; one still copying or failed holds the send. */
+    const filesReady = attachments.every((a) => a.attachment);
+    const mode: Mode = content
         ? busy
             ? steering
                 ? "steer"
@@ -245,15 +278,66 @@ export function Composer({
         : busy && canStop && onStop
           ? "stop"
           : "send";
-    const disabled = mode !== "stop" && !prompt;
+    const disabled = mode !== "stop" && (!content || !filesReady);
 
     const submit = () => {
         if (mode === "stop") {
             onStop?.();
             return;
         }
-        if (!prompt) return;
-        if (onSend(prompt) !== false) setDraft("");
+        if (!content || !filesReady) return;
+        const files = attachments.flatMap((a) => (a.attachment ? [a.attachment] : []));
+        if (onSend(prompt, files) !== false) {
+            setDraft("");
+            takeAttachments(chatId);
+        }
+    };
+
+    const attach = (files: File[]) => {
+        if (files.length === 0) return;
+        addFiles(chatId, files);
+        textareaRef.current?.focus();
+    };
+
+    // Only a paste that carries files is taken over; text pastes as usual.
+    const onPaste = (event: React.ClipboardEvent<HTMLTextAreaElement>) => {
+        if (!canAttach) return;
+        const files = Array.from(event.clipboardData.files);
+        if (files.length === 0) return;
+        event.preventDefault();
+        attach(files);
+    };
+
+    // Only a drag carrying files is a drop target; dragged text passes
+    // through to the field.
+    const carriesFiles = (event: React.DragEvent) =>
+        canAttach && event.dataTransfer.types.includes("Files");
+
+    const onDragEnter = (event: React.DragEvent<HTMLFormElement>) => {
+        if (!carriesFiles(event)) return;
+        event.preventDefault();
+        dragDepthRef.current += 1;
+        setDragging(true);
+    };
+
+    const onDragOver = (event: React.DragEvent<HTMLFormElement>) => {
+        if (!carriesFiles(event)) return;
+        event.preventDefault();
+        event.dataTransfer.dropEffect = "copy";
+    };
+
+    const onDragLeave = (event: React.DragEvent<HTMLFormElement>) => {
+        if (!carriesFiles(event)) return;
+        dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+        if (dragDepthRef.current === 0) setDragging(false);
+    };
+
+    const onDrop = (event: React.DragEvent<HTMLFormElement>) => {
+        if (!carriesFiles(event)) return;
+        event.preventDefault();
+        dragDepthRef.current = 0;
+        setDragging(false);
+        attach(Array.from(event.dataTransfer.files));
     };
 
     const onKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -269,7 +353,7 @@ export function Composer({
         if (event.nativeEvent.isComposing) return;
         event.preventDefault();
         // Enter never stops a turn; that takes the button or Escape.
-        if (prompt) submit();
+        if (content) submit();
     };
 
     const { label, icon: ModeIcon } = MODES[mode];
@@ -287,17 +371,53 @@ export function Composer({
                     onStop?.();
                 }
             }}
+            onDragEnter={onDragEnter}
+            onDragOver={onDragOver}
+            onDragLeave={onDragLeave}
+            onDrop={onDrop}
             className={cn(
                 "relative flex w-full flex-col gap-1.5 rounded-[22px] border border-dark-700 bg-dark-850 p-1.5",
                 "transition-colors focus-within:border-dark-600",
                 className
             )}
         >
+            {dragging && (
+                // pointer-events-none so the overlay never becomes the drag
+                // target itself and throws the enter/leave count off. One
+                // pixel out, over the box's own border, with the same radius.
+                <div
+                    aria-hidden="true"
+                    className={cn(
+                        "pointer-events-none absolute -inset-px z-10 flex items-center justify-center gap-2",
+                        "rounded-[22px] border border-dark-500",
+                        "bg-dark-850/90 text-sm text-dark-100 backdrop-blur-[2px]",
+                        "transition-opacity duration-150 starting:opacity-0"
+                    )}
+                >
+                    <PaperclipIcon className="size-4" />
+                    Drop files to attach
+                </div>
+            )}
             {/* Above the box: in a chat the composer sits at the bottom of the window. */}
             <SlashMenu
                 menu={slash}
                 className="absolute inset-x-0 bottom-full z-20 mb-2"
             />
+            {attachments.length > 0 && (
+                <div className="flex flex-wrap items-end gap-2 px-1 pt-1">
+                    {attachments.map((a) => (
+                        <AttachmentTile
+                            key={a.id}
+                            name={a.name}
+                            mimeType={a.mimeType}
+                            imageUrl={a.previewUrl}
+                            uploading={!a.attachment && !a.error}
+                            error={a.error}
+                            onRemove={() => removeAttachment(chatId, a.id)}
+                        />
+                    ))}
+                </div>
+            )}
             {/* Anchors the deck to its bottom, so while the height animates
                 it's the top row that is revealed or hidden and the controls,
                 on the bottom row in either shape, never move. */}
@@ -317,7 +437,13 @@ export function Composer({
                     // controls' may shrink to nothing, so a narrow box
                     // truncates the model name rather than the field — and
                     // once the rest no longer fits, `measure` goes two rows.
-                    className="group/deck relative grid shrink-0 grid-cols-[minmax(8rem,1fr)_minmax(0,auto)] items-end gap-x-1 data-tall:gap-y-1.5"
+                    className={cn(
+                        "group/deck relative grid shrink-0 items-end gap-x-1 data-tall:gap-y-1.5",
+                        // The attach button takes a column of its own on the left.
+                        canAttach
+                            ? "grid-cols-[auto_minmax(8rem,1fr)_minmax(0,auto)]"
+                            : "grid-cols-[minmax(8rem,1fr)_minmax(0,auto)]"
+                    )}
                 >
                     <span
                         ref={measureRef}
@@ -327,6 +453,38 @@ export function Composer({
                         {draft}
                     </span>
 
+                    {canAttach && (
+                        <Tooltip>
+                            <Tooltip.Trigger
+                                render={
+                                    <button
+                                        type="button"
+                                        aria-label="Attach files"
+                                        onClick={() => fileInputRef.current?.click()}
+                                        className={cn(
+                                            iconButtonClassName,
+                                            "col-start-1 row-start-1 size-8 rounded-full group-data-tall/deck:row-start-2"
+                                        )}
+                                    >
+                                        <PaperclipIcon className="size-4" />
+                                    </button>
+                                }
+                            />
+                            <Tooltip.Content side="top">Attach files</Tooltip.Content>
+                        </Tooltip>
+                    )}
+                    <input
+                        ref={fileInputRef}
+                        type="file"
+                        multiple
+                        hidden
+                        tabIndex={-1}
+                        onChange={(event) => {
+                            attach(Array.from(event.target.files ?? []));
+                            // The same file can be picked again.
+                            event.target.value = "";
+                        }}
+                    />
                     <TextareaAutosize
                         ref={textareaRef}
                         value={draft}
@@ -334,6 +492,7 @@ export function Composer({
                         onFocus={() => setFocused(true)}
                         onBlur={() => setFocused(false)}
                         onKeyDown={onKeyDown}
+                        onPaste={onPaste}
                         // Autosize only re-measures when it re-renders; without
                         // this it keeps the one-row shape's height after the
                         // field widens.
@@ -344,17 +503,21 @@ export function Composer({
                         maxRows={MAX_ROWS}
                         rows={1}
                         className={cn(
-                            "col-start-1 row-start-1 block w-full resize-none bg-transparent px-2.5 py-1",
+                            "row-start-1 block w-full resize-none bg-transparent py-1",
                             "text-sm leading-6 text-dark-50 placeholder:text-dark-300",
-                            "group-data-tall/deck:col-span-2"
+                            canAttach
+                                ? "col-start-2 pr-2.5 pl-1 group-data-tall/deck:col-span-3 group-data-tall/deck:col-start-1 group-data-tall/deck:px-2.5"
+                                : "col-start-1 px-2.5 group-data-tall/deck:col-span-2"
                         )}
                     />
 
                     <div
                         ref={controlsRef}
                         className={cn(
-                            "col-start-2 row-start-1 flex min-w-0 items-center justify-end gap-0.5",
-                            "group-data-tall/deck:col-span-2 group-data-tall/deck:col-start-1 group-data-tall/deck:row-start-2"
+                            "row-start-1 flex min-w-0 items-center justify-end gap-0.5 group-data-tall/deck:row-start-2",
+                            canAttach
+                                ? "col-start-3 group-data-tall/deck:col-span-2 group-data-tall/deck:col-start-2"
+                                : "col-start-2 group-data-tall/deck:col-span-2 group-data-tall/deck:col-start-1"
                         )}
                     >
                         <AccessPicker config={config} onChange={onConfigChange} />

@@ -11,7 +11,7 @@ steering: boolean,
  */
 interrupt: boolean, 
 /**
- * Images can ride along with a prompt.
+ * Files can ride along with a prompt.
  */
 attachments: boolean, 
 /**

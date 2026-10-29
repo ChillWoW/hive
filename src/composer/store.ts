@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
-import type { ChatConfig } from "@/proto";
+import type { Attachment, ChatConfig } from "@/proto";
+import { isImage, primeAttachmentUrl, saveAttachment } from "@/attachments";
 
 /** The new-chat view's draft key; chat ids are UUIDs, so it can't collide. */
 const NEW_CHAT = "";
@@ -12,6 +13,17 @@ const keyOf = (chatId: string | null) => chatId ?? NEW_CHAT;
  * it (a new branch in a folder of its own).
  */
 export type Workspace = "local" | "worktree";
+
+/** A file in a draft: being copied in, copied (`attachment`), or failed. */
+export type DraftAttachment = {
+    id: string;
+    name: string;
+    mimeType: string;
+    /** An image's thumbnail, as an object URL. */
+    previewUrl?: string;
+    attachment?: Attachment;
+    error?: string;
+};
 
 /** What the next new chat is created with. */
 export type NewChatSettings = {
@@ -29,12 +41,21 @@ type ComposerState = {
      * half-written prompt survives switching chats. Empty drafts are dropped.
      */
     drafts: Record<string, string>;
+    /** Files attached to each draft, by the same keys. */
+    attachments: Record<string, DraftAttachment[]>;
     /** Bumped to ask the composer for the caret back. */
     focusToken: number;
     newChat: NewChatSettings;
     /** Starred models as `harness/model`, listed first in the model picker. */
     favorites: string[];
     setDraft: (chatId: string | null, text: string) => void;
+    /** Attaches `files`, copying each in. */
+    addFiles: (chatId: string | null, files: File[]) => void;
+    /** Puts already copied files back, as when a queued prompt is edited. */
+    restoreAttachments: (chatId: string | null, attachments: Attachment[]) => void;
+    removeAttachment: (chatId: string | null, id: string) => void;
+    /** Empties the draft's files, returning the copied ones (to send). */
+    takeAttachments: (chatId: string | null) => Attachment[];
     focus: () => void;
     setNewChat: (patch: Partial<NewChatSettings>) => void;
     toggleFavorite: (key: string) => void;
@@ -70,6 +91,93 @@ export const useComposerStore = create<ComposerState>()(
                     const { [key]: _, ...rest } = s.drafts;
                     return { drafts: text ? { ...rest, [key]: text } : rest };
                 }),
+            attachments: {},
+            addFiles: (chatId, files) => {
+                const key = keyOf(chatId);
+                const added: DraftAttachment[] = files.map((file) => ({
+                    id: crypto.randomUUID(),
+                    name: file.name || "file",
+                    mimeType: file.type || "application/octet-stream",
+                    previewUrl: isImage(file.type) ? URL.createObjectURL(file) : undefined
+                }));
+                set((s) => ({
+                    attachments: {
+                        ...s.attachments,
+                        [key]: [...(s.attachments[key] ?? []), ...added]
+                    }
+                }));
+                const update = (id: string, patch: Partial<DraftAttachment>) =>
+                    set((s) => {
+                        const list = s.attachments[key];
+                        if (!list?.some((a) => a.id === id)) return s;
+                        return {
+                            attachments: {
+                                ...s.attachments,
+                                [key]: list.map((a) => (a.id === id ? { ...a, ...patch } : a))
+                            }
+                        };
+                    });
+                files.forEach((file, i) => {
+                    const { id } = added[i];
+                    saveAttachment(file)
+                        .then((attachment) =>
+                            update(id, { attachment, mimeType: attachment.mimeType })
+                        )
+                        .catch((error: unknown) =>
+                            update(id, {
+                                error: error instanceof Error ? error.message : String(error)
+                            })
+                        );
+                });
+            },
+            restoreAttachments: (chatId, restored) => {
+                if (restored.length === 0) return;
+                const key = keyOf(chatId);
+                set((s) => ({
+                    attachments: {
+                        ...s.attachments,
+                        [key]: [
+                            ...(s.attachments[key] ?? []),
+                            ...restored.map((attachment) => ({
+                                id: crypto.randomUUID(),
+                                name: attachment.name,
+                                mimeType: attachment.mimeType,
+                                attachment
+                            }))
+                        ]
+                    }
+                }));
+            },
+            removeAttachment: (chatId, id) =>
+                set((s) => {
+                    const key = keyOf(chatId);
+                    const list = s.attachments[key] ?? [];
+                    const gone = list.find((a) => a.id === id);
+                    if (!gone) return s;
+                    if (gone.previewUrl) URL.revokeObjectURL(gone.previewUrl);
+                    const rest = list.filter((a) => a !== gone);
+                    const { [key]: _, ...others } = s.attachments;
+                    return { attachments: rest.length ? { ...others, [key]: rest } : others };
+                }),
+            takeAttachments: (chatId) => {
+                const key = keyOf(chatId);
+                const list = useComposerStore.getState().attachments[key] ?? [];
+                const sent: Attachment[] = [];
+                for (const a of list) {
+                    if (a.attachment) {
+                        sent.push(a.attachment);
+                        // The transcript shows the same image; it takes the URL over.
+                        if (a.previewUrl) primeAttachmentUrl(a.attachment, a.previewUrl);
+                    } else if (a.previewUrl) {
+                        URL.revokeObjectURL(a.previewUrl);
+                    }
+                }
+                set((s) => {
+                    const { [key]: _, ...others } = s.attachments;
+                    return { attachments: others };
+                });
+                return sent;
+            },
             focus: () => set((s) => ({ focusToken: s.focusToken + 1 })),
             setNewChat: (patch) =>
                 set((s) => ({ newChat: { ...s.newChat, ...patch } })),
@@ -120,11 +228,19 @@ export function useDraft(chatId: string | null): string {
     return useComposerStore((s) => s.drafts[keyOf(chatId)] ?? "");
 }
 
+const NO_ATTACHMENTS: DraftAttachment[] = [];
+
+export function useDraftAttachments(chatId: string | null): DraftAttachment[] {
+    return useComposerStore((s) => s.attachments[keyOf(chatId)] ?? NO_ATTACHMENTS);
+}
+
 /** Same actions outside React. */
 export const composer = {
     draft: (chatId: string | null) =>
         useComposerStore.getState().drafts[keyOf(chatId)] ?? "",
     setDraft: (chatId: string | null, text: string) =>
         useComposerStore.getState().setDraft(chatId, text),
+    restoreAttachments: (chatId: string | null, attachments: Attachment[]) =>
+        useComposerStore.getState().restoreAttachments(chatId, attachments),
     focus: () => useComposerStore.getState().focus()
 };

@@ -49,6 +49,7 @@ fn send(prompt: &str) -> CommandPayload {
     CommandPayload::Send {
         prompt: prompt.into(),
         message_id: format!("user-{prompt}"),
+        attachments: Vec::new(),
     }
 }
 
@@ -505,7 +506,7 @@ async fn start_resumes_a_turn_cut_short_by_exit() {
     let chat_id = {
         let store = Store::open(dir.path()).unwrap();
         let chat = store.create_chat("/demo", config(HarnessId::Mock)).unwrap();
-        let mut turn = store.start_turn(&chat.id, "hi", None).unwrap();
+        let mut turn = store.start_turn(&chat.id, "hi", &[], None).unwrap();
         for event in [
             AgentEvent::SessionStarted {
                 harness: HarnessId::Mock,
@@ -665,6 +666,45 @@ async fn without_auto_titles_the_prompt_names_the_chat() {
     .await;
     let titled = engine.store().chat(&chat.id).unwrap().unwrap();
     assert_eq!(titled.title.as_deref(), Some("fix the login flow please"));
+}
+
+#[tokio::test]
+async fn attachments_reach_the_user_message_and_name_a_files_only_chat() {
+    let (_dir, engine) = engine(0.0);
+    engine.set_auto_title(false);
+    let file = engine
+        .store()
+        .attachments()
+        .save("design spec.pdf", b"%PDF-1.7")
+        .unwrap();
+    let chat = engine
+        .create_chat("/demo", config(HarnessId::Mock))
+        .unwrap();
+    let mut chats = watch_chats(&engine);
+    let mut updates = watch_messages(&engine, &chat.id);
+
+    let payload = CommandPayload::Send {
+        prompt: String::new(),
+        message_id: "user-files".into(),
+        attachments: vec![file.clone()],
+    };
+    let command = engine.queue_command(&chat.id, payload).unwrap();
+    assert_eq!(command.status, CommandStatus::Applied);
+    let user = engine.store().message("user-files").unwrap().unwrap();
+    assert_eq!(user.attachments, [file]);
+
+    let seen = until(&mut updates, is_input).await;
+    engine
+        .queue_command(&chat.id, answer(request_id(&seen)))
+        .unwrap();
+    until(&mut updates, is_done).await;
+    until(
+        &mut chats,
+        |u| matches!(u, ChatsUpdate::Chat { chat } if chat.title.is_some()),
+    )
+    .await;
+    let titled = engine.store().chat(&chat.id).unwrap().unwrap();
+    assert_eq!(titled.title.as_deref(), Some("design spec.pdf"));
 }
 
 #[tokio::test]

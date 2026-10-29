@@ -7,6 +7,8 @@
 use serde::Deserialize;
 use serde_json::{json, Value};
 
+use crate::attachments::InlineImage;
+
 /// One parsed stdout line.
 #[derive(Debug)]
 pub(crate) enum Frame {
@@ -249,11 +251,31 @@ pub(crate) fn parse_frame(line: &str) -> Result<Frame, serde_json::Error> {
     })
 }
 
-/// A user turn on stdin.
-pub(crate) fn user_line(text: &str) -> String {
+/// A user turn on stdin. With images the content is a block list: the
+/// images first, then the text, as the Messages API takes them.
+pub(crate) fn user_line(text: &str, images: &[InlineImage]) -> String {
+    let content = if images.is_empty() {
+        Value::from(text)
+    } else {
+        let mut blocks: Vec<Value> = images
+            .iter()
+            .map(|image| {
+                json!({
+                    "type": "image",
+                    "source": {
+                        "type": "base64",
+                        "media_type": image.media_type,
+                        "data": image.data,
+                    },
+                })
+            })
+            .collect();
+        blocks.push(json!({ "type": "text", "text": text }));
+        Value::Array(blocks)
+    };
     json!({
         "type": "user",
-        "message": { "role": "user", "content": text },
+        "message": { "role": "user", "content": content },
         "parent_tool_use_id": null,
     })
     .to_string()
@@ -348,9 +370,24 @@ mod tests {
 
     #[test]
     fn user_line_matches_protocol() {
-        let v: Value = serde_json::from_str(&user_line("hi")).unwrap();
+        let v: Value = serde_json::from_str(&user_line("hi", &[])).unwrap();
         assert_eq!(v["type"], "user");
         assert_eq!(v["message"]["content"], "hi");
         assert!(v["parent_tool_use_id"].is_null());
+    }
+
+    #[test]
+    fn user_line_puts_images_before_the_text() {
+        let image = InlineImage {
+            media_type: "image/png",
+            data: "AAAA".into(),
+        };
+        let v: Value = serde_json::from_str(&user_line("look", &[image])).unwrap();
+        let content = &v["message"]["content"];
+        assert_eq!(content[0]["type"], "image");
+        assert_eq!(content[0]["source"]["type"], "base64");
+        assert_eq!(content[0]["source"]["media_type"], "image/png");
+        assert_eq!(content[0]["source"]["data"], "AAAA");
+        assert_eq!(content[1], json!({ "type": "text", "text": "look" }));
     }
 }

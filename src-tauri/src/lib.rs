@@ -1,3 +1,4 @@
+mod attachments;
 mod engine;
 mod folders;
 mod git;
@@ -32,6 +33,9 @@ pub fn run() {
     // Turns that finish or ask something while the window is in the background.
     .plugin(tauri_plugin_notification::init())
     .invoke_handler(tauri::generate_handler![
+      attachments::save_attachment,
+      attachments::attachment_bytes,
+      attachments::open_attachment,
       engine::create_chat,
       engine::list_chats,
       engine::queue_command,

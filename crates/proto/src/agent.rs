@@ -131,7 +131,7 @@ pub struct RunRequest {
     /// [`AgentEvent::SessionStarted`].
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub resume: Option<String>,
-    /// Absolute paths of image attachments.
+    /// Absolute paths of files sent with the prompt.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     #[ts(as = "Option<Vec<String>>")]
     pub attachments: Vec<String>,

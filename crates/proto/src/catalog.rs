@@ -38,7 +38,7 @@ pub struct HarnessCapabilities {
     pub steering: bool,
     /// The running turn can be stopped.
     pub interrupt: bool,
-    /// Images can ride along with a prompt.
+    /// Files can ride along with a prompt.
     pub attachments: bool,
     /// Honors plan mode (`RunRequest::plan`).
     pub plan: bool,

@@ -5,6 +5,7 @@ export { QuestionWizard } from "./QuestionWizard";
 export {
     composer,
     useComposerStore,
+    type DraftAttachment,
     type NewChatSettings,
     type Workspace
 } from "./store";

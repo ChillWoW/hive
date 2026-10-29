@@ -11,6 +11,7 @@ use hive_proto::{AgentEvent, HarnessCatalog, HarnessId, RunRequest, UserInputAns
 use tokio::sync::mpsc;
 
 pub mod approval;
+pub mod attachments;
 pub mod claude;
 pub mod mock;
 pub mod provider;
@@ -74,7 +75,11 @@ pub struct RunHandle {
 
 #[derive(Debug)]
 pub(crate) enum RunCommand {
-    Send(String),
+    Send {
+        prompt: String,
+        /// Absolute paths, as in [`RunRequest::attachments`].
+        attachments: Vec<String>,
+    },
     Answer {
         request_id: String,
         answers: Vec<UserInputAnswer>,
@@ -92,7 +97,16 @@ impl RunHandle {
     /// Starts another turn with `prompt`. Sent mid-turn, the CLI takes it
     /// up once the current turn ends.
     pub fn send(&self, prompt: impl Into<String>) {
-        let _ = self.commands.send(RunCommand::Send(prompt.into()));
+        self.send_with(prompt, Vec::new());
+    }
+
+    /// [`RunHandle::send`] with files: absolute paths, as in
+    /// [`RunRequest::attachments`].
+    pub fn send_with(&self, prompt: impl Into<String>, attachments: Vec<String>) {
+        let _ = self.commands.send(RunCommand::Send {
+            prompt: prompt.into(),
+            attachments,
+        });
     }
 
     /// Answers an [`AgentEvent::InputRequested`].

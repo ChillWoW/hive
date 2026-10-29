@@ -1,6 +1,22 @@
 import { ArrowClockwiseIcon, WarningCircleIcon, XIcon } from "@phosphor-icons/react";
+import { AttachmentTile, openAttachment, useAttachmentUrl } from "@/attachments";
 import type { TranscriptMessage } from "@/chats";
 import { cn } from "@/lib/cn";
+import type { Attachment } from "@/proto";
+
+/** A file the user sent; a click opens it in its default app. */
+function SentAttachment({ attachment }: { attachment: Attachment }) {
+    const url = useAttachmentUrl(attachment);
+    return (
+        <AttachmentTile
+            name={attachment.name}
+            mimeType={attachment.mimeType}
+            imageUrl={url}
+            size="lg"
+            onOpen={() => void openAttachment(attachment).catch(() => {})}
+        />
+    );
+}
 
 /**
  * What the user sent, as a bubble on the right. A prompt the backend hasn't
@@ -19,18 +35,33 @@ export function UserMessage({
         .flatMap((p) => (p.kind === "text" ? [p.text] : []))
         .join("\n\n");
     const delivery = message.delivery;
+    const attachments = message.attachments ?? [];
 
     return (
         <div className="flex max-w-[85%] flex-col items-end gap-1 self-end">
-            <div
-                className={cn(
-                    "rounded-2xl rounded-br-md bg-dark-800 px-3 py-1.5 text-sm leading-6 whitespace-pre-wrap break-words text-dark-50",
-                    delivery?.state === "sending" && "opacity-70",
-                    delivery?.state === "failed" && "ring-1 ring-danger/40"
-                )}
-            >
-                {text}
-            </div>
+            {attachments.length > 0 && (
+                <div
+                    className={cn(
+                        "flex flex-wrap justify-end gap-2",
+                        delivery?.state === "sending" && "opacity-70"
+                    )}
+                >
+                    {attachments.map((attachment) => (
+                        <SentAttachment key={attachment.path} attachment={attachment} />
+                    ))}
+                </div>
+            )}
+            {text.trim() !== "" && (
+                <div
+                    className={cn(
+                        "rounded-2xl rounded-br-md bg-dark-800 px-3 py-1.5 text-sm leading-6 whitespace-pre-wrap break-words text-dark-50",
+                        delivery?.state === "sending" && "opacity-70",
+                        delivery?.state === "failed" && "ring-1 ring-danger/40"
+                    )}
+                >
+                    {text}
+                </div>
+            )}
             {delivery?.state === "failed" && (
                 <div className="flex items-center gap-1 text-xs text-danger">
                     <WarningCircleIcon className="size-3.5 shrink-0" weight="fill" />

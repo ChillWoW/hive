@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use crate::agent::UserInputAnswer;
+use crate::message::Attachment;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[serde(tag = "kind", rename_all = "camelCase")]
@@ -20,6 +21,10 @@ pub enum CommandPayload {
         /// The user message this prompt becomes, minted by the issuer so the
         /// UI can show it before the backend confirms.
         message_id: String,
+        /// Files sent with it, already copied in by Hive.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        #[ts(as = "Option<Vec<Attachment>>", optional)]
+        attachments: Vec<Attachment>,
     },
     #[serde(rename_all = "camelCase")]
     Answer {
@@ -73,7 +78,8 @@ mod tests {
         assert_eq!(
             serde_json::to_value(CommandPayload::Send {
                 prompt: "p".into(),
-                message_id: "m1".into()
+                message_id: "m1".into(),
+                attachments: Vec::new(),
             })
             .unwrap(),
             json!({ "kind": "send", "prompt": "p", "messageId": "m1" })

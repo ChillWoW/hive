@@ -2,6 +2,7 @@
 
 export type { AccessMode } from "./AccessMode";
 export type { AgentEvent } from "./AgentEvent";
+export type { Attachment } from "./Attachment";
 export type { Chat } from "./Chat";
 export type { ChatConfig } from "./ChatConfig";
 export type { ChatsSettings } from "./ChatsSettings";

@@ -31,6 +31,6 @@ plan: boolean,
  */
 resume?: string, 
 /**
- * Absolute paths of image attachments.
+ * Absolute paths of files sent with the prompt.
  */
 attachments?: Array<string>, };

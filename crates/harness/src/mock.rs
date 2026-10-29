@@ -77,7 +77,7 @@ impl Harness for MockHarness {
             capabilities: HarnessCapabilities {
                 steering: false,
                 interrupt: true,
-                attachments: false,
+                attachments: true,
                 plan: false,
             },
         }
@@ -196,7 +196,7 @@ impl Player {
     async fn idle(&mut self) -> bool {
         while self.queue.is_empty() {
             match self.next_command().await {
-                Some(RunCommand::Send(prompt)) => self.queue.push_back(prompt),
+                Some(RunCommand::Send { prompt, .. }) => self.queue.push_back(prompt),
                 Some(RunCommand::Close) | None => return false,
                 Some(RunCommand::Answer { .. } | RunCommand::Interrupt) => {}
             }
@@ -247,7 +247,7 @@ impl Player {
                     request_id: id,
                     answers,
                 }) if id == request_id => break answers,
-                Some(RunCommand::Send(prompt)) => self.queue.push_back(prompt),
+                Some(RunCommand::Send { prompt, .. }) => self.queue.push_back(prompt),
                 Some(RunCommand::Close) => self.closing = true,
                 // Nobody left to answer.
                 Some(RunCommand::Interrupt) | None => {
@@ -276,7 +276,7 @@ impl Player {
             tokio::select! {
                 _ = tokio::time::sleep_until(deadline) => return Interrupted::No,
                 command = self.commands.recv(), if self.commands_open => match command {
-                    Some(RunCommand::Send(prompt)) => self.queue.push_back(prompt),
+                    Some(RunCommand::Send { prompt, .. }) => self.queue.push_back(prompt),
                     Some(RunCommand::Interrupt) => return Interrupted::Yes,
                     Some(RunCommand::Close) => self.closing = true,
                     Some(RunCommand::Answer { .. }) => {}

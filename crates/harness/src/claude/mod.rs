@@ -17,6 +17,9 @@
 //!   Plan mode ends when the user approves `ExitPlanMode`; the run continues
 //!   in its access mode, and while the chat stays in plan mode each new turn
 //!   switches the CLI back into it (`set_permission_mode`).
+//! - Attachments: each turn lists its files' paths under the prompt
+//!   ([`crate::attachments`]) and sends the images among them inline as
+//!   base64 image blocks. Reading an attached file never asks.
 //! - Each turn ends with the CLI's own `result` frame.
 //! - Interrupt sends the `interrupt` control request: the turn ends with an
 //!   interrupted `result` and the process keeps running.
@@ -25,7 +28,7 @@ mod normalize;
 pub(crate) mod provider;
 mod wire;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::{Arc, Mutex};
@@ -41,6 +44,7 @@ use tokio::process::{Child, ChildStderr, ChildStdin, Command};
 use tokio::sync::mpsc;
 
 use crate::approval::{self, Action};
+use crate::attachments;
 use crate::{Harness, HarnessError, Run, RunCommand, RunHandle};
 use normalize::Normalizer;
 use wire::{ControlRequestFrame, Frame};
@@ -290,7 +294,8 @@ impl Harness for ClaudeHarness {
                 // A prompt written mid-turn waits for the turn's `result`.
                 steering: false,
                 interrupt: true,
-                attachments: false,
+                // Images go inline; every file is listed by path for Read.
+                attachments: true,
                 // The CLI's own plan mode; approving `ExitPlanMode` ends it.
                 plan: true,
             },
@@ -369,7 +374,9 @@ impl ClaudeHarness {
         if !title {
             let _ = stdin_tx.send(wire::initialize_line(INITIALIZE_ID));
         }
-        let _ = stdin_tx.send(wire::user_line(&request.prompt));
+        // Written once the session task runs, after `initialize`: its images
+        // are read from disk first.
+        let first = (request.prompt.clone(), request.attachments.clone());
 
         let (events_tx, events) = mpsc::channel(256);
         let (handle, commands) = RunHandle::new();
@@ -389,9 +396,10 @@ impl ClaudeHarness {
                 turns: 1,
                 interrupt_deadline: None,
                 interrupts_sent: 0,
+                attachments: HashSet::new(),
                 stderr_tail,
             }
-            .run(),
+            .run(first),
         );
         Ok(Run { events, handle })
     }
@@ -433,6 +441,8 @@ struct Session {
     turns: usize,
     interrupt_deadline: Option<tokio::time::Instant>,
     interrupts_sent: u64,
+    /// Paths of every file sent this session: reading one never asks.
+    attachments: HashSet<String>,
     stderr_tail: Arc<Mutex<String>>,
 }
 
@@ -440,7 +450,8 @@ struct Session {
 struct Gone;
 
 impl Session {
-    async fn run(mut self) {
+    async fn run(mut self, (prompt, files): (String, Vec<String>)) {
+        self.write_prompt(&prompt, files).await;
         let mut commands_open = true;
         loop {
             let outcome = tokio::select! {
@@ -531,13 +542,17 @@ impl Session {
         }
 
         let exit_plan = body.tool_name == "ExitPlanMode";
-        let question = approval_question(
-            &body.tool_name,
-            body.display_name.as_deref(),
-            body.description.as_deref(),
-            &body.input,
-            self.access,
-        );
+        let question = if self.reads_attachment(&body.tool_name, &body.input) {
+            None
+        } else {
+            approval_question(
+                &body.tool_name,
+                body.display_name.as_deref(),
+                body.description.as_deref(),
+                &body.input,
+                self.access,
+            )
+        };
         let Some(question) = question else {
             let response = self.allow(body.input, exit_plan);
             self.write(wire::control_response_line(&request_id, response));
@@ -568,6 +583,24 @@ impl Session {
         }
     }
 
+    /// Writes a user turn: the attachments' paths listed under the prompt,
+    /// and those that are images also sent inline.
+    async fn write_prompt(&mut self, prompt: &str, files: Vec<String>) {
+        let images = attachments::load_images(&files).await;
+        let text = attachments::prompt_with_attachments(prompt, &files);
+        self.attachments.extend(files);
+        self.write(wire::user_line(&text, &images));
+    }
+
+    /// Reading a file the user attached needs no approval.
+    fn reads_attachment(&self, tool: &str, input: &Value) -> bool {
+        tool == "Read"
+            && input
+                .get("file_path")
+                .and_then(Value::as_str)
+                .is_some_and(|path| self.attachments.contains(path))
+    }
+
     /// Puts the CLI back in plan mode for the turn about to start; approving
     /// the last plan left it in the access mode.
     fn enter_plan(&mut self) {
@@ -581,7 +614,10 @@ impl Session {
 
     async fn on_command(&mut self, command: RunCommand) -> Result<(), Gone> {
         match command {
-            RunCommand::Send(prompt) => {
+            RunCommand::Send {
+                prompt,
+                attachments,
+            } => {
                 if self.stdin.is_some() {
                     // A prompt sent mid-turn waits for it; `end_turn` puts
                     // plan mode back before that one starts.
@@ -589,7 +625,7 @@ impl Session {
                         self.enter_plan();
                     }
                     self.turns += 1;
-                    self.write(wire::user_line(&prompt));
+                    self.write_prompt(&prompt, attachments).await;
                 }
                 Ok(())
             }
