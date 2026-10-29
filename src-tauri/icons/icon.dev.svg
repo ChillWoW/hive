@@ -1,15 +1,13 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
   <defs>
-    <path id="hex" d="M0-116L100.5-58V58L0 116L-100.5 58V-58Z"/>
-    <path id="ring" fill-rule="evenodd" d="M0-116L100.5-58V58L0 116L-100.5 58V-58ZM0-56L48.5-28V28L0 56L-48.5 28V-28Z"/>
+    <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#60A5FA"/>
+      <stop offset="1" stop-color="#3B82F6"/>
+    </linearGradient>
   </defs>
-  <rect width="1024" height="1024" rx="224" fill="#141414"/>
-  <g fill="#3B82F6">
-    <use href="#hex" x="512" y="317"/>
-    <use href="#hex" x="399.4" y="512"/>
-    <use href="#hex" x="624.6" y="512"/>
-    <use href="#hex" x="286.8" y="707"/>
-    <use href="#ring" x="512" y="707"/>
-    <use href="#hex" x="737.2" y="707"/>
+  <rect width="1024" height="1024" rx="224" fill="url(#tile)"/>
+  <g stroke="#141414" stroke-linejoin="round">
+    <path fill="none" stroke-width="96" d="M512 212L771.8 362V662L512 812L252.2 662V362Z"/>
+    <path fill="#141414" stroke-width="24" d="M512 416L595.1 464V560L512 608L428.9 560V464Z"/>
   </g>
 </svg>
