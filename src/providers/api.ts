@@ -17,6 +17,19 @@ import { isTauri } from "@/lib/platform";
 const NO_BACKEND = "Needs the Hive app; there's no backend under `bun run dev`.";
 
 function browserStatus(harness: HarnessId): ProviderStatus {
+    if (harness === "codex") {
+        return {
+            harness,
+            installed: true,
+            path: "~/.local/bin/codex",
+            version: "0.165.0",
+            updateChannel: "latest",
+            account: { loggedIn: true, method: "ChatGPT", email: "you@example.com", plan: "plus" },
+            canInstall: true,
+            canUpdate: true,
+            canSignIn: true
+        };
+    }
     const claude = harness === "claude-code";
     return {
         harness,
@@ -74,7 +87,8 @@ export const providersApi = {
 
 /** npm packages that publish each CLI, for the newest-release check. */
 const NPM_PACKAGES: Partial<Record<HarnessId, string>> = {
-    "claude-code": "@anthropic-ai/claude-code"
+    "claude-code": "@anthropic-ai/claude-code",
+    codex: "@openai/codex"
 };
 
 /** The newest release on `channel` (an npm dist-tag); undefined if the harness has no such check. */

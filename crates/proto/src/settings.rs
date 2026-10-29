@@ -147,6 +147,7 @@ impl Default for KeyboardSettings {
 #[serde(rename_all = "camelCase", default)]
 pub struct ProvidersSettings {
     pub claude_code: bool,
+    pub codex: bool,
     pub mock: bool,
 }
 
@@ -154,6 +155,7 @@ impl Default for ProvidersSettings {
     fn default() -> Self {
         Self {
             claude_code: true,
+            codex: true,
             mock: true,
         }
     }

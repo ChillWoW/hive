@@ -69,6 +69,41 @@ const BROWSER_CATALOGS: HarnessCatalog[] = [
         ],
         accessModes: ["supervised", "auto-accept-edits", "full-access"],
         capabilities: { steering: false, interrupt: true, attachments: false, plan: true }
+    },
+    {
+        id: "codex",
+        label: "Codex",
+        installed: true,
+        // The real list comes from the CLI (`model/list`) and depends on the account.
+        models: (
+            [
+                ["gpt-6-luna", "GPT-6-Luna", "Fast and affordable model for easier tasks."],
+                ["gpt-5.6-terra", "GPT-5.6-Terra", "Older balanced model for straightforward work."],
+                ["gpt-5.6-luna", "GPT-5.6-Luna", "Older fast and efficient model."]
+            ] as const
+        ).map(([id, label, description]) => ({
+            id,
+            label,
+            description,
+            reasoningLevels: ["low", "medium", "high", "xhigh", "max"],
+            options: []
+        })),
+        defaultModel: "gpt-6-luna",
+        commands: [
+            {
+                name: "compact",
+                description: "Summarize the conversation to free up context",
+                kind: "command"
+            },
+            {
+                name: "review",
+                description: "Review uncommitted changes, or what you describe",
+                inputHint: "instructions",
+                kind: "command"
+            }
+        ],
+        accessModes: ["supervised", "auto-accept-edits", "full-access"],
+        capabilities: { steering: false, interrupt: true, attachments: true, plan: true }
     }
 ];
 

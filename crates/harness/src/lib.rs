@@ -18,10 +18,12 @@ use tokio::sync::{mpsc, oneshot};
 pub mod approval;
 pub mod attachments;
 pub mod claude;
+pub mod codex;
 pub mod mock;
 pub mod provider;
 
 pub use claude::ClaudeHarness;
+pub use codex::CodexHarness;
 pub use mock::MockHarness;
 
 #[derive(Debug, thiserror::Error)]

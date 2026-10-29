@@ -29,6 +29,7 @@ export const DEFAULT_SETTINGS: Settings = {
   },
   "providers": {
     "claudeCode": true,
+    "codex": true,
     "mock": true
   }
 };

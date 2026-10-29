@@ -39,7 +39,7 @@ pub(super) fn cli(exe: &Path) -> Command {
     cmd
 }
 
-fn no_window(cmd: &mut Command) {
+pub(crate) fn no_window(cmd: &mut Command) {
     #[cfg(windows)]
     cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
     #[cfg(not(windows))]
@@ -50,15 +50,15 @@ fn installed() -> Result<PathBuf, ProviderError> {
     find_claude().ok_or(ProviderError::NotInstalled("claude"))
 }
 
-pub(super) struct Output {
-    pub(super) success: bool,
-    pub(super) stdout: String,
+pub(crate) struct Output {
+    pub(crate) success: bool,
+    pub(crate) stdout: String,
     stderr: String,
 }
 
 impl Output {
     /// What to show when it failed: the last lines it printed.
-    fn failure(&self) -> ProviderError {
+    pub(crate) fn failure(&self) -> ProviderError {
         let text = if self.stderr.trim().is_empty() {
             &self.stdout
         } else {
@@ -68,7 +68,7 @@ impl Output {
     }
 }
 
-pub(super) async fn run(mut cmd: Command, timeout: Duration) -> Result<Output, ProviderError> {
+pub(crate) async fn run(mut cmd: Command, timeout: Duration) -> Result<Output, ProviderError> {
     let child = cmd.spawn().map_err(|e| ProviderError::Failed(e.to_string()))?;
     match tokio::time::timeout(timeout, child.wait_with_output()).await {
         Ok(Ok(out)) => Ok(Output {
@@ -132,7 +132,7 @@ pub async fn status() -> ProviderStatus {
 }
 
 /// `"2.1.312 (Claude Code)"` → `"2.1.312"`.
-pub(super) fn parse_version(text: &str) -> Option<String> {
+pub(crate) fn parse_version(text: &str) -> Option<String> {
     text.split_whitespace()
         .find(|word| word.starts_with(|c: char| c.is_ascii_digit()) && word.contains('.'))
         .map(str::to_owned)
@@ -347,7 +347,7 @@ fn lock(output: &Mutex<String>) -> std::sync::MutexGuard<'_, String> {
 }
 
 /// Drops terminal escape sequences (colours, cursor moves).
-fn strip_ansi(text: &str) -> String {
+pub(crate) fn strip_ansi(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
     let mut chars = text.chars().peekable();
     while let Some(c) = chars.next() {
@@ -371,7 +371,7 @@ fn strip_ansi(text: &str) -> String {
 }
 
 /// The last few non-empty lines, for an error message.
-fn tail(text: &str) -> String {
+pub(crate) fn tail(text: &str) -> String {
     let lines: Vec<&str> = text
         .lines()
         .map(str::trim)

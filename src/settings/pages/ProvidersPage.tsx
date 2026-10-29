@@ -33,7 +33,8 @@ import { SignInDialog } from "./SignInDialog";
 
 /** The CLI each harness runs, for install hints. */
 const CLI_NAMES: Partial<Record<HarnessCatalog["id"], string>> = {
-    "claude-code": "claude"
+    "claude-code": "claude",
+    codex: "codex"
 };
 
 /**
@@ -409,9 +410,12 @@ function ErrorStrip({ message, onDismiss }: { message: string; onDismiss: () => 
 
 const PLAN_LABELS: Record<string, string> = {
     free: "Free",
+    plus: "Plus",
     pro: "Pro",
     max: "Max",
     team: "Team",
+    business: "Business",
+    edu: "Edu",
     enterprise: "Enterprise"
 };
 

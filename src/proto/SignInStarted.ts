@@ -5,6 +5,13 @@
  */
 export type SignInStarted = { loginId: string, 
 /**
- * The page to approve access on; the CLI already tried to open it.
+ * The page to approve access on. With `needs_code` the CLI already
+ * tried to open it; without, the app opens it.
  */
-url: string, };
+url: string, 
+/**
+ * The page shows a code to paste back (Claude). Without one (Codex) the
+ * sign-in finishes when the browser does: finish it at once, with no
+ * code, and wait.
+ */
+needsCode: boolean, };

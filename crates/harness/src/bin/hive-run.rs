@@ -4,13 +4,16 @@
 //!
 //! Options:
 //!     --mock              Use the scripted mock instead of `claude`
+//!     --codex             Use `codex app-server` instead of `claude`
 //!     --model <id>        Model to run
 //!     --effort <level>    minimal | low | medium | high | xhigh | max
 //!     --sandbox <level>   read-only | workspace-write (default) | danger-full-access
 //!     --cwd <dir>         Working directory (default: current)
 //!     --resume <id>       Continue a Claude session
 //!     --attach <path>     Send a file with the prompt (repeatable)
-//!     --yes               Approve every permission prompt
+//!     --access <mode>     supervised | auto-accept-edits | full-access (default)
+//!     --plan              Plan mode
+//!     --yes               Skip every check (auto-approve)
 //!     --json              Print raw AgentEvent JSON lines
 //!
 //! Questions are answered on stdin. After each turn, type a follow-up
@@ -18,9 +21,9 @@
 
 use std::io::{BufRead, Write};
 
-use hive_harness::{ClaudeHarness, Harness, MockHarness, RunHandle};
+use hive_harness::{ClaudeHarness, CodexHarness, Harness, MockHarness, RunHandle};
 use hive_proto::{
-    AgentEvent, HarnessId, ReasoningLevel, RunRequest, SandboxLevel, ToolCall, UserInputAnswer,
+    AccessMode, AgentEvent, HarnessId, ReasoningLevel, RunRequest, SandboxLevel, ToolCall, UserInputAnswer,
     UserInputQuestion,
 };
 use tokio::sync::mpsc;
@@ -63,6 +66,12 @@ fn parse_args() -> Result<Options, String> {
         let mut value = || args.next().ok_or(format!("{arg} needs a value"));
         match arg.as_str() {
             "--mock" => mock = true,
+            "--codex" => request.harness = HarnessId::Codex,
+            "--plan" => request.plan = true,
+            "--access" => {
+                request.access = serde_json::from_value::<AccessMode>(value()?.into())
+                    .map_err(|_| "unknown --access mode")?
+            }
             "--json" => json = true,
             "--yes" => request.auto_approve = true,
             "--model" => request.model = Some(value()?),
@@ -106,12 +115,14 @@ async fn main() {
     let options = match parse_args() {
         Ok(options) => options,
         Err(error) => {
-            eprintln!("hive-run: {error}\nusage: hive-run [--mock] [--model id] [--effort level] [--sandbox level] [--cwd dir] [--resume id] [--attach path] [--yes] [--json] <prompt>");
+            eprintln!("hive-run: {error}\nusage: hive-run [--mock|--codex] [--access mode] [--plan] [--model id] [--effort level] [--sandbox level] [--cwd dir] [--resume id] [--attach path] [--yes] [--json] <prompt>");
             std::process::exit(2);
         }
     };
     let harness: Box<dyn Harness> = if options.mock {
         Box::new(MockHarness::new())
+    } else if options.request.harness == HarnessId::Codex {
+        Box::new(CodexHarness::new())
     } else {
         Box::new(ClaudeHarness::new())
     };

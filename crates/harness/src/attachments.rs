@@ -65,6 +65,29 @@ pub async fn load_images(paths: &[String]) -> Vec<InlineImage> {
     images
 }
 
+/// The attachments that are images a model takes, by path, for a harness
+/// that reads them itself; same rules as [`load_images`].
+pub async fn image_paths(paths: &[String]) -> Vec<String> {
+    let mut images = Vec::new();
+    for path in paths {
+        let Ok(meta) = tokio::fs::metadata(path).await else {
+            continue;
+        };
+        if !meta.is_file() || meta.len() > MAX_INLINE_IMAGE_BYTES as u64 {
+            continue;
+        }
+        let mut head = [0u8; 12];
+        let Ok(mut file) = tokio::fs::File::open(path).await else {
+            continue;
+        };
+        let n = tokio::io::AsyncReadExt::read(&mut file, &mut head).await.unwrap_or(0);
+        if image_type(&head[..n]).is_some() {
+            images.push(path.clone());
+        }
+    }
+    images
+}
+
 /// An image type the API takes, by content.
 fn image_type(bytes: &[u8]) -> Option<&'static str> {
     match bytes {

@@ -1005,7 +1005,7 @@ impl Session {
     }
 }
 
-async fn sleep_until(deadline: Option<tokio::time::Instant>) {
+pub(crate) async fn sleep_until(deadline: Option<tokio::time::Instant>) {
     match deadline {
         Some(at) => tokio::time::sleep_until(at).await,
         None => std::future::pending().await,
@@ -1013,7 +1013,7 @@ async fn sleep_until(deadline: Option<tokio::time::Instant>) {
 }
 
 /// Writes lines in order; dropping every sender closes stdin.
-async fn write_stdin(mut stdin: ChildStdin, mut lines: mpsc::UnboundedReceiver<String>) {
+pub(crate) async fn write_stdin(mut stdin: ChildStdin, mut lines: mpsc::UnboundedReceiver<String>) {
     while let Some(mut line) = lines.recv().await {
         line.push('\n');
         if stdin.write_all(line.as_bytes()).await.is_err() || stdin.flush().await.is_err() {
@@ -1023,7 +1023,7 @@ async fn write_stdin(mut stdin: ChildStdin, mut lines: mpsc::UnboundedReceiver<S
 }
 
 /// Keeps the last few KB of stderr for crash messages.
-async fn collect_stderr(mut stderr: ChildStderr, tail: Arc<Mutex<String>>) {
+pub(crate) async fn collect_stderr(mut stderr: ChildStderr, tail: Arc<Mutex<String>>) {
     let mut buf = [0u8; 1024];
     while let Ok(n) = stderr.read(&mut buf).await {
         if n == 0 {
@@ -1042,7 +1042,7 @@ async fn collect_stderr(mut stderr: ChildStderr, tail: Arc<Mutex<String>>) {
 }
 
 /// npm installs `claude.cmd`, which only runs through `cmd /C`.
-fn command_for(exe: &Path) -> Command {
+pub(crate) fn command_for(exe: &Path) -> Command {
     let is_batch = exe
         .extension()
         .and_then(|e| e.to_str())
@@ -1099,7 +1099,7 @@ fn install_locations() -> Vec<PathBuf> {
     paths
 }
 
-fn find_on_path(name: &str) -> Option<PathBuf> {
+pub(crate) fn find_on_path(name: &str) -> Option<PathBuf> {
     let candidates: &[&str] = if cfg!(windows) {
         &["exe", "cmd", "bat"]
     } else {

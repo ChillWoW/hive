@@ -72,8 +72,13 @@ pub enum SignInMethod {
 #[serde(rename_all = "camelCase")]
 pub struct SignInStarted {
     pub login_id: String,
-    /// The page to approve access on; the CLI already tried to open it.
+    /// The page to approve access on. With `needs_code` the CLI already
+    /// tried to open it; without, the app opens it.
     pub url: String,
+    /// The page shows a code to paste back (Claude). Without one (Codex) the
+    /// sign-in finishes when the browser does: finish it at once, with no
+    /// code, and wait.
+    pub needs_code: bool,
 }
 
 /// How much of a subscription's rate limits the signed-in account has used,

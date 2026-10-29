@@ -5,4 +5,4 @@
  * by its id in camelCase. Read by the frontend (`src/harnesses/`); chats
  * already on a turned-off harness keep running on it.
  */
-export type ProvidersSettings = { claudeCode: boolean, mock: boolean, };
+export type ProvidersSettings = { claudeCode: boolean, codex: boolean, mock: boolean, };
