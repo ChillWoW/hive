@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { usePanelLayout, useLayoutStore } from "@/stores/useLayoutStore";
 import { FilesPanel } from "@/files";
+import { RightSidebar } from "@/rightbar";
 import { SidePanel } from "./SidePanel";
 
 /** The right sidebar, then the file panel at the window's edge. */
@@ -21,7 +22,9 @@ export function RightPanels() {
                 onResize={(width) =>
                     setRightWidth(Math.min(width, layout.rightMax))
                 }
-            />
+            >
+                <RightSidebar />
+            </SidePanel>
             <SidePanel
                 label="Files"
                 width={layout.files}

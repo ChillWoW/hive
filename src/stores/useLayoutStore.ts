@@ -24,11 +24,14 @@ type LayoutState = {
     /** Preferred widths; what's shown can be less while the window is narrow. */
     filesWidth: number;
     rightWidth: number;
+    /** A panel edge is being dragged (widths follow the pointer, unanimated). */
+    resizing: boolean;
     toggleSidebar: () => void;
     toggleFilePanel: () => void;
     toggleRightSidebar: () => void;
     setFilesWidth: (width: number) => void;
     setRightWidth: (width: number) => void;
+    setResizing: (resizing: boolean) => void;
 };
 
 const OPEN_KEY = {
@@ -139,6 +142,7 @@ export const useLayoutStore = create<LayoutState>()(
                 openedAt: { sidebar: 0, files: 0, right: 0 },
                 filesWidth: FILES_PANEL_DEFAULT,
                 rightWidth: RIGHT_SIDEBAR_DEFAULT,
+                resizing: false,
                 toggleSidebar: () => toggle("sidebar"),
                 toggleFilePanel: () => toggle("files"),
                 toggleRightSidebar: () => toggle("right"),
@@ -150,6 +154,7 @@ export const useLayoutStore = create<LayoutState>()(
                             FILES_PANEL_MAX
                         )
                     }),
+                setResizing: (resizing) => set({ resizing }),
                 setRightWidth: (width) =>
                     set({ rightWidth: Math.max(width, RIGHT_SIDEBAR_MIN) })
             };

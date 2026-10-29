@@ -7,7 +7,8 @@ import { useWindowState } from "./useWindowState";
 import { WindowControls } from "./WindowControls";
 import { chats, useChatsStore } from "@/chats";
 import { composer } from "@/composer";
-import { useEffect } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { TabStrip } from "@/rightbar";
 import { HarnessIcon } from "@/harnesses";
 import { useShortcut } from "@/keybindings";
 import { cn } from "@/lib/cn";
@@ -55,11 +56,28 @@ export function TopBar({ title, harness, className }: TopBarProps) {
     const insetForTrafficLights = isMac && !fullscreen;
 
     // What's shown, not what's open: a panel hidden for room reads as closed.
+    const layout = usePanelLayout();
     const {
         sidebar: open,
         files: filePanelOpen,
         right: rightOpen
-    } = usePanelLayout().visible;
+    } = layout.visible;
+    const resizing = useLayoutStore((state) => state.resizing);
+
+    // The right sidebar's tabs sit in this bar above it. The panel toggles and
+    // window controls keep the corner: over the file panel while it's wide
+    // enough, else they take the end of the tabs' room.
+    const trailing = useRef<HTMLDivElement>(null);
+    const [trailingWidth, setTrailingWidth] = useState(0);
+    useLayoutEffect(() => {
+        const el = trailing.current;
+        if (!el) return;
+        const observer = new ResizeObserver(() => setTrailingWidth(el.offsetWidth));
+        observer.observe(el);
+        return () => observer.disconnect();
+    }, []);
+    const tabsWidth = Math.max(0, layout.right - Math.max(0, trailingWidth - layout.files));
+    const tabsGap = Math.max(0, layout.files - trailingWidth);
     const toggleSidebar = useLayoutStore((state) => state.toggleSidebar);
     const toggleFilePanel = useLayoutStore((state) => state.toggleFilePanel);
     const toggleRightSidebar = useLayoutStore(
@@ -198,8 +216,27 @@ export function TopBar({ title, harness, className }: TopBarProps) {
                 )}
                 {/* Spacer: an empty strip you can grab to drag the window. */}
                 <div data-tauri-drag-region className="h-full flex-1" />
+            </div>
 
-                <div className="flex items-center gap-0.5">
+            <div
+                data-tauri-drag-region
+                inert={!rightOpen}
+                style={{ width: tabsWidth }}
+                className={cn(
+                    "flex h-full shrink-0 overflow-hidden",
+                    !resizing && "transition-[width]"
+                )}
+            >
+                <TabStrip />
+            </div>
+            <div
+                data-tauri-drag-region
+                style={{ width: tabsGap }}
+                className={cn("h-full shrink-0", !resizing && "transition-[width]")}
+            />
+
+            <div ref={trailing} className="flex h-full shrink-0 items-center">
+                <div data-tauri-drag-region className="flex h-full items-center gap-0.5 px-2">
                     <Tooltip>
                         <Tooltip.Trigger
                             render={
@@ -246,9 +283,9 @@ export function TopBar({ title, harness, className }: TopBarProps) {
                         </Tooltip.Content>
                     </Tooltip>
                 </div>
-            </div>
 
-            {!isMac && <WindowControls />}
+                {!isMac && <WindowControls />}
+            </div>
         </header>
     );
 }

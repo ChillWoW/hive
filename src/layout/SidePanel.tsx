@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { cn } from "@/lib/cn";
+import { useLayoutStore } from "@/stores/useLayoutStore";
 
 type SidePanelProps = {
     label: string;
@@ -24,7 +25,11 @@ export function SidePanel({
     children
 }: SidePanelProps) {
     const open = width > 0;
-    const [dragging, setDragging] = useState(false);
+    const [dragging, setDraggingState] = useState(false);
+    const setDragging = (on: boolean) => {
+        setDraggingState(on);
+        useLayoutStore.getState().setResizing(on);
+    };
     const [contentWidth, setContentWidth] = useState(width);
     if (open && width !== contentWidth) setContentWidth(width);
 
