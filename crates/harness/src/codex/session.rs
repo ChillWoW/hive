@@ -253,6 +253,8 @@ fn mcp_overrides(mcp: &McpServer) -> Map<String, Value> {
     // Hive's own tools: approved in every access mode, so Codex neither
     // rejects a call under `never` nor asks about one under the others.
     config.insert(key("default_tools_approval_mode"), json!("approve"));
+    // Its calls may wait on the user (Codex cuts them off after 60s).
+    config.insert(key("tool_timeout_sec"), json!(McpServer::TOOL_TIMEOUT_SECS));
     config
 }
 
@@ -1058,6 +1060,7 @@ mod tests {
         assert_eq!(p["config"]["mcp_servers.hive.args"], json!(["mcp"]));
         assert_eq!(p["config"]["mcp_servers.hive.env"], json!({"HIVE_CHAT_ID": "c1"}));
         assert_eq!(p["config"]["mcp_servers.hive.default_tools_approval_mode"], "approve");
+        assert_eq!(p["config"]["mcp_servers.hive.tool_timeout_sec"], 3900);
         assert!(thread_params(&r, true).get("config").is_none());
     }
 

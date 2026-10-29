@@ -560,6 +560,8 @@ fn with_mcp_server(inherited: Option<&str>, mcp: &McpServer) -> Option<String> {
             "disabled": false,
             // Its tools as tools, not behind Code Mode.
             "codemode": false,
+            // Its calls may wait on the user; the default is 5s.
+            "timeout": McpServer::TOOL_TIMEOUT_SECS * 1000,
         }),
     );
     Some(config.to_string())
@@ -676,6 +678,7 @@ mod tests {
                 "environment": {"HIVE_CHAT_ID": "c1"},
                 "disabled": false,
                 "codemode": false,
+                "timeout": 3_900_000,
             })
         );
         assert!(with_mcp_server(None, &mcp).is_some());

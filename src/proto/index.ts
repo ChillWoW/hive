@@ -43,6 +43,7 @@ export type { ReadOnlyReason } from "./ReadOnlyReason";
 export type { ReasoningLevel } from "./ReasoningLevel";
 export type { RunRequest } from "./RunRequest";
 export type { SandboxLevel } from "./SandboxLevel";
+export type { SecretRequest } from "./SecretRequest";
 export type { SendKey } from "./SendKey";
 export type { Session } from "./Session";
 export type { SessionStatus } from "./SessionStatus";

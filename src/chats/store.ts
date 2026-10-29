@@ -850,7 +850,10 @@ export const chats = {
         useChatsStore.getState().answer(chatId, requestId, answers),
     /** Background tasks live on the session; nothing here to update. */
     stopTask: (chatId: string, taskId: string) => chatsApi.stopTask(chatId, taskId),
-    taskOutput: (chatId: string, taskId: string) => chatsApi.taskOutput(chatId, taskId)
+    taskOutput: (chatId: string, taskId: string) => chatsApi.taskOutput(chatId, taskId),
+    /** The card goes when the session drops it (`Session.secrets`). */
+    answerSecret: (chatId: string, requestId: string, value: string | null) =>
+        chatsApi.answerSecret(chatId, requestId, value)
 };
 
 export function useChat(chatId: string | null) {

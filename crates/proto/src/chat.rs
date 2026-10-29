@@ -143,6 +143,28 @@ pub struct Session {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     #[ts(as = "Option<Vec<BackgroundTask>>")]
     pub background: Vec<BackgroundTask>,
+    /// Secrets the agent is waiting on (Hive's `request_secret` tool), oldest
+    /// first. Only what the card shows; the value never passes through here.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[ts(as = "Option<Vec<SecretRequest>>")]
+    pub secrets: Vec<SecretRequest>,
+}
+
+/// An agent asking the user for a secret (an API key, a token) in a card
+/// of its own, so the value stays out of the chat.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(optional_fields)]
+pub struct SecretRequest {
+    pub id: String,
+    /// The card's title, e.g. "GitHub token".
+    pub label: String,
+    /// What it's for and where to get it.
+    pub reason: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub placeholder: Option<String>,
+    /// Epoch millis.
+    pub requested_at: i64,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]

@@ -160,6 +160,10 @@ impl McpServer {
     pub const HIVE: &'static str = "hive";
     /// The chat whose agent launched the server.
     pub const CHAT_ID_ENV: &'static str = "HIVE_CHAT_ID";
+    /// How long an agent's CLI lets one of its tool calls run: past the
+    /// longest a Hive tool waits on the user (`request_secret`, an hour),
+    /// where the CLIs' own defaults cut calls off after a minute or less.
+    pub const TOOL_TIMEOUT_SECS: u64 = 65 * 60;
 
     /// This server, launched for `chat_id`'s agent.
     pub fn for_chat(&self, chat_id: &str) -> Self {

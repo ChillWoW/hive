@@ -1087,11 +1087,17 @@ fn managed_mcp_config() -> bool {
 }
 
 /// The inline `--mcp-config` JSON for an injected server (the CLI takes a
-/// JSON string as well as a file path).
+/// JSON string as well as a file path). `timeout` (ms) is how long one of
+/// its tool calls may run.
 fn mcp_config_arg(mcp: &McpServer) -> String {
     json!({
         "mcpServers": {
-            &mcp.name: { "command": mcp.command, "args": mcp.args, "env": mcp.env }
+            &mcp.name: {
+                "command": mcp.command,
+                "args": mcp.args,
+                "env": mcp.env,
+                "timeout": McpServer::TOOL_TIMEOUT_SECS * 1000,
+            }
         }
     })
     .to_string()
@@ -1388,6 +1394,7 @@ mod tests {
                 "command": r"C:\Program Files\Hive\hive.exe",
                 "args": ["mcp"],
                 "env": {"HIVE_CHAT_ID": "c1"},
+                "timeout": 3_900_000,
             }}})
         );
     }

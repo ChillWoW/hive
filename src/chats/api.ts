@@ -114,6 +114,12 @@ export const chatsApi = {
             ? invoke<void>("stop_background_task", { chatId, taskId })
             : Promise.reject(new Error(NO_BACKEND)),
 
+    /** Answers a secret card (`Session.secrets`): the value is saved for the agent, null declines. */
+    answerSecret: (chatId: string, requestId: string, value: string | null): Promise<void> =>
+        isTauri
+            ? invoke<void>("answer_secret_request", { chatId, requestId, value })
+            : Promise.reject(new Error(NO_BACKEND)),
+
     /** The end of a background shell's output (its last 8 KiB). */
     taskOutput: (chatId: string, taskId: string): Promise<TaskOutput> =>
         isTauri

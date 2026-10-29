@@ -29,6 +29,7 @@ import { AgentUpdates } from "./AgentUpdates";
 import { BackgroundTasks } from "./BackgroundTasks";
 import { ContextRing } from "./ContextRing";
 import { QueuedTray } from "./QueuedTray";
+import { SecretRequestCard } from "./SecretRequestCard";
 import { UsageRing } from "./UsageRing";
 
 type InputPart = Extract<MessagePart, { kind: "input" }>;
@@ -45,7 +46,8 @@ function pendingInput(messages: TranscriptMessage[]): InputPart | undefined {
 /**
  * The main pane: the active chat's transcript with the composer under it,
  * or, for the new-chat view, the composer centred until the first prompt.
- * While the agent waits on a question the wizard takes the composer's place.
+ * While the agent waits on a question the wizard takes the composer's place,
+ * and a secret it asked for (`Session.secrets`) its card.
  */
 export function ChatView() {
     const chatId = useChatsStore((s) => s.activeChatId);
@@ -101,6 +103,8 @@ export function ChatView() {
         session?.status === "awaitingInput" ||
         messages.some((m) => m.delivery?.state === "sending");
     const input = pendingInput(shown);
+    // A question first; secrets wait their turn, oldest first.
+    const secret = input ? undefined : session?.secrets?.[0];
 
     const sendTo = (prompt: string, attachments: Attachment[] = []) => {
         if (chat) {
@@ -140,12 +144,26 @@ export function ChatView() {
                     <QueuedTray chatId={chatId} messages={queued} running={busy} />
                 )}
                 {/* The box grows into the wizard and back rather than jumping. */}
-                <MorphHeight swapKey={input && chat ? `question:${input.requestId}` : "composer"}>
+                <MorphHeight
+                    swapKey={
+                        input && chat
+                            ? `question:${input.requestId}`
+                            : secret && chat
+                              ? `secret:${secret.id}`
+                              : "composer"
+                    }
+                >
                     {input && chat ? (
                         <QuestionWizard
                             key={input.requestId}
                             questions={input.questions}
                             onSubmit={(answers) => chats.answer(chat.id, input.requestId, answers)}
+                        />
+                    ) : secret && chat ? (
+                        <SecretRequestCard
+                            key={secret.id}
+                            request={secret}
+                            onAnswer={(value) => chats.answerSecret(chat.id, secret.id, value)}
                         />
                     ) : (
                         <Composer
@@ -240,7 +258,7 @@ export function ChatView() {
                     key={chatId ?? "new"}
                     messages={shown}
                     cwd={chat ? workDir(chat) : (newChat.cwd ?? undefined)}
-                    waiting={!!input}
+                    waiting={!!input || !!secret}
                     error={error}
                     onRetry={retry}
                     onDiscard={(m) => chats.discard(m.id)}

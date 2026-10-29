@@ -6,6 +6,7 @@ mod folders;
 mod git;
 mod mcp;
 mod providers;
+mod secrets;
 mod settings;
 mod terminals;
 mod updater;
@@ -63,6 +64,7 @@ pub fn run() {
       engine::set_chat_pinned,
       engine::mark_chat_seen,
       engine::delete_chat,
+      secrets::answer_secret_request,
       files::list_files,
       files::list_directory,
       editor::read_file,
@@ -122,6 +124,10 @@ pub fn run() {
       let settings = hive_store::SettingsFile::open(&data_dir)?;
       // Resuming only happens at launch; titles follow the setting live.
       let chats = settings.get().chats;
+      // Before the MCP host, whose `request_secret` reaches for it.
+      let secrets = secrets::Secrets::new(&data_dir);
+      secrets.sweep_every_hour();
+      app.manage(secrets);
       let config = EngineConfig {
         resume_interrupted: chats.resume_interrupted,
         auto_title: chats.auto_title,

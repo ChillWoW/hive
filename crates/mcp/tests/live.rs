@@ -2,7 +2,9 @@
 //! chat's run, the CLI launches the `hive-mcp` bridge, the agent calls a
 //! tool, the host runs it as that chat. In supervised mode, so a Hive tool
 //! that got asked about would hang the turn. Spends a few tokens; ignored
-//! by default:
+//! by default. The `_waits_` tests hold the call past a minute, as a tool
+//! waiting on the user (`request_secret`) does, where the CLIs' own
+//! timeouts would cut it off:
 //!
 //!     cargo test -p hive-mcp --test live -- --ignored --test-threads 1
 
@@ -23,10 +25,12 @@ use tokio::sync::mpsc;
 const WAIT: Duration = Duration::from_secs(240);
 const WORD: &str = "pineapple-42";
 
+/// `delay`: how long the tool takes to answer.
 async fn agent_calls_hive(
     harness: Arc<dyn Harness>,
     model: Option<&str>,
     reasoning: Option<ReasoningLevel>,
+    delay: Duration,
 ) {
     let data = tempfile::tempdir().unwrap();
     let work = tempfile::tempdir().unwrap();
@@ -39,6 +43,7 @@ async fn agent_calls_hive(
         move |ctx, args| {
             seen.lock().unwrap().push((ctx, args.clone()));
             async move {
+                tokio::time::sleep(delay).await;
                 Ok(json!(format!(
                     "Hive says: {}",
                     args["text"].as_str().unwrap_or_default()
@@ -91,7 +96,7 @@ async fn agent_calls_hive(
         .unwrap();
 
     let mut text = String::new();
-    let status = tokio::time::timeout(WAIT, async {
+    let status = tokio::time::timeout(WAIT + delay, async {
         while let Some(update) = rx.recv().await {
             if let MessagesUpdate::Event { event, .. } = update {
                 match event {
@@ -131,7 +136,7 @@ async fn agent_calls_hive(
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "spends tokens on the real claude CLI"]
 async fn claude_calls_a_hive_tool() {
-    agent_calls_hive(Arc::new(ClaudeHarness::new()), Some("haiku"), None).await;
+    agent_calls_hive(Arc::new(ClaudeHarness::new()), Some("haiku"), None, Duration::ZERO).await;
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -145,6 +150,7 @@ async fn codex_calls_a_hive_tool() {
         Arc::new(harness),
         model.as_deref(),
         Some(ReasoningLevel::Low),
+        Duration::ZERO,
     )
     .await;
 }
@@ -152,5 +158,34 @@ async fn codex_calls_a_hive_tool() {
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "spends tokens on the real opencode CLI"]
 async fn opencode_calls_a_hive_tool() {
-    agent_calls_hive(Arc::new(OpencodeHarness::new()), None, None).await;
+    agent_calls_hive(Arc::new(OpencodeHarness::new()), None, None, Duration::ZERO).await;
+}
+
+/// Past every CLI's default tool-call timeout (Codex 60s, OpenCode 5s).
+const SLOW: Duration = Duration::from_secs(75);
+
+#[tokio::test(flavor = "multi_thread")]
+#[ignore = "spends tokens on the real claude CLI"]
+async fn claude_waits_on_a_slow_hive_tool() {
+    agent_calls_hive(Arc::new(ClaudeHarness::new()), Some("haiku"), None, SLOW).await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+#[ignore = "spends tokens on the real codex CLI"]
+async fn codex_waits_on_a_slow_hive_tool() {
+    let harness = CodexHarness::new();
+    let model = harness.catalog().models.first().map(|m| m.id.clone());
+    agent_calls_hive(
+        Arc::new(harness),
+        model.as_deref(),
+        Some(ReasoningLevel::Low),
+        SLOW,
+    )
+    .await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+#[ignore = "spends tokens on the real opencode CLI"]
+async fn opencode_waits_on_a_slow_hive_tool() {
+    agent_calls_hive(Arc::new(OpencodeHarness::new()), None, None, SLOW).await;
 }

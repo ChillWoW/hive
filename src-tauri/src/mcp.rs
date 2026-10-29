@@ -13,6 +13,8 @@ use hive_mcp::{Ctx, Host, McpServer, Tools};
 use serde_json::{json, Value};
 use tauri::{AppHandle, Manager};
 
+use crate::secrets;
+
 /// Starts the host and returns how agents launch a bridge to it; None (and
 /// agents run without it) when it can't.
 pub fn start(app: &AppHandle, data_dir: &Path) -> Option<McpServer> {
@@ -28,15 +30,23 @@ pub fn start(app: &AppHandle, data_dir: &Path) -> Option<McpServer> {
 
 fn tools(app: &AppHandle) -> Tools {
     let whoami_app = app.clone();
-    Tools::new().tool(
-        "whoami",
-        "The Hive chat you're running in: its id, title, folder (and worktree), agent and model.",
-        json!({ "type": "object", "properties": {} }),
-        move |ctx, _| {
-            let result = whoami(&whoami_app, &ctx);
-            async move { result }
-        },
-    )
+    let secrets_app = app.clone();
+    Tools::new()
+        .tool(
+            "whoami",
+            "The Hive chat you're running in: its id, title, folder (and worktree), agent and model.",
+            json!({ "type": "object", "properties": {} }),
+            move |ctx, _| {
+                let result = whoami(&whoami_app, &ctx);
+                async move { result }
+            },
+        )
+        .tool(
+            secrets::TOOL,
+            secrets::DESCRIPTION,
+            secrets::schema(),
+            move |ctx, args| secrets::request(secrets_app.clone(), ctx, args),
+        )
 }
 
 fn whoami(app: &AppHandle, ctx: &Ctx) -> Result<Value, String> {

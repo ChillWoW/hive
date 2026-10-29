@@ -4,12 +4,12 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use hive_engine::{Engine, EngineConfig, RESUME_PROMPT};
+use hive_engine::{Engine, EngineConfig, EngineError, RESUME_PROMPT};
 use hive_harness::{Harness, MockHarness};
 use hive_proto::{
     fold_event, AgentEvent, ChatConfig, ChatsUpdate, Command, CommandPayload, CommandStatus,
     DoneStatus, HarnessId, Message, MessagePart, MessageRole, MessageStatus, MessagesUpdate,
-    SandboxLevel, SessionStatus, UserInputAnswer,
+    SandboxLevel, SecretRequest, Session, SessionStatus, UserInputAnswer,
 };
 use hive_store::Store;
 use tokio::sync::mpsc;
@@ -221,6 +221,76 @@ async fn a_turn_runs_answers_and_matches_the_store() {
         engine.chats().unwrap()[0].harness_session_id.as_deref(),
         Some("mock-session")
     );
+}
+
+fn secret(id: &str) -> SecretRequest {
+    SecretRequest {
+        id: id.into(),
+        label: "GitHub token".into(),
+        reason: "To open the PR.".into(),
+        placeholder: None,
+        requested_at: 0,
+    }
+}
+
+/// The session as the chat list last published it.
+async fn next_session(chats: &mut mpsc::UnboundedReceiver<ChatsUpdate>) -> Session {
+    let seen = until(chats, |u| matches!(u, ChatsUpdate::Session { session: Some(_), .. })).await;
+    match seen.into_iter().last() {
+        Some(ChatsUpdate::Session { session: Some(s), .. }) => s,
+        _ => unreachable!(),
+    }
+}
+
+#[tokio::test]
+async fn a_secret_card_waits_on_input_and_goes_with_its_turn() {
+    let (_dir, engine) = engine(0.0);
+    let chat = engine
+        .create_chat("/demo", config(HarnessId::Mock))
+        .unwrap();
+    let mut updates = watch_messages(&engine, &chat.id);
+
+    // Only while a turn runs.
+    assert!(matches!(
+        engine.open_secret_request(&chat.id, secret("s0")),
+        Err(EngineError::NoTurn)
+    ));
+
+    engine.queue_command(&chat.id, send("hi")).unwrap();
+    // The mock's turn waits on a question until it's answered.
+    let seen = until(&mut updates, is_input).await;
+    let mut chats = watch_chats(&engine);
+
+    let _first = engine.open_secret_request(&chat.id, secret("s1")).unwrap();
+    let session = next_session(&mut chats).await;
+    assert_eq!(session.secrets, [secret("s1")]);
+    assert_eq!(session.status, SessionStatus::AwaitingInput);
+
+    // Taken down; the question still waits.
+    engine.close_secret_request(&chat.id, "s1");
+    let session = next_session(&mut chats).await;
+    assert!(session.secrets.is_empty());
+    assert_eq!(session.status, SessionStatus::AwaitingInput);
+
+    // With the question answered the chat keeps waiting on the secret,
+    // until the turn ends and takes the card with it.
+    let second = engine.open_secret_request(&chat.id, secret("s2")).unwrap();
+    engine
+        .queue_command(&chat.id, answer(request_id(&seen)))
+        .unwrap();
+    timeout(WAIT, second).await.unwrap().unwrap_err();
+    let after: Vec<Session> = until(&mut chats, |u| {
+        matches!(u, ChatsUpdate::Session { session: Some(s), .. } if s.status == SessionStatus::Idle)
+    })
+    .await
+    .into_iter()
+    .filter_map(|u| match u {
+        ChatsUpdate::Session { session, .. } => session,
+        _ => None,
+    })
+    .collect();
+    assert!(after.iter().all(|s| s.status != SessionStatus::Working));
+    assert!(after.last().unwrap().secrets.is_empty());
 }
 
 #[tokio::test]

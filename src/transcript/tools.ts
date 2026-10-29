@@ -74,7 +74,15 @@ type HiveTool = { label?: string; detail?: (input: JsonValue | undefined) => str
  * Hive's MCP tools (`src-tauri/src/mcp.rs`) by name. Every one gets Hive's
  * mark and its name; an entry here can give it a label and a detail line.
  */
-const HIVE_TOOLS: Record<string, HiveTool> = {};
+const HIVE_TOOLS: Record<string, HiveTool> = {
+    request_secret: {
+        label: "Asking for a secret",
+        detail: (input) =>
+            input && typeof input === "object" && !Array.isArray(input) && typeof input.label === "string"
+                ? input.label
+                : ""
+    }
+};
 
 function isHiveTool(call: ToolCall): boolean {
     return call.kind === "mcp" && call.server === HIVE_SERVER;

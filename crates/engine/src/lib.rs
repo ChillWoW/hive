@@ -20,6 +20,9 @@
 //!   one ends between turns the agent may start a turn by itself
 //!   ([`AgentEvent::BackgroundTurn`]): a reply with no prompt, run like any
 //!   other (status, queue, notifications).
+//! - A secret the agent asks for (Hive's `request_secret` tool) is session
+//!   state too: a card on [`Session::secrets`] while the tool call waits,
+//!   for the turn that made it. The value never comes through here.
 //!
 //! [`Run`]: hive_harness::Run
 
@@ -33,11 +36,11 @@ use hive_harness::{Harness, RunHandle};
 use hive_proto::{
     AgentEvent, Attachment, BackgroundTask, Chat, ChatConfig, ChatsUpdate, Command,
     CommandPayload, CommandStatus, ContextUsage, DoneStatus, HarnessCatalog, HarnessId,
-    McpServer, MessageStatus, MessagesUpdate, NewWorktree, RunRequest, Session, SessionStatus, SlashCommand,
-    TaskOutput, UserInputAnswer,
+    McpServer, MessageStatus, MessagesUpdate, NewWorktree, RunRequest, SecretRequest, Session,
+    SessionStatus, SlashCommand, TaskOutput, UserInputAnswer,
 };
 use hive_store::{new_id, now_ms, Recovery, Store, StoreError, Turn};
-use tokio::sync::{mpsc, watch};
+use tokio::sync::{mpsc, oneshot, watch};
 
 mod titles;
 
@@ -92,6 +95,8 @@ pub enum EngineError {
     NoTask,
     #[error("{0}")]
     Task(String),
+    #[error("Asking for a secret needs a turn in progress.")]
+    NoTurn,
     #[error(transparent)]
     Git(#[from] hive_git::GitError),
 }
@@ -184,7 +189,16 @@ struct ChatState {
     /// The chat's config changed under the run: close it once its work is
     /// done, so the next prompt starts one with the new config.
     restart: bool,
+    /// Secrets the running turn is waiting on, mirrored on the session.
+    secrets: Vec<PendingSecret>,
     watchers: Vec<Watcher<MessagesUpdate>>,
+}
+
+/// A secret card. Dropping it (the turn ended, the run closed) wakes the
+/// tool call waiting on it.
+struct PendingSecret {
+    request: SecretRequest,
+    _ended: oneshot::Sender<()>,
 }
 
 impl ChatState {
@@ -561,6 +575,72 @@ impl Engine {
             st.task_run(task_id)?.handle.clone()
         };
         handle.task_output(task_id).await.map_err(EngineError::Task)
+    }
+
+    /// Puts up a card asking the user for a secret, for an agent's tool call
+    /// waiting on it. Only during a turn: the card goes when the turn ends,
+    /// the run closes or the chat is deleted, and then the returned receiver
+    /// resolves (with an error), unless [`Engine::close_secret_request`]
+    /// took the card down first. The chat waits on input while it's up.
+    pub fn open_secret_request(
+        &self,
+        chat_id: &str,
+        request: SecretRequest,
+    ) -> Result<oneshot::Receiver<()>> {
+        let runtime = self.runtime_for(chat_id);
+        let mut st = lock(&runtime.state);
+        self.chat(chat_id)?;
+        if st.run.is_none() || !st.in_flight() {
+            return Err(EngineError::NoTurn);
+        }
+        let (ended, rx) = oneshot::channel();
+        st.secrets.push(PendingSecret {
+            request,
+            _ended: ended,
+        });
+        self.sync_secrets(chat_id, &mut st);
+        Ok(rx)
+    }
+
+    /// Takes a secret card down: answered, declined or given up on.
+    pub fn close_secret_request(&self, chat_id: &str, request_id: &str) {
+        let Some(runtime) = lock(&self.inner.chats).get(chat_id).cloned() else {
+            return;
+        };
+        let mut st = lock(&runtime.state);
+        let before = st.secrets.len();
+        st.secrets.retain(|p| p.request.id != request_id);
+        if st.secrets.len() != before {
+            self.sync_secrets(chat_id, &mut st);
+        }
+    }
+
+    /// Mirrors the pending secrets on the session; during a turn the chat
+    /// waits on input while there's a secret or a question.
+    fn sync_secrets(&self, chat_id: &str, st: &mut ChatState) {
+        let requests: Vec<SecretRequest> = st.secrets.iter().map(|p| p.request.clone()).collect();
+        let waiting =
+            !requests.is_empty() || st.run.as_ref().is_some_and(|r| !r.inputs.is_empty());
+        let in_flight = st.in_flight();
+        let Some(session) = &mut st.session else {
+            return;
+        };
+        let mut changed = session.secrets != requests;
+        session.secrets = requests;
+        if in_flight {
+            let status = if waiting {
+                SessionStatus::AwaitingInput
+            } else {
+                SessionStatus::Working
+            };
+            changed |= session.status != status;
+            session.status = status;
+        }
+        if changed {
+            session.updated_at = now_ms();
+            let session = session.clone();
+            self.publish_session(chat_id, Some(session));
+        }
     }
 
     /// Changes the chat under its lock, publishing it if anything changed.
@@ -1093,7 +1173,8 @@ impl Engine {
                 self.set_status(chat_id, st, SessionStatus::AwaitingInput)
             }
             AgentEvent::InputResolved { .. }
-                if st.run.as_ref().is_some_and(|r| r.inputs.is_empty()) =>
+                if st.run.as_ref().is_some_and(|r| r.inputs.is_empty())
+                    && st.secrets.is_empty() =>
             {
                 self.set_status(chat_id, st, SessionStatus::Working)
             }
@@ -1126,6 +1207,9 @@ impl Engine {
                 }
             }
             AgentEvent::Done { status, .. } => {
+                // Nobody is waiting on them any more.
+                st.secrets.clear();
+                self.sync_secrets(chat_id, st);
                 // Status and duration, which the event alone doesn't carry.
                 if let Some(message) = finished {
                     publish(&mut st.watchers, MessagesUpdate::Message { message });
@@ -1239,6 +1323,7 @@ impl Engine {
         }
         st.restart = false;
         st.commands.clear();
+        st.secrets.clear();
         if st.session.take().is_some() {
             self.publish_session(chat_id, None);
         }
@@ -1260,6 +1345,7 @@ impl Engine {
                 updated_at: now,
                 commands: st.commands.clone(),
                 background: Vec::new(),
+                secrets: Vec::new(),
             }),
         };
         let session = session.clone();

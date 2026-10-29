@@ -3,7 +3,7 @@
 //! its channels die with the page.
 
 use std::collections::HashMap;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use hive_engine::{Engine, WatchId};
 use hive_proto::{
@@ -12,6 +12,8 @@ use hive_proto::{
 };
 use tauri::ipc::Channel;
 use tauri::{State, Webview};
+
+use crate::secrets::Secrets;
 
 /// Watch ids by the webview that opened them.
 #[derive(Default)]
@@ -188,8 +190,14 @@ pub async fn mark_chat_seen(engine: State<'_, Engine>, chat_id: String) -> Resul
 
 /// Deletes the chat and everything in it, stopping its run.
 #[tauri::command]
-pub async fn delete_chat(engine: State<'_, Engine>, chat_id: String) -> Result<(), String> {
-    engine.delete_chat(&chat_id).map_err(|e| e.to_string())
+pub async fn delete_chat(
+    engine: State<'_, Engine>,
+    secrets: State<'_, Arc<Secrets>>,
+    chat_id: String,
+) -> Result<(), String> {
+    engine.delete_chat(&chat_id).map_err(|e| e.to_string())?;
+    secrets.forget_chat(&chat_id);
+    Ok(())
 }
 
 /// Withdraws a prompt still waiting behind the running turn.
