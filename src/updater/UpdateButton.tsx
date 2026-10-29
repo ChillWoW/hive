@@ -1,6 +1,7 @@
 import { ArrowCircleUpIcon, WarningCircleIcon } from "@phosphor-icons/react";
+import { Ring } from "@/chat/Ring";
 import { cn } from "@/lib/cn";
-import { DotMatrixSpinner, Tooltip } from "@/ui";
+import { Tooltip } from "@/ui";
 import { install, useUpdaterStore, type UpdateState } from "./store";
 
 function label(state: Exclude<UpdateState, { phase: "none" }>): string {
@@ -20,9 +21,7 @@ function label(state: Exclude<UpdateState, { phase: "none" }>): string {
 
 function hint(state: Exclude<UpdateState, { phase: "none" }>): string {
     if (state.phase === "failed") return state.error;
-    if (state.phase === "available") {
-        return `Install Hive ${state.update.version} and restart. Running agents are stopped.`;
-    }
+    if (state.phase === "available") return "Install and restart Hive";
     return `Installing Hive ${state.update.version}`;
 }
 
@@ -63,7 +62,9 @@ export function UpdateButton() {
                             />
                         )}
                         {working ? (
-                            <DotMatrixSpinner className="relative size-4 shrink-0" />
+                            <span className="relative">
+                                <Ring fraction={state.phase === "installing" ? 1 : progress} />
+                            </span>
                         ) : failed ? (
                             <WarningCircleIcon className="relative size-4 shrink-0" />
                         ) : (
