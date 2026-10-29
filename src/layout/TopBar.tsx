@@ -9,7 +9,7 @@ import { useShortcut } from "@/keybindings";
 import { cn } from "@/lib/cn";
 import { isMac } from "@/lib/platform";
 import type { HarnessId } from "@/proto";
-import { Button, Tooltip } from "@/ui";
+import { Button, FolderTreeIcon, Tooltip } from "@/ui";
 import {
     ArrowLeftIcon,
     ArrowRightIcon,
@@ -52,6 +52,12 @@ export function TopBar({ title, harness, className }: TopBarProps) {
 
     const open = useLayoutStore((state) => state.sidebarOpen);
     const toggleSidebar = useLayoutStore((state) => state.toggleSidebar);
+    const filePanelOpen = useLayoutStore((state) => state.filePanelOpen);
+    const toggleFilePanel = useLayoutStore((state) => state.toggleFilePanel);
+    const rightOpen = useLayoutStore((state) => state.rightSidebarOpen);
+    const toggleRightSidebar = useLayoutStore(
+        (state) => state.toggleRightSidebar
+    );
     const newChat = () => {
         chats.select(null);
         composer.focus();
@@ -185,7 +191,54 @@ export function TopBar({ title, harness, className }: TopBarProps) {
                 )}
                 {/* Spacer: an empty strip you can grab to drag the window. */}
                 <div data-tauri-drag-region className="h-full flex-1" />
-                {/* right-side actions go here */}
+
+                <div className="flex items-center gap-0.5">
+                    <Tooltip>
+                        <Tooltip.Trigger
+                            render={
+                                <Button
+                                    variant="ghost"
+                                    onClick={toggleFilePanel}
+                                    aria-label="Toggle file panel"
+                                    aria-pressed={filePanelOpen}
+                                    className="p-0 size-6"
+                                >
+                                    <FolderTreeIcon
+                                        weight={
+                                            filePanelOpen ? "fill" : "regular"
+                                        }
+                                        className="size-4"
+                                    />
+                                </Button>
+                            }
+                        />
+                        <Tooltip.Content side="bottom">
+                            Toggle file panel
+                        </Tooltip.Content>
+                    </Tooltip>
+
+                    <Tooltip>
+                        <Tooltip.Trigger
+                            render={
+                                <Button
+                                    variant="ghost"
+                                    onClick={toggleRightSidebar}
+                                    aria-label="Toggle right sidebar"
+                                    aria-pressed={rightOpen}
+                                    className="p-0 size-6"
+                                >
+                                    <SidebarSimpleIcon
+                                        weight={rightOpen ? "fill" : "regular"}
+                                        className="size-4 -scale-x-100"
+                                    />
+                                </Button>
+                            }
+                        />
+                        <Tooltip.Content side="bottom">
+                            Toggle right sidebar
+                        </Tooltip.Content>
+                    </Tooltip>
+                </div>
             </div>
 
             {!isMac && <WindowControls />}
