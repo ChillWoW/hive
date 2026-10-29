@@ -46,7 +46,7 @@ if (version === current) {
     console.error(`Hive is already at ${version}.`);
     process.exit(1);
 }
-if (run(["git", "status", "--porcelain"], true).trim()) {
+if (run(["git", "status", "--porcelain", "--untracked-files=no"], true).trim()) {
     console.error("Commit or stash your changes first.");
     process.exit(1);
 }
