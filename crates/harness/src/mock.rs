@@ -802,6 +802,7 @@ mod tests {
             plan: false,
             resume: None,
             attachments: Vec::new(),
+            mcp: None,
         }
     }
 

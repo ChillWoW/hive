@@ -25,6 +25,7 @@ fn request(prompt: &str, cwd: &std::path::Path) -> RunRequest {
         plan: false,
         resume: None,
         attachments: Vec::new(),
+        mcp: None,
     }
 }
 

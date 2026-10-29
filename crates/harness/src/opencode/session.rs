@@ -208,7 +208,7 @@ pub(super) fn model_ref(request: &RunRequest, models: &Models) -> Option<Value> 
 impl Session {
     async fn open(launch: &Launch, events: mpsc::Sender<AgentEvent>) -> Result<Self, String> {
         let request = &launch.request;
-        let server = Server::start(&launch.exe, &request.cwd).await?;
+        let server = Server::start(&launch.exe, &request.cwd, request.mcp.as_ref()).await?;
         let api = server.api.clone();
         let mut bus = api.subscribe();
         // Wait for the stream to be live, so nothing after this is missed.

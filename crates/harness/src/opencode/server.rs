@@ -11,7 +11,8 @@ use std::process::{ExitStatus, Stdio};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use serde_json::Value;
+use hive_proto::McpServer;
+use serde_json::{json, Value};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Child;
 use tokio::sync::mpsc;
@@ -63,13 +64,13 @@ pub(super) enum Bus {
 impl Server {
     /// Starts `opencode serve` in `cwd` (home when empty) and waits until it
     /// answers. Only the 2.x API is spoken.
-    pub async fn start(exe: &Path, cwd: &str) -> Result<Self, String> {
+    pub async fn start(exe: &Path, cwd: &str, mcp: Option<&McpServer>) -> Result<Self, String> {
         let mut last = String::new();
         for attempt in 0..SPAWN_ATTEMPTS {
             if attempt > 0 {
                 tokio::time::sleep(Duration::from_millis(250 * u64::from(attempt))).await;
             }
-            match Self::start_once(exe, cwd).await {
+            match Self::start_once(exe, cwd, mcp).await {
                 Ok(server) => return Ok(server),
                 Err((message, retry)) => {
                     last = message;
@@ -82,7 +83,11 @@ impl Server {
         Err(last)
     }
 
-    async fn start_once(exe: &Path, cwd: &str) -> Result<Self, (String, bool)> {
+    async fn start_once(
+        exe: &Path,
+        cwd: &str,
+        mcp: Option<&McpServer>,
+    ) -> Result<Self, (String, bool)> {
         let port = free_port().ok_or(("No free local port for OpenCode.".to_owned(), false))?;
         let password = secret();
         let mut cmd = command_for(exe);
@@ -102,6 +107,13 @@ impl Server {
             // Not `kill_on_drop`: killing the launcher first would leave the
             // tree kill nothing to walk from ([`Server`]'s `Drop`).
             .kill_on_drop(false);
+        // An inherited inline config that isn't a JSON object is left as it
+        // is: the run goes without Hive's server rather than without the
+        // user's config.
+        let inherited = std::env::var("OPENCODE_CONFIG_CONTENT").ok();
+        if let Some(config) = mcp.and_then(|mcp| with_mcp_server(inherited.as_deref(), mcp)) {
+            cmd.env("OPENCODE_CONFIG_CONTENT", config);
+        }
         let dir = if cwd.is_empty() {
             home_dir()
         } else {
@@ -520,6 +532,39 @@ fn is_transient(stderr: &str) -> bool {
         .any(|s| lower.contains(s))
 }
 
+/// `inherited` inline config (none is an empty one) with `mcp` added as a
+/// local server, in 2.x's shape (`mcp.servers.<name>`). None when the
+/// inherited config isn't a JSON object to add to.
+fn with_mcp_server(inherited: Option<&str>, mcp: &McpServer) -> Option<String> {
+    let mut config: Value = match inherited.filter(|s| !s.trim().is_empty()) {
+        Some(raw) => serde_json::from_str(raw).ok()?,
+        None => json!({}),
+    };
+    let servers = config
+        .as_object_mut()?
+        .entry("mcp")
+        .or_insert_with(|| json!({}))
+        .as_object_mut()?
+        .entry("servers")
+        .or_insert_with(|| json!({}))
+        .as_object_mut()?;
+    let command: Vec<&str> = std::iter::once(mcp.command.as_str())
+        .chain(mcp.args.iter().map(String::as_str))
+        .collect();
+    servers.insert(
+        mcp.name.clone(),
+        json!({
+            "type": "local",
+            "command": command,
+            "environment": mcp.env,
+            "disabled": false,
+            // Its tools as tools, not behind Code Mode.
+            "codemode": false,
+        }),
+    );
+    Some(config.to_string())
+}
+
 fn free_port() -> Option<u16> {
     std::net::TcpListener::bind(("127.0.0.1", 0))
         .and_then(|l| l.local_addr())
@@ -608,6 +653,35 @@ async fn kill_tree(child: &mut Child) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn mcp_server_merges_into_the_inline_config() {
+        let mcp = McpServer {
+            name: "hive".into(),
+            command: "/opt/hive".into(),
+            args: vec!["mcp".into()],
+            env: [("HIVE_CHAT_ID".to_owned(), "c1".to_owned())].into(),
+        };
+        let config: Value = serde_json::from_str(
+            &with_mcp_server(Some(r#"{"model":"x","mcp":{"servers":{"other":{}}}}"#), &mcp).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(config["model"], "x");
+        assert_eq!(config["mcp"]["servers"]["other"], json!({}));
+        assert_eq!(
+            config["mcp"]["servers"]["hive"],
+            json!({
+                "type": "local",
+                "command": ["/opt/hive", "mcp"],
+                "environment": {"HIVE_CHAT_ID": "c1"},
+                "disabled": false,
+                "codemode": false,
+            })
+        );
+        assert!(with_mcp_server(None, &mcp).is_some());
+        assert!(with_mcp_server(Some("not json"), &mcp).is_none());
+        assert!(with_mcp_server(Some("[]"), &mcp).is_none());
+    }
 
     #[test]
     fn sse_frames_split_anywhere() {

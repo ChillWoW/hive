@@ -47,10 +47,10 @@ use std::time::Duration;
 
 use hive_proto::{
     AccessMode, AgentEvent, CommandKind, DoneStatus, HarnessCapabilities, HarnessCatalog,
-    HarnessId, Model, ModelOption, ModelOptionChoice, ReasoningLevel, RunRequest, SlashCommand,
-    TaskOutput, UserInputAnswer, UserInputQuestion,
+    HarnessId, McpServer, Model, ModelOption, ModelOptionChoice, ReasoningLevel, RunRequest,
+    SlashCommand, TaskOutput, UserInputAnswer, UserInputQuestion,
 };
-use serde_json::Value;
+use serde_json::{json, Value};
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, ChildStderr, ChildStdin, Command};
 use tokio::sync::{mpsc, oneshot};
@@ -180,6 +180,13 @@ fn permission_mode(request: &RunRequest) -> &'static str {
 /// Claude's file-changing tools: auto-accept edits allows these unasked.
 const EDIT_TOOLS: [&str; 4] = ["Edit", "Write", "MultiEdit", "NotebookEdit"];
 
+/// A tool of Hive's own MCP server (`mcp__hive__<tool>`).
+fn is_hive_tool(tool: &str) -> bool {
+    tool.strip_prefix("mcp__")
+        .and_then(|rest| rest.strip_prefix(McpServer::HIVE))
+        .is_some_and(|rest| rest.starts_with("__"))
+}
+
 /// What a `can_use_tool` request has to ask the user before it's allowed,
 /// in `access`; `None` allows it now. `ExitPlanMode` (the plan is ready)
 /// asks whether to start implementing it.
@@ -197,6 +204,10 @@ fn approval_question(
                 "Claude wants to start implementing its plan. Allow it?",
             )
         });
+    }
+    // Hive's own tools act through Hive itself: never asked about.
+    if is_hive_tool(tool) {
+        return None;
     }
     let edit = EDIT_TOOLS.contains(&tool);
     let action = if edit { Action::Edit } else { Action::Other };
@@ -411,6 +422,7 @@ impl Harness for ClaudeHarness {
         request.auto_approve = false;
         request.access = AccessMode::Supervised;
         request.plan = false;
+        request.mcp = None;
         self.spawn(request, true)
     }
 }
@@ -437,6 +449,10 @@ impl ClaudeHarness {
             if !managed_mcp_config() {
                 cmd.arg("--strict-mcp-config");
             }
+        } else if let Some(mcp) = &request.mcp {
+            // Beside the user's own servers (no `--strict-mcp-config`): the
+            // CLI merges an inline config with the settings-sourced ones.
+            cmd.args(["--mcp-config", &mcp_config_arg(mcp)]);
         }
         cmd
             // Set when Hive itself runs inside Claude Code; the child would
@@ -1070,6 +1086,17 @@ fn managed_mcp_config() -> bool {
     Path::new(path).is_file()
 }
 
+/// The inline `--mcp-config` JSON for an injected server (the CLI takes a
+/// JSON string as well as a file path).
+fn mcp_config_arg(mcp: &McpServer) -> String {
+    json!({
+        "mcpServers": {
+            &mcp.name: { "command": mcp.command, "args": mcp.args, "env": mcp.env }
+        }
+    })
+    .to_string()
+}
+
 /// `claude` on PATH, else where its installers put it. An app started from
 /// Finder or the Start menu may not see the shell's PATH, and one running
 /// when the CLI was installed never sees the new entry.
@@ -1335,6 +1362,33 @@ mod tests {
         assert_eq!(
             ask("ExitPlanMode", &json!({"plan": "p"}), AutoAcceptEdits).as_deref(),
             Some("Claude wants to start implementing its plan. Allow it?")
+        );
+    }
+
+    #[test]
+    fn hive_tools_are_never_asked_about() {
+        let ask = |tool: &str| approval_question(tool, None, None, &json!({}), AccessMode::Supervised);
+        assert!(ask("mcp__hive__whoami").is_none());
+        assert!(ask("mcp__hivemind__x").is_some());
+        assert!(ask("mcp__linear__search").is_some());
+    }
+
+    #[test]
+    fn mcp_config_arg_spells_the_server_the_way_the_cli_reads_it() {
+        let mcp = McpServer {
+            name: "hive".into(),
+            command: r"C:\Program Files\Hive\hive.exe".into(),
+            args: vec!["mcp".into()],
+            env: [("HIVE_CHAT_ID".to_owned(), "c1".to_owned())].into(),
+        };
+        let parsed: Value = serde_json::from_str(&mcp_config_arg(&mcp)).unwrap();
+        assert_eq!(
+            parsed,
+            json!({"mcpServers": {"hive": {
+                "command": r"C:\Program Files\Hive\hive.exe",
+                "args": ["mcp"],
+                "env": {"HIVE_CHAT_ID": "c1"},
+            }}})
         );
     }
 }

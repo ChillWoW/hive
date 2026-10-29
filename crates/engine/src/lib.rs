@@ -33,7 +33,7 @@ use hive_harness::{Harness, RunHandle};
 use hive_proto::{
     AgentEvent, Attachment, BackgroundTask, Chat, ChatConfig, ChatsUpdate, Command,
     CommandPayload, CommandStatus, ContextUsage, DoneStatus, HarnessCatalog, HarnessId,
-    MessageStatus, MessagesUpdate, NewWorktree, RunRequest, Session, SessionStatus, SlashCommand,
+    McpServer, MessageStatus, MessagesUpdate, NewWorktree, RunRequest, Session, SessionStatus, SlashCommand,
     TaskOutput, UserInputAnswer,
 };
 use hive_store::{new_id, now_ms, Recovery, Store, StoreError, Turn};
@@ -63,6 +63,9 @@ pub struct EngineConfig {
     pub auto_title: bool,
     /// Where chats' worktrees go, a folder each.
     pub worktrees_dir: PathBuf,
+    /// Hive's own MCP server, given to every chat's runs with the chat's
+    /// id ([`McpServer::for_chat`]). None runs agents without it.
+    pub mcp: Option<McpServer>,
 }
 
 impl Default for EngineConfig {
@@ -72,6 +75,7 @@ impl Default for EngineConfig {
             resume_interrupted: false,
             auto_title: true,
             worktrees_dir: std::env::temp_dir().join("hive-worktrees"),
+            mcp: None,
         }
     }
 }
@@ -906,6 +910,7 @@ impl Engine {
             plan: config.plan,
             resume: chat.harness_session_id.clone(),
             attachments: prompt.paths(),
+            mcp: self.inner.config.mcp.as_ref().map(|m| m.for_chat(&chat.id)),
         };
         let run = {
             let _runtime = self.inner.runtime.enter();

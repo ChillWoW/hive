@@ -72,6 +72,7 @@ dependencies = [
  "hive-engine",
  "hive-git",
  "hive-harness",
+ "hive-mcp",
  "hive-proto",
  "hive-store",
  "hive-usage",
@@ -1660,6 +1661,21 @@ dependencies = [
  "sha2",
  "thiserror 2.0.19",
  "tokio",
+]
+
+[[package]]
+name = "hive-mcp"
+version = "0.0.1"
+dependencies = [
+ "hive-engine",
+ "hive-harness",
+ "hive-proto",
+ "hive-store",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "uuid",
 ]
 
 [[package]]

@@ -133,7 +133,7 @@ impl OpencodeHarness {
 /// The models of the providers the user has set up. The list syncs shortly
 /// after the server starts; an empty one right then is asked again.
 async fn list_models(exe: PathBuf) -> Result<Models, String> {
-    let server = Server::start(&exe, "").await?;
+    let server = Server::start(&exe, "", None).await?;
     let result = fetch_models(&server.api, 5).await;
     server.shutdown().await;
     result
@@ -247,7 +247,7 @@ impl Harness for OpencodeHarness {
             }
             let exe = exe.ok_or(HarnessError::NotInstalled("opencode"))?;
             let listed = tokio::time::timeout(PROBE_TIMEOUT, async {
-                let server = Server::start(&exe, &cwd).await?;
+                let server = Server::start(&exe, &cwd, None).await?;
                 let listed = session::list_commands(&server.api).await;
                 server.shutdown().await;
                 listed
@@ -275,7 +275,7 @@ impl Harness for OpencodeHarness {
         let (handle, mut commands) = RunHandle::new();
         tokio::spawn(async move {
             let work = async {
-                let server = Server::start(&exe, &request.cwd).await?;
+                let server = Server::start(&exe, &request.cwd, None).await?;
                 let mut body = json!({ "prompt": request.prompt });
                 if let Some(model) = session::model_ref(&request, &models) {
                     body["model"] = model;

@@ -135,6 +135,38 @@ pub struct RunRequest {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     #[ts(as = "Option<Vec<String>>")]
     pub attachments: Vec<String>,
+    /// Hive's own MCP server, added beside the agent's configured ones.
+    /// Stamped on by the engine per chat; never on title runs.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(skip)]
+    pub mcp: Option<McpServer>,
+}
+
+/// A stdio MCP server to launch beside the agent: `command args…` with `env`.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct McpServer {
+    pub name: String,
+    pub command: String,
+    #[serde(default)]
+    pub args: Vec<String>,
+    #[serde(default)]
+    pub env: BTreeMap<String, String>,
+}
+
+impl McpServer {
+    /// The name Hive's own server goes by: Claude sees its tools as
+    /// `mcp__hive__<tool>`.
+    pub const HIVE: &'static str = "hive";
+    /// The chat whose agent launched the server.
+    pub const CHAT_ID_ENV: &'static str = "HIVE_CHAT_ID";
+
+    /// This server, launched for `chat_id`'s agent.
+    pub fn for_chat(&self, chat_id: &str) -> Self {
+        let mut server = self.clone();
+        server.env.insert(Self::CHAT_ID_ENV.into(), chat_id.into());
+        server
+    }
 }
 
 /// A decoded tool invocation, reduced to the fields each kind renders.

@@ -4,6 +4,7 @@ mod engine;
 mod files;
 mod folders;
 mod git;
+mod mcp;
 mod providers;
 mod settings;
 mod terminals;
@@ -125,6 +126,7 @@ pub fn run() {
         resume_interrupted: chats.resume_interrupted,
         auto_title: chats.auto_title,
         worktrees_dir: data_dir.join("worktrees"),
+        mcp: mcp::start(app.handle(), &data_dir),
         ..EngineConfig::default()
       };
       app.manage(settings);

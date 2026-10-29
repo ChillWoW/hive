@@ -122,6 +122,7 @@ impl Engine {
             plan: false,
             resume: None,
             attachments: Vec::new(),
+            mcp: None,
         };
         for attempt in 0..=RETRY_DELAYS.len() {
             match harness.run_title(request.clone()) {

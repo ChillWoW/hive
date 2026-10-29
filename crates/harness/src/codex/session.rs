@@ -6,7 +6,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use hive_proto::{
-    AccessMode, AgentEvent, DoneStatus, HarnessId, RunRequest, SandboxLevel, UserInputAnswer,
+    AccessMode, AgentEvent, DoneStatus, HarnessId, McpServer, RunRequest, SandboxLevel, UserInputAnswer,
     UserInputQuestion,
 };
 use serde_json::{json, Map, Value};
@@ -236,8 +236,24 @@ pub(super) fn thread_params(request: &RunRequest, title: bool) -> Map<String, Va
     if title {
         params.insert("baseInstructions".into(), json!(crate::TITLE_INSTRUCTIONS));
         params.insert("ephemeral".into(), json!(true));
+    } else if let Some(mcp) = &request.mcp {
+        params.insert("config".into(), Value::Object(mcp_overrides(mcp)));
     }
     params
+}
+
+/// Dotted config overrides that add an injected MCP server on top of the
+/// user's `mcp_servers` table.
+fn mcp_overrides(mcp: &McpServer) -> Map<String, Value> {
+    let key = |field: &str| format!("mcp_servers.{}.{field}", mcp.name);
+    let mut config = Map::new();
+    config.insert(key("command"), json!(mcp.command));
+    config.insert(key("args"), json!(mcp.args));
+    config.insert(key("env"), json!(mcp.env));
+    // Hive's own tools: approved in every access mode, so Codex neither
+    // rejects a call under `never` nor asks about one under the others.
+    config.insert(key("default_tools_approval_mode"), json!("approve"));
+    config
 }
 
 impl Session {
@@ -1026,6 +1042,23 @@ mod tests {
         r.access = access;
         r.auto_approve = auto;
         r
+    }
+
+    #[test]
+    fn mcp_server_rides_as_dotted_overrides_but_not_on_titles() {
+        let mut r = request(AccessMode::Supervised, false);
+        r.mcp = Some(McpServer {
+            name: "hive".into(),
+            command: "/opt/hive".into(),
+            args: vec!["mcp".into()],
+            env: [("HIVE_CHAT_ID".to_owned(), "c1".to_owned())].into(),
+        });
+        let p = thread_params(&r, false);
+        assert_eq!(p["config"]["mcp_servers.hive.command"], "/opt/hive");
+        assert_eq!(p["config"]["mcp_servers.hive.args"], json!(["mcp"]));
+        assert_eq!(p["config"]["mcp_servers.hive.env"], json!({"HIVE_CHAT_ID": "c1"}));
+        assert_eq!(p["config"]["mcp_servers.hive.default_tools_approval_mode"], "approve");
+        assert!(thread_params(&r, true).get("config").is_none());
     }
 
     #[test]
