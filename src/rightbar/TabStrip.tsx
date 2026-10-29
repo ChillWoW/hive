@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { PlusIcon, XIcon } from "@phosphor-icons/react";
+import { PlusIcon, TerminalWindowIcon, XIcon } from "@phosphor-icons/react";
+import { ShortcutKeys, useBinding, type ActionId } from "@/keybindings";
 import { cn } from "@/lib/cn";
 import { useDocsStore } from "@/editor";
 import { FileIcon, iconButtonClassName, Menu, Tooltip } from "@/ui";
@@ -165,10 +166,11 @@ export function TabStrip() {
                         <Tooltip.Content side="bottom">New tab</Tooltip.Content>
                     </Tooltip>
                     <Menu.Content side="bottom" align="end" sideOffset={6} className="w-48 min-w-0">
-                        {NEW_TABS.map(({ label, icon: TabIcon, open }) => (
+                        {NEW_TABS.map(({ label, icon: TabIcon, shortcut, open }) => (
                             <Menu.Item key={label} onClick={open}>
                                 <TabIcon className="size-3.5 text-dark-200" />
                                 {label}
+                                {shortcut && <MenuShortcut id={shortcut} />}
                             </Menu.Item>
                         ))}
                     </Menu.Content>
@@ -234,7 +236,11 @@ function TabChip({
             )}
         >
             <span className="flex size-[18px] shrink-0 items-center justify-center">
-                <FileIcon name={tab.title} className={cn("size-3.5", !active && "opacity-80")} />
+                {tab.kind === "terminal" ? (
+                    <TerminalWindowIcon className={cn("size-3.5", !active && "opacity-80")} />
+                ) : (
+                    <FileIcon name={tab.title} className={cn("size-3.5", !active && "opacity-80")} />
+                )}
             </span>
             <span className="min-w-0 flex-1 truncate text-[11.5px]">{tab.title}</span>
             <button
@@ -259,11 +265,18 @@ function TabChip({
         </div>
     );
 
-    // The file's path on hover, as zeron shows a tab's detail.
+    // The file's path (a terminal's folder) on hover, as zeron shows a tab's detail.
     return (
         <Tooltip disabled={dragging}>
             <Tooltip.Trigger delay={350} render={chip} />
-            <Tooltip.Content side="bottom">{tab.path}</Tooltip.Content>
+            <Tooltip.Content side="bottom">
+                {tab.kind === "file" ? tab.path : (tab.cwd ?? "Home folder")}
+            </Tooltip.Content>
         </Tooltip>
     );
+}
+
+function MenuShortcut({ id }: { id: ActionId }) {
+    const binding = useBinding(id);
+    return <ShortcutKeys shortcut={binding} variant="plain" className="ml-auto pl-4" />;
 }

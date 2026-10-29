@@ -24,6 +24,7 @@ export const DEFAULT_SETTINGS: Settings = {
     "nextChat": "Ctrl+Tab",
     "goBack": "Alt+Left",
     "goForward": "Alt+Right",
+    "newTerminal": "Mod+J",
     "togglePlan": "Shift+Tab"
   },
   "providers": {

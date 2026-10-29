@@ -117,6 +117,7 @@ pub struct KeyboardSettings {
     pub next_chat: String,
     pub go_back: String,
     pub go_forward: String,
+    pub new_terminal: String,
     /// Only while typing a prompt.
     pub toggle_plan: String,
 }
@@ -133,6 +134,7 @@ impl Default for KeyboardSettings {
             next_chat: "Ctrl+Tab".into(),
             go_back: "Alt+Left".into(),
             go_forward: "Alt+Right".into(),
+            new_terminal: "Mod+J".into(),
             toggle_plan: "Shift+Tab".into(),
         }
     }

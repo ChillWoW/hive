@@ -2,6 +2,7 @@ export { ACTIONS, actionById, type Action, type ActionId } from "./actions";
 export { ShortcutKeys } from "./ShortcutKeys";
 export {
     COMPOSER_SCOPE,
+    isAppShortcut,
     useBinding,
     useKeybindingsRuntime,
     useShortcut,

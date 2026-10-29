@@ -6,6 +6,7 @@ mod folders;
 mod git;
 mod providers;
 mod settings;
+mod terminals;
 
 use std::sync::Arc;
 
@@ -79,8 +80,12 @@ pub fn run() {
       settings::settings_reload,
       settings::settings_path,
       settings::settings_reveal,
+      terminals::terminal_spawn,
+      terminals::terminal_write,
+      terminals::terminal_resize,
+      terminals::terminal_kill,
     ])
-    // A reload takes the page's channels with it.
+    // A reload takes the page's channels (and so its terminals) with it.
     .on_page_load(|webview, payload| {
       if payload.event() == PageLoadEvent::Started {
         let app = webview.app_handle();
@@ -88,6 +93,9 @@ pub fn run() {
           (app.try_state::<engine::Watches>(), app.try_state::<Engine>())
         {
           watches.clear(&engine, webview.label());
+        }
+        if let Some(terminals) = app.try_state::<terminals::Terminals>() {
+          terminals.clear(webview.label());
         }
       }
     })
@@ -128,6 +136,7 @@ pub fn run() {
       app.manage(engine);
       app.manage(engine::Watches::default());
       app.manage(providers::SignIns::default());
+      app.manage(terminals::Terminals::default());
       Ok(())
     })
     .run(tauri::generate_context!())

@@ -72,6 +72,23 @@ export function useKeybindingsRuntime() {
     }, []);
 }
 
+/**
+ * Whether `event` is the shortcut of a global action something handles now,
+ * so a widget that eats keys (the terminal) can let it through to the app.
+ */
+export function isAppShortcut(event: KeyboardEvent) {
+    const pressed = shortcutFromEvent(event);
+    if (!pressed) return false;
+    const combo = stringifyShortcut(pressed);
+    const { keyboard } = useSettingsStore.getState().settings;
+    return ACTIONS.some(
+        (action) =>
+            action.scope === "global" &&
+            canonical(keyboard[action.id]) === combo &&
+            !!handlers.get(action.id)?.length
+    );
+}
+
 /** An action id, or a fixed combo the app doesn't let you rebind (`Escape`, `Mod+Enter`). */
 export type ShortcutRef = ActionId | (string & {});
 

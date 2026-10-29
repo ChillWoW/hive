@@ -67,6 +67,13 @@ export const ACTIONS: readonly Action[] = [
         scope: "global"
     },
     {
+        id: "newTerminal",
+        label: "New terminal",
+        description: "In the right sidebar, in the chat's folder",
+        keywords: "terminal shell console command line new open",
+        scope: "global"
+    },
+    {
         id: "openSettings",
         label: "Settings",
         description: "Opens or closes this window",

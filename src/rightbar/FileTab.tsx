@@ -85,7 +85,7 @@ function Toolbar({
     doc,
     image
 }: {
-    tab: RightTab;
+    tab: Extract<RightTab, { kind: "file" }>;
     doc: Doc | undefined;
     image: boolean;
 }) {
