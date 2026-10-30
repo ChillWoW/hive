@@ -6,6 +6,7 @@ export {
     currentState,
     dropDoc,
     isMarkdown,
+    moveDoc,
     openDoc,
     overwrite,
     reloadFromDisk,

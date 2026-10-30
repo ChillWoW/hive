@@ -69,6 +69,8 @@ pub fn run() {
       secrets::answer_secret_request,
       files::list_files,
       files::list_directory,
+      files::rename_entry,
+      files::delete_entry,
       editor::read_file,
       editor::read_file_bytes,
       editor::write_file,

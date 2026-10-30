@@ -5,7 +5,7 @@
 //! one folder of it (the file panel's tree).
 
 use std::collections::HashSet;
-use std::path::{Component, Path};
+use std::path::{Component, Path, PathBuf};
 
 use hive_proto::{DirectoryEntry, WorkspaceEntry};
 
@@ -124,6 +124,92 @@ fn list_dir(root: &Path, dir: &str, all: bool) -> Result<Vec<DirectoryEntry>, St
     Ok(entries)
 }
 
+/// `path` (relative, `/`-separated, not "") under `root`, refused when it would
+/// leave it, through a link among its folders too. The entry itself may be a
+/// link: it's renamed or deleted as one, never what it points at.
+fn entry(root: &Path, path: &str) -> Result<PathBuf, String> {
+    let relative = Path::new(path);
+    let outside = || format!("{path} is not inside the folder");
+    if path.is_empty()
+        || !relative
+            .components()
+            .all(|part| matches!(part, Component::Normal(_)))
+    {
+        return Err(outside());
+    }
+    let target = root.join(relative);
+    let parent = target.parent().ok_or_else(outside)?;
+    let (Ok(root), Ok(parent)) = (root.canonicalize(), parent.canonicalize()) else {
+        return Err(format!("{path} no longer exists"));
+    };
+    if !parent.starts_with(&root) {
+        return Err(outside());
+    }
+    std::fs::symlink_metadata(&target).map_err(|_| format!("{path} no longer exists"))?;
+    Ok(target)
+}
+
+/// A new name for an entry: one plain file name (zeron's `renamed_path`).
+fn check_name(name: &str) -> Result<(), String> {
+    if name.is_empty()
+        || name == "."
+        || name == ".."
+        || name.eq_ignore_ascii_case(".git")
+        || name.contains(['/', '\\', '\0', ':'])
+    {
+        return Err("Enter a single file name without path separators".into());
+    }
+    Ok(())
+}
+
+/// Renames `path` under `root` to `name` in the same folder; the new path.
+fn rename(root: &Path, path: &str, name: &str) -> Result<String, String> {
+    check_name(name)?;
+    let from = entry(root, path)?;
+    let to = from.with_file_name(name);
+    // A case-only rename on a case-insensitive disk finds itself there.
+    let same = to.file_name().zip(from.file_name()).is_some_and(|(a, b)| {
+        a.to_string_lossy().to_lowercase() == b.to_string_lossy().to_lowercase()
+    });
+    if !same && std::fs::symlink_metadata(&to).is_ok() {
+        return Err(format!("{name} already exists"));
+    }
+    std::fs::rename(&from, &to).map_err(|error| error.to_string())?;
+    Ok(match path.rsplit_once('/') {
+        Some((parent, _)) => format!("{parent}/{name}"),
+        None => name.to_owned(),
+    })
+}
+
+/// Deletes `path` under `root` for good, a folder with everything in it.
+fn delete(root: &Path, path: &str) -> Result<(), String> {
+    let target = entry(root, path)?;
+    let meta = std::fs::symlink_metadata(&target).map_err(|error| error.to_string())?;
+    let result = if meta.is_dir() {
+        std::fs::remove_dir_all(&target)
+    } else if meta.file_type().is_symlink() {
+        // A link to a folder is a directory entry on Windows.
+        std::fs::remove_file(&target).or_else(|_| std::fs::remove_dir(&target))
+    } else {
+        std::fs::remove_file(&target)
+    };
+    result.map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub async fn rename_entry(cwd: String, path: String, name: String) -> Result<String, String> {
+    tokio::task::spawn_blocking(move || rename(Path::new(&cwd), &path, &name))
+        .await
+        .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+pub async fn delete_entry(cwd: String, path: String) -> Result<(), String> {
+    tokio::task::spawn_blocking(move || delete(Path::new(&cwd), &path))
+        .await
+        .map_err(|error| error.to_string())?
+}
+
 #[tauri::command]
 pub async fn list_files(cwd: String, all: Option<bool>) -> Result<Vec<WorkspaceEntry>, String> {
     tokio::task::spawn_blocking(move || list(Path::new(&cwd), all.unwrap_or(false)))
@@ -238,6 +324,41 @@ mod tests {
         assert!(list_dir(&root, "..", false).is_err());
         assert!(list_dir(&root, "src/../..", false).is_err());
         assert!(list_dir(&root, "README.md", false).is_err());
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn renames_in_place() {
+        let root = project("rename");
+        assert_eq!(
+            rename(&root, "src/main.rs", "lib.rs").unwrap(),
+            "src/lib.rs"
+        );
+        assert!(root.join("src/lib.rs").is_file());
+        assert_eq!(rename(&root, "src", "app").unwrap(), "app");
+        assert!(root.join("app/nested/a b.rs").is_file());
+        assert_eq!(
+            rename(&root, "README.md", "readme.md").unwrap(),
+            "readme.md"
+        );
+        assert!(rename(&root, "readme.md", ".gitignore").is_err());
+        assert!(rename(&root, "readme.md", "../x").is_err());
+        assert!(rename(&root, "readme.md", ".git").is_err());
+        assert!(rename(&root, "missing", "x").is_err());
+        assert!(rename(&root, "../escape", "x").is_err());
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn deletes_files_and_folders() {
+        let root = project("delete");
+        delete(&root, "README.md").unwrap();
+        delete(&root, "src").unwrap();
+        assert!(!root.join("README.md").exists());
+        assert!(!root.join("src").exists());
+        assert!(delete(&root, "src").is_err());
+        assert!(delete(&root, "").is_err());
+        assert!(delete(&root, "..").is_err());
         std::fs::remove_dir_all(&root).unwrap();
     }
 

@@ -22,6 +22,8 @@ type RightbarState = {
     add: (content: TabContent, title: string) => string;
     activate: (id: string) => void;
     retitle: (id: string, title: string) => void;
+    /** Points a file tab at `path` (its file was renamed), titled `title`. */
+    repath: (id: string, path: string, title: string) => void;
     /** Takes a tab away; the shown one passes to its right neighbour, else its left. */
     remove: (id: string) => void;
     /** Moves the tab at `from` to `to`. */
@@ -42,6 +44,10 @@ export const useRightbarStore = create<RightbarState>()((set) => ({
     activate: (activeId) => set({ activeId }),
     retitle: (id, title) =>
         set((s) => ({ tabs: s.tabs.map((t) => (t.id === id ? { ...t, title } : t)) })),
+    repath: (id, path, title) =>
+        set((s) => ({
+            tabs: s.tabs.map((t) => (t.id === id && t.kind === "file" ? { ...t, path, title } : t))
+        })),
     remove: (id) =>
         set((s) => {
             const index = s.tabs.findIndex((t) => t.id === id);

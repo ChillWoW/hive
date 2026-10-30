@@ -3,7 +3,7 @@ import type { DirectoryEntry, WorkspaceEntry } from "@/proto";
 import { isTauri } from "@/lib/platform";
 
 /** A made-up project for plain `bun run dev`, where there's no backend. */
-const FAKE: WorkspaceEntry[] = [
+let FAKE: WorkspaceEntry[] = [
     "src/",
     "src/chat/",
     "src/composer/",
@@ -40,6 +40,37 @@ export function listFiles(cwd: string, all = false): Promise<WorkspaceEntry[]> {
 }
 
 const nameOf = (path: string) => path.slice(path.lastIndexOf("/") + 1);
+
+/** `path` is `ancestor` or inside it. */
+export const containsPath = (ancestor: string, path: string) =>
+    path === ancestor || path.startsWith(`${ancestor}/`);
+
+/**
+ * Renames `path` under `cwd` to `name` in the same folder (zeron's tree
+ * rename); the new path. Refused when `name` is taken or isn't one name.
+ */
+export function renameEntry(cwd: string, path: string, name: string): Promise<string> {
+    if (isTauri) return invoke<string>("rename_entry", { cwd, path, name });
+    const slash = path.lastIndexOf("/");
+    const to = slash === -1 ? name : `${path.slice(0, slash)}/${name}`;
+    if (!name || /[/\\:]/.test(name)) {
+        return Promise.reject("Enter a single file name without path separators");
+    }
+    if (to !== path && FAKE.some((e) => e.path === to)) {
+        return Promise.reject(`${name} already exists`);
+    }
+    FAKE = FAKE.map((e) =>
+        containsPath(path, e.path) ? { ...e, path: to + e.path.slice(path.length) } : e
+    );
+    return Promise.resolve(to);
+}
+
+/** Deletes `path` under `cwd` for good, a folder with everything in it. */
+export function deleteEntry(cwd: string, path: string): Promise<void> {
+    if (isTauri) return invoke<void>("delete_entry", { cwd, path });
+    FAKE = FAKE.filter((e) => !containsPath(path, e.path));
+    return Promise.resolve();
+}
 
 /**
  * What's directly in `dir` under `cwd` ("" for `cwd` itself), folders

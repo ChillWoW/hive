@@ -174,9 +174,17 @@ function extensions(id: string, file: FileText): Extension[] {
 async function loadLanguage(id: string, path: string) {
     const name = path.slice(path.lastIndexOf("/") + 1);
     const description = LanguageDescription.matchFilename(languages, name);
-    if (!description) return;
+    if (!description) return dispatchTo(id, { effects: language.reconfigure([]) });
     const support = await description.load();
     dispatchTo(id, { effects: language.reconfigure(support) });
+}
+
+/** The tab `id`'s file was renamed (moved) to `path`; unsaved changes stay. */
+export function moveDoc(id: string, path: string) {
+    const doc = getDoc(id);
+    if (!doc || doc.path === path) return;
+    setDoc(id, { path });
+    if (currentState(id)) void loadLanguage(id, path);
 }
 
 /** Reads `path` for the tab `id`, once. */
