@@ -1,4 +1,6 @@
-export type DiffLine = { kind: "same" | "add" | "del"; text: string };
+import type { FileDiff, PatchLine } from "@/diff/patch";
+
+export type DiffLine ={ kind: "same" | "add" | "del"; text: string };
 
 /** Past this many cells the LCS table is skipped for a plain replace. */
 const MAX_CELLS = 400_000;
@@ -71,12 +73,41 @@ export function diffLines(before: string, after: string): DiffLine[] {
     return out;
 }
 
-export function countChanges(lines: DiffLine[]) {
-    let added = 0;
-    let removed = 0;
-    for (const l of lines) {
-        if (l.kind === "add") added++;
-        else if (l.kind === "del") removed++;
-    }
-    return { added, removed };
+/**
+ * `lines` as a one-hunk `FileDiff` of `path`, drawn by the diff tab's rows.
+ * Numbered from 1 only when the lines are the whole file; a snippet's real
+ * line numbers aren't known.
+ */
+export function toFileDiff(path: string, lines: DiffLine[], numbered: boolean): FileDiff {
+    let oldNo = 1;
+    let newNo = 1;
+    let additions = 0;
+    let deletions = 0;
+    const out: PatchLine[] = lines.map(({ kind, text }) => {
+        if (kind === "add") {
+            additions++;
+            return { kind, text, newNo: numbered ? newNo++ : undefined };
+        }
+        if (kind === "del") {
+            deletions++;
+            return { kind, text, oldNo: numbered ? oldNo++ : undefined };
+        }
+        return {
+            kind: "context",
+            text,
+            oldNo: numbered ? oldNo++ : undefined,
+            newNo: numbered ? newNo++ : undefined
+        };
+    });
+    return {
+        path: path.replace(/\\/g, "/"),
+        status: "modified",
+        binary: false,
+        notices: [],
+        hunks: [{ header: "", lines: out }],
+        additions,
+        deletions,
+        maxLine: numbered ? Math.max(oldNo, newNo) - 1 : 0,
+        lineCount: out.length
+    };
 }

@@ -34,8 +34,9 @@ const ROW: Record<PatchLine["kind"], { row: string; accent: string; marker: stri
         meta: { row: "", accent: "", marker: "", no: "text-dark-250" }
     };
 
-/** One line-number column, fitted to the file's largest number. */
-const gutterWidth = (file: FileDiff) => Math.max(String(file.maxLine || 1).length * 7 + 14, 36);
+/** One line-number column, fitted to the file's largest number; none for an unnumbered file. */
+const gutterWidth = (file: FileDiff) =>
+    file.maxLine ? Math.max(String(file.maxLine).length * 7 + 14, 36) : 0;
 
 export type FileSectionProps = {
     file: FileDiff;
@@ -181,7 +182,8 @@ function useHighlights(file: FileDiff) {
     return spans?.file === file ? spans.map : null;
 }
 
-function FileBody({ file, split, wrap }: { file: FileDiff; split: boolean; wrap: boolean }) {
+/** A file's hunks, unified or split; also the transcript's file-change diffs. */
+export function FileBody({ file, split, wrap }: { file: FileDiff; split: boolean; wrap: boolean }) {
     const spans = useHighlights(file);
     const gutter = gutterWidth(file);
     if (!split) {
@@ -189,7 +191,7 @@ function FileBody({ file, split, wrap }: { file: FileDiff; split: boolean; wrap:
             <Scroller wrap={wrap}>
                 {file.hunks.map((hunk, h) => (
                     <div key={h}>
-                        <HunkHeader header={hunk.header} />
+                        {hunk.header && <HunkHeader header={hunk.header} />}
                         {hunk.lines.map((line, i) => (
                             <UnifiedRow
                                 key={i}
@@ -320,8 +322,12 @@ function UnifiedRow({
             <div className="sticky left-0 z-[1] flex shrink-0 bg-dark-850">
                 <span className={cn("absolute inset-0", tone.row)} />
                 {tone.accent && <span className={cn("absolute inset-y-0 left-0 w-[3px]", tone.accent)} />}
-                <LineNo no={line.oldNo} width={gutter} className={tone.no} />
-                <LineNo no={line.newNo} width={gutter} className={tone.no} />
+                {gutter > 0 && (
+                    <>
+                        <LineNo no={line.oldNo} width={gutter} className={tone.no} />
+                        <LineNo no={line.newNo} width={gutter} className={tone.no} />
+                    </>
+                )}
                 <Marker kind={line.kind} />
             </div>
             <Code text={line.text} spans={spans} wrap={wrap} />
@@ -362,11 +368,13 @@ function SplitCell({
             <div className="sticky left-0 z-[1] flex shrink-0 bg-dark-850">
                 <span className={cn("absolute inset-0", tone.row)} />
                 {tone.accent && <span className={cn("absolute inset-y-0 left-0 w-[3px]", tone.accent)} />}
-                <LineNo
-                    no={side === "old" ? line.oldNo : line.newNo}
-                    width={gutter}
-                    className={tone.no}
-                />
+                {gutter > 0 && (
+                    <LineNo
+                        no={side === "old" ? line.oldNo : line.newNo}
+                        width={gutter}
+                        className={tone.no}
+                    />
+                )}
                 <Marker kind={line.kind} narrow />
             </div>
             <Code text={line.text} spans={spans?.get(line)} wrap={wrap} />

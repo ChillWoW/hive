@@ -11,7 +11,7 @@ import type { JsonValue } from "@/proto/serde_json/JsonValue";
 import { cn } from "@/lib/cn";
 import { FileIcon } from "@/ui";
 import { ChatCwd } from "./context";
-import { countChanges, diffLines } from "./diff";
+import { diffLines, toFileDiff } from "./diff";
 import { DiffView } from "./DiffView";
 import { Markdown } from "./Markdown";
 import {
@@ -216,7 +216,7 @@ function Item({ item, last, streaming }: { item: GroupItem; last: boolean; strea
 function Trailing({ part }: { part: ToolPart }) {
     const change = useChange(part);
     if (!change) return null;
-    const { added, removed } = countChanges(change);
+    const { additions: added, deletions: removed } = change;
     if (!added && !removed) return null;
     return (
         <span className="shrink-0 tabular-nums">
@@ -227,16 +227,22 @@ function Trailing({ part }: { part: ToolPart }) {
     );
 }
 
-/** Before → after of a file change: the result's diff, else what the call asked for. */
+/**
+ * Before → after of a file change: the result's diff, else what the call
+ * asked for. Line numbers only for a new file's content, the whole file.
+ */
 function useChange(part: ToolPart) {
     return useMemo(() => {
-        if (part.diff) return diffLines(part.diff.oldText ?? "", part.diff.newText);
+        if (part.diff) {
+            const { path, oldText, newText } = part.diff;
+            return toFileDiff(path, diffLines(oldText ?? "", newText), oldText === undefined);
+        }
         const call = part.call;
         if (call.kind === "editFile" && (call.oldString !== undefined || call.newString !== undefined)) {
-            return diffLines(call.oldString ?? "", call.newString ?? "");
+            return toFileDiff(call.path, diffLines(call.oldString ?? "", call.newString ?? ""), false);
         }
         if (call.kind === "writeFile" && call.content !== undefined) {
-            return diffLines("", call.content);
+            return toFileDiff(call.path, diffLines("", call.content), true);
         }
         return undefined;
     }, [part]);
@@ -340,8 +346,8 @@ function CallBody({ part }: { part: ToolPart }): ReactNode {
                 ))}
             </ul>
         );
-    } else if (change && change.length > 0 && !part.isError) {
-        result = <DiffView lines={change} className="my-1.5" />;
+    } else if (change && change.lineCount > 0 && !part.isError) {
+        result = <DiffView file={change} className="my-1.5" />;
     } else if (part.output?.trim()) {
         result = (
             <Lines text={part.output} className={part.isError ? "text-danger/80" : "text-dark-250"} />
