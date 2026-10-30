@@ -69,6 +69,9 @@ pub struct EngineConfig {
     /// Hive's own MCP server, given to every chat's runs with the chat's
     /// id ([`McpServer::for_chat`]). None runs agents without it.
     pub mcp: Option<McpServer>,
+    /// Where the checkout snapshots taken as turns start keep their objects
+    /// (the diff tab's "Latest turn"). Swept at [`Engine::start`].
+    pub turn_snapshots_dir: PathBuf,
 }
 
 impl Default for EngineConfig {
@@ -79,6 +82,7 @@ impl Default for EngineConfig {
             auto_title: true,
             worktrees_dir: std::env::temp_dir().join("hive-worktrees"),
             mcp: None,
+            turn_snapshots_dir: std::env::temp_dir().join("hive-turn-snapshots"),
         }
     }
 }
@@ -142,6 +146,17 @@ struct Inner {
     auto_title: AtomicBool,
     /// How many runs' event loops are still going.
     pumps: Arc<watch::Sender<usize>>,
+    /// Each chat's checkout as its latest prompted turn started, by chat id.
+    /// In memory only: after a restart there's none until the next turn.
+    turn_bases: Mutex<HashMap<String, watch::Receiver<TurnBase>>>,
+}
+
+/// A turn's starting snapshot, taken in the background.
+enum TurnBase {
+    Pending,
+    /// None outside a checkout.
+    Ready(Option<hive_git::TreeSnapshot>),
+    Failed(String),
 }
 
 /// Held by a run's event loop; counts it in [`Inner::pumps`].
@@ -287,6 +302,7 @@ impl Engine {
                 next_id: AtomicU64::new(1),
                 titling: Mutex::default(),
                 pumps: Arc::new(watch::channel(0).0),
+                turn_bases: Mutex::default(),
             }),
         }
     }
@@ -310,6 +326,9 @@ impl Engine {
             Ok(n) => log::info!("removed {n} unused attachments"),
             Err(e) => log::warn!("sweeping attachments: {e}"),
         }
+        // Earlier runs' turn snapshots: unreachable now.
+        let snapshots = self.inner.config.turn_snapshots_dir.clone();
+        std::thread::spawn(move || hive_git::sweep_turn_snapshots(&snapshots));
         if !self.inner.config.resume_interrupted {
             return Ok(recovery);
         }
@@ -540,6 +559,7 @@ impl Engine {
         st.watchers.clear();
         self.store().delete_chat(chat_id)?;
         lock(&self.inner.chats).remove(chat_id);
+        lock(&self.inner.turn_bases).remove(chat_id);
         publish(
             &mut lock(&self.inner.list).watchers,
             ChatsUpdate::Removed {
@@ -847,6 +867,7 @@ impl Engine {
             return self.start_run(chat, runtime, st, prompt);
         }
         self.start_turn(&chat.id, st, &prompt)?;
+        self.snapshot_turn(chat);
         if let Some(run) = &st.run {
             run.handle.send_with(prompt.text.clone(), prompt.paths());
         }
@@ -1003,6 +1024,7 @@ impl Engine {
             run.handle.close();
             return Err(e);
         }
+        self.snapshot_turn(chat);
         let id = self.next_id();
         st.run = Some(LiveRun {
             id,
@@ -1042,6 +1064,49 @@ impl Engine {
         )?;
         self.begin_turn(chat_id, st, turn);
         Ok(())
+    }
+
+    /// Snapshots the chat's checkout in the background as a prompt starts a
+    /// turn: the base of its "Latest turn" diff ([`Engine::turn_diff`]), as
+    /// in zeron. Best-effort, and racing the agent's first edits.
+    fn snapshot_turn(&self, chat: &Chat) {
+        let (tx, rx) = watch::channel(TurnBase::Pending);
+        lock(&self.inner.turn_bases).insert(chat.id.clone(), rx);
+        let cwd = PathBuf::from(chat.work_dir());
+        let dir = self.inner.config.turn_snapshots_dir.clone();
+        let chat_id = chat.id.clone();
+        self.inner.runtime.spawn(async move {
+            let base = match hive_git::snapshot_tree(&cwd, &dir).await {
+                Ok(snapshot) => TurnBase::Ready(snapshot),
+                Err(e) => {
+                    log::warn!("snapshotting {chat_id}'s turn: {e}");
+                    TurnBase::Failed(e.to_string())
+                }
+            };
+            // Nobody listening: a later turn replaced it, or the chat went.
+            let _ = tx.send(base);
+        });
+    }
+
+    /// What the chat's latest prompted turn changed in its checkout so far:
+    /// the snapshot taken as it started against the checkout now. None
+    /// before a turn since launch, or outside a checkout.
+    pub async fn turn_diff(&self, chat_id: &str) -> Result<Option<hive_proto::GitDiff>> {
+        self.chat(chat_id)?;
+        let Some(mut base) = lock(&self.inner.turn_bases).get(chat_id).cloned() else {
+            return Ok(None);
+        };
+        let turn = {
+            let Ok(ready) = base.wait_for(|b| !matches!(b, TurnBase::Pending)).await else {
+                return Ok(None);
+            };
+            match &*ready {
+                TurnBase::Ready(Some(snapshot)) => snapshot.clone(),
+                TurnBase::Ready(None) | TurnBase::Pending => return Ok(None),
+                TurnBase::Failed(e) => return Err(hive_git::GitError::Failed(e.clone()).into()),
+            }
+        };
+        Ok(Some(hive_git::turn_diff(&turn).await?))
     }
 
     /// Opens a reply with no prompt: the agent started a turn on its own.

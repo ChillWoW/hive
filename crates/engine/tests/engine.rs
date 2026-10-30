@@ -1104,3 +1104,50 @@ async fn a_worktree_chat_runs_in_its_worktree_and_takes_it_when_deleted() {
     // Its branch is kept.
     assert!(git(p, &["show-ref", "--verify", "--quiet", "refs/heads/hive/add-a-readme"]));
 }
+
+#[tokio::test]
+async fn the_latest_turn_diffs_against_the_checkout_as_it_started() {
+    let project = tempfile::tempdir().unwrap();
+    let p = project.path();
+    std::fs::write(p.join("a.txt"), "one\n").unwrap();
+    let ready = git(p, &["init", "-q", "-b", "main"])
+        && git(p, &["config", "user.email", "hive@example.com"])
+        && git(p, &["config", "user.name", "Hive"])
+        && git(p, &["config", "commit.gpgsign", "false"])
+        && git(p, &["config", "core.autocrlf", "false"])
+        && git(p, &["add", "."])
+        && git(p, &["commit", "-q", "-m", "first"]);
+    if !ready {
+        return; // No git here.
+    }
+    let data = tempfile::tempdir().unwrap();
+    let snapshots = tempfile::tempdir().unwrap();
+    let engine = engine_in(
+        &data,
+        0.0,
+        EngineConfig {
+            turn_snapshots_dir: snapshots.path().to_path_buf(),
+            ..Default::default()
+        },
+    );
+    let chat = engine
+        .create_chat(p.to_string_lossy().into_owned(), config(HarnessId::Mock))
+        .unwrap();
+    assert!(engine.turn_diff(&chat.id).await.unwrap().is_none(), "no turn yet");
+
+    // Changed before the turn: not the turn's.
+    std::fs::write(p.join("a.txt"), "one\nbefore\n").unwrap();
+    let mut updates = watch_messages(&engine, &chat.id);
+    engine.queue_command(&chat.id, send("hello")).unwrap();
+    until(&mut updates, is_input).await;
+    let clean = engine.turn_diff(&chat.id).await.unwrap().unwrap();
+    assert!(clean.patch.is_empty(), "{}", clean.patch);
+
+    std::fs::write(p.join("a.txt"), "one\nbefore\nduring\n").unwrap();
+    let diff = engine.turn_diff(&chat.id).await.unwrap().unwrap();
+    assert!(diff.patch.contains("+during"), "{}", diff.patch);
+    assert!(!diff.patch.contains("+before"), "{}", diff.patch);
+
+    engine.delete_chat(&chat.id).unwrap();
+    assert!(engine.turn_diff(&chat.id).await.is_err(), "the chat is gone");
+}

@@ -12,7 +12,7 @@ import { useChatsStore, workDir } from "@/chats";
 import { useComposerStore } from "@/composer/store";
 import { FileSection } from "@/diff/DiffFiles";
 import { parsePatchReusing, startsFolded, totals, type FileDiff } from "@/diff/patch";
-import { SCOPE_LABELS, useCheckoutDiff, useDiffPrefs, type DiffScope } from "@/diff/store";
+import { SCOPE_LABELS, useCheckoutDiff, useDiffPrefs, useTurnDiff, type DiffScope } from "@/diff/store";
 import { useGitRepo } from "@/git";
 import { cn } from "@/lib/cn";
 import { platform } from "@/lib/platform";
@@ -34,8 +34,9 @@ function useActiveFolder() {
 
 /**
  * The diff tab, as zeron's Diff surface: the open chat's checkout against
- * HEAD (untracked files included) or a branch's changes against another,
- * unified or split, per-file folding, read again while it's shown.
+ * HEAD (untracked files included), a branch's changes against another, or
+ * what the chat's latest turn changed; unified or split, per-file folding,
+ * read again while it's shown.
  */
 export function DiffTab() {
     const folder = useActiveFolder();
@@ -55,6 +56,7 @@ function scopeLabel(scope: DiffScope, count: number, base: string | undefined) {
     if (scope === "workingTree") {
         return count === 1 ? "1 Uncommitted change" : `${count} Uncommitted changes`;
     }
+    if (scope === "turn") return `${count} Changed ${files} this turn`;
     return base ? `${count} Changed ${files} vs ${base}` : `${count} Changed ${files}`;
 }
 
@@ -80,7 +82,12 @@ function DiffPane({ folder }: { folder: string | null }) {
     const waitingForBase = scope === "branch" && !base;
     // Not read while the right sidebar is closed (it stays mounted).
     const shown = usePanelLayout().visible.right;
-    const entry = useCheckoutDiff(folder, base, shown && !waitingForBase);
+    const turnScope = scope === "turn";
+    // The open chat's latest turn; the new-chat view has none.
+    const chatId = useChatsStore((s) => s.activeChatId);
+    const checkoutEntry = useCheckoutDiff(folder, base, shown && !waitingForBase && !turnScope);
+    const turnEntry = useTurnDiff(folder, chatId, shown && turnScope);
+    const entry = turnScope ? turnEntry : checkoutEntry;
     const diff = entry?.diff;
 
     const patch = diff?.patch ?? "";
@@ -119,6 +126,8 @@ function DiffPane({ folder }: { folder: string | null }) {
         content = <Notice>This folder isn't in a git checkout.</Notice>;
     } else if (scope === "branch" && repo && !base) {
         content = <Notice>There's no other branch to compare this one with.</Notice>;
+    } else if (turnScope && (!chatId || diff === null)) {
+        content = <Notice>No turn recorded yet — send a message first.</Notice>;
     } else if (!entry || (scope === "branch" && !repo)) {
         content = (
             <div className="flex flex-1 items-center justify-center">
@@ -134,7 +143,9 @@ function DiffPane({ folder }: { folder: string | null }) {
             <Notice>
                 {scope === "workingTree"
                     ? "No uncommitted changes"
-                    : base
+                    : turnScope
+                      ? "No changes this turn"
+                      : base
                       ? `No changes vs ${base}`
                       : "No branch changes"}
             </Notice>

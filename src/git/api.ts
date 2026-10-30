@@ -102,6 +102,16 @@ export const gitApi = {
                   patch: FAKE_PATCH,
                   truncated: false
               }),
+    /** What a chat's latest turn changed in its checkout; null before a turn since launch. */
+    turnDiff: (chatId: string): Promise<GitDiff | null> =>
+        isTauri
+            ? invoke("git_turn_diff", { chatId })
+            : Promise.resolve({
+                  root: "",
+                  branch: fake.current,
+                  patch: FAKE_PATCH.slice(FAKE_PATCH.indexOf("diff --git a/notes.md")),
+                  truncated: false
+              }),
     switchBranch: (cwd: string, name: string): Promise<void> =>
         isTauri
             ? invoke("git_switch_branch", { cwd, name })

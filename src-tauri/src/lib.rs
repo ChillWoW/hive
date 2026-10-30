@@ -77,6 +77,7 @@ pub fn run() {
       git::git_create_branch,
       git::git_delete_branch,
       git::git_diff,
+      git::git_turn_diff,
       providers::provider_status,
       providers::provider_usage,
       providers::provider_install,
@@ -133,6 +134,7 @@ pub fn run() {
         resume_interrupted: chats.resume_interrupted,
         auto_title: chats.auto_title,
         worktrees_dir: data_dir.join("worktrees"),
+        turn_snapshots_dir: data_dir.join("turn-snapshots"),
         mcp: mcp::start(app.handle(), &data_dir),
         ..EngineConfig::default()
       };

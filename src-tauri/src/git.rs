@@ -40,3 +40,13 @@ pub async fn git_diff(cwd: String, base: Option<String>) -> Result<Option<GitDif
         .await
         .map_err(|e| e.to_string())
 }
+
+/// What a chat's latest prompted turn changed in its checkout so far; null
+/// before its first turn since launch (or outside a checkout).
+#[tauri::command]
+pub async fn git_turn_diff(
+    engine: tauri::State<'_, hive_engine::Engine>,
+    chat_id: String,
+) -> Result<Option<GitDiff>, String> {
+    engine.turn_diff(&chat_id).await.map_err(|e| e.to_string())
+}

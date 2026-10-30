@@ -151,7 +151,15 @@ pub async fn diff(cwd: &Path, base: Option<&str>) -> Result<Option<GitDiff>, Git
 
 /// Runs git, keeping at most `cap` bytes of its output: (stdout, cut short).
 async fn capped(cwd: &Path, args: &[&str], cap: usize) -> Result<(Vec<u8>, bool), GitError> {
-    let mut cmd = Command::from(command(cwd, args));
+    capped_command(command(cwd, args), cap).await
+}
+
+/// [`capped`] for a prepared git command (stdout and stderr piped).
+pub(crate) async fn capped_command(
+    cmd: std::process::Command,
+    cap: usize,
+) -> Result<(Vec<u8>, bool), GitError> {
+    let mut cmd = Command::from(cmd);
     cmd.kill_on_drop(true);
     let mut child = cmd.spawn().map_err(|e| match e.kind() {
         std::io::ErrorKind::NotFound => GitError::NotInstalled,

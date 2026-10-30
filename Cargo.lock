@@ -1644,9 +1644,11 @@ name = "hive-git"
 version = "0.0.1"
 dependencies = [
  "hive-proto",
+ "ignore",
  "tempfile",
  "thiserror 2.0.19",
  "tokio",
+ "uuid",
 ]
 
 [[package]]
