@@ -37,7 +37,7 @@ use hive_proto::{
     AgentEvent, Attachment, BackgroundTask, Chat, ChatConfig, ChatsUpdate, Command,
     CommandPayload, CommandStatus, ContextUsage, DoneStatus, HarnessCatalog, HarnessId,
     McpServer, MessageStatus, MessagesUpdate, NewWorktree, RunRequest, SecretRequest, Session,
-    SessionStatus, SlashCommand, TaskOutput, UserInputAnswer,
+    SessionStatus, SlashCommand, TaskOutput, TextGenerationSettings, UserInputAnswer,
 };
 use hive_store::{new_id, now_ms, Recovery, Store, StoreError, Turn};
 use tokio::sync::{mpsc, oneshot, watch};
@@ -155,6 +155,8 @@ struct Inner {
     next_id: AtomicU64,
     /// Chats whose title is being written.
     titling: Mutex<HashSet<String>>,
+    /// The `textGeneration` setting: which model writes titles.
+    text_generation: Mutex<TextGenerationSettings>,
     /// Starts as `config.auto_title`; follows the setting.
     auto_title: AtomicBool,
     /// Starts as `config.worktrees_location` / `branch_prefix` /
@@ -317,6 +319,7 @@ impl Engine {
                 order: harnesses.iter().map(|h| h.id()).collect(),
                 harnesses: harnesses.into_iter().map(|h| (h.id(), h)).collect(),
                 auto_title: AtomicBool::new(config.auto_title),
+                text_generation: Mutex::default(),
                 worktrees: Mutex::new(WorktreeOptions {
                     location: config.worktrees_location.clone(),
                     branch_prefix: config.branch_prefix.clone(),
@@ -341,6 +344,11 @@ impl Engine {
     /// Turns title runs on or off for chats titled from now on.
     pub fn set_auto_title(&self, on: bool) {
         self.inner.auto_title.store(on, Ordering::Relaxed);
+    }
+
+    /// The model title runs use from now on; no harness means automatic.
+    pub fn set_text_generation(&self, settings: TextGenerationSettings) {
+        *lock(&self.inner.text_generation) = settings;
     }
 
     /// Where worktrees made from now on go (None: `config.worktrees_dir`),

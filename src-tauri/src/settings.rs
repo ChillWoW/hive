@@ -24,6 +24,7 @@ fn broadcast(app: &AppHandle, (settings, changed): (Settings, bool)) -> Settings
 /// Hands the engine the settings it follows live.
 pub fn apply<R: tauri::Runtime>(app: &impl Manager<R>, engine: &Engine, settings: &Settings) {
     engine.set_auto_title(settings.chats.auto_title);
+    engine.set_text_generation(settings.text_generation.clone());
     let worktrees = &settings.worktrees;
     let home = app.path().home_dir().ok();
     engine.set_worktrees(

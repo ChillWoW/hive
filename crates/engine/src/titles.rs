@@ -1,5 +1,7 @@
 //! Chat titles: as soon as a chat's first prompt is saved, a throwaway title
-//! run of a cheap model names it from that prompt, alongside the turn. It runs in an empty temp folder with no tools, MCP servers or
+//! run names it from that prompt, alongside the turn: the model the
+//! `textGeneration` setting picks, else a cheap one. It runs in an empty temp
+//! folder with no tools, MCP servers or
 //! settings ([`Harness::run_title`]). If that yields nothing, the prompt's
 //! first words stand in. A rename by the user always wins.
 
@@ -96,13 +98,7 @@ impl Engine {
 
     /// The title model's answer, cleaned; `None` if every attempt failed.
     async fn generate_title(&self, chat_harness: HarnessId, prompt: &str) -> Option<String> {
-        let harness = self.title_harness(chat_harness)?;
-        let catalog = harness.catalog();
-        let model = cheapest_model(&catalog.models);
-        // The lowest effort, where the model takes one.
-        let reasoning = model
-            .filter(|m| !m.reasoning_levels.is_empty())
-            .map(|_| ReasoningLevel::Minimal);
+        let (harness, model, reasoning) = self.text_model(chat_harness)?;
         // No project instructions, files or session to pick up.
         let scratch = tempfile::tempdir().ok()?;
         let request = RunRequest {
@@ -113,7 +109,7 @@ impl Engine {
             ),
             cwd: scratch.path().to_string_lossy().into_owned(),
             sandbox: SandboxLevel::ReadOnly,
-            model: model.map(|m| m.id.clone()),
+            model,
             reasoning,
             model_options: Default::default(),
             auto_approve: false,
@@ -144,6 +140,30 @@ impl Engine {
             }
         }
         None
+    }
+
+    /// The harness, model and effort a text run uses: the `textGeneration`
+    /// setting's pick while its harness is installed, else automatic (the
+    /// title harness's smallest model at its lowest effort).
+    fn text_model(&self, chat_harness: HarnessId) -> Option<TextModel> {
+        let picked = lock(&self.inner.text_generation).clone();
+        if let Some(id) = picked.harness {
+            match self.inner.harnesses.get(&id).filter(|h| h.supports_titles()) {
+                Some(harness) => {
+                    let catalog = harness.catalog();
+                    if catalog.installed {
+                        let (model, reasoning) =
+                            fit_model(&catalog.models, picked.model, picked.reasoning);
+                        return Some((harness.clone(), model, reasoning));
+                    }
+                    log::warn!("text generation: {id:?} isn't installed; picking automatically");
+                }
+                None => log::warn!("text generation: {id:?} can't write titles"),
+            }
+        }
+        let harness = self.title_harness(chat_harness)?;
+        let (model, reasoning) = fit_model(&harness.catalog().models, None, None);
+        Some((harness, model, reasoning))
     }
 
     /// The chat's own harness if it writes titles, else the first installed
@@ -193,6 +213,33 @@ async fn collect_text(run: Run) -> Result<String, String> {
     let _ =
         tokio::time::timeout(EXIT_GRACE, async { while events.recv().await.is_some() {} }).await;
     result
+}
+
+/// A harness, the model id it runs (None: its default) and the effort.
+type TextModel = (Arc<dyn Harness>, Option<String>, Option<ReasoningLevel>);
+
+/// `model` if the catalog lists it, else the cheapest; `reasoning` if that
+/// model takes it, else its lowest level (None for a model without levels).
+/// An empty catalog (not fetched yet) takes both as they are.
+fn fit_model(
+    models: &[Model],
+    model: Option<String>,
+    reasoning: Option<ReasoningLevel>,
+) -> (Option<String>, Option<ReasoningLevel>) {
+    if models.is_empty() {
+        return (model, reasoning);
+    }
+    let Some(picked) = model
+        .and_then(|id| models.iter().find(|m| m.id == id))
+        .or_else(|| cheapest_model(models))
+    else {
+        return (None, None);
+    };
+    let levels = &picked.reasoning_levels;
+    let reasoning = reasoning
+        .filter(|r| levels.contains(r))
+        .or_else(|| levels.iter().min().copied());
+    (Some(picked.id.clone()), reasoning)
 }
 
 /// A small-tier model (haiku, mini, nano, flash, small, lite), else the
@@ -258,6 +305,27 @@ mod tests {
         let models = [model("opus", "Opus"), model("sonnet", "Sonnet")];
         assert_eq!(id(&models).as_deref(), Some("sonnet"));
         assert_eq!(id(&[]), None);
+    }
+
+    #[test]
+    fn a_picked_model_is_fitted_to_the_catalog() {
+        use ReasoningLevel::*;
+        let mut opus = model("opus", "Opus");
+        opus.reasoning_levels = vec![Low, Medium, High];
+        let models = [opus, model("haiku", "Haiku")];
+        let fit = |m: Option<&str>, r| fit_model(&models, m.map(Into::into), r);
+        assert_eq!(fit(Some("opus"), Some(High)), (Some("opus".into()), Some(High)));
+        // A level it lacks: its lowest.
+        assert_eq!(fit(Some("opus"), Some(Minimal)), (Some("opus".into()), Some(Low)));
+        assert_eq!(fit(Some("opus"), None), (Some("opus".into()), Some(Low)));
+        // Gone, or none picked: the cheapest, which takes no level.
+        assert_eq!(fit(Some("gone"), Some(High)), (Some("haiku".into()), None));
+        assert_eq!(fit(None, None), (Some("haiku".into()), None));
+        // Catalog not fetched yet: as picked.
+        assert_eq!(
+            fit_model(&[], Some("x".into()), Some(High)),
+            (Some("x".into()), Some(High))
+        );
     }
 
     #[test]

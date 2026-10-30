@@ -1,5 +1,6 @@
 export { Composer } from "./Composer";
 export { FolderPicker } from "./FolderPicker";
+export { ModelPicker } from "./ModelPicker";
 export { folderName } from "./paths";
 export { QuestionWizard } from "./QuestionWizard";
 export {

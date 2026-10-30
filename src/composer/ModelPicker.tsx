@@ -60,26 +60,38 @@ function matches(row: Row, query: string) {
  * keeps the card open so its effort can be set next. A chat
  * already started is `locked` to its harness and lists only its models; a
  * harness whose CLI isn't installed is listed, and picking it opens Settings › Providers.
+ *
+ * Elsewhere (Settings › Chats › Text generation): a null `config` shows
+ * `placeholder` with nothing picked, `fastMode={false}` drops that row,
+ * and `placement`/`triggerClassName` fit it to a form.
  */
 export function ModelPicker({
     config,
     onChange,
-    locked = false
+    locked = false,
+    fastMode = true,
+    placeholder,
+    placement = "top",
+    triggerClassName
 }: {
-    config: ChatConfig;
+    config: ChatConfig | null;
     onChange: (config: ChatConfig) => void;
     locked?: boolean;
+    fastMode?: boolean;
+    placeholder?: string;
+    placement?: "top" | "bottom";
+    triggerClassName?: string;
 }) {
     const all = useCatalogs();
-    const current = useCatalog(config.harness);
-    const model = resolveModel(current, config);
-    const reasoning = resolveReasoning(model, config);
-    const fast = isFastMode(model, config);
+    const current = useCatalog(config?.harness);
+    const model = config ? resolveModel(current, config) : undefined;
+    const reasoning = config ? resolveReasoning(model, config) : undefined;
+    const fast = fastMode && !!config && isFastMode(model, config);
     const container = usePortalContainer();
     const [open, setOpen] = useState(false);
     const [side, setSide] = useState<Side | null>(null);
 
-    if (!current || !model) {
+    if (config && (!current || !model)) {
         return (
             <span className="h-8 truncate px-2.5 text-sm leading-8 text-dark-250 select-none">
                 {current ? "No models" : "Loading…"}
@@ -87,7 +99,7 @@ export function ModelPicker({
         );
     }
 
-    const catalogs = locked ? [current] : all;
+    const catalogs = locked && current ? [current] : all;
 
     return (
         <Popover
@@ -99,11 +111,12 @@ export function ModelPicker({
             }}
         >
             <Popover.Trigger
-                aria-label={`Model: ${model.label}`}
-                className={cn(pickerTriggerClassName, "gap-1.5")}
+                aria-label={`Model: ${model?.label ?? placeholder}`}
+                className={cn(pickerTriggerClassName, "gap-1.5", triggerClassName)}
             >
-                {/* Fast mode takes the harness mark's place. */}
-                {fast ? (
+                {!current || !model ? (
+                    <span className="truncate">{placeholder}</span>
+                ) : fast ? (
                     <LightningIcon
                         weight="fill"
                         aria-label="Fast mode"
@@ -112,7 +125,7 @@ export function ModelPicker({
                 ) : (
                     <HarnessIcon harness={current.id} className="size-3.5 shrink-0" />
                 )}
-                <span className="truncate">{model.label}</span>
+                {model && <span className="truncate">{model.label}</span>}
                 {reasoning && (
                     // Yields first under pressure, so the model name truncates last.
                     <span className="min-w-0 shrink-[1000] truncate text-dark-250">
@@ -122,7 +135,7 @@ export function ModelPicker({
             </Popover.Trigger>
             <Popover.Portal container={container ?? undefined}>
                 <Popover.Positioner
-                    side="top"
+                    side={placement}
                     align="end"
                     sideOffset={10}
                     // The extra room on top keeps it off the top bar, the
@@ -139,6 +152,7 @@ export function ModelPicker({
                             config={config}
                             current={current}
                             model={model}
+                            fastMode={fastMode}
                             onChange={onChange}
                             side={side}
                             onToggleSide={(next) => setSide((s) => (s === next ? null : next))}
@@ -146,7 +160,7 @@ export function ModelPicker({
                     </Popover.Popup>
                     {/* Siblings of the popup, which clips its overflow; the
                         positioner is what they're placed against. */}
-                    {side === "fast" && hasFastMode(model) && (
+                    {side === "fast" && config && model && fastMode && hasFastMode(model) && (
                         <SideCard
                             label="Fast mode"
                             options={FAST_CHOICES}
@@ -159,7 +173,7 @@ export function ModelPicker({
                             }}
                         />
                     )}
-                    {side === "effort" && model.reasoningLevels.length > 0 && (
+                    {side === "effort" && config && model && model.reasoningLevels.length > 0 && (
                         <SideCard
                             label="Reasoning effort"
                             // Highest first, so the list reads the way the effort grows.
@@ -189,25 +203,36 @@ const FAST_CHOICES = [
     { id: "off", label: "Off" }
 ] as const;
 
+/** What a pick starts from when nothing is picked yet. */
+const BLANK: Omit<ChatConfig, "harness"> = {
+    modelOptions: {},
+    sandbox: "read-only",
+    access: "supervised",
+    plan: false
+};
+
 function ModelCard({
     catalogs,
     config,
     current,
     model,
+    fastMode,
     onChange,
     side,
     onToggleSide
 }: {
     catalogs: HarnessCatalog[];
-    config: ChatConfig;
-    current: HarnessCatalog;
-    model: Model;
+    config: ChatConfig | null;
+    current: HarnessCatalog | undefined;
+    model: Model | undefined;
+    fastMode: boolean;
     onChange: (config: ChatConfig) => void;
     side: Side | null;
     onToggleSide: (side: Side) => void;
 }) {
-    const reasoning = resolveReasoning(model, config);
-    const fast = isFastMode(model, config);
+    const reasoning = config ? resolveReasoning(model, config) : undefined;
+    const fast = !!config && isFastMode(model, config);
+    const showFast = fastMode && hasFastMode(model);
     const favorites = useComposerStore((s) => s.favorites);
     const toggleFavorite = useComposerStore((s) => s.toggleFavorite);
     const [query, setQuery] = useState("");
@@ -242,7 +267,7 @@ function ModelCard({
 
     const q = query.trim().toLowerCase();
     const shown = q ? rows.filter((row) => matches(row, q)) : rows;
-    const selectedKey = keyOf(current, model);
+    const selectedKey = current && model ? keyOf(current, model) : null;
     const selectedIndex = shown.findIndex((row) => row.key === selectedKey);
     const [active, setActive] = useState(Math.max(0, selectedIndex));
     /** Keyboard moves scroll the active row into view; the pointer doesn't. */
@@ -271,7 +296,7 @@ function ModelCard({
         if (row.key !== selectedKey) {
             onChange(
                 fitConfig(row.harness, {
-                    ...config,
+                    ...(config ?? BLANK),
                     harness: row.harness.id,
                     model: row.model.id
                 })
@@ -400,9 +425,9 @@ function ModelCard({
 
             {/* Fast mode and effort belong to the picked model, not the
                 highlighted one: each model has its own. */}
-            {(hasFastMode(model) || model.reasoningLevels.length > 0) && (
+            {model && (showFast || model.reasoningLevels.length > 0) && (
                 <div className="mt-1 flex flex-col gap-0.5 border-t border-dark-600 pt-1">
-                    {hasFastMode(model) && (
+                    {showFast && (
                         <button
                             type="button"
                             aria-expanded={side === "fast"}

@@ -16,6 +16,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use ts_rs::TS;
 
+use crate::agent::{HarnessId, ReasoningLevel};
+
 /// Bumped when a field changes meaning; new fields only need a default.
 pub const SETTINGS_VERSION: u32 = 1;
 
@@ -24,6 +26,7 @@ pub const SETTINGS_VERSION: u32 = 1;
 pub struct Settings {
     pub version: u32,
     pub chats: ChatsSettings,
+    pub text_generation: TextGenerationSettings,
     pub worktrees: WorktreesSettings,
     pub notifications: NotificationsSettings,
     pub keyboard: KeyboardSettings,
@@ -36,6 +39,7 @@ impl Default for Settings {
         Self {
             version: SETTINGS_VERSION,
             chats: ChatsSettings::default(),
+            text_generation: TextGenerationSettings::default(),
             worktrees: WorktreesSettings::default(),
             notifications: NotificationsSettings::default(),
             keyboard: KeyboardSettings::default(),
@@ -63,6 +67,21 @@ impl Default for ChatsSettings {
             auto_title: true,
         }
     }
+}
+
+/// The model behind Hive's own short text runs (chat titles, for now). Read
+/// by the engine, live (`src-tauri/src/settings.rs`). No harness means
+/// automatic: the chat's own harness (else the first installed one that can),
+/// its smallest model at its lowest effort. A picked harness that isn't
+/// installed falls back to automatic too.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase", default)]
+pub struct TextGenerationSettings {
+    pub harness: Option<HarnessId>,
+    /// None, or one the harness no longer lists: its smallest model.
+    pub model: Option<String>,
+    /// None, or a level the model lacks: its lowest.
+    pub reasoning: Option<ReasoningLevel>,
 }
 
 /// Chats started in a worktree of their own. Read by the engine, live
@@ -382,6 +401,21 @@ mod tests {
         );
         assert_eq!(s.worktrees.location, "D:\\wt");
         assert_eq!(s.worktrees.branch_prefix, "me");
+    }
+
+    #[test]
+    fn text_generation_is_set_and_cleared_leaf_by_leaf() {
+        let pick = json!({ "textGeneration": {
+            "harness": "codex", "model": "gpt-5-mini", "reasoning": "nope"
+        } });
+        let s = Settings::sanitize(&Settings::default(), &pick);
+        let text = &s.text_generation;
+        assert_eq!(text.harness, Some(HarnessId::Codex));
+        assert_eq!(text.model.as_deref(), Some("gpt-5-mini"));
+        assert_eq!(text.reasoning, None);
+        let cleared = json!({ "textGeneration": { "harness": null, "model": null } });
+        let s = Settings::sanitize(&s, &cleared);
+        assert_eq!(s.text_generation, TextGenerationSettings::default());
     }
 
     #[test]

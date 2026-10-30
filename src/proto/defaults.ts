@@ -7,6 +7,11 @@ export const DEFAULT_SETTINGS: Settings = {
     "resumeInterrupted": false,
     "autoTitle": true
   },
+  "textGeneration": {
+    "harness": null,
+    "model": null,
+    "reasoning": null
+  },
   "worktrees": {
     "location": "",
     "branchPrefix": "hive",

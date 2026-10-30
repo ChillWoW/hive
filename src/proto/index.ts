@@ -60,6 +60,7 @@ export type { SlashCommand } from "./SlashCommand";
 export type { SubagentStatus } from "./SubagentStatus";
 export type { TaskEnd } from "./TaskEnd";
 export type { TaskOutput } from "./TaskOutput";
+export type { TextGenerationSettings } from "./TextGenerationSettings";
 export type { TodoItem } from "./TodoItem";
 export type { TodoStatus } from "./TodoStatus";
 export type { ToolCall } from "./ToolCall";

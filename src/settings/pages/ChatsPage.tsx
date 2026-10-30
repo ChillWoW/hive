@@ -1,6 +1,7 @@
 import { Switch } from "@/ui";
 import { SettingRow, SettingsSection } from "../SettingsSection";
 import { useSetting } from "../store";
+import { TextGenerationRow } from "./TextGenerationRow";
 
 export function ChatsPage() {
     const resume = useSetting("chats", "resumeInterrupted");
@@ -22,6 +23,10 @@ export function ChatsPage() {
                         />
                     }
                 />
+            </SettingsSection>
+
+            <SettingsSection title="Text generation">
+                <TextGenerationRow />
             </SettingsSection>
 
             <SettingsSection title="Sessions">
