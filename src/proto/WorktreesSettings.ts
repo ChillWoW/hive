@@ -15,4 +15,8 @@ location: string,
  * New branches are `<prefix>/<slug of the first prompt>`; empty, just
  * the slug.
  */
-branchPrefix: string, };
+branchPrefix: string, 
+/**
+ * Deleting a worktree chat deletes its branch too, merged or not.
+ */
+deleteBranch: boolean, };

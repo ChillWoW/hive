@@ -77,6 +77,8 @@ pub struct WorktreesSettings {
     /// New branches are `<prefix>/<slug of the first prompt>`; empty, just
     /// the slug.
     pub branch_prefix: String,
+    /// Deleting a worktree chat deletes its branch too, merged or not.
+    pub delete_branch: bool,
 }
 
 impl Default for WorktreesSettings {
@@ -84,6 +86,7 @@ impl Default for WorktreesSettings {
         Self {
             location: String::new(),
             branch_prefix: "hive".into(),
+            delete_branch: false,
         }
     }
 }

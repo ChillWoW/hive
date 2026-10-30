@@ -4,7 +4,7 @@ import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { cn } from "@/lib/cn";
 import { tildify, untildify, useHomeDir } from "@/lib/home";
 import { isTauri } from "@/lib/platform";
-import { iconButtonClassName, Input, Tooltip } from "@/ui";
+import { iconButtonClassName, Input, Switch, Tooltip } from "@/ui";
 import { settingsApi } from "../api";
 import { SettingRow, SettingsSection } from "../SettingsSection";
 import { useSetting } from "../store";
@@ -62,6 +62,7 @@ function DraftInput({
 export function WorktreesPage() {
     const location = useSetting("worktrees", "location");
     const prefix = useSetting("worktrees", "branchPrefix");
+    const deleteBranch = useSetting("worktrees", "deleteBranch");
     const [defaultDir, setDefaultDir] = useState("");
     const home = useHomeDir();
 
@@ -85,59 +86,77 @@ export function WorktreesPage() {
     const example = prefix.value ? `${prefix.value}/fix-login-bug` : "fix-login-bug";
 
     return (
-        <SettingsSection title="New worktrees">
-            <SettingRow
-                label="Worktree location"
-                description={
-                    invalidLocation
-                        ? "Not an absolute path, so the default is used"
-                        : "The folder new worktrees go in. Empty uses the default"
-                }
-                keywords="worktree folder directory path location where"
-                setting={location}
-                control={
-                    <DraftInput
-                        value={location.value}
-                        onCommit={setLocation}
-                        placeholder={tildify(defaultDir, home)}
-                        invalid={invalidLocation}
-                        aria-label="Worktree location"
-                        rightIcon={
-                            isTauri && (
-                                <Tooltip>
-                                    <Tooltip.Trigger
-                                        render={
-                                            <button
-                                                type="button"
-                                                aria-label="Choose a folder"
-                                                onClick={() => void browse()}
-                                                className={cn(iconButtonClassName, "-mr-1 size-5")}
-                                            >
-                                                <FolderOpenIcon className="size-3.5" />
-                                            </button>
-                                        }
-                                    />
-                                    <Tooltip.Content side="left">Choose a folder</Tooltip.Content>
-                                </Tooltip>
-                            )
-                        }
-                    />
-                }
-            />
-            <SettingRow
-                label="Branch prefix"
-                description={`New branches look like ${example}. Empty for none`}
-                keywords="worktree branch prefix name namespace git"
-                setting={prefix}
-                control={
-                    <DraftInput
-                        value={prefix.value}
-                        onCommit={prefix.set}
-                        placeholder="None"
-                        aria-label="Branch prefix"
-                    />
-                }
-            />
-        </SettingsSection>
+        <>
+            <SettingsSection title="New worktrees">
+                <SettingRow
+                    label="Worktree location"
+                    description={
+                        invalidLocation
+                            ? "Not an absolute path, so the default is used"
+                            : "The folder new worktrees go in. Empty uses the default"
+                    }
+                    keywords="worktree folder directory path location where"
+                    setting={location}
+                    control={
+                        <DraftInput
+                            value={location.value}
+                            onCommit={setLocation}
+                            placeholder={tildify(defaultDir, home)}
+                            invalid={invalidLocation}
+                            aria-label="Worktree location"
+                            rightIcon={
+                                isTauri && (
+                                    <Tooltip>
+                                        <Tooltip.Trigger
+                                            render={
+                                                <button
+                                                    type="button"
+                                                    aria-label="Choose a folder"
+                                                    onClick={() => void browse()}
+                                                    className={cn(iconButtonClassName, "-mr-1 size-5")}
+                                                >
+                                                    <FolderOpenIcon className="size-3.5" />
+                                                </button>
+                                            }
+                                        />
+                                        <Tooltip.Content side="left">Choose a folder</Tooltip.Content>
+                                    </Tooltip>
+                                )
+                            }
+                        />
+                    }
+                />
+                <SettingRow
+                    label="Branch prefix"
+                    description={`New branches look like ${example}. Empty for none`}
+                    keywords="worktree branch prefix name namespace git"
+                    setting={prefix}
+                    control={
+                        <DraftInput
+                            value={prefix.value}
+                            onCommit={prefix.set}
+                            placeholder="None"
+                            aria-label="Branch prefix"
+                        />
+                    }
+                />
+            </SettingsSection>
+
+            <SettingsSection title="Deleting chats">
+                <SettingRow
+                    label="Delete the branch"
+                    description="Deleting a worktree chat deletes its branch too, merged or not"
+                    keywords="worktree branch delete remove cleanup chat git"
+                    setting={deleteBranch}
+                    control={
+                        <Switch
+                            checked={deleteBranch.value}
+                            onCheckedChange={deleteBranch.set}
+                            aria-label="Delete the branch"
+                        />
+                    }
+                />
+            </SettingsSection>
+        </>
     );
 }

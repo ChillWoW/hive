@@ -9,7 +9,8 @@ export const DEFAULT_SETTINGS: Settings = {
   },
   "worktrees": {
     "location": "",
-    "branchPrefix": "hive"
+    "branchPrefix": "hive",
+    "deleteBranch": false
   },
   "notifications": {
     "turnFinished": true,

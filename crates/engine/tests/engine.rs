@@ -1103,6 +1103,29 @@ async fn a_worktree_chat_runs_in_its_worktree_and_takes_it_when_deleted() {
     .expect("the worktree is removed");
     // Its branch is kept.
     assert!(git(p, &["show-ref", "--verify", "--quiet", "refs/heads/hive/add-a-readme"]));
+
+    // Unless the setting says to delete it too.
+    engine.set_worktrees(None, "hive".into(), true);
+    let chat = engine
+        .create_chat_in_worktree(
+            cwd.clone(),
+            config(HarnessId::Mock),
+            hive_proto::NewWorktree {
+                base: Some("main".into()),
+                hint: Some("Fix a bug".into()),
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(chat.worktree.as_ref().unwrap().branch, "hive/fix-a-bug");
+    engine.delete_chat(&chat.id).unwrap();
+    timeout(WAIT, async {
+        while git(p, &["show-ref", "--verify", "--quiet", "refs/heads/hive/fix-a-bug"]) {
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+    })
+    .await
+    .expect("the branch is deleted");
 }
 
 #[tokio::test]

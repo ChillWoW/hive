@@ -29,6 +29,7 @@ pub fn apply<R: tauri::Runtime>(app: &impl Manager<R>, engine: &Engine, settings
     engine.set_worktrees(
         worktrees_location(home.as_deref(), &worktrees.location),
         worktrees.branch_prefix.clone(),
+        worktrees.delete_branch,
     );
 }
 

@@ -73,6 +73,9 @@ pub struct EngineConfig {
     /// New worktree branches are `<prefix>/<slug>`; empty, just the slug.
     /// Changed live with [`Engine::set_worktrees`].
     pub branch_prefix: String,
+    /// Deleting a worktree chat deletes its branch too. Changed live with
+    /// [`Engine::set_worktrees`].
+    pub delete_worktree_branch: bool,
     /// Hive's own MCP server, given to every chat's runs with the chat's
     /// id ([`McpServer::for_chat`]). None runs agents without it.
     pub mcp: Option<McpServer>,
@@ -90,6 +93,7 @@ impl Default for EngineConfig {
             worktrees_dir: std::env::temp_dir().join("hive-worktrees"),
             worktrees_location: None,
             branch_prefix: "hive".into(),
+            delete_worktree_branch: false,
             mcp: None,
             turn_snapshots_dir: std::env::temp_dir().join("hive-turn-snapshots"),
         }
@@ -153,8 +157,8 @@ struct Inner {
     titling: Mutex<HashSet<String>>,
     /// Starts as `config.auto_title`; follows the setting.
     auto_title: AtomicBool,
-    /// Starts as `config.worktrees_location` / `branch_prefix`; follows the
-    /// settings.
+    /// Starts as `config.worktrees_location` / `branch_prefix` /
+    /// `delete_worktree_branch`; follows the settings.
     worktrees: Mutex<WorktreeOptions>,
     /// How many runs' event loops are still going.
     pumps: Arc<watch::Sender<usize>>,
@@ -166,6 +170,7 @@ struct Inner {
 struct WorktreeOptions {
     location: Option<PathBuf>,
     branch_prefix: String,
+    delete_branch: bool,
 }
 
 /// A turn's starting snapshot, taken in the background.
@@ -315,6 +320,7 @@ impl Engine {
                 worktrees: Mutex::new(WorktreeOptions {
                     location: config.worktrees_location.clone(),
                     branch_prefix: config.branch_prefix.clone(),
+                    delete_branch: config.delete_worktree_branch,
                 }),
                 config,
                 runtime,
@@ -337,12 +343,19 @@ impl Engine {
         self.inner.auto_title.store(on, Ordering::Relaxed);
     }
 
-    /// Where worktrees made from now on go (None: `config.worktrees_dir`)
-    /// and their branches' prefix. Existing worktrees stay where they are.
-    pub fn set_worktrees(&self, location: Option<PathBuf>, branch_prefix: String) {
+    /// Where worktrees made from now on go (None: `config.worktrees_dir`),
+    /// their branches' prefix, and whether deleting a worktree chat deletes
+    /// its branch. Existing worktrees stay where they are.
+    pub fn set_worktrees(
+        &self,
+        location: Option<PathBuf>,
+        branch_prefix: String,
+        delete_branch: bool,
+    ) {
         *lock(&self.inner.worktrees) = WorktreeOptions {
             location,
             branch_prefix,
+            delete_branch,
         };
     }
 
@@ -590,7 +603,8 @@ impl Engine {
 
     /// Deletes the chat with its transcript, journal and commands, closing
     /// its run first. Its worktree is removed in the background, once the
-    /// run has let go of it; the worktree's branch is kept.
+    /// run has let go of it. The worktree's branch is kept, unless the
+    /// delete-branch option is on and the worktree went.
     pub fn delete_chat(&self, chat_id: &str) -> Result<()> {
         let runtime = self.runtime_for(chat_id);
         let mut st = lock(&runtime.state);
@@ -610,9 +624,15 @@ impl Engine {
             },
         );
         if let Some(worktree) = chat.worktree {
+            let delete_branch = lock(&self.inner.worktrees).delete_branch;
             self.inner.runtime.spawn(async move {
-                if let Err(e) = hive_git::remove_worktree(Path::new(&chat.cwd), &worktree).await {
+                let cwd = Path::new(&chat.cwd);
+                if let Err(e) = hive_git::remove_worktree(cwd, &worktree).await {
                     log::warn!("removing worktree {}: {e}", worktree.root);
+                } else if delete_branch && cwd.is_dir() {
+                    if let Err(e) = hive_git::delete(cwd, &worktree.branch).await {
+                        log::warn!("deleting branch {}: {e}", worktree.branch);
+                    }
                 }
             });
         }

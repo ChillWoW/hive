@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { chats, useSession } from "@/chats";
 import { useGitRepo } from "@/git";
 import type { Chat } from "@/proto";
+import { useSetting } from "@/settings/store";
 import { Button, Modal } from "@/ui";
 import { UNTITLED } from "./ChatRow";
 
@@ -21,6 +22,7 @@ export function DeleteChatDialog({
     const running = useSession(shown?.id ?? null) !== undefined;
     const worktree = shown?.worktree;
     const changes = useGitRepo(worktree?.path)?.repo?.changes ?? 0;
+    const deleteBranch = useSetting("worktrees", "deleteBranch").value;
     const [error, setError] = useState<string | null>(null);
     const [busy, setBusy] = useState(false);
 
@@ -55,9 +57,11 @@ export function DeleteChatDialog({
             </p>
             {worktree && (
                 <p className="mt-2">
-                    Its worktree is removed too; the branch{" "}
+                    {deleteBranch
+                        ? "Its worktree and branch "
+                        : "Its worktree is removed too; the branch "}
                     <span className="font-medium break-all text-dark-50">{worktree.branch}</span>{" "}
-                    is kept.
+                    {deleteBranch ? "are deleted too." : "is kept."}
                     {changes > 0 && (
                         <span className="text-warning">
                             {" "}
