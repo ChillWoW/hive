@@ -1,5 +1,5 @@
 import { useEffect, useState, type KeyboardEvent } from "react";
-import { ACTIONS, type Action } from "@/keybindings/actions";
+import { ACTIONS, CATEGORIES, type Action, type CategoryId } from "@/keybindings/actions";
 import { ShortcutKeys } from "@/keybindings/ShortcutKeys";
 import {
     canonical,
@@ -22,13 +22,14 @@ export function KeyboardPage() {
 
     return (
         <>
-            <SettingsSection title="Shortcuts">
-                {ACTIONS.map((action) => (
-                    <ShortcutRow key={action.id} action={action} />
-                ))}
-            </SettingsSection>
+            {CATEGORIES.filter((category) => category.id !== "prompt").map((category) => (
+                <SettingsSection key={category.id} title={category.title}>
+                    <ShortcutRows category={category.id} />
+                </SettingsSection>
+            ))}
 
             <SettingsSection title="Prompt box">
+                <ShortcutRows category="prompt" />
                 <SettingRow
                     label="Send with"
                     description={
@@ -68,6 +69,12 @@ export function KeyboardPage() {
             </SettingsSection>
         </>
     );
+}
+
+function ShortcutRows({ category }: { category: CategoryId }) {
+    return ACTIONS.filter((action) => action.category === category).map((action) => (
+        <ShortcutRow key={action.id} action={action} />
+    ));
 }
 
 /**
