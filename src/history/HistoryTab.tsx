@@ -98,7 +98,6 @@ const colorOf = (id: number) => PALETTE[id % PALETTE.length]!;
 const dimmed = (color: string) => `color-mix(in srgb, ${color} 24%, ${PANEL_BG})`;
 
 const STROKE = 1.5;
-const FOCUSED_STROKE = 2.25;
 const HIT_WIDTH = 11;
 const UNFOCUSED_ROW_OPACITY = 0.6;
 
@@ -592,11 +591,11 @@ function ColumnsMenu() {
                     </Menu.CheckboxItem>
                 ))}
                 <Menu.Separator />
-                <Menu.GroupLabel>Author</Menu.GroupLabel>
                 <Menu.RadioGroup
                     value={authorDisplay}
                     onValueChange={(value) => setAuthorDisplay(value as AuthorDisplay)}
                 >
+                    <Menu.GroupLabel>Author</Menu.GroupLabel>
                     <Menu.RadioItem value="avatar" closeOnClick={false}>
                         Picture
                     </Menu.RadioItem>
@@ -739,12 +738,10 @@ function GraphCell({
 }) {
     const paint = (id: number) =>
         focus !== undefined && focus !== id ? dimmed(colorOf(id)) : colorOf(id);
-    const width = (id: number) => (focus === id ? FOCUSED_STROKE : STROKE);
     const leave = () => onHover(undefined);
     const mid = ROW_HEIGHT / 2;
     const nodeX = laneX(geometry, geometry.compact ? 0 : row.lane);
-    const selected = focus === row.color;
-    const radius = NODE_RADIUS + (selected ? 0.75 : 0);
+    const radius = NODE_RADIUS;
     const color = paint(row.color);
 
     // The compact rail: each row's half-lines in its node's colour, as zeron joins row centres.
@@ -779,7 +776,7 @@ function GraphCell({
                             key={i}
                             d={line.d}
                             stroke={paint(line.color)}
-                            strokeWidth={width(line.color)}
+                            strokeWidth={STROKE}
                             className="transition-[stroke] duration-150"
                         />
                     ))}
