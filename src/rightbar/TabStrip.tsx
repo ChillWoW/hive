@@ -34,8 +34,8 @@ function slideOffset(index: number, { from, over }: Drag) {
 }
 
 /**
- * The right sidebar's tabs, as in zeron: one chip per tab (icon, title, ✕ on
- * hover), the strip scrolling sideways with faded edges, drag to reorder
+ * The right sidebar's tabs, as in zeron: one chip per tab (icon, the ✕ in its
+ * place on hover, title), the strip scrolling sideways with faded edges, drag to reorder
  * (the others slide aside), middle-click to close, then "+".
  */
 export function TabStrip() {
@@ -215,12 +215,12 @@ function TabChip({
     onPointerUp: (event: React.PointerEvent<HTMLDivElement>) => void;
     onPointerCancel: (event: React.PointerEvent<HTMLDivElement>) => void;
 }) {
-    // Unsaved changes: a dot where the ✕ shows on hover, as in zeron.
+    // Unsaved changes: a dot after the title.
     const dirty = useDocsStore((s) => !!s.docs[tab.id]?.dirty);
     // The diff tab is titled with what it compares, as zeron's is.
     const scope = useDiffPrefs((s) => s.scope);
     const title = tab.kind === "diff" ? SCOPE_LABELS[scope] : tab.title;
-    const chip = (
+    return (
         <div
             role="tab"
             tabIndex={0}
@@ -246,58 +246,72 @@ function TabChip({
                 dragged && "z-10 bg-dark-700 shadow-md"
             )}
         >
-            <span className="flex size-[18px] shrink-0 items-center justify-center">
-                {tab.kind === "diff" ? (
-                    <GitDiffIcon className={cn("size-3.5", !active && "opacity-80")} />
-                ) : tab.kind === "terminal" ? (
-                    <TerminalWindowIcon className={cn("size-3.5", !active && "opacity-80")} />
-                ) : tab.kind === "history" ? (
-                    <ClockCounterClockwiseIcon className={cn("size-3.5", !active && "opacity-80")} />
-                ) : tab.kind === "commit" ? (
-                    <GitCommitIcon className={cn("size-3.5", !active && "opacity-80")} />
-                ) : (
-                    <FileIcon name={tab.title} className={cn("size-3.5", !active && "opacity-80")} />
-                )}
+            {/* The icon, swapped for the ✕ while the tab is hovered or focused. */}
+            <span className="relative flex size-[18px] shrink-0 items-center justify-center">
+                <span className="flex transition-opacity group-hover/tab:opacity-0 group-focus-within/tab:opacity-0">
+                    {tab.kind === "diff" ? (
+                        <GitDiffIcon className={cn("size-3.5", !active && "opacity-80")} />
+                    ) : tab.kind === "terminal" ? (
+                        <TerminalWindowIcon className={cn("size-3.5", !active && "opacity-80")} />
+                    ) : tab.kind === "history" ? (
+                        <ClockCounterClockwiseIcon className={cn("size-3.5", !active && "opacity-80")} />
+                    ) : tab.kind === "commit" ? (
+                        <GitCommitIcon className={cn("size-3.5", !active && "opacity-80")} />
+                    ) : (
+                        <FileIcon name={tab.title} className={cn("size-3.5", !active && "opacity-80")} />
+                    )}
+                </span>
+                <Tooltip disabled={dragging}>
+                    <Tooltip.Trigger
+                        render={
+                            <button
+                                type="button"
+                                aria-label={dirty ? "Close tab (unsaved changes)" : "Close tab"}
+                                // Not a drag of the tab, and not its activation.
+                                onPointerDown={(event) => event.stopPropagation()}
+                                onClick={(event) => {
+                                    event.stopPropagation();
+                                    onClose();
+                                }}
+                                className={cn(
+                                    "absolute inset-0 flex items-center justify-center rounded text-dark-200 opacity-0 outline-none transition-opacity",
+                                    "group-hover/tab:opacity-100 group-focus-within/tab:opacity-100 hover:bg-white/[0.12] hover:text-dark-50"
+                                )}
+                            >
+                                <XIcon className="size-3" />
+                            </button>
+                        }
+                    />
+                    {/* Mod+W closes the shown tab, so only its ✕ names the shortcut. */}
+                    <Tooltip.Content side="bottom" shortcut={active ? "closeTab" : undefined}>
+                        {dirty ? "Close tab (saves changes)" : "Close tab"}
+                    </Tooltip.Content>
+                </Tooltip>
             </span>
-            <span className="min-w-0 flex-1 truncate text-[11.5px]">{title}</span>
-            <button
-                type="button"
-                aria-label={dirty ? "Close tab (unsaved changes)" : "Close tab"}
-                // Not a drag of the tab, and not its activation.
-                onPointerDown={(event) => event.stopPropagation()}
-                onClick={(event) => {
-                    event.stopPropagation();
-                    onClose();
-                }}
-                className={cn(
-                    "relative flex size-[18px] shrink-0 items-center justify-center rounded text-dark-200 outline-none",
-                    "hover:bg-white/[0.12] hover:text-dark-50"
-                )}
-            >
-                {dirty && (
-                    <span className="absolute size-1.5 rounded-full bg-dark-100 transition-opacity group-hover/tab:opacity-0" />
-                )}
-                <XIcon className="size-3 opacity-0 transition-opacity group-hover/tab:opacity-100 group-focus-within/tab:opacity-100" />
-            </button>
+            {/* The file's path (a terminal's folder) on hover, as zeron shows a tab's detail. */}
+            <Tooltip disabled={dragging}>
+                <Tooltip.Trigger
+                    delay={350}
+                    render={<span className="min-w-0 flex-1 truncate text-[11.5px]">{title}</span>}
+                />
+                <Tooltip.Content side="bottom">
+                    {tab.kind === "file"
+                        ? tab.path
+                        : tab.kind === "diff"
+                          ? "Changes in the open chat's folder"
+                          : tab.kind === "history"
+                            ? "Commits of the open chat's folder"
+                            : tab.kind === "commit"
+                              ? `${tab.sha.slice(0, 7)} ${tab.subject}`
+                              : (tab.cwd ?? "Home folder")}
+                </Tooltip.Content>
+            </Tooltip>
+            {dirty && (
+                <span aria-hidden className="flex size-[18px] shrink-0 items-center justify-center">
+                    <span className="size-1.5 rounded-full bg-dark-100" />
+                </span>
+            )}
         </div>
-    );
-
-    // The file's path (a terminal's folder) on hover, as zeron shows a tab's detail.
-    return (
-        <Tooltip disabled={dragging}>
-            <Tooltip.Trigger delay={350} render={chip} />
-            <Tooltip.Content side="bottom">
-                {tab.kind === "file"
-                    ? tab.path
-                    : tab.kind === "diff"
-                      ? "Changes in the open chat's folder"
-                      : tab.kind === "history"
-                        ? "Commits of the open chat's folder"
-                        : tab.kind === "commit"
-                          ? `${tab.sha.slice(0, 7)} ${tab.subject}`
-                          : (tab.cwd ?? "Home folder")}
-            </Tooltip.Content>
-        </Tooltip>
     );
 }
 
