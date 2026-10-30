@@ -14,10 +14,11 @@ type ProjectsState = {
     /** Every project picked on this device, in the order they were added. */
     projects: Project[];
     /**
-     * Deleted projects. A folder with chats would otherwise come back through
-     * them (`useProjects`); adding it again brings it back.
+     * Deleted projects, by path, with when they were deleted. A folder with
+     * chats would otherwise come back through them; adding it again, or a
+     * chat started in it since, brings it back (`useHiddenFolders`).
      */
-    removed: string[];
+    removed: Record<string, number>;
     /** Adds `path` at the end; a project already listed stays where it is. */
     add: (path: string) => void;
     /** Takes `path` off the list. Its chats stay. */
@@ -33,30 +34,39 @@ export const useProjectsStore = create<ProjectsState>()(
     persist(
         (set) => ({
             projects: [],
-            removed: [],
+            removed: {},
             add: (path) =>
-                set((s) => ({
-                    projects: s.projects.some((p) => p.path === path)
-                        ? s.projects
-                        : [...s.projects, { path, addedAt: Date.now() }],
-                    removed: s.removed.filter((r) => r !== path)
-                })),
+                set((s) => {
+                    const { [path]: _, ...removed } = s.removed;
+                    return {
+                        projects: s.projects.some((p) => p.path === path)
+                            ? s.projects
+                            : [...s.projects, { path, addedAt: Date.now() }],
+                        removed
+                    };
+                }),
             remove: (path) =>
                 set((s) => ({
                     projects: s.projects.filter((p) => p.path !== path),
-                    removed: s.removed.includes(path) ? s.removed : [...s.removed, path]
+                    removed: { ...s.removed, [path]: Date.now() }
                 }))
         }),
         {
             name: "hive.projects",
-            version: 2,
+            version: 3,
             storage: createJSONStorage(() => localStorage),
             partialize: (s) => ({ projects: s.projects, removed: s.removed }),
-            // v1 kept `lastUsedAt` instead.
+            // v1 kept `lastUsedAt` instead; v2 kept `removed` as a list of paths.
             migrate: (saved) => {
-                const projects = (saved as { projects?: unknown[] } | undefined)?.projects;
+                const old = saved as { projects?: unknown[]; removed?: unknown } | undefined;
+                const projects = old?.projects;
+                const now = Date.now();
                 return {
-                    removed: [],
+                    removed: Object.fromEntries(
+                        (Array.isArray(old?.removed) ? old.removed : [])
+                            .filter((p): p is string => typeof p === "string")
+                            .map((p) => [p, now])
+                    ),
                     projects: (Array.isArray(projects) ? projects : []).map((p) => {
                         const old = p as { path: string; addedAt?: number; lastUsedAt?: number };
                         return { path: old.path, addedAt: old.addedAt ?? old.lastUsedAt ?? 0 };
@@ -68,13 +78,31 @@ export const useProjectsStore = create<ProjectsState>()(
 );
 
 /**
- * Every project path: the saved ones and every chat's folder, once each.
- * The order is fixed by when each was first seen (picked, or its first chat
- * created), so projects never move around; new ones land at the bottom.
+ * Deleted projects' folders that stay out of lists: every one without a chat
+ * started in it since it was deleted.
+ */
+export function useHiddenFolders(): Set<string> {
+    const removed = useProjectsStore((s) => s.removed);
+    const chats = useChatsStore((s) => s.chats);
+    return useMemo(() => {
+        const hidden = new Set(Object.keys(removed));
+        for (const chat of chats) {
+            const at = removed[chat.cwd];
+            if (at != null && chat.createdAt > at) hidden.delete(chat.cwd);
+        }
+        return hidden;
+    }, [removed, chats]);
+}
+
+/**
+ * Every project path: the saved ones and every chat's folder, once each,
+ * deleted ones left out. The order is fixed by when each was first seen
+ * (picked, or its first chat created), so projects never move around; new
+ * ones land at the bottom.
  */
 export function useProjects(): string[] {
     const saved = useProjectsStore((s) => s.projects);
-    const removed = useProjectsStore((s) => s.removed);
+    const hidden = useHiddenFolders();
     const chats = useChatsStore((s) => s.chats);
     return useMemo(() => {
         const first = new Map<string, number>();
@@ -82,10 +110,10 @@ export function useProjects(): string[] {
             first.set(path, Math.min(first.get(path) ?? Infinity, at));
         for (const project of saved) see(project.path, project.addedAt);
         for (const chat of chats) {
-            if (!removed.includes(chat.cwd)) see(chat.cwd, chat.createdAt);
+            if (!hidden.has(chat.cwd)) see(chat.cwd, chat.createdAt);
         }
         return [...first].sort((a, b) => a[1] - b[1]).map(([path]) => path);
-    }, [saved, removed, chats]);
+    }, [saved, hidden, chats]);
 }
 
 /** Same actions outside React. */

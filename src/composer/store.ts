@@ -81,6 +81,8 @@ type ComposerState = {
     openDraft: (key: string) => void;
     /** Throws a draft away: its text, files and, for a new chat, its settings. */
     discardDraft: (key: string) => void;
+    /** Discards every new-chat draft in `cwd` (its project was deleted). */
+    discardFolderDrafts: (cwd: string) => void;
     /** Drops the drafts of chats that are gone. */
     pruneDrafts: (chatIds: Set<string>) => void;
     toggleFavorite: (key: string) => void;
@@ -234,6 +236,29 @@ export const useComposerStore = create<ComposerState>()(
                     const { [key]: _a, ...attachments } = s.attachments;
                     const { [key]: _p, ...parked } = s.parked;
                     return { drafts, attachments, parked };
+                }),
+            discardFolderDrafts: (cwd) =>
+                set((s) => {
+                    const keys = [s.newDraftId, ...Object.keys(s.parked)].filter((key) =>
+                        key === s.newDraftId
+                            ? s.newChat.cwd === cwd
+                            : s.parked[key]?.settings.cwd === cwd
+                    );
+                    if (!keys.length) return s;
+                    for (const key of keys) {
+                        for (const a of s.attachments[key] ?? []) {
+                            if (a.previewUrl) URL.revokeObjectURL(a.previewUrl);
+                        }
+                    }
+                    const drop = <T,>(record: Record<string, T>) =>
+                        Object.fromEntries(
+                            Object.entries(record).filter(([k]) => !keys.includes(k))
+                        );
+                    return {
+                        drafts: drop(s.drafts),
+                        attachments: drop(s.attachments),
+                        parked: drop(s.parked)
+                    };
                 }),
             pruneDrafts: (chatIds) =>
                 set((s) => {
@@ -401,5 +426,6 @@ export const composer = {
     startNewChat: (cwd?: string) => useComposerStore.getState().startNewChat(cwd),
     openDraft: (key: string) => useComposerStore.getState().openDraft(key),
     discardDraft: (key: string) => useComposerStore.getState().discardDraft(key),
+    discardFolderDrafts: (cwd: string) => useComposerStore.getState().discardFolderDrafts(cwd),
     pruneDrafts: (chatIds: Set<string>) => useComposerStore.getState().pruneDrafts(chatIds)
 };

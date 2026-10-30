@@ -23,6 +23,7 @@ import {
     searchInputClassName
 } from "./chip";
 import { ProjectIcon } from "./ProjectIcon";
+import { composer } from "./store";
 
 /**
  * The folder a chat works in, as a chip under the composer. In the new-chat
@@ -184,6 +185,7 @@ function FolderCombobox({
                                         onOpenChange={(next) => setMenuFor(next ? path : null)}
                                         onDelete={() => {
                                             projects.remove(path);
+                                            composer.discardFolderDrafts(path);
                                             if (path === cwd) onChange?.(null);
                                         }}
                                     />
