@@ -6,7 +6,7 @@ import {
     TextAlignLeftIcon
 } from "@phosphor-icons/react";
 import { FileSection } from "@/diff/DiffFiles";
-import { parsePatch, startsFolded, totals, type FileDiff } from "@/diff/patch";
+import { parsePatch, totals, type FileDiff } from "@/diff/patch";
 import { useDiffPrefs } from "@/diff/store";
 import { errorText } from "@/git/store";
 import { historyApi } from "@/history/api";
@@ -62,7 +62,7 @@ export function CommitTab({ tab }: { tab: CommitTabData }) {
     const sum = useMemo(() => totals(files), [files]);
 
     const [folds, setFolds] = useState<Record<string, boolean>>({});
-    const isFolded = (file: FileDiff) => folds[file.path] ?? startsFolded(file);
+    const isFolded = (file: FileDiff) => folds[file.path] ?? true;
     const allFolded = files.length > 0 && files.every(isFolded);
     const toggle = useCallback(
         (path: string, folded: boolean) => setFolds((s) => ({ ...s, [path]: !folded })),

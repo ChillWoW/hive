@@ -254,10 +254,3 @@ export function totals(files: FileDiff[]): DiffTotals {
     return { files: files.length, additions, deletions };
 }
 
-/** Files this long start folded, as do lockfiles (generated, rarely read). */
-const FOLD_LINES = 1500;
-const LOCKFILE =
-    /(^|\/)(package-lock\.json|bun\.lockb?|yarn\.lock|pnpm-lock\.yaml|Cargo\.lock|composer\.lock|Gemfile\.lock|poetry\.lock|go\.sum|uv\.lock)$/;
-
-export const startsFolded = (file: FileDiff) =>
-    file.lineCount > FOLD_LINES || LOCKFILE.test(file.path);

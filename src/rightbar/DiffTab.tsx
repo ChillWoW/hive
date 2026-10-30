@@ -10,7 +10,7 @@ import {
 } from "@phosphor-icons/react";
 import { useChatsStore } from "@/chats";
 import { FileSection } from "@/diff/DiffFiles";
-import { parsePatchReusing, startsFolded, totals, type FileDiff } from "@/diff/patch";
+import { parsePatchReusing, totals, type FileDiff } from "@/diff/patch";
 import { SCOPE_LABELS, useCheckoutDiff, useDiffPrefs, useTurnDiff, type DiffScope } from "@/diff/store";
 import { useGitRepo } from "@/git";
 import { cn } from "@/lib/cn";
@@ -78,7 +78,7 @@ function DiffPane({ folder }: { folder: string | null }) {
     const sum = useMemo(() => totals(files), [files]);
 
     const [folds, setFolds] = useState<Record<string, boolean>>({});
-    const isFolded = (file: FileDiff) => folds[file.path] ?? startsFolded(file);
+    const isFolded = (file: FileDiff) => folds[file.path] ?? true;
     const allFolded = files.length > 0 && files.every(isFolded);
     const toggle = useCallback(
         (path: string, folded: boolean) => setFolds((s) => ({ ...s, [path]: !folded })),
