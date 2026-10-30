@@ -140,7 +140,7 @@ export interface TooltipContentProps
 
 function TooltipShortcut({ shortcut }: { shortcut: ShortcutRef }) {
     const binding = useBinding(shortcut);
-    return <ShortcutKeys shortcut={binding} variant="plain" className="shrink-0" />;
+    return <ShortcutKeys shortcut={binding} variant="plain" className="shrink-0 text-dark-250" />;
 }
 
 const TooltipContent = forwardRef<HTMLDivElement, TooltipContentProps>(
