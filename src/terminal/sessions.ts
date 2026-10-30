@@ -5,12 +5,16 @@ import { Terminal } from "@xterm/xterm";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { isAppShortcut } from "@/keybindings";
 import { isMac, isTauri } from "@/lib/platform";
-import { killTerminal, resizeTerminal, spawnTerminal, writeTerminal } from "./api";
+import { foregroundProcess, killTerminal, resizeTerminal, spawnTerminal, writeTerminal } from "./api";
 import { TERMINAL_OPTIONS } from "./theme";
 
 export type SessionEvents = {
-    /** The shell is up; its name (`pwsh`, `zsh`). */
-    onStarted?: (shell: string) => void;
+    /**
+     * What the tab is called, whenever that changes: the title the running
+     * program set (Claude Code's task, vim's file), else the program's name
+     * (`cargo`, `node`), else the shell's (`pwsh`, `zsh`).
+     */
+    onTitle?: (title: string) => void;
     /** The shell quit with code 0 (`exit`); other endings stay on screen. */
     onClosed?: () => void;
 };
@@ -27,7 +31,60 @@ type Session = {
     /** Typed before the shell was up. */
     pending: Uint8Array[];
     events: SessionEvents;
+    /** The shell's name, once started. */
+    shell: string | null;
+    /** The program in front, or null while the shell is. */
+    process: string | null;
+    /** The title `process` set, if it did. */
+    program: { process: string; title: string } | null;
+    /** The last title sent to `onTitle`. */
+    title: string | null;
+    /** Bumped per title the terminal sets, so a stale lookup is dropped. */
+    titleSeq: number;
 };
+
+function updateTitle(session: Session) {
+    const { program, process, shell } = session;
+    const title =
+        program && process === program.process ? program.title : (process ?? shell);
+    if (!title || title === session.title) return;
+    session.title = title;
+    session.events.onTitle?.(title);
+}
+
+function onProcess(session: Session, name: string | null) {
+    session.process = name;
+    // A title belongs to the program that set it.
+    if (session.program?.process !== name) session.program = null;
+    updateTitle(session);
+}
+
+/**
+ * A title a program set (OSC 0/2). Kept only while that program is in front,
+ * so a prompt's title or the console's own (an `.exe` path on Windows) never
+ * names the tab.
+ */
+function onTitleChange(id: string, session: Session, raw: string) {
+    const title = raw.trim();
+    if (!title || /\.exe$/i.test(title)) return;
+    const seq = ++session.titleSeq;
+    const { program, process } = session;
+    if (process != null && program?.process === process) {
+        session.program = { process, title };
+        updateTitle(session);
+        return;
+    }
+    // A program that just started may not have been seen yet: ask now.
+    if (session.pty == null) return;
+    foregroundProcess(session.pty)
+        .then((name) => {
+            if (sessions.get(id) !== session || seq !== session.titleSeq) return;
+            session.process = name;
+            session.program = name == null ? null : { process: name, title };
+            updateTitle(session);
+        })
+        .catch(() => {});
+}
 
 /** Live outside React, so a tab's scrollback and shell survive it being off screen. */
 const sessions = new Map<string, Session>();
@@ -78,9 +135,15 @@ export function createSession(id: string, cwd: string | null, events: SessionEve
         opened: false,
         pty: null,
         pending: [],
-        events
+        events,
+        shell: null,
+        process: null,
+        program: null,
+        title: null,
+        titleSeq: 0
     };
     sessions.set(id, session);
+    term.onTitleChange((title) => onTitleChange(id, session, title));
 
     term.attachCustomKeyEventHandler((event) => onKey(term, event));
     term.onData((data) => send(session, encoder.encode(data)));
@@ -107,6 +170,9 @@ async function start(id: string, session: Session) {
                 }
                 const how = code == null ? "ended" : `exited with code ${code}`;
                 session.term.write(`\r\n\x1b[2m[Process ${how}]\x1b[0m\r\n`);
+            },
+            (name) => {
+                if (sessions.get(id) === session) onProcess(session, name);
             }
         );
         if (sessions.get(id) !== session) {
@@ -117,7 +183,8 @@ async function start(id: string, session: Session) {
         for (const bytes of session.pending.splice(0)) writeTerminal(pty, bytes);
         // The view may have been resized while the shell started.
         if (session.term.cols !== 0) resizeTerminal(pty, session.term.cols, session.term.rows);
-        session.events.onStarted?.(shell);
+        session.shell = shell;
+        updateTitle(session);
     } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         session.term.write(`\x1b[2m${message}\x1b[0m\r\n`);

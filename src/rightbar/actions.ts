@@ -34,7 +34,7 @@ export function openTerminalTab(cwd: string | null = activeFolder()) {
     const { add, retitle } = useRightbarStore.getState();
     const id = add({ kind: "terminal", cwd }, "Terminal");
     createSession(id, cwd, {
-        onStarted: (shell) => retitle(id, shell),
+        onTitle: (title) => retitle(id, title),
         onClosed: () => discardTab(id)
     });
     useLayoutStore.getState().show("right");

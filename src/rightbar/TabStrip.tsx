@@ -288,7 +288,7 @@ function TabChip({
                     </Tooltip.Content>
                 </Tooltip>
             </span>
-            {/* The file's path (a terminal's folder) on hover, as zeron shows a tab's detail. */}
+            {/* The file's path (a terminal's title and folder) on hover, as zeron shows a tab's detail. */}
             <Tooltip disabled={dragging}>
                 <Tooltip.Trigger
                     delay={350}
@@ -303,7 +303,12 @@ function TabChip({
                             ? "Commits of the open chat's folder"
                             : tab.kind === "commit"
                               ? `${tab.sha.slice(0, 7)} ${tab.subject}`
-                              : (tab.cwd ?? "Home folder")}
+                              : (
+                                  <span className="flex flex-col">
+                                      <span>{title}</span>
+                                      <span className="text-dark-300">{tab.cwd ?? "Home folder"}</span>
+                                  </span>
+                              )}
                 </Tooltip.Content>
             </Tooltip>
             {dirty && (

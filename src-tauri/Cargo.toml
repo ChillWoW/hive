@@ -40,6 +40,8 @@ tauri-plugin-opener = "2"
 tauri-plugin-window-state = "2"
 tauri-plugin-notification = "2"
 portable-pty = "0.9"
+# A terminal tab's title: the program running in it.
+sysinfo = { version = "0.40", default-features = false, features = ["system"] }
 tauri-plugin-updater = "2"
 # Picks the newest release for the pre-release update channel.
 semver = "1"

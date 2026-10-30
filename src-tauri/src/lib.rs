@@ -104,6 +104,7 @@ pub fn run() {
       terminals::terminal_write,
       terminals::terminal_resize,
       terminals::terminal_kill,
+      terminals::terminal_foreground,
       updater::update_check,
       updater::update_install,
       usage::usage_report,
