@@ -1,4 +1,5 @@
 import {
+    BookOpenIcon,
     BrainIcon,
     FileIcon,
     FilePlusIcon,
@@ -106,9 +107,21 @@ function toolSearch(call: ToolCall): { select: string[] | undefined; query: stri
     return { select, query: raw };
 }
 
+/** Claude's skill loader: the skill's name and the arguments it was handed. */
+export function skillOf(call: ToolCall): { name: string; args: string } | undefined {
+    if (call.kind !== "unknown" || call.name !== "Skill") return undefined;
+    const input = call.input;
+    if (!input || typeof input !== "object" || Array.isArray(input)) return { name: "", args: "" };
+    return {
+        name: typeof input.skill === "string" ? input.skill.trim() : "",
+        args: typeof input.args === "string" ? input.args.trim() : ""
+    };
+}
+
 export function iconOf(call: ToolCall): ToolIcon {
     if (isHiveTool(call)) return HiveMark;
     if (toolSearch(call)) return ToolboxIcon;
+    if (skillOf(call)) return BookOpenIcon;
     switch (call.kind) {
         case "exec":
             return TerminalWindowIcon;
@@ -156,6 +169,8 @@ export function chipContent(
             ? chip("Load tools", search.select.join(", "))
             : chip("Find tools", search.query);
     }
+    const skill = skillOf(call);
+    if (skill) return chip("Skill", skill.name);
     switch (call.kind) {
         case "exec":
             return chip("Run", call.command);

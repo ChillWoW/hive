@@ -21,6 +21,7 @@ import {
     isRunning,
     pathOf,
     shortPath,
+    skillOf,
     summarize,
     THOUGHT_ICON,
     type GroupItem,
@@ -295,7 +296,9 @@ function invocationOf(part: ToolPart, cwd: string | undefined): string {
             return call.prompt ? `${call.url}\n${call.prompt}` : call.url;
         case "webSearch":
             return call.query;
-        case "unknown":
+        case "unknown": {
+            const skill = skillOf(call);
+            if (skill) return skill.args ? `${skill.name}\n${skill.args}` : skill.name;
             if (call.name === "ToolSearch") {
                 const input = call.input;
                 if (input && typeof input === "object" && !Array.isArray(input) && typeof input.query === "string") {
@@ -303,6 +306,7 @@ function invocationOf(part: ToolPart, cwd: string | undefined): string {
                 }
             }
             return json(call.input);
+        }
         case "mcp":
             return json(call.input);
         case "todo":
