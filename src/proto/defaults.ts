@@ -21,6 +21,7 @@ export const DEFAULT_SETTINGS: Settings = {
   },
   "keyboard": {
     "sendWith": "enter",
+    "commandPalette": "Mod+K",
     "newChat": "Mod+N",
     "toggleSidebar": "Mod+B",
     "openSettings": "Mod+,",

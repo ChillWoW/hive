@@ -34,6 +34,18 @@ export function useShortcut(id: ActionId, handler: ShortcutHandler) {
     }, [id]);
 }
 
+/**
+ * Runs an action as its shortcut would (the latest mounted handler), for the
+ * command palette. False when nothing handles it now.
+ */
+export function runAction(id: ActionId): boolean {
+    const run = handlers.get(id)?.at(-1);
+    return !!run && run() !== false;
+}
+
+/** Whether something handles `id` now. */
+export const canRunAction = (id: ActionId) => !!handlers.get(id)?.length;
+
 function inScope(target: EventTarget | null, scope: "global" | "composer") {
     if (scope === "global") return true;
     return target instanceof Element && !!target.closest("[data-shortcut-scope='composer']");

@@ -31,6 +31,8 @@ export interface ModalProps
     backdropClassName?: string;
     titleClassName?: string;
     bodyClassName?: string;
+    /** Where focus goes on close (Base UI's `Popup.finalFocus`); default: back where it was. */
+    finalFocus?: ComponentProps<typeof BaseDialog.Popup>["finalFocus"];
 }
 
 const backdropClassNames = cn(
@@ -51,6 +53,7 @@ const ModalRoot = ({
     backdropClassName,
     titleClassName,
     bodyClassName,
+    finalFocus,
     ...rootProps
 }: ModalProps) => {
     // Mounts into the shell's overlay layer, which starts below the top bar, so the backdrop dims
@@ -135,6 +138,7 @@ const ModalRoot = ({
                     )}
                 />
                 <BaseDialog.Popup
+                    finalFocus={finalFocus}
                     className={cn(
                         "pointer-events-auto absolute top-1/2 left-1/2 z-50 w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2",
                         "bg-dark-850 text-dark-50 border border-dark-600",

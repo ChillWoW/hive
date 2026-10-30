@@ -139,6 +139,8 @@ pub enum SendKey {
 #[serde(rename_all = "camelCase", default)]
 pub struct KeyboardSettings {
     pub send_with: SendKey,
+    /// Opens the command palette (chats, files, actions).
+    pub command_palette: String,
     pub new_chat: String,
     pub toggle_sidebar: String,
     pub open_settings: String,
@@ -165,6 +167,7 @@ impl Default for KeyboardSettings {
     fn default() -> Self {
         Self {
             send_with: SendKey::Enter,
+            command_palette: "Mod+K".into(),
             new_chat: "Mod+N".into(),
             toggle_sidebar: "Mod+B".into(),
             open_settings: "Mod+,".into(),

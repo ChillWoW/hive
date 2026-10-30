@@ -2,6 +2,7 @@ import { useChatsStore, workDir } from "@/chats";
 import { useComposerStore } from "@/composer/store";
 import { blockClose, dropDoc, openDoc, save, useDocsStore } from "@/editor";
 import { fitColumns, useLayoutStore } from "@/stores/useLayoutStore";
+import { rememberFile } from "@/palette/store";
 import { createSession, disposeSession } from "@/terminal";
 import { useRightbarStore } from "./store";
 
@@ -24,6 +25,7 @@ export function openFileTab(cwd: string, path: string) {
     if (open) activate(open.id);
     else void openDoc(add({ kind: "file", cwd, path }, nameOf(path)), cwd, path);
     useLayoutStore.getState().show("right");
+    rememberFile(cwd, path);
 }
 
 /**

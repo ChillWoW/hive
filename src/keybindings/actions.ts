@@ -29,6 +29,14 @@ export type Action = {
 /** Order within a category on the settings page. A new one: a field in `KeyboardSettings`, then a row here. */
 export const ACTIONS: readonly Action[] = [
     {
+        id: "commandPalette",
+        category: "general",
+        label: "Command palette",
+        description: "Chats, files and actions in one search",
+        keywords: "command palette quick open search go to anything run",
+        scope: "global"
+    },
+    {
         id: "newChat",
         category: "chats",
         label: "New chat",

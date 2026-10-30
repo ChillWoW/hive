@@ -6,6 +6,7 @@ import { useKeybindingsRuntime } from "@/keybindings";
 import { RightPanels, Sidebar, TopBar, WINDOW_CONTROLS_WIDTH } from "@/layout";
 import { isMac } from "@/lib/platform";
 import { useNotificationsRuntime } from "@/notifications";
+import { CommandPalette, usePaletteRuntime } from "@/palette";
 import { SettingsModal, useSettingsRuntime } from "@/settings";
 import { PortalContainerProvider } from "@/ui";
 import { useUpdaterRuntime } from "@/updater";
@@ -18,6 +19,7 @@ export function App() {
     useNotificationsRuntime();
     useUpdaterRuntime();
     useUsageRuntime();
+    usePaletteRuntime();
     const chat = useChat(useChatsStore((s) => s.activeChatId));
     const title = chat ? (chat.title ?? folderName(chat.cwd)) : undefined;
     // Overlays mount here, below the top bar, so an open modal never takes
@@ -56,6 +58,7 @@ export function App() {
             </div>
             <SettingsModal />
             <UsageModal />
+            <CommandPalette />
         </PortalContainerProvider>
     );
 }

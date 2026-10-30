@@ -20,6 +20,7 @@ import { HarnessIcon } from "@/harnesses";
 import { useShortcut } from "@/keybindings";
 import { cn } from "@/lib/cn";
 import { isMac } from "@/lib/platform";
+import { PaletteButton } from "@/palette";
 import type { HarnessId } from "@/proto";
 import { Button, FolderTreeIcon, Tooltip } from "@/ui";
 import { UsageButton } from "@/usage";
@@ -253,6 +254,7 @@ export function TopBar({ title, harness, className }: TopBarProps) {
 
             <div ref={trailing} className="flex h-full shrink-0 items-center">
                 <div data-tauri-drag-region className="flex h-full items-center gap-0.5 px-2">
+                    <PaletteButton />
                     <UsageButton />
 
                     <Tooltip>
