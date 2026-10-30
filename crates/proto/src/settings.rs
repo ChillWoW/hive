@@ -84,6 +84,19 @@ pub struct TextGenerationSettings {
     pub reasoning: Option<ReasoningLevel>,
 }
 
+/// How a new worktree's branch is named.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "kebab-case")]
+pub enum BranchNaming {
+    /// `<branch_prefix>/<slug of the first prompt>`.
+    #[default]
+    Static,
+    /// `<type>/<slug>`, the type (feat, fix, refactor, …) and slug written by
+    /// the text generation model from the first prompt; guessed from its
+    /// words when that fails.
+    Semantic,
+}
+
 /// Chats started in a worktree of their own. Read by the engine, live
 /// (`src-tauri/src/settings.rs`); chats already in a worktree keep theirs.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
@@ -93,8 +106,9 @@ pub struct WorktreesSettings {
     /// absolute path; a leading `~` is the home folder) uses
     /// `<data dir>/worktrees`.
     pub location: String,
-    /// New branches are `<prefix>/<slug of the first prompt>`; empty, just
-    /// the slug.
+    pub branch_naming: BranchNaming,
+    /// With static naming, new branches are `<prefix>/<slug of the first
+    /// prompt>`; empty, just the slug.
     pub branch_prefix: String,
     /// Deleting a worktree chat deletes its branch too, merged or not.
     pub delete_branch: bool,
@@ -104,6 +118,7 @@ impl Default for WorktreesSettings {
     fn default() -> Self {
         Self {
             location: String::new(),
+            branch_naming: BranchNaming::Static,
             branch_prefix: "hive".into(),
             delete_branch: false,
         }

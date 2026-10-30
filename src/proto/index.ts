@@ -5,6 +5,7 @@ export type { AgentEvent } from "./AgentEvent";
 export type { Attachment } from "./Attachment";
 export type { BackgroundTask } from "./BackgroundTask";
 export type { BackgroundTaskKind } from "./BackgroundTaskKind";
+export type { BranchNaming } from "./BranchNaming";
 export type { Chat } from "./Chat";
 export type { ChatConfig } from "./ChatConfig";
 export type { ChatsSettings } from "./ChatsSettings";

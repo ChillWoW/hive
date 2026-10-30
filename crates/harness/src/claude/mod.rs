@@ -438,7 +438,7 @@ impl ClaudeHarness {
         if title {
             cmd.args([
                 "--system-prompt",
-                crate::TITLE_INSTRUCTIONS,
+                crate::TEXT_INSTRUCTIONS,
                 "--tools",
                 "",
                 "--mcp-config",

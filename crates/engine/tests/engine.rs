@@ -1106,7 +1106,13 @@ async fn a_worktree_chat_runs_in_its_worktree_and_takes_it_when_deleted() {
     assert!(git(p, &["show-ref", "--verify", "--quiet", "refs/heads/hive/add-a-readme"]));
 
     // Unless the setting says to delete it too.
-    engine.set_worktrees(None, "hive".into(), true);
+    let options = |branch_naming| hive_engine::WorktreeOptions {
+        location: None,
+        branch_naming,
+        branch_prefix: "hive".into(),
+        delete_branch: true,
+    };
+    engine.set_worktrees(options(hive_proto::BranchNaming::Static));
     let chat = engine
         .create_chat_in_worktree(
             cwd.clone(),
@@ -1127,6 +1133,22 @@ async fn a_worktree_chat_runs_in_its_worktree_and_takes_it_when_deleted() {
     })
     .await
     .expect("the branch is deleted");
+
+    // Semantic naming: the mock's answer isn't `type/slug`, so the type is
+    // guessed from the prompt.
+    engine.set_worktrees(options(hive_proto::BranchNaming::Semantic));
+    let chat = engine
+        .create_chat_in_worktree(
+            cwd.clone(),
+            config(HarnessId::Mock),
+            hive_proto::NewWorktree {
+                base: Some("main".into()),
+                hint: Some("Fix the login bug".into()),
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(chat.worktree.as_ref().unwrap().branch, "fix/login-bug");
 }
 
 #[tokio::test]

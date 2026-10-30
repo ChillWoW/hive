@@ -14,6 +14,7 @@ export const DEFAULT_SETTINGS: Settings = {
   },
   "worktrees": {
     "location": "",
+    "branchNaming": "static",
     "branchPrefix": "hive",
     "deleteBranch": false
   },

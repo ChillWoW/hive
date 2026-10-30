@@ -3,7 +3,7 @@
 
 use std::path::{Path, PathBuf};
 
-use hive_engine::Engine;
+use hive_engine::{Engine, WorktreeOptions};
 use hive_proto::Settings;
 use hive_store::SettingsFile;
 use serde_json::Value;
@@ -27,11 +27,12 @@ pub fn apply<R: tauri::Runtime>(app: &impl Manager<R>, engine: &Engine, settings
     engine.set_text_generation(settings.text_generation.clone());
     let worktrees = &settings.worktrees;
     let home = app.path().home_dir().ok();
-    engine.set_worktrees(
-        worktrees_location(home.as_deref(), &worktrees.location),
-        worktrees.branch_prefix.clone(),
-        worktrees.delete_branch,
-    );
+    engine.set_worktrees(WorktreeOptions {
+        location: worktrees_location(home.as_deref(), &worktrees.location),
+        branch_naming: worktrees.branch_naming,
+        branch_prefix: worktrees.branch_prefix.clone(),
+        delete_branch: worktrees.delete_branch,
+    });
 }
 
 /// The worktrees folder the user typed: `~` is the home folder; empty or

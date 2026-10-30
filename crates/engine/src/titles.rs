@@ -98,13 +98,36 @@ impl Engine {
 
     /// The title model's answer, cleaned; `None` if every attempt failed.
     async fn generate_title(&self, chat_harness: HarnessId, prompt: &str) -> Option<String> {
+        self.generate_text(
+            chat_harness,
+            TITLE_INSTRUCTIONS,
+            prompt,
+            &RETRY_DELAYS,
+            ATTEMPT_TIMEOUT,
+            |text| Some(clean_title(text)).filter(|t| !t.is_empty()),
+        )
+        .await
+    }
+
+    /// A text run's answer to `task` about the session request `prompt`, as
+    /// `accept` takes it; tried again after each of `retries` while it
+    /// fails or `accept` refuses it. `None` if every attempt failed.
+    pub(crate) async fn generate_text<T>(
+        &self,
+        chat_harness: HarnessId,
+        task: &str,
+        prompt: &str,
+        retries: &[Duration],
+        timeout: Duration,
+        accept: impl Fn(&str) -> Option<T>,
+    ) -> Option<T> {
         let (harness, model, reasoning) = self.text_model(chat_harness)?;
         // No project instructions, files or session to pick up.
         let scratch = tempfile::tempdir().ok()?;
         let request = RunRequest {
             harness: harness.id(),
             prompt: format!(
-                "{TITLE_INSTRUCTIONS}\n\nSession request (JSON string):\n{}",
+                "{task}\n\nSession request (JSON string):\n{}",
                 serde_json::to_string(prompt).ok()?
             ),
             cwd: scratch.path().to_string_lossy().into_owned(),
@@ -119,23 +142,21 @@ impl Engine {
             attachments: Vec::new(),
             mcp: None,
         };
-        for attempt in 0..=RETRY_DELAYS.len() {
+        for attempt in 0..=retries.len() {
             match harness.run_title(request.clone()) {
-                Ok(run) => match collect_text(run).await {
-                    Ok(text) => {
-                        let title = clean_title(&text);
-                        if !title.is_empty() {
-                            return Some(title);
-                        }
-                    }
-                    Err(e) => log::warn!("title attempt {}: {e}", attempt + 1),
+                Ok(run) => match collect_text(run, timeout).await {
+                    Ok(text) => match accept(&text) {
+                        Some(value) => return Some(value),
+                        None => log::warn!("text attempt {}: unusable {text:?}", attempt + 1),
+                    },
+                    Err(e) => log::warn!("text attempt {}: {e}", attempt + 1),
                 },
                 Err(e) => {
-                    log::warn!("title attempt {}: {e}", attempt + 1);
+                    log::warn!("text attempt {}: {e}", attempt + 1);
                     return None; // Not installed: retrying won't help.
                 }
             }
-            if let Some(delay) = RETRY_DELAYS.get(attempt) {
+            if let Some(delay) = retries.get(attempt) {
                 tokio::time::sleep(*delay).await;
             }
         }
@@ -184,9 +205,9 @@ impl Engine {
 
 /// The run's text up to its `Done`. A tool call or question fails it: a
 /// title run must never act or wait on the user.
-async fn collect_text(run: Run) -> Result<String, String> {
+async fn collect_text(run: Run, timeout: Duration) -> Result<String, String> {
     let Run { mut events, handle } = run;
-    let result = tokio::time::timeout(ATTEMPT_TIMEOUT, async {
+    let result = tokio::time::timeout(timeout, async {
         let mut text = String::new();
         while let Some(event) = events.recv().await {
             match event {

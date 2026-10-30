@@ -34,7 +34,7 @@ use std::time::Duration;
 
 use hive_harness::{Harness, RunHandle};
 use hive_proto::{
-    AgentEvent, Attachment, BackgroundTask, Chat, ChatConfig, ChatsUpdate, Command,
+    AgentEvent, Attachment, BackgroundTask, BranchNaming, Chat, ChatConfig, ChatsUpdate, Command,
     CommandPayload, CommandStatus, ContextUsage, DoneStatus, HarnessCatalog, HarnessId,
     McpServer, MessageStatus, MessagesUpdate, NewWorktree, RunRequest, SecretRequest, Session,
     SessionStatus, SlashCommand, TaskOutput, TextGenerationSettings, UserInputAnswer,
@@ -42,6 +42,7 @@ use hive_proto::{
 use hive_store::{new_id, now_ms, Recovery, Store, StoreError, Turn};
 use tokio::sync::{mpsc, oneshot, watch};
 
+mod branches;
 mod titles;
 
 pub use hive_store;
@@ -70,8 +71,11 @@ pub struct EngineConfig {
     /// The user's own place for worktrees, over `worktrees_dir`. Changed
     /// live with [`Engine::set_worktrees`].
     pub worktrees_location: Option<PathBuf>,
-    /// New worktree branches are `<prefix>/<slug>`; empty, just the slug.
-    /// Changed live with [`Engine::set_worktrees`].
+    /// How new worktree branches are named. Changed live with
+    /// [`Engine::set_worktrees`].
+    pub branch_naming: BranchNaming,
+    /// With static naming, new worktree branches are `<prefix>/<slug>`;
+    /// empty, just the slug. Changed live with [`Engine::set_worktrees`].
     pub branch_prefix: String,
     /// Deleting a worktree chat deletes its branch too. Changed live with
     /// [`Engine::set_worktrees`].
@@ -92,6 +96,7 @@ impl Default for EngineConfig {
             auto_title: true,
             worktrees_dir: std::env::temp_dir().join("hive-worktrees"),
             worktrees_location: None,
+            branch_naming: BranchNaming::Static,
             branch_prefix: "hive".into(),
             delete_worktree_branch: false,
             mcp: None,
@@ -159,8 +164,8 @@ struct Inner {
     text_generation: Mutex<TextGenerationSettings>,
     /// Starts as `config.auto_title`; follows the setting.
     auto_title: AtomicBool,
-    /// Starts as `config.worktrees_location` / `branch_prefix` /
-    /// `delete_worktree_branch`; follows the settings.
+    /// Starts as `config.worktrees_location` / `branch_naming` /
+    /// `branch_prefix` / `delete_worktree_branch`; follows the settings.
     worktrees: Mutex<WorktreeOptions>,
     /// How many runs' event loops are still going.
     pumps: Arc<watch::Sender<usize>>,
@@ -169,10 +174,12 @@ struct Inner {
     turn_bases: Mutex<HashMap<String, watch::Receiver<TurnBase>>>,
 }
 
-struct WorktreeOptions {
-    location: Option<PathBuf>,
-    branch_prefix: String,
-    delete_branch: bool,
+pub struct WorktreeOptions {
+    /// None: `config.worktrees_dir`.
+    pub location: Option<PathBuf>,
+    pub branch_naming: BranchNaming,
+    pub branch_prefix: String,
+    pub delete_branch: bool,
 }
 
 /// A turn's starting snapshot, taken in the background.
@@ -322,6 +329,7 @@ impl Engine {
                 text_generation: Mutex::default(),
                 worktrees: Mutex::new(WorktreeOptions {
                     location: config.worktrees_location.clone(),
+                    branch_naming: config.branch_naming,
                     branch_prefix: config.branch_prefix.clone(),
                     delete_branch: config.delete_worktree_branch,
                 }),
@@ -351,20 +359,11 @@ impl Engine {
         *lock(&self.inner.text_generation) = settings;
     }
 
-    /// Where worktrees made from now on go (None: `config.worktrees_dir`),
-    /// their branches' prefix, and whether deleting a worktree chat deletes
-    /// its branch. Existing worktrees stay where they are.
-    pub fn set_worktrees(
-        &self,
-        location: Option<PathBuf>,
-        branch_prefix: String,
-        delete_branch: bool,
-    ) {
-        *lock(&self.inner.worktrees) = WorktreeOptions {
-            location,
-            branch_prefix,
-            delete_branch,
-        };
+    /// Where worktrees made from now on go, how their branches are named,
+    /// and whether deleting a worktree chat deletes its branch. Existing
+    /// worktrees stay where they are.
+    pub fn set_worktrees(&self, options: WorktreeOptions) {
+        *lock(&self.inner.worktrees) = options;
     }
 
     /// Where new worktrees go when no location is set.
@@ -471,20 +470,29 @@ impl Engine {
             .filter(char::is_ascii_alphanumeric)
             .take(8)
             .collect();
-        let (dir, prefix) = {
+        let (dir, naming, prefix) = {
             let options = lock(&self.inner.worktrees);
             let root = options
                 .location
                 .as_ref()
                 .unwrap_or(&self.inner.config.worktrees_dir);
-            (root.join(key), options.branch_prefix.clone())
+            (
+                root.join(key),
+                options.branch_naming,
+                options.branch_prefix.clone(),
+            )
+        };
+        let hint = worktree.hint.as_deref().unwrap_or_default();
+        let (prefix, hint) = match naming {
+            BranchNaming::Static => (prefix, hint.to_owned()),
+            BranchNaming::Semantic => self.semantic_branch(config.harness, hint).await,
         };
         let made = hive_git::add_worktree(
             Path::new(&cwd),
             &dir,
             worktree.base.as_deref(),
             &prefix,
-            worktree.hint.as_deref().unwrap_or_default(),
+            &hint,
         )
         .await?;
         let saved = self.store().create_chat(cwd.clone(), config).and_then(|mut chat| {

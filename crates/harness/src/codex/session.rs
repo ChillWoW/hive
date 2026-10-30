@@ -234,7 +234,7 @@ pub(super) fn thread_params(request: &RunRequest, title: bool) -> Map<String, Va
         params.insert("serviceTier".into(), json!(tier));
     }
     if title {
-        params.insert("baseInstructions".into(), json!(crate::TITLE_INSTRUCTIONS));
+        params.insert("baseInstructions".into(), json!(crate::TEXT_INSTRUCTIONS));
         params.insert("ephemeral".into(), json!(true));
     } else if let Some(mcp) = &request.mcp {
         params.insert("config".into(), Value::Object(mcp_overrides(mcp)));
