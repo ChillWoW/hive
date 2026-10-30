@@ -1,6 +1,5 @@
-//! Chat titles, as zeron writes them: once a chat's first exchange
-//! completes, a throwaway title run of a cheap model names it from the first
-//! prompt. It runs in an empty temp folder with no tools, MCP servers or
+//! Chat titles: as soon as a chat's first prompt is saved, a throwaway title
+//! run of a cheap model names it from that prompt, alongside the turn. It runs in an empty temp folder with no tools, MCP servers or
 //! settings ([`Harness::run_title`]). If that yields nothing, the prompt's
 //! first words stand in. A rename by the user always wins.
 
@@ -23,8 +22,8 @@ const ATTEMPT_TIMEOUT: Duration = Duration::from_secs(30);
 const EXIT_GRACE: Duration = Duration::from_secs(5);
 
 impl Engine {
-    /// Names `chat_id` in the background if it has no title yet. Called after
-    /// every completed turn; does nothing while a title is already on its way.
+    /// Names `chat_id` in the background if it has no title yet. Called as
+    /// every prompted turn starts; does nothing while a title is on its way.
     pub(crate) fn maybe_title(&self, chat_id: &str) {
         let titled = self
             .store()

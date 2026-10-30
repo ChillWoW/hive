@@ -886,7 +886,7 @@ async fn a_config_change_restarts_the_run_after_its_turn() {
 }
 
 #[tokio::test]
-async fn a_completed_first_turn_titles_the_chat() {
+async fn the_first_prompt_titles_the_chat_while_its_turn_runs() {
     let (_dir, engine) = engine(0.0);
     let chat = engine
         .create_chat("/demo", config(HarnessId::Mock))
@@ -897,12 +897,7 @@ async fn a_completed_first_turn_titles_the_chat() {
     engine
         .queue_command(&chat.id, send("fix the login flow please"))
         .unwrap();
-    let seen = until(&mut updates, is_input).await;
-    engine
-        .queue_command(&chat.id, answer(request_id(&seen)))
-        .unwrap();
-    until(&mut updates, is_done).await;
-
+    // Named while the turn still waits on its question.
     until(
         &mut chats,
         |u| matches!(u, ChatsUpdate::Chat { chat } if chat.title.is_some()),
@@ -910,6 +905,12 @@ async fn a_completed_first_turn_titles_the_chat() {
     .await;
     let titled = engine.store().chat(&chat.id).unwrap().unwrap();
     assert_eq!(titled.title.as_deref(), Some("Fix The Login Flow"));
+
+    let seen = until(&mut updates, is_input).await;
+    engine
+        .queue_command(&chat.id, answer(request_id(&seen)))
+        .unwrap();
+    until(&mut updates, is_done).await;
 }
 
 #[tokio::test]

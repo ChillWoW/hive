@@ -1126,6 +1126,8 @@ impl Engine {
             Some(prompt.message_id.clone()),
         )?;
         self.begin_turn(chat_id, st, turn);
+        // The prompt is saved: an untitled chat is named alongside its turn.
+        self.maybe_title(chat_id);
         Ok(())
     }
 
@@ -1343,9 +1345,6 @@ impl Engine {
                     publish(&mut st.watchers, MessagesUpdate::Message { message });
                 }
                 self.publish_chat(chat_id);
-                if status == DoneStatus::Completed {
-                    self.maybe_title(chat_id);
-                }
                 let handover = std::mem::take(&mut st.handover);
                 // The next turn starts a run with the new config, once
                 // background work is done.
