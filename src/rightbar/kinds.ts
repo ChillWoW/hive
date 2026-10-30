@@ -5,6 +5,8 @@ import { openDiffTab, openTerminalTab } from "./actions";
 /** Something the "+" menu opens in a new tab. */
 export type NewTab = {
     label: string;
+    /** One line under the label in the empty sidebar. */
+    hint: string;
     icon: Icon;
     /** Its shortcut, shown on the right of its row. */
     shortcut?: ActionId;
@@ -18,13 +20,16 @@ export type NewTab = {
 export const NEW_TABS: readonly NewTab[] = [
     {
         label: "Terminal",
+        hint: "A shell in the chat's folder",
         icon: TerminalWindowIcon,
         shortcut: "newTerminal",
         open: () => openTerminalTab()
     },
     {
         label: "Diff",
+        hint: "What changed in the folder",
         icon: GitDiffIcon,
+        shortcut: "openDiff",
         open: () => openDiffTab()
     }
 ];

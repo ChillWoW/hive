@@ -26,6 +26,7 @@ export const DEFAULT_SETTINGS: Settings = {
     "goBack": "Alt+Left",
     "goForward": "Alt+Right",
     "newTerminal": "Mod+J",
+    "openDiff": "Mod+Shift+G",
     "togglePlan": "Shift+Tab"
   },
   "providers": {

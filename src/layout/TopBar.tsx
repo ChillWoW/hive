@@ -8,7 +8,7 @@ import { WindowControls } from "./WindowControls";
 import { chats, useChatsStore } from "@/chats";
 import { composer } from "@/composer";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { openTerminalTab, TabStrip } from "@/rightbar";
+import { openDiffTab, openTerminalTab, TabStrip } from "@/rightbar";
 import { HarnessIcon } from "@/harnesses";
 import { useShortcut } from "@/keybindings";
 import { cn } from "@/lib/cn";
@@ -92,6 +92,7 @@ export function TopBar({ title, harness, className }: TopBarProps) {
     useShortcut("toggleSidebar", toggleSidebar);
     useShortcut("newChat", newChat);
     useShortcut("newTerminal", () => openTerminalTab());
+    useShortcut("openDiff", () => openDiffTab());
 
     const canGoBack = useChatsStore((s) => s.back.length > 0);
     const canGoForward = useChatsStore((s) => s.forward.length > 0);

@@ -119,6 +119,7 @@ pub struct KeyboardSettings {
     pub go_back: String,
     pub go_forward: String,
     pub new_terminal: String,
+    pub open_diff: String,
     /// Only while typing a prompt.
     pub toggle_plan: String,
 }
@@ -137,6 +138,7 @@ impl Default for KeyboardSettings {
             go_back: "Alt+Left".into(),
             go_forward: "Alt+Right".into(),
             new_terminal: "Mod+J".into(),
+            open_diff: "Mod+Shift+G".into(),
             toggle_plan: "Shift+Tab".into(),
         }
     }

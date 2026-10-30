@@ -74,6 +74,13 @@ export const ACTIONS: readonly Action[] = [
         scope: "global"
     },
     {
+        id: "openDiff",
+        label: "Show diff",
+        description: "In the right sidebar, for the chat's folder",
+        keywords: "diff changes git review compare open",
+        scope: "global"
+    },
+    {
         id: "openSettings",
         label: "Settings",
         description: "Opens or closes this window",
