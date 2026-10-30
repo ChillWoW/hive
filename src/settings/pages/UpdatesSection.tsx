@@ -20,7 +20,7 @@ export function UpdatesSection() {
             <StatusRow />
             <SettingRow
                 label="Check automatically"
-                description="At launch and every few hours. Nothing installs until you click Update"
+                description="Checks every few hours. Nothing installs until you click Update"
                 keywords="update auto check automatic background release new version"
                 setting={autoCheck}
                 control={
@@ -35,7 +35,7 @@ export function UpdatesSection() {
                 label="Channel"
                 description={
                     prerelease
-                        ? "Pre-releases arrive first and may be unstable. Switching back waits for a stable release past yours"
+                        ? "Pre-releases come first and may be unstable"
                         : "Stable releases only"
                 }
                 keywords="update channel prerelease pre-release beta stable early insider"

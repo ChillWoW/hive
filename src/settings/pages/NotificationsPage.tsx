@@ -44,7 +44,7 @@ export function NotificationsPage() {
             <SettingsSection title="Alerts">
                 <SettingRow
                     label="Sound on questions"
-                    description="Play a chime when an agent asks a question or for approval"
+                    description="Chime when an agent asks a question or for approval"
                     keywords="sound chime audio beep question approval permission"
                     setting={inputSound}
                     control={
@@ -57,7 +57,7 @@ export function NotificationsPage() {
                 />
                 <SettingRow
                     label="Sound when a turn finishes"
-                    description="Play a chime when an agent finishes a turn or stops with an error"
+                    description="Chime when an agent finishes a turn or stops with an error"
                     keywords="sound chime audio beep done finished complete error"
                     setting={finishedSound}
                     control={

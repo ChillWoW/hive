@@ -14,7 +14,7 @@ export function ChatsPage() {
             <SettingsSection title="New chats">
                 <SettingRow
                     label="Auto-title chats"
-                    description="A quick model run names each new chat. Off, its first words do"
+                    description="A model run names new chats. Off, their first words do"
                     keywords="title name rename auto generate summary tokens"
                     setting={autoTitle}
                     control={
@@ -30,7 +30,7 @@ export function ChatsPage() {
             <SettingsSection title="Archiving">
                 <SettingRow
                     label="Auto-archive chats"
-                    description="Chats with no activity for a while move to Archived. Pinned chats and running ones stay"
+                    description="Idle chats move to Archived. Pinned and running ones stay"
                     keywords="archive auto old inactive idle cleanup sidebar"
                     setting={autoArchive}
                     control={
@@ -69,7 +69,7 @@ export function ChatsPage() {
             <SettingsSection title="Sessions">
                 <SettingRow
                     label="Resume interrupted turns"
-                    description="When Hive closes mid-turn, the agent continues on next launch. Uses tokens"
+                    description="Continue cut-short turns on next launch. Uses tokens"
                     keywords="resume restart continue crash interrupted relaunch startup"
                     setting={resume}
                     control={

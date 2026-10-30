@@ -166,7 +166,7 @@ export function WorktreesPage() {
                     label="Branch naming"
                     description={
                         semantic
-                            ? "The text generation model picks the kind of change, like fix/login-bug or feat/dark-mode"
+                            ? "The text model picks the type, like fix/login-bug"
                             : "Every new branch starts with the same prefix"
                     }
                     keywords="worktree branch naming name prefix semantic static conventional type git"
@@ -194,7 +194,7 @@ export function WorktreesPage() {
             <SettingsSection title="Deleting chats">
                 <SettingRow
                     label="Delete the branch"
-                    description="Deleting a worktree chat deletes its branch too, merged or not"
+                    description="Deleting a worktree chat deletes its branch too"
                     keywords="worktree branch delete remove cleanup chat git"
                     setting={deleteBranch}
                     control={

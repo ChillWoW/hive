@@ -76,7 +76,7 @@ export function TextGenerationRow() {
     return (
         <SettingRow
             label="Model"
-            description="Writes chat titles. Automatic uses the chat's agent at its smallest model"
+            description="Writes chat titles. Automatic: the chat's agent, smallest model"
             keywords="text generation title model reasoning effort auto automatic haiku mini cheap"
             setting={{
                 modified,
