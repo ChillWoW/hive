@@ -23,8 +23,8 @@ import { timeAgo, useMinuteClock } from "./time";
 
 export const UNTITLED = "New chat";
 
-/** How long the pointer rests on a row before its card shows (as in zeron). */
-export const CARD_DWELL = 550;
+/** How long the pointer rests on a row before its card shows. */
+export const CARD_DWELL = 300;
 
 /**
  * One chat in the sidebar: status dot, title, time since its last activity
