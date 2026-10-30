@@ -24,6 +24,7 @@ pub const SETTINGS_VERSION: u32 = 1;
 pub struct Settings {
     pub version: u32,
     pub chats: ChatsSettings,
+    pub worktrees: WorktreesSettings,
     pub notifications: NotificationsSettings,
     pub keyboard: KeyboardSettings,
     pub providers: ProvidersSettings,
@@ -34,6 +35,7 @@ impl Default for Settings {
         Self {
             version: SETTINGS_VERSION,
             chats: ChatsSettings::default(),
+            worktrees: WorktreesSettings::default(),
             notifications: NotificationsSettings::default(),
             keyboard: KeyboardSettings::default(),
             providers: ProvidersSettings::default(),
@@ -57,6 +59,29 @@ impl Default for ChatsSettings {
         Self {
             resume_interrupted: false,
             auto_title: true,
+        }
+    }
+}
+
+/// Chats started in a worktree of their own. Read by the engine, live
+/// (`src-tauri/src/settings.rs`); chats already in a worktree keep theirs.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase", default)]
+pub struct WorktreesSettings {
+    /// The folder new worktrees go in, a subfolder each. Empty (or not an
+    /// absolute path; a leading `~` is the home folder) uses
+    /// `<data dir>/worktrees`.
+    pub location: String,
+    /// New branches are `<prefix>/<slug of the first prompt>`; empty, just
+    /// the slug.
+    pub branch_prefix: String,
+}
+
+impl Default for WorktreesSettings {
+    fn default() -> Self {
+        Self {
+            location: String::new(),
+            branch_prefix: "hive".into(),
         }
     }
 }
@@ -190,6 +215,14 @@ impl Settings {
     /// Clamps values the types alone can't constrain.
     pub fn normalize(&mut self) {
         self.version = SETTINGS_VERSION;
+        let worktrees = &mut self.worktrees;
+        worktrees.location = worktrees.location.trim().to_owned();
+        worktrees.branch_prefix = worktrees
+            .branch_prefix
+            .trim()
+            .trim_matches('/')
+            .trim()
+            .to_owned();
     }
 }
 
@@ -300,6 +333,16 @@ mod tests {
     fn options_can_be_cleared() {
         let s = sanitize(&Doc::default(), &json!({ "section": { "path": null } }));
         assert_eq!(s.section.path, None);
+    }
+
+    #[test]
+    fn worktree_settings_are_trimmed() {
+        let s = Settings::sanitize(
+            &Settings::default(),
+            &json!({ "worktrees": { "location": "  D:\\wt ", "branchPrefix": " /me/ " } }),
+        );
+        assert_eq!(s.worktrees.location, "D:\\wt");
+        assert_eq!(s.worktrees.branch_prefix, "me");
     }
 
     #[test]

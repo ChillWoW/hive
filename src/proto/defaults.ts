@@ -7,6 +7,10 @@ export const DEFAULT_SETTINGS: Settings = {
     "resumeInterrupted": false,
     "autoTitle": true
   },
+  "worktrees": {
+    "location": "",
+    "branchPrefix": "hive"
+  },
   "notifications": {
     "turnFinished": true,
     "needsInput": true,

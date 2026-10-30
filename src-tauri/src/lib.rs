@@ -98,6 +98,7 @@ pub fn run() {
       settings::settings_reload,
       settings::settings_path,
       settings::settings_reveal,
+      settings::worktrees_default_dir,
       terminals::terminal_spawn,
       terminals::terminal_write,
       terminals::terminal_resize,
@@ -131,7 +132,8 @@ pub fn run() {
       let data_dir = data_dir(app)?;
       let settings = hive_store::SettingsFile::open(&data_dir)?;
       // Resuming only happens at launch; titles follow the setting live.
-      let chats = settings.get().chats;
+      let initial = settings.get();
+      let chats = initial.chats.clone();
       // Before the MCP host, whose `request_secret` reaches for it.
       let secrets = secrets::Secrets::new(&data_dir);
       secrets.sweep_every_hour();
@@ -161,6 +163,8 @@ pub fn run() {
         config,
         tauri::async_runtime::handle().inner().clone(),
       );
+      // The worktree options and the rest the engine follows live.
+      settings::apply(app.handle(), &engine, &initial);
       let recovery = engine.start()?;
       log::info!(
         "recovered: {} commands expired, {} turns aborted",

@@ -82,6 +82,7 @@ export type { UserInputAnswer } from "./UserInputAnswer";
 export type { UserInputQuestion } from "./UserInputQuestion";
 export type { WorkspaceEntry } from "./WorkspaceEntry";
 export type { Worktree } from "./Worktree";
+export type { WorktreesSettings } from "./WorktreesSettings";
 export type { WriteOutcome } from "./WriteOutcome";
 export type { JsonValue } from "./serde_json/JsonValue";
 

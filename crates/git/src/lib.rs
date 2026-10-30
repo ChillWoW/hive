@@ -341,7 +341,8 @@ fn io_error(e: std::io::Error) -> GitError {
 }
 
 /// Makes a worktree for a chat in `cwd`'s repository: a new branch
-/// `hive/<slug of hint>` (numbered when taken) off `base` (when missing,
+/// `<branch_prefix>/<slug of hint>` (just the slug for an empty prefix; numbered
+/// when taken) off `base` (when missing,
 /// the checked-out branch, else HEAD's commit), checked out at
 /// `dir/<repository name>` so the folder keeps the project's name. The
 /// agent runs in the same subfolder of it that `cwd` is of its repository.
@@ -349,6 +350,7 @@ pub async fn add_worktree(
     cwd: &Path,
     dir: &Path,
     base: Option<&str>,
+    branch_prefix: &str,
     hint: &str,
 ) -> Result<Worktree, GitError> {
     let out = git(cwd, &["rev-parse", "--show-toplevel", "--show-prefix"])
@@ -383,7 +385,10 @@ pub async fn add_worktree(
         )));
     }
 
-    let slug = format!("hive/{}", branch_slug(hint));
+    let slug = match branch_prefix.trim().trim_matches('/') {
+        "" => branch_slug(hint),
+        prefix => format!("{prefix}/{}", branch_slug(hint)),
+    };
     let mut branch = slug.clone();
     let mut n = 1;
     while branch_exists(&top, &branch).await? {
@@ -646,7 +651,7 @@ mod tests {
         let dir = store.path().join("abc");
 
         // From a subfolder: the agent runs in the same one of the worktree.
-        let wt = add_worktree(&path.join("pkg/app"), &dir, None, "Fix the login bug, please!")
+        let wt = add_worktree(&path.join("pkg/app"), &dir, None, "hive", "Fix the login bug, please!")
             .await
             .unwrap();
         assert_eq!(wt.branch, "hive/fix-the-login-bug-please");
@@ -667,10 +672,20 @@ mod tests {
 
         // The same hint again gets a numbered branch.
         let dir2 = store.path().join("def");
-        let wt2 = add_worktree(path, &dir2, Some("main"), "Fix the login bug, please!")
+        let wt2 = add_worktree(path, &dir2, Some("main"), "hive", "Fix the login bug, please!")
             .await
             .unwrap();
         assert_eq!(wt2.branch, "hive/fix-the-login-bug-please-2");
+
+        // Another prefix, or none.
+        let wt3 = add_worktree(path, &store.path().join("ghi"), None, "me/", "Fix it")
+            .await
+            .unwrap();
+        assert_eq!(wt3.branch, "me/fix-it");
+        let wt4 = add_worktree(path, &store.path().join("jkl"), None, "", "Fix it")
+            .await
+            .unwrap();
+        assert_eq!(wt4.branch, "fix-it");
 
         // Uncommitted work, then the folder disappears.
         std::fs::write(Path::new(&wt.root).join("wip.txt"), "wip").unwrap();
@@ -690,6 +705,8 @@ mod tests {
         remove_worktree(path, &wt).await.unwrap();
         remove_worktree(path, &wt2).await.unwrap();
         assert!(!dir2.exists());
+        remove_worktree(path, &wt3).await.unwrap();
+        remove_worktree(path, &wt4).await.unwrap();
     }
 
     #[test]

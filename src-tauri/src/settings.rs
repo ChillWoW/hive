@@ -1,6 +1,8 @@
 //! Settings commands. The document lives in `hive_store::SettingsFile`; every
 //! change is broadcast as [`CHANGED`] so all windows stay in sync.
 
+use std::path::{Path, PathBuf};
+
 use hive_engine::Engine;
 use hive_proto::Settings;
 use hive_store::SettingsFile;
@@ -12,7 +14,7 @@ pub const CHANGED: &str = "settings://changed";
 fn broadcast(app: &AppHandle, (settings, changed): (Settings, bool)) -> Settings {
     if changed {
         if let Some(engine) = app.try_state::<Engine>() {
-            apply(&engine, &settings);
+            apply(app, &engine, &settings);
         }
         let _ = app.emit(CHANGED, &settings);
     }
@@ -20,8 +22,41 @@ fn broadcast(app: &AppHandle, (settings, changed): (Settings, bool)) -> Settings
 }
 
 /// Hands the engine the settings it follows live.
-fn apply(engine: &Engine, settings: &Settings) {
+pub fn apply<R: tauri::Runtime>(app: &impl Manager<R>, engine: &Engine, settings: &Settings) {
     engine.set_auto_title(settings.chats.auto_title);
+    let worktrees = &settings.worktrees;
+    let home = app.path().home_dir().ok();
+    engine.set_worktrees(
+        worktrees_location(home.as_deref(), &worktrees.location),
+        worktrees.branch_prefix.clone(),
+    );
+}
+
+/// The worktrees folder the user typed: `~` is the home folder; empty or
+/// relative means the default (None).
+fn worktrees_location(home: Option<&Path>, raw: &str) -> Option<PathBuf> {
+    let raw = raw.trim();
+    if raw.is_empty() {
+        return None;
+    }
+    let path = match raw.strip_prefix('~') {
+        Some(rest) if rest.is_empty() || rest.starts_with(['/', '\\']) => {
+            home?.join(rest.trim_start_matches(['/', '\\']))
+        }
+        _ => PathBuf::from(raw),
+    };
+    if !path.is_absolute() {
+        log::warn!("worktree location {raw:?} isn't an absolute path; using the default");
+        return None;
+    }
+    Some(path)
+}
+
+/// Where worktrees go while no location is set, for the settings field's
+/// placeholder.
+#[tauri::command]
+pub fn worktrees_default_dir(engine: State<'_, Engine>) -> String {
+    engine.default_worktrees_dir().display().to_string()
 }
 
 #[tauri::command]

@@ -92,6 +92,12 @@ export const settingsApi = {
     reveal: (): Promise<void> =>
         isTauri ? invoke("settings_reveal") : Promise.resolve(),
 
+    /** Where worktrees go while `worktrees.location` is empty. */
+    defaultWorktreesDir: (): Promise<string> =>
+        isTauri
+            ? invoke<string>("worktrees_default_dir")
+            : Promise.resolve("~/.hive/worktrees"),
+
     /** Every change from any window, including this one. */
     onChanged: async (
         handler: (settings: Settings) => void

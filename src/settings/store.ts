@@ -10,6 +10,7 @@ import {
 
 export type SettingsPageId =
     | "chats"
+    | "worktrees"
     | "providers"
     | "notifications"
     | "keyboard"

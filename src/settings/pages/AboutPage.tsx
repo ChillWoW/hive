@@ -4,6 +4,7 @@ import {
     ArrowCounterClockwiseIcon,
     FolderOpenIcon
 } from "@phosphor-icons/react";
+import { tildify, useHomeDir } from "@/lib/home";
 import { isTauri } from "@/lib/platform";
 import { Button } from "@/ui";
 import { settingsApi } from "../api";
@@ -14,6 +15,7 @@ import { useSettingsStore } from "../store";
 export function AboutPage() {
     const [version, setVersion] = useState<string | null>(null);
     const [path, setPath] = useState<string | null>(null);
+    const home = useHomeDir();
 
     useEffect(() => {
         if (isTauri) getVersion().then(setVersion, () => {});
@@ -45,7 +47,7 @@ export function AboutPage() {
                     description={
                         path ? (
                             <span className="font-mono text-[11px] break-all text-dark-250">
-                                {path}
+                                {tildify(path, home)}
                             </span>
                         ) : (
                             "Stored in this browser"

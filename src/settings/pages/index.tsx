@@ -2,6 +2,7 @@ import type { ComponentType } from "react";
 import {
     BellIcon,
     ChatsIcon,
+    GitForkIcon,
     InfoIcon,
     KeyboardIcon,
     PlugsConnectedIcon,
@@ -13,6 +14,7 @@ import { ChatsPage } from "./ChatsPage";
 import { KeyboardPage } from "./KeyboardPage";
 import { NotificationsPage } from "./NotificationsPage";
 import { ProvidersPage } from "./ProvidersPage";
+import { WorktreesPage } from "./WorktreesPage";
 
 export type SettingsPage = {
     id: SettingsPageId;
@@ -28,6 +30,12 @@ export const SETTINGS_PAGES: readonly SettingsPage[] = [
         label: "Chats",
         icon: ChatsIcon,
         Component: ChatsPage
+    },
+    {
+        id: "worktrees",
+        label: "Worktrees",
+        icon: GitForkIcon,
+        Component: WorktreesPage
     },
     {
         id: "providers",

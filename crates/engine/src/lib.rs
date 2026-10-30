@@ -64,8 +64,15 @@ pub struct EngineConfig {
     /// Name untitled chats with a title run; off, the first prompt's opening
     /// words name them. Changed live with [`Engine::set_auto_title`].
     pub auto_title: bool,
-    /// Where chats' worktrees go, a folder each.
+    /// Where chats' worktrees go, a folder each, unless `worktrees_location`
+    /// says otherwise.
     pub worktrees_dir: PathBuf,
+    /// The user's own place for worktrees, over `worktrees_dir`. Changed
+    /// live with [`Engine::set_worktrees`].
+    pub worktrees_location: Option<PathBuf>,
+    /// New worktree branches are `<prefix>/<slug>`; empty, just the slug.
+    /// Changed live with [`Engine::set_worktrees`].
+    pub branch_prefix: String,
     /// Hive's own MCP server, given to every chat's runs with the chat's
     /// id ([`McpServer::for_chat`]). None runs agents without it.
     pub mcp: Option<McpServer>,
@@ -81,6 +88,8 @@ impl Default for EngineConfig {
             resume_interrupted: false,
             auto_title: true,
             worktrees_dir: std::env::temp_dir().join("hive-worktrees"),
+            worktrees_location: None,
+            branch_prefix: "hive".into(),
             mcp: None,
             turn_snapshots_dir: std::env::temp_dir().join("hive-turn-snapshots"),
         }
@@ -144,11 +153,19 @@ struct Inner {
     titling: Mutex<HashSet<String>>,
     /// Starts as `config.auto_title`; follows the setting.
     auto_title: AtomicBool,
+    /// Starts as `config.worktrees_location` / `branch_prefix`; follows the
+    /// settings.
+    worktrees: Mutex<WorktreeOptions>,
     /// How many runs' event loops are still going.
     pumps: Arc<watch::Sender<usize>>,
     /// Each chat's checkout as its latest prompted turn started, by chat id.
     /// In memory only: after a restart there's none until the next turn.
     turn_bases: Mutex<HashMap<String, watch::Receiver<TurnBase>>>,
+}
+
+struct WorktreeOptions {
+    location: Option<PathBuf>,
+    branch_prefix: String,
 }
 
 /// A turn's starting snapshot, taken in the background.
@@ -295,6 +312,10 @@ impl Engine {
                 order: harnesses.iter().map(|h| h.id()).collect(),
                 harnesses: harnesses.into_iter().map(|h| (h.id(), h)).collect(),
                 auto_title: AtomicBool::new(config.auto_title),
+                worktrees: Mutex::new(WorktreeOptions {
+                    location: config.worktrees_location.clone(),
+                    branch_prefix: config.branch_prefix.clone(),
+                }),
                 config,
                 runtime,
                 chats: Mutex::default(),
@@ -314,6 +335,20 @@ impl Engine {
     /// Turns title runs on or off for chats titled from now on.
     pub fn set_auto_title(&self, on: bool) {
         self.inner.auto_title.store(on, Ordering::Relaxed);
+    }
+
+    /// Where worktrees made from now on go (None: `config.worktrees_dir`)
+    /// and their branches' prefix. Existing worktrees stay where they are.
+    pub fn set_worktrees(&self, location: Option<PathBuf>, branch_prefix: String) {
+        *lock(&self.inner.worktrees) = WorktreeOptions {
+            location,
+            branch_prefix,
+        };
+    }
+
+    /// Where new worktrees go when no location is set.
+    pub fn default_worktrees_dir(&self) -> &Path {
+        &self.inner.config.worktrees_dir
     }
 
     /// Run once at boot, before anything else: recovers what the last
@@ -415,11 +450,19 @@ impl Engine {
             .filter(char::is_ascii_alphanumeric)
             .take(8)
             .collect();
-        let dir = self.inner.config.worktrees_dir.join(key);
+        let (dir, prefix) = {
+            let options = lock(&self.inner.worktrees);
+            let root = options
+                .location
+                .as_ref()
+                .unwrap_or(&self.inner.config.worktrees_dir);
+            (root.join(key), options.branch_prefix.clone())
+        };
         let made = hive_git::add_worktree(
             Path::new(&cwd),
             &dir,
             worktree.base.as_deref(),
+            &prefix,
             worktree.hint.as_deref().unwrap_or_default(),
         )
         .await?;
