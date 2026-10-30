@@ -552,7 +552,7 @@ function FetchButton({
                 }
             />
             <Tooltip.Content side="bottom">
-                Update every remote's branches (git fetch --all); your files stay as they are
+                Get the latest from every remote
             </Tooltip.Content>
         </Tooltip>
     );
