@@ -85,6 +85,29 @@ export function foldEvent(parts: MessagePart[], event: AgentEvent) {
             }
             return;
 
+        // Updates the one running, else starts one.
+        case "compaction": {
+            const running = runningCompaction(parts);
+            if (running) {
+                running.status = event.status;
+                running.auto = running.auto || event.auto;
+                if (event.beforeTokens !== undefined) running.beforeTokens = event.beforeTokens;
+                if (event.afterTokens !== undefined) running.afterTokens = event.afterTokens;
+                if (event.error !== undefined) running.error = event.error;
+            } else {
+                parts.push({
+                    kind: "compaction",
+                    id: `c${parts.length}`,
+                    status: event.status,
+                    auto: event.auto,
+                    beforeTokens: event.beforeTokens,
+                    afterTokens: event.afterTokens,
+                    error: event.error
+                });
+            }
+            return;
+        }
+
         case "error":
             parts.push({
                 kind: "error",
@@ -93,7 +116,17 @@ export function foldEvent(parts: MessagePart[], event: AgentEvent) {
             });
             return;
 
-        case "done":
+        case "done": {
+            // A compaction the turn never reported the end of ends with it.
+            const running = runningCompaction(parts);
+            if (running) {
+                running.status =
+                    event.status === "completed"
+                        ? "completed"
+                        : event.status === "interrupted"
+                          ? "stopped"
+                          : "failed";
+            }
             if (event.error) {
                 parts.push({
                     kind: "error",
@@ -102,6 +135,7 @@ export function foldEvent(parts: MessagePart[], event: AgentEvent) {
                 });
             }
             return;
+        }
 
         // The parent transcript keeps only the spawn chip; this tracks its
         // lifecycle. The subagent's own content would fold into its own view.
@@ -125,6 +159,7 @@ export function foldEvent(parts: MessagePart[], event: AgentEvent) {
         case "usage":
         case "availableCommands":
         case "backgroundTasks":
+        case "goalChanged":
             return;
 
         default:
@@ -132,6 +167,11 @@ export function foldEvent(parts: MessagePart[], event: AgentEvent) {
             // it's handled.
             event satisfies never;
     }
+}
+
+function runningCompaction(parts: MessagePart[]) {
+    const part = parts.findLast((p) => p.kind === "compaction" && p.status === "running");
+    return part?.kind === "compaction" ? part : undefined;
 }
 
 function findTool(parts: MessagePart[], id: string) {

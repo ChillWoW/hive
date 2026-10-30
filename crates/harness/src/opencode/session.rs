@@ -443,6 +443,7 @@ impl Session {
         let replies = self.replies.clone();
         let text = prompt.text.trim();
         if prompt.files.is_empty() && text == "/compact" {
+            self.normalizer.compact_turn = true;
             tokio::spawn(async move {
                 if let Err(e) = api.post(&format!("/api/session/{session}/compact"), &json!({})).await {
                     let _ = replies.send(Reply::PromptFailed(e));

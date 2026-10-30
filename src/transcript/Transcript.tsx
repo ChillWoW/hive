@@ -4,6 +4,7 @@ import type { TranscriptMessage } from "@/chats";
 import { cn } from "@/lib/cn";
 import { AssistantMessage } from "./AssistantMessage";
 import { ChatCwd } from "./context";
+import { CompactionRow } from "./parts";
 import { UserMessage } from "./UserMessage";
 
 /** How close to the bottom still counts as following along, in px. */
@@ -20,6 +21,34 @@ type TranscriptProps = {
     /** Under the messages, inside the scroller (the composer's spacer). */
     className?: string;
 };
+
+/** A prompt that is `/compact` and nothing else: shown as its divider, not a bubble. */
+function isBareCompact(message: TranscriptMessage): boolean {
+    if (message.role !== "user" || message.attachments?.length) return false;
+    const text = message.parts.flatMap((p) => (p.kind === "text" ? [p.text] : [])).join("");
+    return text.trim().toLowerCase() === "/compact";
+}
+
+const hasCompaction = (message: TranscriptMessage | undefined) =>
+    message?.role === "assistant" && message.parts.some((p) => p.kind === "compaction");
+
+/**
+ * Whether a `/compact` followed by `reply` reads as a compaction: its reply
+ * has one, or is still to come. One that ended without (refused before it
+ * started) keeps its bubble, with whatever the reply said.
+ */
+const compacting = (reply: TranscriptMessage | undefined) =>
+    !reply || hasCompaction(reply) || (reply.role === "assistant" && reply.status === "streaming");
+
+/** A `/compact` on its way, before its reply has said anything. */
+function PendingCompaction() {
+    return (
+        <CompactionRow
+            part={{ kind: "compaction", id: "pending", status: "running", auto: false }}
+            streaming
+        />
+    );
+}
 
 /**
  * A chat's messages, oldest first. While a turn streams it keeps the newest
@@ -104,8 +133,16 @@ export function Transcript({
                         ref={contentRef}
                         className={cn("mx-auto flex w-full max-w-3xl flex-col gap-5 py-6", className)}
                     >
-                        {messages.map((message) =>
-                            message.role === "user" ? (
+                        {messages.map((message, i) =>
+                            isBareCompact(message) &&
+                            message.delivery?.state !== "failed" &&
+                            compacting(messages[i + 1]) ? (
+                                // The reply's divider stands for it; until
+                                // that arrives, one of its own.
+                                hasCompaction(messages[i + 1]) ? null : (
+                                    <PendingCompaction key={message.id} />
+                                )
+                            ) : message.role === "user" ? (
                                 <UserMessage
                                     key={message.id}
                                     message={message}

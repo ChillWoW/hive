@@ -7,7 +7,9 @@
 
 use std::collections::{HashMap, HashSet};
 
-use hive_proto::{AgentEvent, DoneStatus, TodoItem, TodoStatus, ToolCall, ToolDiff};
+use hive_proto::{
+    AgentEvent, CompactionStatus, DoneStatus, TodoItem, TodoStatus, ToolCall, ToolDiff,
+};
 use serde_json::Value;
 
 #[derive(Default)]
@@ -30,6 +32,8 @@ pub struct Normalizer {
     pub plan_seen: bool,
     /// The last error the server gave up on, for a failed turn without one.
     pub last_error: Option<String>,
+    /// The turn is a `/compact`: a compaction in it isn't automatic.
+    pub compact_turn: bool,
 }
 
 #[derive(Clone, PartialEq)]
@@ -63,6 +67,7 @@ impl Normalizer {
     /// Clears per-turn state.
     pub fn start_turn(&mut self) {
         self.plan_seen = false;
+        self.compact_turn = false;
         self.last_error = None;
         self.streamed.clear();
         if let Some(thread) = &self.thread_id {
@@ -236,10 +241,17 @@ impl Normalizer {
                 let review = str_field(item, "review").unwrap_or_default().to_owned();
                 self.text(thread, &id, &review).into_iter().collect()
             }
-            "contextCompaction" if completed => self
-                .text(thread, &id, "Context compacted.")
-                .into_iter()
-                .collect(),
+            "contextCompaction" if main => vec![AgentEvent::Compaction {
+                status: if completed {
+                    CompactionStatus::Completed
+                } else {
+                    CompactionStatus::Running
+                },
+                auto: !self.compact_turn,
+                before_tokens: None,
+                after_tokens: None,
+                error: None,
+            }],
             "reasoning" => {
                 if !completed || self.streamed.contains(&id) {
                     return Vec::new();

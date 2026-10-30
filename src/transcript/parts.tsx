@@ -1,5 +1,6 @@
 import {
     ArrowElbowDownRightIcon,
+    ArrowsInLineVerticalIcon,
     ChatCircleDotsIcon,
     CircleNotchIcon,
     RobotIcon,
@@ -7,6 +8,7 @@ import {
 } from "@phosphor-icons/react";
 import type { FinishedTask, MessagePart } from "@/proto";
 import { cn } from "@/lib/cn";
+import { formatTokens } from "@/usage/format";
 import type { ToolPart } from "./tools";
 
 type Part<K extends MessagePart["kind"]> = Extract<MessagePart, { kind: K }>;
@@ -95,6 +97,56 @@ export function WakeRow({ part }: { part: Part<"wake"> }) {
                     {part.finished.map((t) => t.description).join(", ")}
                 </span>
             )}
+        </div>
+    );
+}
+
+/** The words for a compaction, as its divider shows it. */
+function compactionLabel(part: Part<"compaction">, live: boolean): string {
+    switch (part.status) {
+        case "running":
+            return live ? "Compacting context" : "Context compaction stopped";
+        case "completed":
+            return part.auto ? "Context compacted automatically" : "Context compacted";
+        case "failed":
+            return "Context compaction failed";
+        case "stopped":
+            return "Context compaction stopped";
+    }
+}
+
+/**
+ * A context compaction (`/compact`, or the agent's own): a divider across
+ * the transcript, as in t3code — shimmering while it runs, then where it
+ * ended with the context's size before and after, or why it failed.
+ */
+export function CompactionRow({ part, streaming }: { part: Part<"compaction">; streaming: boolean }) {
+    const live = part.status === "running" && streaming;
+    const failed = part.status === "failed";
+    const tokens =
+        part.status === "completed" && (part.beforeTokens ?? part.afterTokens) !== undefined
+            ? `${part.beforeTokens !== undefined ? formatTokens(part.beforeTokens) : "?"} → ${
+                  part.afterTokens !== undefined ? formatTokens(part.afterTokens) : "?"
+              } tokens`
+            : null;
+    return (
+        <div role="separator" className="flex min-w-0 items-center gap-3 py-1 text-xs">
+            <span className="h-px flex-1 bg-dark-700" />
+            <span className="flex min-w-0 max-w-[80%] items-center gap-1.5">
+                {failed ? (
+                    <WarningCircleIcon className="size-3.5 shrink-0 text-danger" weight="fill" />
+                ) : (
+                    <ArrowsInLineVerticalIcon className="size-3.5 shrink-0 text-dark-200" />
+                )}
+                <span className={cn("shrink-0 text-dark-200", live && "shimmer")}>
+                    {compactionLabel(part, live)}
+                </span>
+                {tokens && <span className="shrink-0 text-dark-250 tabular-nums">{tokens}</span>}
+                {failed && part.error && (
+                    <span className="min-w-0 truncate text-danger">· {part.error}</span>
+                )}
+            </span>
+            <span className="h-px flex-1 bg-dark-700" />
         </div>
     );
 }

@@ -1273,6 +1273,15 @@ impl Engine {
             self.set_background(chat_id, runtime, st, tasks);
             return;
         }
+        if let AgentEvent::GoalChanged { goal } = event {
+            if let Some(session) = st.session.as_mut().filter(|s| s.goal != goal) {
+                session.goal = goal;
+                session.updated_at = now_ms();
+                let session = session.clone();
+                self.publish_session(chat_id, Some(session));
+            }
+            return;
+        }
         if let Some(run) = &mut st.run {
             run.activity += 1;
             match &event {
@@ -1489,6 +1498,7 @@ impl Engine {
                 commands: st.commands.clone(),
                 background: Vec::new(),
                 secrets: Vec::new(),
+                goal: None,
             }),
         };
         let session = session.clone();

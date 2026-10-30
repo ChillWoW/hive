@@ -6,7 +6,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use hive_proto::{
-    AccessMode, AgentEvent, DoneStatus, HarnessId, McpServer, RunRequest, SandboxLevel, UserInputAnswer,
+    AccessMode, AgentEvent, DoneStatus, Goal, GoalStatus, HarnessId, McpServer, RunRequest, SandboxLevel, UserInputAnswer,
     UserInputQuestion,
 };
 use serde_json::{json, Map, Value};
@@ -14,6 +14,7 @@ use tokio::process::Child;
 use tokio::sync::mpsc;
 
 use super::models::{self, FAST_MODE, SERVICE_TIER};
+use super::goal::{self, GoalCommand};
 use super::normalize::Normalizer;
 use super::rpc::{Client, Incoming, Server};
 use super::skills::{self, Skill};
@@ -29,6 +30,9 @@ const INTERRUPT_SETTLE: Duration = Duration::from_secs(5);
 const EXIT_GRACE: Duration = Duration::from_secs(3);
 /// The turn that follows an approved plan.
 const IMPLEMENT_PROMPT: &str = "Implement the plan.";
+/// How long a finished turn waits, while a goal is active, for Codex to
+/// start the next turn toward it in the same reply.
+const GOAL_CONTINUATION_GRACE: Duration = Duration::from_secs(5);
 
 /// What the session was started for.
 pub(super) struct Launch {
@@ -98,6 +102,12 @@ struct Turn {
     interrupt_pending: bool,
     /// Waiting on whether to implement its plan; no turn runs meanwhile.
     awaiting_plan: bool,
+    /// A command Hive runs itself (`/goal`, `/feedback`): no model turn,
+    /// ended by its `Reply::Local`.
+    local: bool,
+    /// Started toward a goal set (or resumed) paused: made active once the
+    /// turn is under way, so Codex never starts one of its own first.
+    activate_goal: bool,
 }
 
 /// A server request (or our own plan question) waiting on the user, keyed by
@@ -130,6 +140,14 @@ enum ApprovalKind {
 enum Reply {
     TurnStarted(Result<Value, String>),
     Skills(Vec<Skill>),
+    /// A command Hive ran itself: its reply, or why it failed; with the
+    /// goal it left, when it read or changed it.
+    Local {
+        result: Result<String, String>,
+        goal: Option<Option<Goal>>,
+    },
+    /// The thread's goal, read as the session opened.
+    Goal(Option<Goal>),
 }
 
 struct Session {
@@ -165,6 +183,11 @@ struct Session {
     replies_rx: mpsc::UnboundedReceiver<Reply>,
     closing: bool,
     plans: u64,
+    /// The thread's goal, as last reported.
+    goal: Option<Goal>,
+    /// A turn finished with the goal active: the reply stays open until
+    /// then for the next turn toward it.
+    continuation_deadline: Option<tokio::time::Instant>,
 }
 
 /// The consumer dropped the event stream.
@@ -328,6 +351,15 @@ impl Session {
                 }
             });
         }
+        if !launch.title {
+            let get = client.request("thread/goal/get", json!({ "threadId": thread_id }));
+            let replies = replies.clone();
+            tokio::spawn(async move {
+                if let Ok(result) = get.await {
+                    let _ = replies.send(Reply::Goal(goal::goal(&result["goal"])));
+                }
+            });
+        }
         let normalizer = Normalizer::new(thread_id.clone());
         Ok(Self {
             client,
@@ -361,6 +393,8 @@ impl Session {
             replies_rx,
             closing: false,
             plans: 0,
+            goal: None,
+            continuation_deadline: None,
         })
     }
 
@@ -404,6 +438,8 @@ impl Session {
                 },
                 Some(reply) = self.replies_rx.recv() => self.on_reply(reply).await,
                 _ = sleep_until(self.interrupt_deadline) => self.settle_interrupt().await,
+                // No next turn came: the goal's work is done for now.
+                _ = sleep_until(self.continuation_deadline) => self.end_turn(DoneStatus::Completed, None).await,
             };
             if outcome.is_err() {
                 return; // `kill_on_drop` takes the server down.
@@ -438,9 +474,21 @@ impl Session {
             plan,
             interrupt_pending: false,
             awaiting_plan: false,
+            local: false,
+            activate_goal: false,
         });
         let text = prompt.text.trim();
+        if prompt.files.is_empty() && user && !self.title {
+            if let Some(reason) = goal::parse_feedback(text) {
+                self.feedback(reason);
+                return Ok(());
+            }
+            if let Some(command) = goal::parse_goal(text) {
+                return self.goal_command(command, plan).await;
+            }
+        }
         let request = if prompt.files.is_empty() && text == "/compact" {
+            self.normalizer.compact_turn = true;
             self.client.request(
                 "thread/compact/start",
                 json!({ "threadId": self.thread_id }),
@@ -498,8 +546,155 @@ impl Session {
         params
     }
 
+    /// `/feedback [reason]`: the thread and Codex's logs to OpenAI.
+    fn feedback(&mut self, reason: String) {
+        if let Some(turn) = &mut self.turn {
+            turn.local = true;
+        }
+        let upload = self.client.request(
+            "feedback/upload",
+            json!({
+                "classification": "bug",
+                "includeLogs": true,
+                "reason": (!reason.is_empty()).then_some(reason),
+                "threadId": self.thread_id,
+            }),
+        );
+        let replies = self.replies.clone();
+        tokio::spawn(async move {
+            let result = upload
+                .await
+                .map(|r| {
+                    let id = r["threadId"].as_str().unwrap_or_default();
+                    format!("Feedback sent to OpenAI.\n\nThread ID: `{id}`")
+                })
+                .map_err(|e| format!("Couldn't send feedback to OpenAI: {e}"));
+            let _ = replies.send(Reply::Local { result, goal: None });
+        });
+    }
+
+    /// `/goal …`. Setting or resuming one starts a turn toward it; the
+    /// rest only read or change it, answering without the model.
+    async fn goal_command(&mut self, command: GoalCommand, plan: bool) -> Result<(), Gone> {
+        let thread = self.thread_id.clone();
+        type Done = fn(&Value) -> (String, Option<Option<Goal>>);
+        let (request, done): (_, Done) = match command {
+            GoalCommand::Set(objective) => {
+                // Paused until the turn is under way, then active.
+                tokio::spawn(self.client.request(
+                    "thread/goal/set",
+                    json!({ "threadId": thread, "objective": objective, "status": "paused", "origin": "user" }),
+                ));
+                return self.goal_turn(goal::start_prompt(&objective), plan).await;
+            }
+            GoalCommand::Resume => {
+                return self.goal_turn(goal::RESUME_PROMPT.into(), plan).await;
+            }
+            GoalCommand::Show => (
+                self.client
+                    .request("thread/goal/get", json!({ "threadId": thread })),
+                |r| {
+                    let g = goal::goal(&r["goal"]);
+                    (goal::describe(g.as_ref()), Some(g))
+                },
+            ),
+            GoalCommand::Clear => (
+                self.client.request(
+                    "thread/goal/clear",
+                    json!({ "threadId": thread, "origin": "user" }),
+                ),
+                |_| ("Goal cleared.".into(), Some(None)),
+            ),
+            GoalCommand::Pause => (
+                self.client.request(
+                    "thread/goal/set",
+                    json!({ "threadId": thread, "status": "paused", "origin": "user" }),
+                ),
+                |r| ("Goal paused.".into(), Some(goal::goal(&r["goal"]))),
+            ),
+        };
+        if let Some(turn) = &mut self.turn {
+            turn.local = true;
+        }
+        let replies = self.replies.clone();
+        tokio::spawn(async move {
+            let (result, goal) = match request.await {
+                Ok(r) => {
+                    let (text, goal) = done(&r);
+                    (Ok(text), goal)
+                }
+                // Pausing or clearing nothing isn't a failure.
+                Err(e) if e.contains("no goal exists") => {
+                    (Ok(goal::describe(None)), Some(None))
+                }
+                Err(e) => (Err(e), None),
+            };
+            let _ = replies.send(Reply::Local { result, goal });
+        });
+        Ok(())
+    }
+
+    /// A model turn toward the goal, which becomes active once it starts.
+    async fn goal_turn(&mut self, text: String, plan: bool) -> Result<(), Gone> {
+        if let Some(turn) = &mut self.turn {
+            turn.activate_goal = true;
+        }
+        let prompt = Prompt {
+            text,
+            files: Vec::new(),
+        };
+        let params = self.turn_params(&prompt, plan).await;
+        let request = self.client.request("turn/start", params);
+        let replies = self.replies.clone();
+        tokio::spawn(async move {
+            let _ = replies.send(Reply::TurnStarted(request.await));
+        });
+        Ok(())
+    }
+
+    async fn set_goal(&mut self, goal: Option<Goal>) -> Result<(), Gone> {
+        if self.goal == goal {
+            return Ok(());
+        }
+        self.goal = goal.clone();
+        self.emit(AgentEvent::GoalChanged { goal }).await
+    }
+
+    fn goal_active(&self) -> bool {
+        self.goal
+            .as_ref()
+            .is_some_and(|g| g.status == GoalStatus::Active)
+    }
+
+    /// Stopping the work stops the goal from starting more.
+    fn pause_goal(&self) {
+        if self.goal_active() {
+            tokio::spawn(self.client.request(
+                "thread/goal/set",
+                json!({ "threadId": self.thread_id, "status": "paused", "origin": "user" }),
+            ));
+        }
+    }
+
     async fn on_reply(&mut self, reply: Reply) -> Result<(), Gone> {
         match reply {
+            Reply::Goal(goal) => self.set_goal(goal).await,
+            Reply::Local { result, goal } => {
+                if let Some(goal) = goal {
+                    self.set_goal(goal).await?;
+                }
+                // Stopped meanwhile: that turn is over.
+                if !self.turn.as_ref().is_some_and(|t| t.local) {
+                    return Ok(());
+                }
+                match result {
+                    Ok(text) => {
+                        self.emit(AgentEvent::TextDelta { text }).await?;
+                        self.end_turn(DoneStatus::Completed, None).await
+                    }
+                    Err(e) => self.end_turn(DoneStatus::Errored, Some(e)).await,
+                }
+            }
             Reply::Skills(skills) => {
                 self.skills_cache
                     .lock()
@@ -509,6 +704,15 @@ impl Session {
                 self.report_commands().await
             }
             Reply::TurnStarted(Ok(result)) => {
+                if self.turn.as_ref().is_some_and(|t| t.activate_goal) {
+                    if let Some(turn) = &mut self.turn {
+                        turn.activate_goal = false;
+                    }
+                    tokio::spawn(self.client.request(
+                        "thread/goal/set",
+                        json!({ "threadId": self.thread_id, "status": "active", "origin": "user" }),
+                    ));
+                }
                 if let (Some(turn), Some(id)) = (&mut self.turn, result["turn"]["id"].as_str()) {
                     if turn.id.is_none() {
                         turn.id = Some(id.to_owned());
@@ -546,6 +750,26 @@ impl Session {
         match method {
             "turn/started" if main => {
                 let id = params["turn"]["id"].as_str().map(str::to_owned);
+                // The next turn toward the goal: same reply.
+                self.continuation_deadline = None;
+                if self.turn.is_none() && self.goal_active() && !self.closing {
+                    // Codex went on toward the goal after the reply ended:
+                    // a reply of its own.
+                    self.emit(AgentEvent::BackgroundTurn {
+                        finished: Vec::new(),
+                    })
+                    .await?;
+                    self.normalizer.start_turn();
+                    self.turn = Some(Turn {
+                        id,
+                        plan: false,
+                        interrupt_pending: false,
+                        awaiting_plan: false,
+                        local: false,
+                        activate_goal: false,
+                    });
+                    return Ok(());
+                }
                 if let Some(turn) = &mut self.turn {
                     if turn.id.is_none() && !turn.awaiting_plan {
                         turn.id = id;
@@ -582,8 +806,27 @@ impl Session {
                         .or_else(|| self.normalizer.last_error.clone())
                         .unwrap_or_else(|| "Codex couldn't finish this turn.".into())
                 });
+                // An active goal goes on in another turn: wait for it.
+                if status == DoneStatus::Completed
+                    && self.goal_active()
+                    && !self.closing
+                    && self.queue.is_empty()
+                    && !self.turn.as_ref().is_some_and(|t| t.plan)
+                {
+                    if let Some(turn) = &mut self.turn {
+                        turn.id = None;
+                    }
+                    self.continuation_deadline =
+                        Some(tokio::time::Instant::now() + GOAL_CONTINUATION_GRACE);
+                    return Ok(());
+                }
                 self.on_turn_completed(status, error).await
             }
+            "thread/goal/updated" if main => {
+                let goal = goal::goal(&params["goal"]);
+                self.set_goal(goal).await
+            }
+            "thread/goal/cleared" if main => self.set_goal(None).await,
             "serverRequest/resolved" => {
                 let rpc = &params["requestId"];
                 let resolved: Vec<String> =
@@ -667,6 +910,7 @@ impl Session {
     async fn end_turn(&mut self, status: DoneStatus, error: Option<String>) -> Result<(), Gone> {
         self.turn = None;
         self.interrupt_deadline = None;
+        self.continuation_deadline = None;
         let open: Vec<String> = self.pending.drain().map(|(id, _)| id).collect();
         for request_id in open {
             self.emit(AgentEvent::InputResolved { request_id }).await?;
@@ -737,7 +981,10 @@ impl Session {
                 let Some(turn) = &self.turn else {
                     return Ok(());
                 };
-                if turn.awaiting_plan {
+                self.pause_goal();
+                // Nothing of the model's to stop: a command of Hive's, or
+                // a reply waiting on the goal's next turn.
+                if turn.awaiting_plan || turn.local || self.continuation_deadline.is_some() {
                     return self.end_turn(DoneStatus::Interrupted, None).await;
                 }
                 if self.interrupt_deadline.is_none() {

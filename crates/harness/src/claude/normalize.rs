@@ -3,8 +3,8 @@
 use std::collections::{HashMap, HashSet};
 
 use hive_proto::{
-    AgentEvent, BackgroundTask, BackgroundTaskKind, DoneStatus, FinishedTask, HarnessId, TaskEnd,
-    TodoItem, TodoStatus, ToolCall,
+    AgentEvent, BackgroundTask, BackgroundTaskKind, CompactionStatus, DoneStatus, FinishedTask,
+    HarnessId, TaskEnd, TodoItem, TodoStatus, ToolCall,
 };
 use serde_json::Value;
 
@@ -30,6 +30,12 @@ pub(crate) struct Normalizer {
     /// Tasks that ended since the last turn: what a turn the CLI starts on
     /// its own is about.
     finished: Vec<FinishedTask>,
+    /// The turn so far streamed text, or compacted: either way its
+    /// `result` isn't a reply to show.
+    turn_spoke: bool,
+    /// The turn is one the CLI started on its own; its `result` is never
+    /// a reply.
+    quiet_turn: bool,
     pub session_id: Option<String>,
 }
 
@@ -109,6 +115,43 @@ impl Normalizer {
                         .collect();
                     vec![self.background_event()]
                 }
+                // `compacting` as a compaction starts; how it ended once
+                // it has (a success also gets a `compact_boundary`).
+                "status" => {
+                    if f.status.as_deref() == Some("compacting") {
+                        self.turn_spoke = true;
+                        return compaction(CompactionStatus::Running, None);
+                    }
+                    let Some(result) = f.compact_result.as_deref() else {
+                        return Vec::new();
+                    };
+                    match result {
+                        "success" => Vec::new(),
+                        "failed" => compaction(
+                            CompactionStatus::Failed,
+                            f.compact_error.filter(|e| !e.trim().is_empty()),
+                        ),
+                        _ => compaction(CompactionStatus::Stopped, None),
+                    }
+                }
+                "compact_boundary" => {
+                    self.turn_spoke = true;
+                    let meta = f.compact_metadata.unwrap_or_default();
+                    let mut out = vec![AgentEvent::Compaction {
+                        status: CompactionStatus::Completed,
+                        auto: meta.trigger == "auto",
+                        before_tokens: meta.pre_tokens,
+                        after_tokens: meta.post_tokens,
+                        error: None,
+                    }];
+                    if let Some(tokens) = meta.post_tokens {
+                        out.push(AgentEvent::ContextUsage {
+                            tokens: Some(tokens),
+                            window: None,
+                        });
+                    }
+                    out
+                }
                 "task_started" => {
                     let (Some(task), Some(tool)) = (f.task_id, f.tool_use_id) else {
                         return Vec::new();
@@ -131,6 +174,9 @@ impl Normalizer {
                 let delta = f.event.delta;
                 let event = match delta.kind.as_str() {
                     "text_delta" if !delta.text.is_empty() => {
+                        if f.parent_tool_use_id.is_none() {
+                            self.turn_spoke = true;
+                        }
                         AgentEvent::TextDelta { text: delta.text }
                     }
                     "thinking_delta" if !delta.thinking.is_empty() => AgentEvent::ReasoningDelta {
@@ -227,6 +273,31 @@ impl Normalizer {
                     self.session_id = Some(id.clone());
                 }
                 let mut out = Vec::new();
+                // A local command (`/context`, `/cost`, `/mcp`, …) answers
+                // only here; a model turn's text already streamed. A
+                // `/compact`'s ("Not enough messages to compact.") isn't a
+                // reply either.
+                let spoke = std::mem::take(&mut self.turn_spoke);
+                let quiet = std::mem::take(&mut self.quiet_turn);
+                let result = f.result.as_deref().map(str::trim).filter(|t| !t.is_empty());
+                if let Some(text) = result.filter(|_| {
+                    !spoke && !quiet && !interrupted && f.subtype == "success" && !f.is_error
+                }) {
+                    out.push(if f.local_command.as_deref() == Some("compact") {
+                        // It never started: the reason is the outcome.
+                        AgentEvent::Compaction {
+                            status: CompactionStatus::Failed,
+                            auto: false,
+                            before_tokens: None,
+                            after_tokens: None,
+                            error: Some(text.to_owned()),
+                        }
+                    } else {
+                        AgentEvent::TextDelta {
+                            text: text.to_owned(),
+                        }
+                    });
+                }
                 if let Some(window) = self.context_window(&f.model_usage) {
                     out.push(AgentEvent::ContextUsage {
                         tokens: None,
@@ -286,7 +357,10 @@ impl Normalizer {
     }
 
     /// The tasks that ended since the last turn, for the turn they woke.
+    /// The turn is one the CLI started on its own, so its `result` isn't
+    /// shown as a reply.
     pub fn take_finished(&mut self) -> Vec<FinishedTask> {
+        self.quiet_turn = true;
         std::mem::take(&mut self.finished)
     }
 
@@ -300,6 +374,17 @@ impl Normalizer {
             tasks: self.background.clone(),
         }
     }
+}
+
+/// A compaction starting or ending without numbers (`status` frames).
+fn compaction(status: CompactionStatus, error: Option<String>) -> Vec<AgentEvent> {
+    vec![AgentEvent::Compaction {
+        status,
+        auto: false,
+        before_tokens: None,
+        after_tokens: None,
+        error,
+    }]
 }
 
 /// A `task_notification` status; `None` while it hasn't ended.
@@ -506,6 +591,91 @@ mod tests {
             [AgentEvent::SessionStarted { session_id, .. }] if session_id == "s1"
         ));
         assert!(normalize(&mut n, init).is_empty());
+    }
+
+    #[test]
+    fn compaction_runs_then_lands_with_its_numbers() {
+        let mut n = Normalizer::default();
+        let running = normalize(
+            &mut n,
+            json!({"type":"system","subtype":"status","status":"compacting"}),
+        );
+        assert!(matches!(
+            running.as_slice(),
+            [AgentEvent::Compaction {
+                status: CompactionStatus::Running,
+                ..
+            }]
+        ));
+        let boundary = normalize(
+            &mut n,
+            json!({"type":"system","subtype":"compact_boundary","compact_metadata":{"trigger":"manual","pre_tokens":1000,"post_tokens":200}}),
+        );
+        assert!(matches!(
+            boundary.as_slice(),
+            [
+                AgentEvent::Compaction {
+                    status: CompactionStatus::Completed,
+                    auto: false,
+                    before_tokens: Some(1000),
+                    after_tokens: Some(200),
+                    ..
+                },
+                AgentEvent::ContextUsage {
+                    tokens: Some(200),
+                    ..
+                }
+            ]
+        ));
+        // The result echoes the CLI's stdout; not a reply.
+        let result = normalize(
+            &mut n,
+            json!({"type":"result","subtype":"success","result":"Compacted","local_command":"compact"}),
+        );
+        assert!(!result.iter().any(|e| matches!(
+            e,
+            AgentEvent::TextDelta { .. } | AgentEvent::Compaction { .. }
+        )));
+    }
+
+    #[test]
+    fn a_compaction_that_never_started_fails_with_the_reason() {
+        let mut n = Normalizer::default();
+        let result = normalize(
+            &mut n,
+            json!({"type":"result","subtype":"success","result":"Not enough messages to compact.","local_command":"compact"}),
+        );
+        assert!(matches!(
+            result.first(),
+            Some(AgentEvent::Compaction { status: CompactionStatus::Failed, error: Some(e), .. }) if e.starts_with("Not enough")
+        ));
+    }
+
+    #[test]
+    fn a_local_commands_output_arrives_as_the_result() {
+        let mut n = Normalizer::default();
+        let result = normalize(
+            &mut n,
+            json!({"type":"result","subtype":"success","result":"Total cost: $0.01\n"}),
+        );
+        assert_eq!(
+            result.first(),
+            Some(&AgentEvent::TextDelta {
+                text: "Total cost: $0.01".into()
+            })
+        );
+        // A model turn's text already streamed: the result repeats it.
+        normalize(
+            &mut n,
+            json!({"type":"stream_event","event":{"type":"content_block_delta","delta":{"type":"text_delta","text":"hi"}}}),
+        );
+        let result = normalize(
+            &mut n,
+            json!({"type":"result","subtype":"success","result":"hi"}),
+        );
+        assert!(!result
+            .iter()
+            .any(|e| matches!(e, AgentEvent::TextDelta { .. })));
     }
 
     #[test]

@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use crate::agent::{
-    AccessMode, BackgroundTask, HarnessId, ReasoningLevel, SandboxLevel, SlashCommand,
+    AccessMode, BackgroundTask, Goal, HarnessId, ReasoningLevel, SandboxLevel, SlashCommand,
 };
 
 /// The run settings a chat sends with each turn; the composer edits these.
@@ -148,6 +148,10 @@ pub struct Session {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     #[ts(as = "Option<Vec<SecretRequest>>")]
     pub secrets: Vec<SecretRequest>,
+    /// The goal the agent keeps working toward (Codex's `/goal`), while one
+    /// is set.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub goal: Option<Goal>,
 }
 
 /// An agent asking the user for a secret (an API key, a token) in a card

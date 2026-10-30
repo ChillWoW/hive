@@ -12,7 +12,9 @@
 
 use std::collections::{HashMap, HashSet, VecDeque};
 
-use hive_proto::{AgentEvent, DoneStatus, McpServer, TodoItem, TodoStatus, ToolCall};
+use hive_proto::{
+    AgentEvent, CompactionStatus, DoneStatus, McpServer, TodoItem, TodoStatus, ToolCall,
+};
 use serde_json::Value;
 
 /// Tool output kept on a result; the agent saw all of it.
@@ -46,6 +48,8 @@ pub(super) struct Normalizer {
     pub last_error: Option<String>,
     /// The model the root session last ran.
     pub model: Option<String>,
+    /// The turn is a `/compact`: a compaction in it isn't automatic.
+    pub compact_turn: bool,
 }
 
 impl Normalizer {
@@ -60,6 +64,7 @@ impl Normalizer {
     pub fn start_turn(&mut self) {
         self.usage = (0, 0);
         self.text_seen = false;
+        self.compact_turn = false;
         self.last_error = None;
     }
 
@@ -247,6 +252,26 @@ impl Normalizer {
                 let reason = error_message(&data["error"]);
                 vec![AgentEvent::Error {
                     message: format!("The model provider keeps failing; OpenCode is retrying ({reason})."),
+                }]
+            }
+            "session.compaction.started"
+            | "session.compaction.ended"
+            | "session.compaction.failed"
+                if root =>
+            {
+                let status = match kind {
+                    "session.compaction.started" => CompactionStatus::Running,
+                    "session.compaction.ended" => CompactionStatus::Completed,
+                    _ => CompactionStatus::Failed,
+                };
+                let error = (status == CompactionStatus::Failed && !data["error"].is_null())
+                    .then(|| error_message(&data["error"]));
+                vec![AgentEvent::Compaction {
+                    status,
+                    auto: !self.compact_turn,
+                    before_tokens: None,
+                    after_tokens: None,
+                    error,
                 }]
             }
             // A subagent's end; the root's is the session loop's.

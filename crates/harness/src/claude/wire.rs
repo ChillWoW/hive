@@ -59,6 +59,27 @@ pub(crate) struct SystemFrame {
     /// `commands_changed`: the full list again, as `initialize` gave it.
     #[serde(default)]
     pub commands: Option<Vec<Value>>,
+    /// `status`: how a compaction ended (`success`, `failed`, …); absent
+    /// while one starts (`status: "compacting"`).
+    #[serde(default)]
+    pub compact_result: Option<String>,
+    #[serde(default)]
+    pub compact_error: Option<String>,
+    /// `compact_boundary`: what the compaction did.
+    #[serde(default)]
+    pub compact_metadata: Option<CompactMetadata>,
+}
+
+/// `compact_boundary`'s account of a compaction.
+#[derive(Debug, Default, Deserialize)]
+pub(crate) struct CompactMetadata {
+    /// `manual` (`/compact`) or `auto`.
+    #[serde(default)]
+    pub trigger: String,
+    #[serde(default)]
+    pub pre_tokens: Option<u64>,
+    #[serde(default)]
+    pub post_tokens: Option<u64>,
 }
 
 /// One task in `background_tasks_changed`.
@@ -218,6 +239,15 @@ pub(crate) struct ResultFrame {
     pub model_usage: std::collections::BTreeMap<String, Value>,
     #[serde(default)]
     pub session_id: Option<String>,
+    /// The turn's final text; for a local command (`/context`, `/cost`, …)
+    /// the only place its output arrives.
+    #[serde(default)]
+    pub result: Option<String>,
+    #[serde(default)]
+    pub is_error: bool,
+    /// The local command the turn ran (`compact`, …), if any.
+    #[serde(default)]
+    pub local_command: Option<String>,
 }
 
 #[derive(Debug, Default, Deserialize)]

@@ -72,7 +72,9 @@ export function ModelPicker({
     fastMode = true,
     placeholder,
     placement = "top",
-    triggerClassName
+    triggerClassName,
+    open: openProp,
+    onOpenChange
 }: {
     config: ChatConfig | null;
     onChange: (config: ChatConfig) => void;
@@ -81,6 +83,9 @@ export function ModelPicker({
     placeholder?: string;
     placement?: "top" | "bottom";
     triggerClassName?: string;
+    /** Opens the card from outside (the composer's `/model`). */
+    open?: boolean;
+    onOpenChange?: (open: boolean) => void;
 }) {
     const all = useCatalogs();
     const current = useCatalog(config?.harness);
@@ -88,7 +93,12 @@ export function ModelPicker({
     const reasoning = config ? resolveReasoning(model, config) : undefined;
     const fast = fastMode && !!config && isFastMode(model, config);
     const container = usePortalContainer();
-    const [open, setOpen] = useState(false);
+    const [ownOpen, setOwnOpen] = useState(false);
+    const open = openProp ?? ownOpen;
+    const setOpen = (next: boolean) => {
+        setOwnOpen(next);
+        onOpenChange?.(next);
+    };
     const [side, setSide] = useState<Side | null>(null);
 
     if (config && (!current || !model)) {

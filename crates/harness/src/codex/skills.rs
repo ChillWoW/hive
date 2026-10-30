@@ -55,10 +55,16 @@ pub fn commands(skills: &[Skill]) -> Vec<SlashCommand> {
     commands
 }
 
-/// `/compact` and `/review`, which the session turns into their own
-/// app-server requests.
+/// `/compact`, `/review`, `/goal` and `/feedback`, which the session turns
+/// into their own app-server requests.
 pub fn builtin() -> Vec<SlashCommand> {
     vec![
+        SlashCommand {
+            name: "goal".into(),
+            description: "Set a goal Codex keeps working toward until it's done".into(),
+            input_hint: Some("objective, or pause, resume, clear".into()),
+            kind: CommandKind::Command,
+        },
         SlashCommand {
             name: "compact".into(),
             description: "Summarize the conversation to free up context".into(),
@@ -69,6 +75,12 @@ pub fn builtin() -> Vec<SlashCommand> {
             name: "review".into(),
             description: "Review uncommitted changes, or what you describe".into(),
             input_hint: Some("instructions".into()),
+            kind: CommandKind::Command,
+        },
+        SlashCommand {
+            name: "feedback".into(),
+            description: "Send this chat and Codex's logs to OpenAI".into(),
+            input_hint: Some("what went wrong (optional)".into()),
             kind: CommandKind::Command,
         },
     ]
@@ -123,6 +135,6 @@ mod tests {
             .map(|s| s.name.as_str())
             .collect();
         assert_eq!(names, ["pdf", "docs:write"]);
-        assert_eq!(commands(&skills)[2].kind, CommandKind::Skill);
+        assert_eq!(commands(&skills)[builtin().len()].kind, CommandKind::Skill);
     }
 }

@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::agent::{FinishedTask, ToolCall, ToolDiff, UserInputQuestion};
+use crate::agent::{CompactionStatus, FinishedTask, ToolCall, ToolDiff, UserInputQuestion};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "lowercase")]
@@ -83,6 +83,20 @@ pub enum MessagePart {
         id: String,
         finished: Vec<FinishedTask>,
     },
+    /// A context compaction: a divider in the transcript.
+    #[serde(rename_all = "camelCase")]
+    Compaction {
+        id: String,
+        status: CompactionStatus,
+        #[serde(default)]
+        auto: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        before_tokens: Option<u64>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        after_tokens: Option<u64>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        error: Option<String>,
+    },
 }
 
 impl MessagePart {
@@ -93,7 +107,8 @@ impl MessagePart {
             | MessagePart::Tool { id, .. }
             | MessagePart::Input { id, .. }
             | MessagePart::Error { id, .. }
-            | MessagePart::Wake { id, .. } => id,
+            | MessagePart::Wake { id, .. }
+            | MessagePart::Compaction { id, .. } => id,
         }
     }
 }

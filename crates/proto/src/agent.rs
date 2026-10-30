@@ -393,6 +393,46 @@ pub struct TaskOutput {
     pub truncated: bool,
 }
 
+/// A goal the agent keeps working toward across turns until it's met
+/// (Codex's `/goal`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(optional_fields)]
+pub struct Goal {
+    pub objective: String,
+    pub status: GoalStatus,
+    #[serde(default)]
+    pub tokens_used: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub token_budget: Option<u64>,
+    #[serde(default)]
+    pub seconds_used: u64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub enum GoalStatus {
+    Active,
+    Paused,
+    Blocked,
+    /// The plan's usage limit stopped it.
+    UsageLimited,
+    /// It spent its token budget.
+    BudgetLimited,
+    Complete,
+}
+
+/// Where a context compaction stands.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub enum CompactionStatus {
+    Running,
+    Completed,
+    Failed,
+    /// The turn ended (stopped) before it finished.
+    Stopped,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub enum DoneStatus {
@@ -461,11 +501,33 @@ pub enum AgentEvent {
     AvailableCommands {
         commands: Vec<SlashCommand>,
     },
+    /// The conversation is being summarized to free up context: `/compact`,
+    /// or the agent on its own (`auto`). `Running` first, then where it
+    /// ended; token counts when the harness reports them.
+    #[serde(rename_all = "camelCase")]
+    Compaction {
+        status: CompactionStatus,
+        #[serde(default)]
+        auto: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        before_tokens: Option<u64>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        after_tokens: Option<u64>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        error: Option<String>,
+    },
     /// Every background task the session holds now (agents, shells,
     /// monitors), replacing the last set. Session state, not transcript: the
     /// engine keeps it on [`crate::Session::background`] and never records it.
     BackgroundTasks {
         tasks: Vec<BackgroundTask>,
+    },
+    /// The session's goal now (`None`: cleared), replacing the last. Session
+    /// state like `BackgroundTasks`: kept on [`crate::Session::goal`], never
+    /// recorded.
+    GoalChanged {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        goal: Option<Goal>,
     },
     /// The agent started a turn on its own, between the user's turns:
     /// background work it was waiting on ended (`finished`, possibly empty

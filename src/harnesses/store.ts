@@ -91,6 +91,12 @@ const BROWSER_CATALOGS: HarnessCatalog[] = [
         defaultModel: "gpt-6-luna",
         commands: [
             {
+                name: "goal",
+                description: "Set a goal Codex keeps working toward until it's done",
+                inputHint: "objective, or pause, resume, clear",
+                kind: "command"
+            },
+            {
                 name: "compact",
                 description: "Summarize the conversation to free up context",
                 kind: "command"
@@ -99,6 +105,12 @@ const BROWSER_CATALOGS: HarnessCatalog[] = [
                 name: "review",
                 description: "Review uncommitted changes, or what you describe",
                 inputHint: "instructions",
+                kind: "command"
+            },
+            {
+                name: "feedback",
+                description: "Send this chat and Codex's logs to OpenAI",
+                inputHint: "what went wrong (optional)",
                 kind: "command"
             }
         ],

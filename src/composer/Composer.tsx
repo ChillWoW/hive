@@ -14,11 +14,14 @@ import { cn } from "@/lib/cn";
 import { isMac } from "@/lib/platform";
 import { useSettingsStore } from "@/settings/store";
 import { useWorkspaceFiles } from "@/files";
+import { refreshCatalogs, useCatalog } from "@/harnesses";
+import { useUsageStore } from "@/usage/store";
 import { iconButtonClassName, Tooltip } from "@/ui";
 import { ModelPicker } from "./ModelPicker";
 import { AccessPicker } from "./AccessPicker";
 import { MentionMenu } from "./MentionMenu";
 import { SlashMenu } from "./SlashMenu";
+import { appCommands, type AppCommandId, standaloneAppCommand } from "./slashCommands";
 import { useMentionMenu } from "./useMentionMenu";
 import { useSlashMenu } from "./useSlashMenu";
 import { composer, useComposerStore, useDraft, useDraftAttachments } from "./store";
@@ -146,12 +149,40 @@ export function Composer({
         });
     };
 
+    const [modelOpen, setModelOpen] = useState(false);
+    const planOffered = !!useCatalog(config.harness)?.capabilities.plan;
+    const app = appCommands({ plan: planOffered, planOn: config.plan });
+
+    /** Runs one of Hive's own `/` commands. */
+    const runApp = (id: AppCommandId) => {
+        switch (id) {
+            case "model":
+                void refreshCatalogs();
+                setModelOpen(true);
+                break;
+            case "plan":
+            case "default":
+                if (planOffered) onConfigChange({ ...config, plan: id === "plan" });
+                break;
+            case "usage-limits": {
+                const usage = useUsageStore.getState();
+                usage.setMetric("limits");
+                usage.setOpen(true);
+                break;
+            }
+        }
+    };
+
     const slash = useSlashMenu({
         draft,
         caret,
         commands,
+        app,
+        started: chatId !== null,
+        attached: attachments.length > 0,
         enabled: focused,
-        complete
+        complete,
+        onApp: runApp
     });
 
     // Listed while the field has focus, so the first `@` rarely waits.
@@ -307,6 +338,20 @@ export function Composer({
             return;
         }
         if (!content || !filesReady) return;
+        // `/plan` and the like on their own run here; they never reach the agent.
+        const standalone =
+            attachments.length === 0
+                ? standaloneAppCommand(prompt, [
+                      "model",
+                      "usage-limits",
+                      ...(planOffered ? (["plan", "default"] as const) : [])
+                  ])
+                : null;
+        if (standalone) {
+            setDraft("");
+            runApp(standalone);
+            return;
+        }
         const files = attachments.flatMap((a) => (a.attachment ? [a.attachment] : []));
         if (onSend(prompt, files) !== false) {
             setDraft("");
@@ -563,6 +608,8 @@ export function Composer({
                             config={config}
                             onChange={onConfigChange}
                             locked={lockedHarness}
+                            open={modelOpen}
+                            onOpenChange={setModelOpen}
                         />
                         <Tooltip>
                             <Tooltip.Trigger

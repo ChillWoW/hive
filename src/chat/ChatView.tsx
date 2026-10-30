@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
     chats,
     useChat,
@@ -27,7 +27,8 @@ import { Transcript } from "@/transcript";
 import { MorphHeight } from "@/ui";
 import { AgentUpdates } from "./AgentUpdates";
 import { BackgroundTasks } from "./BackgroundTasks";
-import { ContextRing } from "./ContextRing";
+import { type CompactAction, ContextRing } from "./ContextRing";
+import { GoalTray } from "./GoalTray";
 import { QueuedTray } from "./QueuedTray";
 import { SecretRequestCard } from "./SecretRequestCard";
 import { UsageRing } from "./UsageRing";
@@ -135,11 +136,50 @@ export function ChatView() {
         sendTo(text, message.attachments ?? []);
     };
 
+    // The goal tray's Clear, mid-turn: sent once the stopped turn has ended.
+    const [clearGoal, setClearGoal] = useState(false);
+    useEffect(() => {
+        if (!clearGoal || busy) return;
+        setClearGoal(false);
+        if (chat && session?.goal) sendTo("/goal clear");
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [clearGoal, busy]);
+
+    // The ring's Compact context: a started chat whose harness has `/compact`.
+    const compact: CompactAction | undefined =
+        chat && commands.some((c) => c.kind === "command" && c.name === "compact")
+            ? {
+                  run: () => sendTo("/compact"),
+                  disabled: !shown.some((m) => m.role === "assistant")
+                      ? "Start a conversation before compacting."
+                      : busy
+                        ? "Compacting waits until the agent finishes."
+                        : undefined
+              }
+            : undefined;
+
     const hero = !chatId && shown.length === 0;
 
     const bottom = (
         <div className="shrink-0 px-6 pb-3">
             <div className="mx-auto w-full max-w-3xl">
+                {chat && session?.goal && !input && !secret && (
+                    <GoalTray
+                        goal={session.goal}
+                        working={busy}
+                        onCommand={(arg) => {
+                            if (arg === "resume" || !busy) {
+                                sendTo(`/goal ${arg}`);
+                                return;
+                            }
+                            // Stopping pauses the goal; it's cleared once
+                            // the turn has ended, rather than after Codex
+                            // takes another turn toward it.
+                            setClearGoal(true);
+                            void chats.interrupt(chat.id).catch(() => {});
+                        }}
+                    />
+                )}
                 {chatId && queued.length > 0 && (
                     <QueuedTray chatId={chatId} messages={queued} running={busy} />
                 )}
@@ -230,7 +270,7 @@ export function ChatView() {
                             />
                         )}
                         <UsageRing harness={config.harness} />
-                        <ContextRing usage={chat?.context} />
+                        <ContextRing usage={chat?.context} compact={compact} />
                     </div>
                 </div>
             </div>

@@ -327,6 +327,42 @@ fn describe(event: &AgentEvent) -> String {
                 commands.len() - skills
             )
         }
+        AgentEvent::Compaction {
+            status,
+            auto,
+            before_tokens,
+            after_tokens,
+            error,
+        } => {
+            let status = serde_json::to_value(status).unwrap();
+            let mut line = format!(
+                "{CYAN}● compaction{}: {}{RESET}",
+                if *auto { " (auto)" } else { "" },
+                status.as_str().unwrap_or_default()
+            );
+            if before_tokens.is_some() || after_tokens.is_some() {
+                line.push_str(&format!(
+                    " {DIM}{} → {} tokens{RESET}",
+                    before_tokens.map_or("?".into(), |t| t.to_string()),
+                    after_tokens.map_or("?".into(), |t| t.to_string())
+                ));
+            }
+            if let Some(error) = error {
+                line.push_str(&format!(" {RED}{error}{RESET}"));
+            }
+            line
+        }
+        AgentEvent::GoalChanged { goal: None } => format!("{DIM}● no goal{RESET}"),
+        AgentEvent::GoalChanged { goal: Some(goal) } => {
+            let status = serde_json::to_value(goal.status).unwrap();
+            format!(
+                "{CYAN}● goal ({}): {}{RESET} {DIM}{} tokens · {}s{RESET}",
+                status.as_str().unwrap_or_default(),
+                goal.objective,
+                goal.tokens_used,
+                goal.seconds_used
+            )
+        }
         AgentEvent::BackgroundTurn { finished } => {
             let names: Vec<&str> = finished.iter().map(|t| t.description.as_str()).collect();
             format!("{CYAN}● turn on its own after: {}{RESET}", names.join(", "))

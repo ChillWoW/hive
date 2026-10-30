@@ -3,7 +3,7 @@
 //! Mirrored by `src/transcript/fold.ts` for the live stream in the UI; keep
 //! the two in step.
 
-use crate::agent::{AgentEvent, DoneStatus, ToolCall};
+use crate::agent::{AgentEvent, CompactionStatus, DoneStatus, ToolCall};
 use crate::message::{MessagePart, SubagentStatus};
 
 /// Folds one event into `parts`, in place.
@@ -115,16 +115,70 @@ pub fn fold_event(parts: &mut Vec<MessagePart>, event: &AgentEvent) {
             }
         }
 
-        AgentEvent::Error { message }
-        | AgentEvent::Done {
-            error: Some(message),
-            ..
+        AgentEvent::Compaction {
+            status,
+            auto,
+            before_tokens,
+            after_tokens,
+            error,
         } => {
+            if let Some(MessagePart::Compaction {
+                status: s,
+                auto: a,
+                before_tokens: b,
+                after_tokens: af,
+                error: e,
+                ..
+            }) = running_compaction(parts)
+            {
+                *s = *status;
+                *a |= *auto;
+                if before_tokens.is_some() {
+                    *b = *before_tokens;
+                }
+                if after_tokens.is_some() {
+                    *af = *after_tokens;
+                }
+                if error.is_some() {
+                    *e = error.clone();
+                }
+            } else {
+                let id = format!("c{}", parts.len());
+                parts.push(MessagePart::Compaction {
+                    id,
+                    status: *status,
+                    auto: *auto,
+                    before_tokens: *before_tokens,
+                    after_tokens: *after_tokens,
+                    error: error.clone(),
+                });
+            }
+        }
+
+        AgentEvent::Error { message } => {
             let id = format!("e{}", parts.len());
             parts.push(MessagePart::Error {
                 id,
                 message: message.clone(),
             });
+        }
+
+        AgentEvent::Done { status, error, .. } => {
+            // A compaction the turn never reported the end of ends with it.
+            if let Some(MessagePart::Compaction { status: s, .. }) = running_compaction(parts) {
+                *s = match status {
+                    DoneStatus::Completed => CompactionStatus::Completed,
+                    DoneStatus::Interrupted => CompactionStatus::Stopped,
+                    DoneStatus::Errored => CompactionStatus::Failed,
+                };
+            }
+            if let Some(message) = error {
+                let id = format!("e{}", parts.len());
+                parts.push(MessagePart::Error {
+                    id,
+                    message: message.clone(),
+                });
+            }
         }
 
         // The parent transcript keeps only the spawn chip; this tracks its
@@ -167,12 +221,24 @@ pub fn fold_event(parts: &mut Vec<MessagePart>, event: &AgentEvent) {
             });
         }
 
-        AgentEvent::Done { error: None, .. }
-        | AgentEvent::ContextUsage { .. }
+        AgentEvent::ContextUsage { .. }
         | AgentEvent::Usage { .. }
         | AgentEvent::AvailableCommands { .. }
-        | AgentEvent::BackgroundTasks { .. } => {}
+        | AgentEvent::BackgroundTasks { .. }
+        | AgentEvent::GoalChanged { .. } => {}
     }
+}
+
+fn running_compaction(parts: &mut [MessagePart]) -> Option<&mut MessagePart> {
+    parts.iter_mut().rev().find(|p| {
+        matches!(
+            p,
+            MessagePart::Compaction {
+                status: CompactionStatus::Running,
+                ..
+            }
+        )
+    })
 }
 
 fn find_tool<'a>(parts: &'a mut [MessagePart], id: &str) -> Option<&'a mut MessagePart> {
@@ -280,6 +346,46 @@ mod tests {
                 subagent: Some(SubagentStatus::Done),
                 ..
             }
+        ));
+    }
+
+    #[test]
+    fn a_compaction_updates_in_place_and_ends_with_the_turn() {
+        let compaction = |status, after| AgentEvent::Compaction {
+            status,
+            auto: false,
+            before_tokens: Some(100),
+            after_tokens: after,
+            error: None,
+        };
+        let done = |status| AgentEvent::Done {
+            status,
+            error: None,
+            session_id: None,
+        };
+        let parts = fold(&[
+            compaction(CompactionStatus::Running, None),
+            compaction(CompactionStatus::Completed, Some(20)),
+        ]);
+        assert!(matches!(
+            parts.as_slice(),
+            [MessagePart::Compaction {
+                status: CompactionStatus::Completed,
+                before_tokens: Some(100),
+                after_tokens: Some(20),
+                ..
+            }]
+        ));
+        let parts = fold(&[
+            compaction(CompactionStatus::Running, None),
+            done(DoneStatus::Interrupted),
+        ]);
+        assert!(matches!(
+            parts.as_slice(),
+            [MessagePart::Compaction {
+                status: CompactionStatus::Stopped,
+                ..
+            }]
         ));
     }
 

@@ -31,6 +31,7 @@
 //!
 //! [`AgentEvent::Subagent`]: hive_proto::AgentEvent::Subagent
 
+mod goal;
 mod models;
 mod normalize;
 pub(crate) mod provider;

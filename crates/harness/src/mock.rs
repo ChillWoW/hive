@@ -12,10 +12,10 @@ use std::collections::VecDeque;
 use std::time::Duration;
 
 use hive_proto::{
-    AccessMode, AgentEvent, BackgroundTask, BackgroundTaskKind, CommandKind, DoneStatus, FinishedTask,
-    HarnessCapabilities, HarnessCatalog, HarnessId, Model, ReasoningLevel, RunRequest,
-    SlashCommand, TaskEnd, TaskOutput, TodoItem, TodoStatus, ToolCall, ToolDiff, UserInputAnswer,
-    UserInputQuestion,
+    AccessMode, AgentEvent, BackgroundTask, BackgroundTaskKind, CommandKind, CompactionStatus,
+    DoneStatus, FinishedTask, HarnessCapabilities, HarnessCatalog, HarnessId, Model,
+    ReasoningLevel, RunRequest, SlashCommand, TaskEnd, TaskOutput, TodoItem, TodoStatus, ToolCall,
+    ToolDiff, UserInputAnswer, UserInputQuestion,
 };
 use tokio::sync::mpsc;
 use tokio::time::Instant;
@@ -25,6 +25,12 @@ use crate::{Harness, HarnessError, Run, RunCommand, RunHandle};
 /// A command and a skill, for both menus.
 fn commands() -> Vec<SlashCommand> {
     vec![
+        SlashCommand {
+            name: "compact".into(),
+            description: "Summarize the conversation to free up context".into(),
+            input_hint: None,
+            kind: CommandKind::Command,
+        },
         SlashCommand {
             name: "review".into(),
             description: "Review the current diff".into(),
@@ -473,6 +479,36 @@ fn wake_script(ended: &[BackgroundTask]) -> Vec<Step> {
     s.0
 }
 
+/// `/compact`: a compaction that takes a moment, then the smaller context.
+fn compact_script() -> Vec<Step> {
+    let mut s = Script::default();
+    let compaction = |status, after| AgentEvent::Compaction {
+        status,
+        auto: false,
+        before_tokens: Some(48_200),
+        after_tokens: after,
+        error: None,
+    };
+    s.emit(0, compaction(CompactionStatus::Running, None));
+    s.emit(1800, compaction(CompactionStatus::Completed, Some(6_400)));
+    s.emit(
+        0,
+        AgentEvent::ContextUsage {
+            tokens: Some(6_400),
+            window: None,
+        },
+    );
+    s.emit(
+        100,
+        AgentEvent::Done {
+            status: DoneStatus::Completed,
+            error: None,
+            session_id: Some(SESSION_ID.into()),
+        },
+    );
+    s.0
+}
+
 /// A turn that leaves a dev server and a subagent running in the background.
 fn background_script(turn: usize) -> Vec<Step> {
     let mut s = Script::default();
@@ -567,6 +603,10 @@ fn script(request: &RunRequest, prompt: &str, turn: usize) -> Vec<Step> {
     }
     if prompt.to_lowercase().contains("background") {
         s.0.extend(background_script(turn));
+        return s.0;
+    }
+    if prompt.trim() == "/compact" {
+        s.0.extend(compact_script());
         return s.0;
     }
     s.reasoning(
