@@ -8,7 +8,14 @@ import { WindowControls } from "./WindowControls";
 import { chats, useChatsStore } from "@/chats";
 import { composer } from "@/composer";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { openDiffTab, openTerminalTab, TabStrip } from "@/rightbar";
+import { openFileSearch } from "@/files";
+import {
+    closeShownTab,
+    openDiffTab,
+    openHistoryTab,
+    openTerminalTab,
+    TabStrip
+} from "@/rightbar";
 import { HarnessIcon } from "@/harnesses";
 import { useShortcut } from "@/keybindings";
 import { cn } from "@/lib/cn";
@@ -93,6 +100,11 @@ export function TopBar({ title, harness, className }: TopBarProps) {
     useShortcut("newChat", newChat);
     useShortcut("newTerminal", () => openTerminalTab());
     useShortcut("openDiff", () => openDiffTab());
+    useShortcut("openHistory", () => openHistoryTab());
+    useShortcut("toggleFilePanel", toggleFilePanel);
+    useShortcut("toggleRightSidebar", toggleRightSidebar);
+    useShortcut("searchFiles", openFileSearch);
+    useShortcut("closeTab", closeShownTab);
 
     const canGoBack = useChatsStore((s) => s.back.length > 0);
     const canGoForward = useChatsStore((s) => s.forward.length > 0);
@@ -262,7 +274,7 @@ export function TopBar({ title, harness, className }: TopBarProps) {
                                 </Button>
                             }
                         />
-                        <Tooltip.Content side="bottom">
+                        <Tooltip.Content side="bottom" shortcut="toggleFilePanel">
                             Toggle file panel
                         </Tooltip.Content>
                     </Tooltip>
@@ -284,7 +296,7 @@ export function TopBar({ title, harness, className }: TopBarProps) {
                                 </Button>
                             }
                         />
-                        <Tooltip.Content side="bottom">
+                        <Tooltip.Content side="bottom" shortcut="toggleRightSidebar">
                             Toggle right sidebar
                         </Tooltip.Content>
                     </Tooltip>

@@ -120,6 +120,13 @@ pub struct KeyboardSettings {
     pub go_forward: String,
     pub new_terminal: String,
     pub open_diff: String,
+    pub open_history: String,
+    pub toggle_file_panel: String,
+    pub toggle_right_sidebar: String,
+    /// Opens the file panel with its search field focused.
+    pub search_files: String,
+    /// Closes the right sidebar's shown tab.
+    pub close_tab: String,
     /// Only while typing a prompt.
     pub toggle_plan: String,
 }
@@ -139,6 +146,11 @@ impl Default for KeyboardSettings {
             go_forward: "Alt+Right".into(),
             new_terminal: "Mod+J".into(),
             open_diff: "Mod+Shift+G".into(),
+            open_history: "Mod+Shift+H".into(),
+            toggle_file_panel: "Mod+Shift+E".into(),
+            toggle_right_sidebar: "Mod+Alt+B".into(),
+            search_files: "Mod+P".into(),
+            close_tab: "Mod+W".into(),
             toggle_plan: "Shift+Tab".into(),
         }
     }

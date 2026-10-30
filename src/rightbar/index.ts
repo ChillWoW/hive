@@ -1,5 +1,6 @@
 export {
     activeFolder,
+    closeShownTab,
     closeTab,
     discardTab,
     openCommitTab,

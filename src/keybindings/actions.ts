@@ -67,6 +67,32 @@ export const ACTIONS: readonly Action[] = [
         scope: "global"
     },
     {
+        id: "toggleFilePanel",
+        label: "Toggle file panel",
+        keywords: "files file panel tree explorer hide show",
+        scope: "global"
+    },
+    {
+        id: "searchFiles",
+        label: "Search files",
+        description: "Opens the file panel's search",
+        keywords: "search find files go to file open quick",
+        scope: "global"
+    },
+    {
+        id: "toggleRightSidebar",
+        label: "Toggle right sidebar",
+        keywords: "right sidebar tabs panel hide show collapse",
+        scope: "global"
+    },
+    {
+        id: "closeTab",
+        label: "Close tab",
+        description: "The right sidebar's shown tab",
+        keywords: "close tab file terminal right sidebar",
+        scope: "global"
+    },
+    {
         id: "newTerminal",
         label: "New terminal",
         description: "In the right sidebar, in the chat's folder",
@@ -78,6 +104,13 @@ export const ACTIONS: readonly Action[] = [
         label: "Show diff",
         description: "In the right sidebar, for the chat's folder",
         keywords: "diff changes git review compare open",
+        scope: "global"
+    },
+    {
+        id: "openHistory",
+        label: "Show history",
+        description: "In the right sidebar, for the chat's folder",
+        keywords: "history commits log graph branches git open",
         scope: "global"
     },
     {

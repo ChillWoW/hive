@@ -1,7 +1,7 @@
 import { useChatsStore, workDir } from "@/chats";
 import { useComposerStore } from "@/composer/store";
 import { blockClose, dropDoc, openDoc, save, useDocsStore } from "@/editor";
-import { useLayoutStore } from "@/stores/useLayoutStore";
+import { fitColumns, useLayoutStore } from "@/stores/useLayoutStore";
 import { createSession, disposeSession } from "@/terminal";
 import { useRightbarStore } from "./store";
 
@@ -88,6 +88,16 @@ export async function closeTab(id: string) {
         return;
     }
     discardTab(id);
+}
+
+/** Closes the right sidebar's shown tab; false while the sidebar is hidden or empty. */
+export function closeShownTab(): boolean {
+    const layout = useLayoutStore.getState();
+    if (!fitColumns(window.innerWidth, layout).right) return false;
+    const { activeId } = useRightbarStore.getState();
+    if (!activeId) return false;
+    void closeTab(activeId);
+    return true;
 }
 
 /** Closes a tab, unsaved changes (or a running shell) and all. */

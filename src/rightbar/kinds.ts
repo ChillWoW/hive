@@ -41,6 +41,7 @@ export const NEW_TABS: readonly NewTab[] = [
         label: "History",
         hint: "The folder's commits and branches",
         icon: ClockCounterClockwiseIcon,
+        shortcut: "openHistory",
         open: () => openHistoryTab()
     }
 ];

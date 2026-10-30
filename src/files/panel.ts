@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
+import { useLayoutStore } from "@/stores/useLayoutStore";
 
 type FilesPanelState = {
     /** What the file panel's search field holds. */
@@ -12,6 +13,8 @@ type FilesPanelState = {
     selected: string | null;
     /** A path the tree should scroll to once its row is there. */
     reveal: string | null;
+    /** Bumped to focus the search field (`openFileSearch`). */
+    searchFocus: number;
     setQuery: (query: string) => void;
     toggleShowAll: () => void;
     toggleExpanded: (cwd: string, path: string) => void;
@@ -36,6 +39,7 @@ export const useFilesPanelStore = create<FilesPanelState>()(
             expanded: {},
             selected: null,
             reveal: null,
+            searchFocus: 0,
             setQuery: (query) => set({ query }),
             toggleShowAll: () => set((s) => ({ showAll: !s.showAll })),
             toggleExpanded: (cwd, path) =>
@@ -72,3 +76,9 @@ export const useFilesPanelStore = create<FilesPanelState>()(
         }
     )
 );
+
+/** Shows the file panel with its search field focused, its text selected. */
+export function openFileSearch() {
+    useLayoutStore.getState().show("files");
+    useFilesPanelStore.setState((s) => ({ searchFocus: s.searchFocus + 1 }));
+}

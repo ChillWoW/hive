@@ -27,6 +27,11 @@ export const DEFAULT_SETTINGS: Settings = {
     "goForward": "Alt+Right",
     "newTerminal": "Mod+J",
     "openDiff": "Mod+Shift+G",
+    "openHistory": "Mod+Shift+H",
+    "toggleFilePanel": "Mod+Shift+E",
+    "toggleRightSidebar": "Mod+Alt+B",
+    "searchFiles": "Mod+P",
+    "closeTab": "Mod+W",
     "togglePlan": "Shift+Tab"
   },
   "providers": {

@@ -75,6 +75,13 @@ function FilesHeader() {
     const setQuery = useFilesPanelStore((s) => s.setQuery);
     const showAll = useFilesPanelStore((s) => s.showAll);
     const toggleShowAll = useFilesPanelStore((s) => s.toggleShowAll);
+    const searchFocus = useFilesPanelStore((s) => s.searchFocus);
+    const input = useRef<HTMLInputElement>(null);
+    useEffect(() => {
+        if (!searchFocus) return;
+        input.current?.focus();
+        input.current?.select();
+    }, [searchFocus]);
     const label = showAll
         ? "Hide hidden and ignored files"
         : "Show all files (even hidden)";
@@ -85,6 +92,7 @@ function FilesHeader() {
             <label className="flex h-6 min-w-0 flex-1 cursor-text items-center gap-1.5 rounded-md bg-white/[0.035] px-2 transition-colors hover:bg-white/[0.055]">
                 <MagnifyingGlassIcon className="size-3 shrink-0 text-dark-200" />
                 <input
+                    ref={input}
                     type="text"
                     value={query}
                     onChange={(event) => setQuery(event.target.value)}

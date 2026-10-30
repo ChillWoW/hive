@@ -7,7 +7,15 @@ import type { SendKey } from "./SendKey";
  * elsewhere); an empty string leaves the action unbound. A combo the
  * frontend can't parse is treated as unbound.
  */
-export type KeyboardSettings = { sendWith: SendKey, newChat: string, toggleSidebar: string, openSettings: string, openUsage: string, focusComposer: string, previousChat: string, nextChat: string, goBack: string, goForward: string, newTerminal: string, openDiff: string, 
+export type KeyboardSettings = { sendWith: SendKey, newChat: string, toggleSidebar: string, openSettings: string, openUsage: string, focusComposer: string, previousChat: string, nextChat: string, goBack: string, goForward: string, newTerminal: string, openDiff: string, openHistory: string, toggleFilePanel: string, toggleRightSidebar: string, 
+/**
+ * Opens the file panel with its search field focused.
+ */
+searchFiles: string, 
+/**
+ * Closes the right sidebar's shown tab.
+ */
+closeTab: string, 
 /**
  * Only while typing a prompt.
  */
