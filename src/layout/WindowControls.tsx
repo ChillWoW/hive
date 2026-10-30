@@ -36,6 +36,9 @@ function ControlButton({ label, className, ...props }: ControlButtonProps) {
     );
 }
 
+/** Three 24px buttons, their gaps and padding: what a modal's top-bar dim leaves clickable. */
+export const WINDOW_CONTROLS_WIDTH = 88;
+
 /**
  * Minimise / maximise / close, drawn in HTML because the window is frameless.
  *
@@ -48,8 +51,9 @@ export function WindowControls({ className }: { className?: string }) {
 
     return (
         <div
+            style={{ width: WINDOW_CONTROLS_WIDTH }}
             className={cn(
-                "flex h-full shrink-0 items-center gap-0.5 pr-2 pl-1",
+                "flex h-full shrink-0 items-center justify-end gap-0.5 pr-2 pl-1",
                 className
             )}
         >

@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
 import { ChatView } from "@/chat/ChatView";
 import { useChat, useChatsRuntime, useChatsStore } from "@/chats";
 import { folderName } from "@/composer";
 import { useKeybindingsRuntime } from "@/keybindings";
-import { RightPanels, Sidebar, TopBar } from "@/layout";
+import { RightPanels, Sidebar, TopBar, WINDOW_CONTROLS_WIDTH } from "@/layout";
+import { isMac } from "@/lib/platform";
 import { useNotificationsRuntime } from "@/notifications";
 import { SettingsModal, useSettingsRuntime } from "@/settings";
 import { PortalContainerProvider } from "@/ui";
@@ -19,14 +20,19 @@ export function App() {
     useUsageRuntime();
     const chat = useChat(useChatsStore((s) => s.activeChatId));
     const title = chat ? (chat.title ?? folderName(chat.cwd)) : undefined;
-    // Overlays mount here, below the top bar, so an open modal never covers
+    // Overlays mount here, below the top bar, so an open modal never takes
     // the window's drag region or its controls.
     const [overlayLayer, setOverlayLayer] = useState<HTMLDivElement | null>(
         null
     );
+    // Over the top bar: a modal's dim there keeps a drag region under it and
+    // leaves the window controls clickable.
+    const [chromeLayer, setChromeLayer] = useState<HTMLDivElement | null>(
+        null
+    );
 
     return (
-        <PortalContainerProvider container={overlayLayer}>
+        <PortalContainerProvider container={overlayLayer} chrome={chromeLayer}>
             <div className="relative flex h-full w-full overflow-hidden bg-dark-900 text-dark-50">
                 <Sidebar />
                 <main className="flex min-w-0 flex-1 flex-col overflow-hidden pt-9">
@@ -37,6 +43,15 @@ export function App() {
                 <div
                     ref={setOverlayLayer}
                     className="pointer-events-none absolute inset-x-0 top-9 bottom-0 z-40"
+                />
+                <div
+                    ref={setChromeLayer}
+                    style={
+                        {
+                            "--chrome-controls": `${isMac ? 0 : WINDOW_CONTROLS_WIDTH}px`
+                        } as CSSProperties
+                    }
+                    className="pointer-events-none absolute inset-x-0 top-0 z-40 h-9"
                 />
             </div>
             <SettingsModal />

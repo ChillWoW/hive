@@ -1,4 +1,4 @@
 export { TopBar } from "./TopBar";
-export { WindowControls } from "./WindowControls";
+export { WINDOW_CONTROLS_WIDTH, WindowControls } from "./WindowControls";
 export { RightPanels } from "./RightPanels";
 export { Sidebar } from "./Sidebar";

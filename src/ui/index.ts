@@ -17,7 +17,7 @@ export { Modal } from "./Modal";
 export { MorphHeight } from "./MorphHeight";
 export { NumberInput } from "./NumberInput";
 export { Popover } from "./Popover";
-export { PortalContainerProvider, usePortalContainer } from "./PortalContainer";
+export { PortalContainerProvider, useChromeLayer, usePortalContainer } from "./PortalContainer";
 export { SegmentedControl } from "./SegmentedControl";
 export { Select } from "./Select";
 export { Skeleton } from "./Skeleton";

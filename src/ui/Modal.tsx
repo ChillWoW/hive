@@ -1,9 +1,10 @@
 import type { ComponentProps, FC, ReactElement, ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { Dialog as BaseDialog } from "@base-ui/react/dialog";
 import { XIcon } from "@phosphor-icons/react";
 import { cn } from "@/lib/cn";
 import { iconButtonClassName } from "./iconButton";
-import { usePortalContainer } from "./PortalContainer";
+import { useChromeLayer, usePortalContainer } from "./PortalContainer";
 
 type Size = "sm" | "md" | "lg" | "xl";
 
@@ -32,6 +33,11 @@ export interface ModalProps
     bodyClassName?: string;
 }
 
+const backdropClassNames = cn(
+    "bg-black/40 transition-opacity duration-200 ease-out",
+    "data-[starting-style]:opacity-0 data-[ending-style]:opacity-0"
+);
+
 const ModalRoot = ({
     title,
     trigger,
@@ -52,6 +58,7 @@ const ModalRoot = ({
     // yet" and renders nothing, so fall through to `undefined` — its own default — when no
     // provider is in the tree.
     const portalContainer = usePortalContainer();
+    const chromeLayer = useChromeLayer();
 
     // `modal={true}` makes Base UI render its own `position: fixed; inset: 0` backdrop over the
     // whole viewport, which swallows presses on the top bar and kills window dragging.
@@ -83,13 +90,31 @@ const ModalRoot = ({
             >
                 <BaseDialog.Backdrop
                     className={cn(
-                        "pointer-events-auto absolute inset-0 z-50 bg-black/40",
-                        "transition-opacity duration-200 ease-out",
-                        "data-[starting-style]:opacity-0",
-                        "data-[ending-style]:opacity-0",
+                        "pointer-events-auto absolute inset-0 z-50",
+                        backdropClassNames,
                         backdropClassName
                     )}
                 />
+                {/* The top bar dims too, only to look: the strip under the dim is a drag region,
+                    so the window still moves, and it stops short of the window controls
+                    (`--chrome-controls`), which stay clickable. Presses here land outside the
+                    overlay layer, so they never dismiss the dialog. */}
+                {chromeLayer &&
+                    createPortal(
+                        <BaseDialog.Backdrop
+                            className={cn(
+                                "pointer-events-none absolute inset-0",
+                                backdropClassNames,
+                                backdropClassName
+                            )}
+                        >
+                            <div
+                                data-tauri-drag-region
+                                className="pointer-events-auto absolute inset-y-0 left-0 right-(--chrome-controls)"
+                            />
+                        </BaseDialog.Backdrop>,
+                        chromeLayer
+                    )}
                 <BaseDialog.Popup
                     className={cn(
                         "pointer-events-auto absolute top-1/2 left-1/2 z-50 w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2",
