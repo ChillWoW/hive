@@ -88,33 +88,52 @@ const ModalRoot = ({
             <BaseDialog.Portal
                 container={container ?? portalContainer ?? undefined}
             >
+                {/* The top bar dims too, only to look: the strip under the dim is a drag region,
+                    so the window still moves, and it stops short of the window controls
+                    (`--chrome-controls`), which stay clickable. Presses here land outside the
+                    overlay layer, so they never dismiss the dialog. It's a plain div mirroring
+                    the backdrop's state: a second `Dialog.Backdrop` would take over the
+                    dialog's backdrop ref, and presses on the real one would stop closing it. */}
                 <BaseDialog.Backdrop
                     className={cn(
                         "pointer-events-auto absolute inset-0 z-50",
                         backdropClassNames,
                         backdropClassName
                     )}
-                />
-                {/* The top bar dims too, only to look: the strip under the dim is a drag region,
-                    so the window still moves, and it stops short of the window controls
-                    (`--chrome-controls`), which stay clickable. Presses here land outside the
-                    overlay layer, so they never dismiss the dialog. */}
-                {chromeLayer &&
-                    createPortal(
-                        <BaseDialog.Backdrop
-                            className={cn(
-                                "pointer-events-none absolute inset-0",
-                                backdropClassNames,
-                                backdropClassName
-                            )}
-                        >
-                            <div
-                                data-tauri-drag-region
-                                className="pointer-events-auto absolute inset-y-0 left-0 right-(--chrome-controls)"
-                            />
-                        </BaseDialog.Backdrop>,
-                        chromeLayer
+                    render={(props, state) => (
+                        <>
+                            <div {...props} />
+                            {chromeLayer &&
+                                createPortal(
+                                    <div
+                                        hidden={props.hidden}
+                                        data-starting-style={
+                                            state.transitionStatus ===
+                                            "starting"
+                                                ? ""
+                                                : undefined
+                                        }
+                                        data-ending-style={
+                                            state.transitionStatus === "ending"
+                                                ? ""
+                                                : undefined
+                                        }
+                                        className={cn(
+                                            "pointer-events-none absolute inset-0",
+                                            backdropClassNames,
+                                            backdropClassName
+                                        )}
+                                    >
+                                        <div
+                                            data-tauri-drag-region
+                                            className="pointer-events-auto absolute inset-y-0 left-0 right-(--chrome-controls)"
+                                        />
+                                    </div>,
+                                    chromeLayer
+                                )}
+                        </>
                     )}
+                />
                 <BaseDialog.Popup
                     className={cn(
                         "pointer-events-auto absolute top-1/2 left-1/2 z-50 w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2",
