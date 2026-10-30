@@ -279,6 +279,83 @@
     background: transparent;
 }
 
+/* Mermaid diagrams in the code block's frame: the same 28px header (the
+   language on the left, copy / fullscreen on the right), then the diagram on
+   the frame's fill, pan and zoom controls in its corner. */
+.markdown [data-streamdown="mermaid-block"] {
+    gap: 0;
+    padding: 0;
+    margin: 0.75rem 0;
+    border: 1px solid var(--color-dark-600);
+    border-radius: var(--radius-md);
+    background: rgb(255 255 255 / 0.035);
+    overflow: hidden;
+}
+
+.markdown [data-streamdown="mermaid-block"] > :first-child {
+    height: 28px;
+    padding: 0 5px 0 12px;
+    border-bottom: 1px solid var(--color-dark-600);
+    background: rgb(255 255 255 / 0.02);
+    font-size: 11px;
+    color: var(--color-dark-200);
+}
+
+.markdown [data-streamdown="mermaid-block"] > :first-child > span {
+    margin: 0;
+    font-family: inherit;
+}
+
+.markdown [data-streamdown="mermaid-block"] > :nth-child(2) {
+    top: 3px;
+    right: 5px;
+}
+
+.markdown [data-streamdown="mermaid-block-actions"] {
+    gap: 2px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    backdrop-filter: none;
+}
+
+.markdown [data-streamdown="mermaid-block-actions"] button {
+    display: flex;
+    width: 22px;
+    height: 22px;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border-radius: 6px;
+    color: var(--color-dark-200);
+    transition: background-color 150ms, color 150ms;
+}
+
+.markdown [data-streamdown="mermaid-block-actions"] button:hover {
+    background: rgb(255 255 255 / 0.08);
+    color: var(--color-dark-50);
+}
+
+.markdown [data-streamdown="mermaid-block-actions"] svg {
+    width: 13px;
+    height: 13px;
+}
+
+.markdown [data-streamdown="mermaid-block"] > :last-child {
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    padding: 12px;
+}
+
+/* Display math (`$$` on its own lines) scrolls sideways rather than
+   overflowing the transcript. */
+.markdown .katex-display {
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 0.25rem 0;
+}
+
 /* Tables as zeron draws them: frameless, a hairline under the header and
    between rows the only rules, 12px cells, a bold header; wide ones scroll. */
 .markdown [data-streamdown="table-wrapper"] {
