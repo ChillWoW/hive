@@ -52,6 +52,33 @@ export function openDiffTab() {
     useLayoutStore.getState().show("right");
 }
 
+/**
+ * Shows the history tab (there's one; it follows the open chat's folder),
+ * adding it if it isn't open, and shows the right sidebar.
+ */
+export function openHistoryTab() {
+    const { tabs, activate, add } = useRightbarStore.getState();
+    const open = tabs.find((t) => t.kind === "history");
+    if (open) activate(open.id);
+    else add({ kind: "history" }, "History");
+    useLayoutStore.getState().show("right");
+}
+
+/** Opens what commit `sha` of `cwd` changed in a tab (the one it's already in, if any). */
+export function openCommitTab(cwd: string, commit: { sha: string; subject: string }) {
+    const { tabs, activate, add } = useRightbarStore.getState();
+    const open = tabs.find((t) => t.kind === "commit" && t.cwd === cwd && t.sha === commit.sha);
+    if (open) activate(open.id);
+    else {
+        const subject = commit.subject.trim();
+        add(
+            { kind: "commit", cwd, sha: commit.sha, subject },
+            subject || commit.sha.slice(0, 7)
+        );
+    }
+    useLayoutStore.getState().show("right");
+}
+
 /** Closes a tab, saving its file first; a failed save keeps it open and says so. */
 export async function closeTab(id: string) {
     const doc = useDocsStore.getState().docs[id];

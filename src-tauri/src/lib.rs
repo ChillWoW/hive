@@ -1,4 +1,5 @@
 mod attachments;
+mod avatars;
 mod editor;
 mod engine;
 mod files;
@@ -78,6 +79,11 @@ pub fn run() {
       git::git_delete_branch,
       git::git_diff,
       git::git_turn_diff,
+      git::git_history,
+      git::git_search_history,
+      git::git_fetch_all,
+      git::git_commit_diff,
+      avatars::git_avatars,
       providers::provider_status,
       providers::provider_usage,
       providers::provider_install,
@@ -140,6 +146,7 @@ pub fn run() {
       };
       app.manage(settings);
       app.manage(hive_usage::Usage::new(&data_dir));
+      app.manage(avatars::Avatars::new(&data_dir));
 
       let harnesses: Vec<Arc<dyn Harness>> =
         vec![

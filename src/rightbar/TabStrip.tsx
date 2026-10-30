@@ -1,5 +1,12 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { GitDiffIcon, PlusIcon, TerminalWindowIcon, XIcon } from "@phosphor-icons/react";
+import {
+    ClockCounterClockwiseIcon,
+    GitCommitIcon,
+    GitDiffIcon,
+    PlusIcon,
+    TerminalWindowIcon,
+    XIcon
+} from "@phosphor-icons/react";
 import { SCOPE_LABELS, useDiffPrefs } from "@/diff/store";
 import { ShortcutKeys, useBinding, type ActionId } from "@/keybindings";
 import { cn } from "@/lib/cn";
@@ -244,6 +251,10 @@ function TabChip({
                     <GitDiffIcon className={cn("size-3.5", !active && "opacity-80")} />
                 ) : tab.kind === "terminal" ? (
                     <TerminalWindowIcon className={cn("size-3.5", !active && "opacity-80")} />
+                ) : tab.kind === "history" ? (
+                    <ClockCounterClockwiseIcon className={cn("size-3.5", !active && "opacity-80")} />
+                ) : tab.kind === "commit" ? (
+                    <GitCommitIcon className={cn("size-3.5", !active && "opacity-80")} />
                 ) : (
                     <FileIcon name={tab.title} className={cn("size-3.5", !active && "opacity-80")} />
                 )}
@@ -280,7 +291,11 @@ function TabChip({
                     ? tab.path
                     : tab.kind === "diff"
                       ? "Changes in the open chat's folder"
-                      : (tab.cwd ?? "Home folder")}
+                      : tab.kind === "history"
+                        ? "Commits of the open chat's folder"
+                        : tab.kind === "commit"
+                          ? `${tab.sha.slice(0, 7)} ${tab.subject}`
+                          : (tab.cwd ?? "Home folder")}
             </Tooltip.Content>
         </Tooltip>
     );

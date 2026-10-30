@@ -1,6 +1,11 @@
-import { GitDiffIcon, TerminalWindowIcon, type Icon } from "@phosphor-icons/react";
+import {
+    ClockCounterClockwiseIcon,
+    GitDiffIcon,
+    TerminalWindowIcon,
+    type Icon
+} from "@phosphor-icons/react";
 import type { ActionId } from "@/keybindings";
-import { openDiffTab, openTerminalTab } from "./actions";
+import { openDiffTab, openHistoryTab, openTerminalTab } from "./actions";
 
 /** Something the "+" menu opens in a new tab. */
 export type NewTab = {
@@ -15,7 +20,7 @@ export type NewTab = {
 
 /**
  * What the "+" menu offers, in its order; it's hidden while there's nothing.
- * Files open from the file panel's tree instead.
+ * Files open from the file panel's tree instead, commits from the history.
  */
 export const NEW_TABS: readonly NewTab[] = [
     {
@@ -31,5 +36,11 @@ export const NEW_TABS: readonly NewTab[] = [
         icon: GitDiffIcon,
         shortcut: "openDiff",
         open: () => openDiffTab()
+    },
+    {
+        label: "History",
+        hint: "The folder's commits and branches",
+        icon: ClockCounterClockwiseIcon,
+        open: () => openHistoryTab()
     }
 ];

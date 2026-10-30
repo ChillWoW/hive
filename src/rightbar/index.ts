@@ -2,7 +2,9 @@ export {
     activeFolder,
     closeTab,
     discardTab,
+    openCommitTab,
     openDiffTab,
+    openHistoryTab,
     openFileTab,
     openTerminalTab
 } from "./actions";

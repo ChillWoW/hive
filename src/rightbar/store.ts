@@ -2,13 +2,16 @@ import { create } from "zustand";
 
 /**
  * What a tab shows: a file of a chat's folder in the editor, or a terminal
- * started in a folder (the home folder without one), or the diff of the open
- * chat's folder (it follows the open chat, as zeron's Diff tab does).
+ * started in a folder (the home folder without one), or the diff or history
+ * of the open chat's folder (they follow the open chat, as zeron's Diff and
+ * History tabs do), or what one commit of a folder changed.
  */
 export type TabContent =
     | { kind: "file"; cwd: string; path: string }
     | { kind: "terminal"; cwd: string | null }
-    | { kind: "diff" };
+    | { kind: "diff" }
+    | { kind: "history" }
+    | { kind: "commit"; cwd: string; sha: string; subject: string };
 
 export type RightTab = { id: string; title: string } & TabContent;
 

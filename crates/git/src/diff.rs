@@ -12,7 +12,7 @@ use super::{command, git, GitError};
 /// The patch stops growing past this; the rest is left out ("partial").
 pub const MAX_PATCH_BYTES: usize = 3 * 1024 * 1024;
 /// What git diffs against before the first commit.
-const EMPTY_TREE: &str = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
+pub(crate) const EMPTY_TREE: &str = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
 
 /// `cwd`'s checkout against HEAD, or with `base` against `merge-base(base,
 /// HEAD)`; `None` outside a checkout. Paths are relative to its root.
@@ -150,7 +150,7 @@ pub async fn diff(cwd: &Path, base: Option<&str>) -> Result<Option<GitDiff>, Git
 }
 
 /// Runs git, keeping at most `cap` bytes of its output: (stdout, cut short).
-async fn capped(cwd: &Path, args: &[&str], cap: usize) -> Result<(Vec<u8>, bool), GitError> {
+pub(crate) async fn capped(cwd: &Path, args: &[&str], cap: usize) -> Result<(Vec<u8>, bool), GitError> {
     capped_command(command(cwd, args), cap).await
 }
 

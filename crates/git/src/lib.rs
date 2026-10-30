@@ -1,7 +1,8 @@
 //! hive-git — a project folder's branches and Hive's worktrees, over the
 //! `git` the user has installed: list branches, switch, branch off one,
 //! delete one; add, restore and remove a chat's worktree; diff a checkout,
-//! or snapshot it when a turn starts and diff that turn.
+//! or snapshot it when a turn starts and diff that turn; page, search and
+//! fetch its history.
 
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
@@ -11,8 +12,13 @@ use hive_proto::{GitBranch, GitRepo, Worktree};
 use tokio::process::Command;
 
 mod diff;
+mod history;
 mod turn;
 pub use diff::{diff, MAX_PATCH_BYTES};
+pub use history::{
+    commit_diff, fetch_all, github_remote, history, history_matches, search_history,
+    HISTORY_DEFAULT_LIMIT, HISTORY_MAX_LIMIT,
+};
 pub use turn::{snapshot_tree, sweep_turn_snapshots, turn_diff, TreeSnapshot};
 
 #[derive(Debug, thiserror::Error)]

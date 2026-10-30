@@ -8,29 +8,17 @@ import {
     ColumnsIcon,
     TextAlignLeftIcon
 } from "@phosphor-icons/react";
-import { useChatsStore, workDir } from "@/chats";
-import { useComposerStore } from "@/composer/store";
+import { useChatsStore } from "@/chats";
 import { FileSection } from "@/diff/DiffFiles";
 import { parsePatchReusing, startsFolded, totals, type FileDiff } from "@/diff/patch";
 import { SCOPE_LABELS, useCheckoutDiff, useDiffPrefs, useTurnDiff, type DiffScope } from "@/diff/store";
 import { useGitRepo } from "@/git";
 import { cn } from "@/lib/cn";
-import { platform } from "@/lib/platform";
 import type { GitRepo } from "@/proto";
 import { usePanelLayout } from "@/stores/useLayoutStore";
 import { DotMatrixSpinner, Menu, Tooltip } from "@/ui";
-import { openFileTab } from "./actions";
+import { openPatchFile, useActiveFolder } from "./folders";
 import { ToolButton } from "./ToolButton";
-
-/** The folder the open chat works in, or the new-chat view's; null for neither. */
-function useActiveFolder() {
-    const chatDir = useChatsStore((s) => {
-        const chat = s.activeChatId ? s.chats.find((c) => c.id === s.activeChatId) : undefined;
-        return chat ? workDir(chat) : undefined;
-    });
-    const newChatDir = useComposerStore((s) => s.newChat.cwd ?? null);
-    return chatDir ?? newChatDir;
-}
 
 /**
  * The diff tab, as zeron's Diff surface: the open chat's checkout against
@@ -59,11 +47,6 @@ function scopeLabel(scope: DiffScope, count: number, base: string | undefined) {
     if (scope === "turn") return `${count} Changed ${files} this turn`;
     return base ? `${count} Changed ${files} vs ${base}` : `${count} Changed ${files}`;
 }
-
-const norm = (path: string) => {
-    const p = path.replace(/\\/g, "/").replace(/\/+$/, "");
-    return platform === "windows" ? p.toLowerCase() : p;
-};
 
 /** The last shown patch's files by section, so a refresh reuses the unchanged ones. */
 let lastSections = new Map<string, FileDiff>();
@@ -105,16 +88,7 @@ function DiffPane({ folder }: { folder: string | null }) {
     const root = diff?.root;
     const open = useCallback(
         (path: string) => {
-            if (!root || !folder) return;
-            // The patch's paths are the checkout's; the chat may work in a folder inside it.
-            const r = norm(root);
-            const f = norm(folder);
-            if (f === r) return openFileTab(folder, path);
-            if (f.startsWith(`${r}/`)) {
-                const sub = folder.replace(/\\/g, "/").slice(root.length + 1).replace(/\/+$/, "");
-                if (path.startsWith(`${sub}/`)) return openFileTab(folder, path.slice(sub.length + 1));
-            }
-            openFileTab(root, path);
+            if (root && folder) openPatchFile(folder, root, path);
         },
         [root, folder]
     );

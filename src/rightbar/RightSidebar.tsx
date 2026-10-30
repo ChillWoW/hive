@@ -2,6 +2,8 @@ import type { ComponentType } from "react";
 import { ShortcutKeys, useBinding, type ActionId } from "@/keybindings";
 import { useLayoutStore } from "@/stores/useLayoutStore";
 import { FolderTreeIcon } from "@/ui";
+import { HistoryTab } from "@/history/HistoryTab";
+import { CommitTab } from "./CommitTab";
 import { DiffTab } from "./DiffTab";
 import { FileTab } from "./FileTab";
 import { NEW_TABS } from "./kinds";
@@ -22,6 +24,10 @@ export function RightSidebar() {
                 <TerminalTab key={tab.id} tab={tab} />
             ) : tab?.kind === "diff" ? (
                 <DiffTab key={tab.id} />
+            ) : tab?.kind === "history" ? (
+                <HistoryTab key={tab.id} />
+            ) : tab?.kind === "commit" ? (
+                <CommitTab key={tab.id} tab={tab} />
             ) : (
                 <EmptyTabs />
             )}

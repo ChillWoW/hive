@@ -79,6 +79,8 @@ dependencies = [
  "ignore",
  "log",
  "portable-pty",
+ "reqwest",
+ "rustls",
  "serde",
  "serde_json",
  "sha2",
