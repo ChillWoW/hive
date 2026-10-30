@@ -144,7 +144,7 @@
 
 /* Reasoning: the same markdown a step quieter. */
 .markdown.markdown-muted {
-    color: var(--color-dark-300);
+    color: var(--color-dark-250);
 }
 
 /* A thought inside a tool group, at the group's 12px. */
@@ -189,7 +189,7 @@
 }
 
 .markdown [data-streamdown="list-item"]::marker {
-    color: var(--color-dark-300);
+    color: var(--color-dark-250);
 }
 
 .markdown [data-streamdown="blockquote"] {

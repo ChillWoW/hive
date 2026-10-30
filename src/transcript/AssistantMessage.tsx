@@ -115,7 +115,7 @@ function CopyButton({ text }: { text: string }) {
                         onClick={() => {
                             void navigator.clipboard.writeText(text).then(() => setCopied(true));
                         }}
-                        className="inline-flex size-6 items-center justify-center rounded-sm text-dark-300 transition-colors hover:bg-dark-700 hover:text-dark-50"
+                        className="inline-flex size-6 items-center justify-center rounded-sm text-dark-250 transition-colors hover:bg-dark-700 hover:text-dark-50"
                     >
                         {copied ? (
                             <CheckIcon className="size-3.5" weight="bold" />
@@ -201,7 +201,7 @@ export function AssistantMessage({
             {toBlocks(parts, streaming).map(render)}
             {streaming && <WorkingStatus since={message.createdAt} waiting={waiting} />}
             {!streaming && (
-                <div className="-mt-1 flex h-6 items-center gap-2 text-xs text-dark-300">
+                <div className="-mt-1 flex h-6 items-center gap-2 text-xs text-dark-250">
                     {answer && <CopyButton text={answer} />}
                     {message.durationMs !== undefined && (
                         <span className="tabular-nums">{formatDuration(message.durationMs)}</span>

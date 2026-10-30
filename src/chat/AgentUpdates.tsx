@@ -145,7 +145,7 @@ function UpdateRow({ catalog, entry, latest }: Update) {
                     <div className="truncate text-[13px] leading-5 font-medium text-dark-50">
                         {catalog.label}
                     </div>
-                    <div className="truncate text-xs text-dark-300 tabular-nums">
+                    <div className="truncate text-xs text-dark-250 tabular-nums">
                         {entry.status?.version} → {latest}
                     </div>
                 </div>

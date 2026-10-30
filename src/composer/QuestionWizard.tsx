@@ -120,7 +120,7 @@ export function QuestionWizard({
                 <ChatCircleDotsIcon className="size-3.5 shrink-0" />
                 <span className="truncate font-medium">{question.header}</span>
                 {questions.length > 1 && (
-                    <span className="ml-auto shrink-0 tabular-nums text-dark-300">
+                    <span className="ml-auto shrink-0 tabular-nums text-dark-250">
                         {step + 1} of {questions.length}
                     </span>
                 )}
@@ -180,7 +180,7 @@ export function QuestionWizard({
                     placeholder="Something else…"
                     className={cn(
                         "mt-1 h-9 min-w-0 rounded-md border border-dashed bg-transparent px-2.5 text-sm text-dark-50 outline-none transition-colors",
-                        "placeholder:text-dark-300 hover:border-dark-500 focus:border-solid focus:border-dark-400 disabled:opacity-50",
+                        "placeholder:text-dark-250 hover:border-dark-500 focus:border-solid focus:border-dark-400 disabled:opacity-50",
                         draft.custom.trim() ? "border-dark-400" : "border-dark-600"
                     )}
                 />
@@ -199,7 +199,7 @@ export function QuestionWizard({
                                     i === step
                                         ? "bg-dark-50"
                                         : labelsOf(drafts[i] ?? EMPTY).length
-                                          ? "bg-dark-300"
+                                          ? "bg-dark-250"
                                           : "bg-dark-600"
                                 )}
                             />

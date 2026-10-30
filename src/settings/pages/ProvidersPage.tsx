@@ -85,7 +85,7 @@ export function ProvidersPage() {
                     ))
                 )}
             </SettingsSection>
-            <p className="-mt-4 px-1 text-xs leading-4 text-dark-300">
+            <p className="-mt-4 px-1 text-xs leading-4 text-dark-250">
                 Hive runs the agent CLIs installed on this computer, signed in with their own
                 accounts.
             </p>

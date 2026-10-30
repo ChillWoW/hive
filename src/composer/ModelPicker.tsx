@@ -81,7 +81,7 @@ export function ModelPicker({
 
     if (!current || !model) {
         return (
-            <span className="h-8 truncate px-2.5 text-sm leading-8 text-dark-300 select-none">
+            <span className="h-8 truncate px-2.5 text-sm leading-8 text-dark-250 select-none">
                 {current ? "No models" : "Loading…"}
             </span>
         );
@@ -115,7 +115,7 @@ export function ModelPicker({
                 <span className="truncate">{model.label}</span>
                 {reasoning && (
                     // Yields first under pressure, so the model name truncates last.
-                    <span className="min-w-0 shrink-[1000] truncate text-dark-300">
+                    <span className="min-w-0 shrink-[1000] truncate text-dark-250">
                         {REASONING_LABELS[reasoning]}
                     </span>
                 )}
@@ -351,7 +351,7 @@ function ModelCard({
 
             {/* As in the project picker; the divider runs across the card's inset. */}
             <label className="-mx-1 mb-1 flex shrink-0 items-center gap-2 border-b border-dark-600 px-3.5">
-                <MagnifyingGlassIcon className="size-3.5 shrink-0 text-dark-300" />
+                <MagnifyingGlassIcon className="size-3.5 shrink-0 text-dark-250" />
                 <input
                     id={SEARCH_ID}
                     value={query}
@@ -377,7 +377,7 @@ function ModelCard({
                 className="hide-scrollbar flex flex-col gap-0.5 overflow-y-auto overscroll-contain"
             >
                 {shown.length === 0 && (
-                    <p className="px-2.5 py-3 text-center text-xs text-dark-300">
+                    <p className="px-2.5 py-3 text-center text-xs text-dark-250">
                         No models match.
                     </p>
                 )}
@@ -413,8 +413,8 @@ function ModelCard({
                             )}
                         >
                             <span>Fast mode</span>
-                            <span className="ml-auto text-dark-300">{fast ? "On" : "Off"}</span>
-                            <CaretRightIcon className="size-3 text-dark-300" weight="bold" />
+                            <span className="ml-auto text-dark-250">{fast ? "On" : "Off"}</span>
+                            <CaretRightIcon className="size-3 text-dark-250" weight="bold" />
                         </button>
                     )}
                     {model.reasoningLevels.length > 0 && (
@@ -428,10 +428,10 @@ function ModelCard({
                             )}
                         >
                             <span>Reasoning</span>
-                            <span className="ml-auto text-dark-300">
+                            <span className="ml-auto text-dark-250">
                                 {reasoning && REASONING_LABELS[reasoning]}
                             </span>
-                            <CaretRightIcon className="size-3 text-dark-300" weight="bold" />
+                            <CaretRightIcon className="size-3 text-dark-250" weight="bold" />
                         </button>
                     )}
                 </div>
@@ -508,7 +508,7 @@ function ModelRow({
             >
                 <StarIcon
                     weight={row.favorite ? "fill" : "regular"}
-                    className={cn("size-3.5", row.favorite ? "text-warning" : "text-dark-300")}
+                    className={cn("size-3.5", row.favorite ? "text-warning" : "text-dark-250")}
                 />
             </button>
         </div>

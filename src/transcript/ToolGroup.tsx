@@ -184,7 +184,7 @@ function Item({ item, last, streaming }: { item: GroupItem; last: boolean; strea
             )}
             {call && <Trailing part={item.part as ToolPart} />}
             {body && (
-                <span className="ml-auto flex size-[18px] shrink-0 items-center justify-center text-dark-300 opacity-0 transition-opacity group-hover/item:opacity-100 group-data-panel-open/item:opacity-100">
+                <span className="ml-auto flex size-[18px] shrink-0 items-center justify-center text-dark-250 opacity-0 transition-opacity group-hover/item:opacity-100 group-data-panel-open/item:opacity-100">
                     <CaretRightIcon
                         weight="bold"
                         className="size-3 transition-transform duration-200 group-data-panel-open/item:rotate-90"
@@ -254,7 +254,7 @@ function Lines({ text, className }: { text: string; className?: string }) {
                 </div>
             ))}
             {hidden > 0 && (
-                <div className="font-sans text-dark-300">
+                <div className="font-sans text-dark-250">
                     {hidden.toLocaleString()} more {hidden === 1 ? "line" : "lines"}
                 </div>
             )}
@@ -328,7 +328,7 @@ function CallBody({ part }: { part: ToolPart }): ReactNode {
                         <span
                             className={cn(
                                 item.status === "completed"
-                                    ? "text-dark-300 line-through"
+                                    ? "text-dark-250 line-through"
                                     : item.status === "inProgress"
                                       ? "text-dark-50"
                                       : "text-dark-200"
@@ -344,7 +344,7 @@ function CallBody({ part }: { part: ToolPart }): ReactNode {
         result = <DiffView lines={change} className="my-1.5" />;
     } else if (part.output?.trim()) {
         result = (
-            <Lines text={part.output} className={part.isError ? "text-danger/80" : "text-dark-300"} />
+            <Lines text={part.output} className={part.isError ? "text-danger/80" : "text-dark-250"} />
         );
     }
 

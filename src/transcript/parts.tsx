@@ -41,7 +41,7 @@ export function SubagentChip({ part, streaming }: { part: ToolPart; streaming: b
                 {part.call.description}
             </span>
             {part.call.model && (
-                <span className="shrink-0 text-[11px] text-dark-300">{part.call.model}</span>
+                <span className="shrink-0 text-[11px] text-dark-250">{part.call.model}</span>
             )}
             {running && (
                 <CircleNotchIcon weight="bold" className="size-3.5 shrink-0 animate-spin text-dark-200" />

@@ -178,7 +178,7 @@ function ShortcutRow({ action }: { action: Action }) {
                     ) : bound ? (
                         <ShortcutKeys shortcut={setting.value} />
                     ) : (
-                        <span className="px-1 text-dark-300">Unassigned</span>
+                        <span className="px-1 text-dark-250">Unassigned</span>
                     )}
                 </button>
             }

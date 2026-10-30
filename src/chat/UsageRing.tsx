@@ -71,7 +71,7 @@ export function UsageRing({ harness }: { harness: HarnessId }) {
                 className={cn(
                     chipTriggerClassName,
                     "shrink-0 gap-1.5 px-1.5 tabular-nums",
-                    fraction == null ? "text-dark-300" : LABEL[level]
+                    fraction == null ? "text-dark-250" : LABEL[level]
                 )}
             >
                 <Ring fraction={fraction ?? null} arcClassName={ARC[level]} />
@@ -128,7 +128,7 @@ export function UsageCard({ harness, entry }: { harness: HarnessId; entry: Usage
                     <div className="truncate text-[12.5px] font-medium text-dark-50">
                         {catalog?.label ?? "Account"}
                     </div>
-                    <div className="truncate text-[11px] text-dark-300">
+                    <div className="truncate text-[11px] text-dark-250">
                         {account?.email ?? (provider.probing ? "Loading…" : "Signed in")}
                     </div>
                 </div>
@@ -147,7 +147,7 @@ export function UsageCard({ harness, entry }: { harness: HarnessId; entry: Usage
             )}
             <div className="flex items-center gap-2 border-t border-dark-700 py-1.5 pr-1.5 pl-3 text-[11px]">
                 <span
-                    className={cn("min-w-0 flex-1 line-clamp-2", error ? "text-danger" : "text-dark-300")}
+                    className={cn("min-w-0 flex-1 line-clamp-2", error ? "text-danger" : "text-dark-250")}
                 >
                     {error ?? (fetchedAt ? `Updated ${ago(fetchedAt)}` : "")}
                 </span>
@@ -156,7 +156,7 @@ export function UsageCard({ harness, entry }: { harness: HarnessId; entry: Usage
                     aria-label="Refresh usage"
                     disabled={loading}
                     onClick={() => void refreshUsage(harness, { force: true })}
-                    className="grid size-6 place-items-center rounded-md text-dark-300 outline-none transition-colors hover:bg-dark-700 hover:text-dark-50 disabled:pointer-events-none"
+                    className="grid size-6 place-items-center rounded-md text-dark-250 outline-none transition-colors hover:bg-dark-700 hover:text-dark-50 disabled:pointer-events-none"
                 >
                     <ArrowClockwiseIcon className={cn("size-3.5", loading && "animate-spin")} />
                 </button>
@@ -190,7 +190,7 @@ function Meter({ window }: { window: UsageWindow }) {
                     />
                 )}
             </div>
-            {reset && <span className="text-[11px] text-dark-300">{reset}</span>}
+            {reset && <span className="text-[11px] text-dark-250">{reset}</span>}
         </div>
     );
 }

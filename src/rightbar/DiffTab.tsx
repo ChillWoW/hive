@@ -254,7 +254,7 @@ function BaseStrip({
     return (
         <div className="ml-1 flex min-w-0 items-center gap-1.5 font-mono text-[11.5px]">
             <span className="min-w-0 truncate text-dark-200">{branch}</span>
-            <ArrowRightIcon className="size-3 shrink-0 text-dark-300" />
+            <ArrowRightIcon className="size-3 shrink-0 text-dark-250" />
             <Menu>
                 <Menu.Trigger className={cn(triggerClassName, "px-1.5 text-dark-50")}>
                     <span className="min-w-0 truncate">{base}</span>

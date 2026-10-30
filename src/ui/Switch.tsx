@@ -40,7 +40,7 @@ const SwitchRoot = forwardRef<HTMLButtonElement, SwitchProps>(
                     "hover:border-dark-400",
                     "data-[checked]:border-primary-100 data-[checked]:bg-primary-100",
                     "data-[checked]:hover:bg-primary-200",
-                    "focus-visible:outline focus-visible:outline-2 focus-visible:outline-dark-300 focus-visible:outline-offset-2",
+                    "focus-visible:outline focus-visible:outline-2 focus-visible:outline-dark-250 focus-visible:outline-offset-2",
                     "data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50",
                     "disabled:cursor-not-allowed disabled:opacity-50",
                     rootSizeStyles[size],

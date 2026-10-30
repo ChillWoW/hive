@@ -64,7 +64,7 @@ function Collapsible({ children }: { children: ReactNode }) {
                 <button
                     type="button"
                     onClick={() => setExpanded((e) => !e)}
-                    className="mt-0.5 -ml-1 inline-flex items-center gap-1 rounded-sm px-1 text-xs text-dark-300 hover:bg-dark-700 hover:text-dark-50"
+                    className="mt-0.5 -ml-1 inline-flex items-center gap-1 rounded-sm px-1 text-xs text-dark-250 hover:bg-dark-700 hover:text-dark-50"
                 >
                     <CaretDownIcon
                         className={cn("size-3 transition-transform", expanded && "rotate-180")}

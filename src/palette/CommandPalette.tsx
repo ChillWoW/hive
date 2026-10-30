@@ -86,7 +86,7 @@ function PaletteBody({ onPick }: { onPick: (item: PaletteItem) => void }) {
     return (
         <div className="flex flex-col">
             <div className="flex items-center gap-2 border-b border-dark-700 px-3">
-                <MagnifyingGlassIcon className="size-4 shrink-0 text-dark-300" />
+                <MagnifyingGlassIcon className="size-4 shrink-0 text-dark-250" />
                 <input
                     autoFocus
                     value={query}
@@ -113,7 +113,7 @@ function PaletteBody({ onPick }: { onPick: (item: PaletteItem) => void }) {
             >
                 {sections.map((section) => (
                     <div key={section.id} role="group" aria-label={section.title}>
-                        <div className="px-2.5 pt-2 pb-1 text-[11px] font-medium text-dark-300">
+                        <div className="px-2.5 pt-2 pb-1 text-[11px] font-medium text-dark-250">
                             {section.title}
                         </div>
                         {section.items.map((item) => {
@@ -134,13 +134,13 @@ function PaletteBody({ onPick }: { onPick: (item: PaletteItem) => void }) {
                     </div>
                 ))}
                 {!items.length && (
-                    <div className="px-3 py-6 text-center text-xs text-dark-300">
+                    <div className="px-3 py-6 text-center text-xs text-dark-250">
                         Nothing matches
                     </div>
                 )}
             </div>
 
-            <div className="flex items-center gap-3 border-t border-dark-700 px-3 py-1.5 text-[11px] text-dark-300">
+            <div className="flex items-center gap-3 border-t border-dark-700 px-3 py-1.5 text-[11px] text-dark-250">
                 <span>
                     <Key>↑↓</Key> to move
                 </span>
@@ -201,7 +201,7 @@ function Row({
             </span>
             <span className="min-w-0 shrink truncate">{item.label}</span>
             {item.detail && (
-                <span className="min-w-0 flex-1 truncate text-dark-300">{item.detail}</span>
+                <span className="min-w-0 flex-1 truncate text-dark-250">{item.detail}</span>
             )}
             <span className="ml-auto flex shrink-0 items-center gap-2">
                 {item.chat && <ChatMeta {...item.chat} />}
@@ -221,7 +221,7 @@ function ChatMeta({ status, at, archived }: NonNullable<PaletteItem["chat"]>) {
         <>
             {archived && <span className="text-[11px] text-dark-400">Archived</span>}
             {status === "idle" ? (
-                <span className="text-[11px] text-dark-300 tabular-nums">{timeAgo(at, now)}</span>
+                <span className="text-[11px] text-dark-250 tabular-nums">{timeAgo(at, now)}</span>
             ) : (
                 <StatusMark status={status} />
             )}

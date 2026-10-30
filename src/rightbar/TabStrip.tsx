@@ -240,7 +240,7 @@ function TabChip({
             style={{ width: CHIP_WIDTH, transform: offset ? `translateX(${offset}px)` : undefined }}
             className={cn(
                 "group/tab relative flex h-6 shrink-0 cursor-pointer items-center gap-[3px] rounded-md px-1 outline-none select-none",
-                "focus-visible:ring-1 focus-visible:ring-dark-300",
+                "focus-visible:ring-1 focus-visible:ring-dark-250",
                 animate && "transition-transform duration-150",
                 active ? "bg-white/10 text-dark-50" : "text-dark-200 hover:bg-white/[0.06]",
                 dragged && "z-10 bg-dark-700 shadow-md"
@@ -306,7 +306,7 @@ function TabChip({
                               : (
                                   <span className="flex flex-col">
                                       <span>{title}</span>
-                                      <span className="text-dark-300">{tab.cwd ?? "Home folder"}</span>
+                                      <span className="text-dark-250">{tab.cwd ?? "Home folder"}</span>
                                   </span>
                               )}
                 </Tooltip.Content>

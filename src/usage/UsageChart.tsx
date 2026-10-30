@@ -91,7 +91,7 @@ export function UsageChart({ buckets, metric, hourly, harnesses, stale }: Props)
                                 y={y(t)}
                                 dy="0.32em"
                                 textAnchor="end"
-                                className="fill-dark-300 text-[10.5px] tabular-nums"
+                                className="fill-dark-250 text-[10.5px] tabular-nums"
                             >
                                 {format(t)}
                             </text>
@@ -143,7 +143,7 @@ export function UsageChart({ buckets, metric, hourly, harnesses, stale }: Props)
                                         x={PAD.left + i * slot + slot / 2}
                                         y={HEIGHT - 6}
                                         textAnchor="middle"
-                                        className="pointer-events-none fill-dark-300 text-[10.5px]"
+                                        className="pointer-events-none fill-dark-250 text-[10.5px]"
                                     >
                                         {hourly ? formatHour(b.start) : formatDay(b.start)}
                                     </text>

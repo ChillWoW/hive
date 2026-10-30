@@ -30,7 +30,7 @@ export function ShortcutKeys({
         return (
             <kbd
                 className={cn(
-                    "[font-family:inherit] text-[11px] font-medium tracking-wide text-dark-300",
+                    "[font-family:inherit] text-[11px] font-medium tracking-wide text-dark-250",
                     className
                 )}
             >

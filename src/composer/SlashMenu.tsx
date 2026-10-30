@@ -48,7 +48,7 @@ export function SlashMenu({
                         {command.name}
                     </span>
                     {command.inputHint && (
-                        <span className="shrink-0 text-dark-300">
+                        <span className="shrink-0 text-dark-250">
                             {command.inputHint}
                         </span>
                     )}

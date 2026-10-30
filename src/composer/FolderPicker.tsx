@@ -151,14 +151,14 @@ function FolderCombobox({
                         className={cn(popupClassName, "w-72")}
                     >
                         <div className="flex items-center gap-2 border-b border-dark-600 px-2.5">
-                            <MagnifyingGlassIcon className="size-3.5 shrink-0 text-dark-300" />
+                            <MagnifyingGlassIcon className="size-3.5 shrink-0 text-dark-250" />
                             <Combobox.Input
                                 placeholder="Search or paste a path"
                                 className={searchInputClassName}
                             />
                         </div>
 
-                        <Combobox.Empty className="px-2.5 py-3 text-center text-xs text-dark-300 empty:hidden">
+                        <Combobox.Empty className="px-2.5 py-3 text-center text-xs text-dark-250 empty:hidden">
                             {items.length ? "No folders match." : "No recent folders."}
                         </Combobox.Empty>
 
@@ -251,7 +251,7 @@ function ProjectMenu({
                     onOpenChange(!open);
                 }}
                 className={cn(
-                    "inline-flex size-5 items-center justify-center rounded-sm text-dark-300 outline-none",
+                    "inline-flex size-5 items-center justify-center rounded-sm text-dark-250 outline-none",
                     "transition-[color,background-color,opacity] duration-100",
                     "hover:bg-dark-600 hover:text-dark-50",
                     "data-[popup-open]:bg-dark-600 data-[popup-open]:text-dark-50",

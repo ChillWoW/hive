@@ -30,8 +30,8 @@ const ROW: Record<PatchLine["kind"], { row: string; accent: string; marker: stri
             marker: "text-[#f87171]",
             no: "text-[#f87171]/90"
         },
-        context: { row: "", accent: "", marker: "", no: "text-dark-300" },
-        meta: { row: "", accent: "", marker: "", no: "text-dark-300" }
+        context: { row: "", accent: "", marker: "", no: "text-dark-250" },
+        meta: { row: "", accent: "", marker: "", no: "text-dark-250" }
     };
 
 /** One line-number column, fitted to the file's largest number. */
@@ -404,7 +404,7 @@ function MetaRow({ text }: { text: string }) {
     return (
         <div
             style={{ height: LINE_HEIGHT }}
-            className="flex items-center pl-4 font-mono text-[11px] whitespace-pre text-dark-300 italic"
+            className="flex items-center pl-4 font-mono text-[11px] whitespace-pre text-dark-250 italic"
         >
             {text}
         </div>

@@ -35,7 +35,7 @@ export function MentionMenu({
             )}
         >
             {empty && (
-                <div className="px-2 py-1.5 text-xs text-dark-300">
+                <div className="px-2 py-1.5 text-xs text-dark-250">
                     {menu.loading ? "Listing files…" : "No matching files"}
                 </div>
             )}
@@ -62,7 +62,7 @@ export function MentionMenu({
                             {entry.dir && "/"}
                         </span>
                         {parent && (
-                            <span className="min-w-0 truncate text-dark-300">{parent}</span>
+                            <span className="min-w-0 truncate text-dark-250">{parent}</span>
                         )}
                     </button>
                 );

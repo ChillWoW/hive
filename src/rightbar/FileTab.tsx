@@ -104,7 +104,7 @@ function Toolbar({
                         <div className="flex min-w-0 flex-1 items-center gap-1 truncate text-[11px]">
                             {parts.map((part, i) => (
                                 <span key={i} className="flex min-w-0 shrink items-center gap-1">
-                                    {i > 0 && <span className="text-dark-300">›</span>}
+                                    {i > 0 && <span className="text-dark-250">›</span>}
                                     <span
                                         className={cn(
                                             "truncate",

@@ -186,7 +186,7 @@ export function SignInDialog({
                             </button>
                         ))}
                     </div>
-                    <p className="mt-3 text-xs text-dark-300">
+                    <p className="mt-3 text-xs text-dark-250">
                         Signing in replaces the account {shown?.label} uses now, here and in
                         your terminal.
                     </p>

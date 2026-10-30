@@ -18,7 +18,7 @@ export function ContextRing({ usage }: { usage: ContextUsage | undefined }) {
     const fraction = tokens != null ? Math.min(tokens / capacity, 1) : null;
     const tone =
         fraction == null
-            ? "text-dark-300"
+            ? "text-dark-250"
             : fraction >= 0.9
               ? "text-danger"
               : fraction >= 0.75

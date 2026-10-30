@@ -297,7 +297,7 @@ function Group({
                     {icon}
                     <span className="min-w-0 truncate">{name}</span>
                     {count !== undefined && (
-                        <span className="shrink-0 text-dark-300">{count}</span>
+                        <span className="shrink-0 text-dark-250">{count}</span>
                     )}
                     <Caret
                         open={!collapsed}

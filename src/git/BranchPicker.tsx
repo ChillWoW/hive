@@ -216,7 +216,7 @@ function BranchCombobox({
                             className={cn(popupClassName, "w-80")}
                         >
                             <div className="flex items-center gap-2 border-b border-dark-600 px-2.5">
-                                <MagnifyingGlassIcon className="size-3.5 shrink-0 text-dark-300" />
+                                <MagnifyingGlassIcon className="size-3.5 shrink-0 text-dark-250" />
                                 <Combobox.Input
                                     placeholder={
                                         baseMode ? "Search branches" : "Search or name a new branch"
@@ -244,7 +244,7 @@ function BranchCombobox({
                                 </p>
                             )}
 
-                            <Combobox.Empty className="px-2.5 py-3 text-center text-xs text-dark-300 empty:hidden">
+                            <Combobox.Empty className="px-2.5 py-3 text-center text-xs text-dark-250 empty:hidden">
                                 {names.length ? "No branches match." : "No branches yet."}
                             </Combobox.Empty>
 
@@ -268,7 +268,7 @@ function BranchCombobox({
                                             <GitBranchIcon
                                                 className={cn(
                                                     "size-3.5",
-                                                    name === selected ? "text-dark-50" : "text-dark-300"
+                                                    name === selected ? "text-dark-50" : "text-dark-250"
                                                 )}
                                             />
                                             <span
@@ -410,7 +410,7 @@ function BranchMenu({
                     onOpenChange(!open);
                 }}
                 className={cn(
-                    "pointer-events-auto inline-flex size-5 items-center justify-center rounded-sm text-dark-300 outline-none",
+                    "pointer-events-auto inline-flex size-5 items-center justify-center rounded-sm text-dark-250 outline-none",
                     "transition-[color,background-color,opacity] duration-100",
                     "hover:bg-dark-600 hover:text-dark-50",
                     "data-[popup-open]:bg-dark-600 data-[popup-open]:text-dark-50",

@@ -181,7 +181,7 @@ function TaskList({
         <div className="flex max-h-[min(32rem,var(--available-height))] flex-col">
             <div className="flex h-10 shrink-0 items-center gap-2 pr-2 pl-3">
                 <span className="text-[12.5px] font-medium text-dark-50">Background tasks</span>
-                <span className="text-[11px] text-dark-300 tabular-nums">{tasks.length} running</span>
+                <span className="text-[11px] text-dark-250 tabular-nums">{tasks.length} running</span>
                 {live.length > 1 && (
                     <button
                         type="button"
@@ -284,7 +284,7 @@ function TaskRow({
                     {detail && (
                         <span
                             className={cn(
-                                "truncate text-[11px] text-dark-300",
+                                "truncate text-[11px] text-dark-250",
                                 call?.kind === "exec" && "font-mono text-[10.5px]"
                             )}
                         >
@@ -294,10 +294,10 @@ function TaskRow({
                 </span>
                 <span className="pointer-events-none relative z-10 flex shrink-0 items-center gap-0.5">
                     {stopping ? (
-                        <span className="px-1 text-[11px] text-dark-300">Stopping…</span>
+                        <span className="px-1 text-[11px] text-dark-250">Stopping…</span>
                     ) : (
                         <>
-                            <span className="px-1 text-[11px] text-dark-300 tabular-nums group-hover/task:hidden group-focus-within/task:hidden">
+                            <span className="px-1 text-[11px] text-dark-250 tabular-nums group-hover/task:hidden group-focus-within/task:hidden">
                                 {elapsed(task.startedAt, now)}
                             </span>
                             <button
@@ -319,7 +319,7 @@ function TaskRow({
                         {readable && (
                             <CaretRightIcon
                                 className={cn(
-                                    "size-3 text-dark-300 transition-transform duration-150",
+                                    "size-3 text-dark-250 transition-transform duration-150",
                                     expanded && "rotate-90"
                                 )}
                             />
@@ -387,14 +387,14 @@ function OutputTail({ chatId, taskId, indent }: { chatId: string; taskId: string
                 className={cn(
                     "max-h-56 overflow-auto rounded-md border border-dark-700 bg-dark-900 px-2.5 py-2",
                     "font-mono text-[11px] leading-[1.5] break-all whitespace-pre-wrap",
-                    text ? "text-dark-100" : "text-dark-300"
+                    text ? "text-dark-100" : "text-dark-250"
                 )}
             >
                 {text || (error ? "" : output ? "No output yet." : "Reading…")}
             </pre>
             {error && <span className="text-[11px] text-danger">{error}</span>}
             {output?.truncated && (
-                <span className="text-[11px] text-dark-300">
+                <span className="text-[11px] text-dark-250">
                     Last 8 KB of {Math.round(output.totalBytes / 1024).toLocaleString("en-US")} KB
                 </span>
             )}

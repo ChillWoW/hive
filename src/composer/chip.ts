@@ -48,4 +48,4 @@ export const footerButtonClassName = cn(
 );
 
 export const searchInputClassName =
-    "h-8 w-full bg-transparent text-xs text-dark-50 outline-none placeholder:text-dark-300";
+    "h-8 w-full bg-transparent text-xs text-dark-50 outline-none placeholder:text-dark-250";

@@ -542,7 +542,7 @@ export function Composer({
                         rows={1}
                         className={cn(
                             "row-start-1 block w-full resize-none bg-transparent py-1",
-                            "text-sm leading-6 text-dark-50 placeholder:text-dark-300",
+                            "text-sm leading-6 text-dark-50 placeholder:text-dark-250",
                             canAttach
                                 ? "col-start-2 pr-2.5 pl-1 group-data-tall/deck:col-span-3 group-data-tall/deck:col-start-1 group-data-tall/deck:px-2.5"
                                 : "col-start-1 px-2.5 group-data-tall/deck:col-span-2"
@@ -577,7 +577,7 @@ export function Composer({
                                             "transition-[color,background-color,scale,opacity,filter] duration-200 ease-out active:scale-[0.96]",
                                             "starting:scale-90 starting:opacity-0 starting:blur-[2px]",
                                             "bg-primary-100 text-dark-900 hover:bg-primary-300",
-                                            "disabled:bg-dark-700 disabled:text-dark-300 disabled:active:scale-100"
+                                            "disabled:bg-dark-700 disabled:text-dark-250 disabled:active:scale-100"
                                         )}
                                     >
                                         <ModeIcon

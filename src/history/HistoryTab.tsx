@@ -427,7 +427,7 @@ function Toolbar({
                                         <span className="text-info/90">{comparison.ahead} ahead</span>
                                     )}
                                     {comparison.ahead > 0 && comparison.behind > 0 && (
-                                        <span className="text-dark-300">·</span>
+                                        <span className="text-dark-250">·</span>
                                     )}
                                     {comparison.behind > 0 && (
                                         <span className="text-warning/85">{comparison.behind} behind</span>

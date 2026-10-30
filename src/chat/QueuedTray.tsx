@@ -229,7 +229,7 @@ function Handle({
             <DotsSixVerticalIcon
                 weight="bold"
                 className={cn(
-                    "absolute size-3.5 text-dark-300 opacity-0 transition-opacity duration-150",
+                    "absolute size-3.5 text-dark-250 opacity-0 transition-opacity duration-150",
                     "group-hover:opacity-100 group-focus-within:opacity-100",
                     dragging && "opacity-100"
                 )}

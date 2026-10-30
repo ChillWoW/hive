@@ -69,7 +69,7 @@ export function SidePanel({
                     className={cn(
                         "absolute top-9 bottom-0 left-0 z-20 w-1.5 cursor-col-resize",
                         "after:absolute after:inset-y-0 after:left-0 after:w-px after:transition-colors",
-                        "hover:after:bg-dark-300",
+                        "hover:after:bg-dark-250",
                         dragging && "after:bg-dark-200 hover:after:bg-dark-200"
                     )}
                 />

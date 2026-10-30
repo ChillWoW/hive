@@ -100,7 +100,7 @@ function SearchInput({
                 "transition-colors focus-within:border-dark-400 hover:border-dark-500"
             )}
         >
-            <MagnifyingGlassIcon className="size-3.5 shrink-0 text-dark-300" />
+            <MagnifyingGlassIcon className="size-3.5 shrink-0 text-dark-250" />
             <input
                 value={query}
                 placeholder="Search settings"
@@ -114,14 +114,14 @@ function SearchInput({
                         onChange("");
                     }
                 }}
-                className="min-w-0 flex-1 bg-transparent text-xs text-dark-50 outline-none placeholder:text-dark-300"
+                className="min-w-0 flex-1 bg-transparent text-xs text-dark-50 outline-none placeholder:text-dark-250"
             />
             {query && (
                 <button
                     type="button"
                     aria-label="Clear search"
                     onClick={() => onChange("")}
-                    className="text-dark-300 transition-colors hover:text-dark-50"
+                    className="text-dark-250 transition-colors hover:text-dark-50"
                 >
                     <XIcon className="size-3" weight="bold" />
                 </button>
@@ -187,7 +187,7 @@ function SettingsNav({
                         <Icon
                             className={cn(
                                 "size-3.5 shrink-0",
-                                active ? "text-dark-50" : "text-dark-300"
+                                active ? "text-dark-50" : "text-dark-250"
                             )}
                             weight={active ? "fill" : "regular"}
                         />
@@ -217,7 +217,7 @@ function SearchResults({
                         onClick={() => onOpenPage(id)}
                         className="flex w-fit items-center gap-1.5 text-xs font-medium text-dark-100 transition-colors hover:text-dark-50"
                     >
-                        <Icon className="size-3.5 shrink-0 text-dark-300" />
+                        <Icon className="size-3.5 shrink-0 text-dark-250" />
                         {label}
                     </button>
                     <div className="flex flex-col gap-7">
@@ -231,7 +231,7 @@ function SearchResults({
                 className="flex flex-col items-center gap-2 py-16 text-center"
             >
                 <MagnifyingGlassIcon className="size-6 text-dark-400" />
-                <p className="text-xs text-dark-300">No settings match</p>
+                <p className="text-xs text-dark-250">No settings match</p>
             </div>
         </div>
     );
