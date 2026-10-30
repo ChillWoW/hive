@@ -205,7 +205,7 @@ function Tip({
             }}
             className="pointer-events-none absolute top-1 z-10 min-w-40 rounded-md border border-dark-600 bg-dark-850 px-2.5 py-2 text-xs shadow-lg shadow-black/40"
         >
-            <div className="mb-1.5 text-[11px] text-dark-300">{label(bucket.start, hourly)}</div>
+            <div className="mb-1.5 text-[11px] text-dark-250">{label(bucket.start, hourly)}</div>
             <div className="flex flex-col gap-1">
                 {rows.map((h) => (
                     <div key={h} className="flex items-center gap-2">
@@ -216,17 +216,17 @@ function Tip({
                         <span className="font-medium tabular-nums text-dark-50">
                             {fmt(bucket.by[h]![metric])}
                         </span>
-                        <span className="ml-auto pl-3 text-dark-300">{HARNESS_NAME[h]}</span>
+                        <span className="ml-auto pl-3 text-dark-250">{HARNESS_NAME[h]}</span>
                     </div>
                 ))}
-                {rows.length === 0 && <span className="text-dark-300">No usage</span>}
+                {rows.length === 0 && <span className="text-dark-250">No usage</span>}
                 {rows.length > 1 && (
                     <div className="mt-0.5 flex items-center gap-2 border-t border-dark-700 pt-1.5">
                         <span className="w-2.5" />
                         <span className="font-semibold tabular-nums text-dark-50">
                             {fmt(bucket[metric])}
                         </span>
-                        <span className="ml-auto pl-3 text-dark-300">Total</span>
+                        <span className="ml-auto pl-3 text-dark-250">Total</span>
                     </div>
                 )}
             </div>

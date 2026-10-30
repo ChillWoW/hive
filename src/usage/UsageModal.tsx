@@ -134,7 +134,7 @@ function Overview({ metric }: { metric: "cost" | "tokens" }) {
 
     if (!summary || !query) {
         return (
-            <div className="flex h-full flex-col items-center justify-center gap-3 text-xs text-dark-300">
+            <div className="flex h-full flex-col items-center justify-center gap-3 text-xs text-dark-250">
                 {error ? (
                     <>
                         <p className="max-w-sm text-center text-danger">{error}</p>
@@ -219,12 +219,12 @@ function Hero({
     return (
         <section className={cn("flex min-w-0 flex-col gap-4 transition-opacity", stale && "opacity-60")}>
             <div className="flex flex-col gap-1">
-                <span className="flex items-center gap-1 text-xs text-dark-300">
+                <span className="flex items-center gap-1 text-xs text-dark-250">
                     {metric === "cost" ? "Estimated cost" : "Processed tokens"}
                     {metric === "cost" && (
                         <Tooltip>
                             <Tooltip.Trigger
-                                render={<span aria-label="About this estimate" className="text-dark-300 hover:text-dark-100" />}
+                                render={<span aria-label="About this estimate" className="text-dark-250 hover:text-dark-100" />}
                             >
                                 <InfoIcon className="size-3.5" />
                             </Tooltip.Trigger>
@@ -240,7 +240,7 @@ function Hero({
                 <span className="text-[40px] leading-none font-semibold tracking-tight text-dark-50">
                     {metric === "cost" ? formatUsd(total) : formatTokens(total)}
                 </span>
-                <span className="text-xs text-dark-300">
+                <span className="text-xs text-dark-250">
                     {formatCount(summary.all.sessions)} sessions · {formatCount(summary.all.requests)} requests
                     {metric === "cost" && unpriced > 0 && ` · ${formatCount(unpriced)} unpriced`}
                 </span>
@@ -271,7 +271,7 @@ function Hero({
                             <HarnessIcon harness={h.harness} className="size-3.5 shrink-0" />
                             <span className="flex min-w-0 flex-1 flex-col">
                                 <span className="truncate text-xs text-dark-50">{HARNESS_NAME[h.harness]}</span>
-                                <span className="truncate text-[11px] text-dark-300">
+                                <span className="truncate text-[11px] text-dark-250">
                                     {formatCount(h.sessions)} sessions
                                 </span>
                             </span>
@@ -279,7 +279,7 @@ function Hero({
                                 <span className="text-xs font-medium tabular-nums text-dark-50">
                                     {metric === "cost" ? formatUsd(value) : formatTokens(value)}
                                 </span>
-                                <span className="text-[11px] tabular-nums text-dark-300">
+                                <span className="text-[11px] tabular-nums text-dark-250">
                                     {off ? "Hidden" : shownTotal ? formatPercent(value / shownTotal) : "—"}
                                 </span>
                             </span>
@@ -287,7 +287,7 @@ function Hero({
                     );
                 })}
                 {summary.harnesses.length === 0 && (
-                    <p className="text-xs text-dark-300">No agent usage in this period.</p>
+                    <p className="text-xs text-dark-250">No agent usage in this period.</p>
                 )}
             </div>
         </section>
@@ -334,9 +334,9 @@ function Stats({ summary, metric, stale }: { summary: Summary; metric: "cost" | 
         >
             {tiles.map((tile) => (
                 <div key={tile.label} className="flex flex-col gap-1 bg-dark-800 px-3.5 py-3">
-                    <span className="text-[11px] text-dark-300">{tile.label}</span>
+                    <span className="text-[11px] text-dark-250">{tile.label}</span>
                     <span className="text-lg leading-tight font-semibold text-dark-50">{tile.value}</span>
-                    <span className="min-h-4 truncate text-[11px] text-dark-300">{tile.note}</span>
+                    <span className="min-h-4 truncate text-[11px] text-dark-250">{tile.note}</span>
                 </div>
             ))}
         </div>
@@ -371,7 +371,7 @@ function Footer() {
     const report = useUsageStore((s) => s.report);
     if (!report) return null;
     return (
-        <footer className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-1 border-t border-dark-700 px-5 py-2 text-[11px] text-dark-300">
+        <footer className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-1 border-t border-dark-700 px-5 py-2 text-[11px] text-dark-250">
             {report.sources.map((s) => (
                 <SourceNote key={s.harness} source={s} />
             ))}

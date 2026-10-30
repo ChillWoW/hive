@@ -58,7 +58,7 @@ export function Breakdown({ summary, metric, hourly, view, onView, stale }: Prop
     );
 }
 
-const th = "px-2 py-1.5 text-[11px] font-normal text-dark-300 whitespace-nowrap";
+const th = "px-2 py-1.5 text-[11px] font-normal text-dark-250 whitespace-nowrap";
 const td = "px-2 py-2 whitespace-nowrap tabular-nums";
 
 function Table({ head, children, empty }: { head: ReactNode; children: ReactNode; empty: boolean }) {
@@ -70,7 +70,7 @@ function Table({ head, children, empty }: { head: ReactNode; children: ReactNode
                 </thead>
                 <tbody className="[&>tr]:border-t [&>tr]:border-dark-700">{children}</tbody>
             </table>
-            {empty && <p className="px-3 py-6 text-center text-xs text-dark-300">No usage in this period</p>}
+            {empty && <p className="px-3 py-6 text-center text-xs text-dark-250">No usage in this period</p>}
         </div>
     );
 }
@@ -103,7 +103,7 @@ function ByModel({ summary, metric }: { summary: Summary; metric: "cost" | "toke
                 const unpriced = r.unpriced === r.requests && cost === 0;
                 return (
                     <tr key={`${r.harness}/${r.model}`} className="text-right text-dark-100">
-                        <td className={cn(td, "text-dark-300")}>{i + 1}</td>
+                        <td className={cn(td, "text-dark-250")}>{i + 1}</td>
                         <td className={cn(td, "w-full max-w-0 text-left")}>
                             <div className="flex min-w-0 items-center gap-2">
                                 <HarnessIcon harness={r.harness} className="size-3.5 shrink-0" />
@@ -122,7 +122,7 @@ function ByModel({ summary, metric }: { summary: Summary; metric: "cost" | "toke
                         <td className={cn(td, "text-dark-50")}>
                             {unpriced ? (
                                 <Tooltip>
-                                    <Tooltip.Trigger render={<span className="text-dark-300 underline decoration-dotted underline-offset-2" />}>
+                                    <Tooltip.Trigger render={<span className="text-dark-250 underline decoration-dotted underline-offset-2" />}>
                                         Unpriced
                                     </Tooltip.Trigger>
                                     <Tooltip.Content>

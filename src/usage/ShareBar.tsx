@@ -36,7 +36,7 @@ export function ShareBar({ title, parts, stale }: { title: string; parts: Share[
                         <span className="size-2 shrink-0 rounded-[2px]" style={{ background: p.color }} />
                         <span className="text-dark-200">{p.label}</span>
                         <span className="font-medium tabular-nums text-dark-50">{p.display}</span>
-                        <span className="tabular-nums text-dark-300">
+                        <span className="tabular-nums text-dark-250">
                             {total ? formatPercent(p.value / total) : "—"}
                         </span>
                     </div>

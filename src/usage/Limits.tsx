@@ -16,7 +16,7 @@ export function Limits() {
     const harnesses = HARNESS_ORDER.filter((h) => WITH_LIMITS.includes(h) && enabled.includes(h));
     if (!harnesses.length) {
         return (
-            <p className="py-16 text-center text-xs text-dark-300">
+            <p className="py-16 text-center text-xs text-dark-250">
                 None of the enabled agents report plan limits.
             </p>
         );
@@ -36,7 +36,7 @@ function LimitsCard({ harness }: { harness: HarnessId }) {
         <div className="self-start overflow-hidden rounded-md border border-dark-700 bg-dark-800">
             <UsageCard harness={harness} entry={entry} />
             {entry.usage === null && !entry.error && (
-                <p className="border-t border-dark-700 px-3 py-2.5 text-[11px] text-dark-300">
+                <p className="border-t border-dark-700 px-3 py-2.5 text-[11px] text-dark-250">
                     No plan limits for this login (API key or signed out).
                 </p>
             )}
