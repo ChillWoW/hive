@@ -6,13 +6,14 @@
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
-use std::sync::{Mutex, OnceLock};
-use std::time::Duration;
+use std::sync::Mutex;
 
 use base64::Engine as _;
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use tokio::task::JoinSet;
+
+use crate::http;
 
 const MAX_AVATAR_BYTES: usize = 2 * 1024 * 1024;
 /// Downloads at once.
@@ -64,22 +65,6 @@ struct GitHubIdentity {
 #[derive(Deserialize)]
 struct GitHubUser {
     avatar_url: String,
-}
-
-fn client() -> Option<&'static reqwest::Client> {
-    static CLIENT: OnceLock<Option<reqwest::Client>> = OnceLock::new();
-    CLIENT
-        .get_or_init(|| {
-            // Fails when one is already installed, which is fine.
-            let _ = rustls::crypto::ring::default_provider().install_default();
-            reqwest::Client::builder()
-                .timeout(Duration::from_secs(15))
-                // GitHub's API refuses requests without one.
-                .user_agent("hive-desktop")
-                .build()
-                .ok()
-        })
-        .as_ref()
 }
 
 /// The authors' pictures that could be found, as `data:` URLs keyed by
@@ -142,22 +127,15 @@ async fn read_page(
     page: usize,
     per_page: usize,
 ) -> bool {
-    let Some(client) = client() else {
+    let (Some(client), Some(request)) = (
+        http::client(),
+        // Owner and repo are checked to be URL-safe by `github_remote`.
+        http::github_get(&format!(
+            "https://api.github.com/repos/{owner}/{repo}/commits?per_page={per_page}&page={page}"
+        )),
+    ) else {
         return false;
     };
-    let mut request = client
-        // Owner and repo are checked to be URL-safe by `github_remote`.
-        .get(format!(
-            "https://api.github.com/repos/{owner}/{repo}/commits?per_page={per_page}&page={page}"
-        ))
-        .header(reqwest::header::ACCEPT, "application/vnd.github+json");
-    // A token lifts the 60-an-hour limit and reaches private repositories.
-    if let Some(token) = ["GITHUB_TOKEN", "GH_TOKEN"]
-        .iter()
-        .find_map(|name| std::env::var(name).ok().filter(|t| !t.is_empty()))
-    {
-        request = request.bearer_auth(token);
-    }
     let rows = match request.send().await {
         Ok(response) if response.status().is_success() => {
             match response.json::<Vec<GitHubCommit>>().await {

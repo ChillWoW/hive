@@ -1,9 +1,11 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
 import { isTauri } from "@/lib/platform";
+import { useSettingsStore } from "@/settings/store";
 
 /**
  * Transport for app updates (`src-tauri/src/updater.rs`). Under a plain
- * `bun run dev` a made-up update shows up so the button can be tried out;
+ * `bun run dev` a made-up update shows up (a beta on the pre-release
+ * channel) so the button can be tried out;
  * installing it plays a fake download and then fails.
  */
 
@@ -17,10 +19,19 @@ export type UpdateProgress =
     | { kind: "downloading"; downloaded: number; total?: number | null }
     | { kind: "installing" };
 
-/** The newer release, or null when up to date (always null in dev builds). */
+/**
+ * The newer release on the `updates.channel` setting, or null when up to
+ * date (always null in dev builds).
+ */
 export function checkForUpdate(): Promise<UpdateInfo | null> {
     if (!isTauri) {
-        return Promise.resolve({ version: "0.0.2", currentVersion: "0.0.1", notes: null });
+        const pre = useSettingsStore.getState().settings.updates.channel === "prerelease";
+        return new Promise((resolve) =>
+            setTimeout(
+                () => resolve({ version: pre ? "0.0.3-beta.1" : "0.0.2", currentVersion: "0.0.1", notes: null }),
+                400
+            )
+        );
     }
     return invoke<UpdateInfo | null>("update_check");
 }

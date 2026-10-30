@@ -41,6 +41,8 @@ tauri-plugin-window-state = "2"
 tauri-plugin-notification = "2"
 portable-pty = "0.9"
 tauri-plugin-updater = "2"
+# Picks the newest release for the pre-release update channel.
+semver = "1"
 # The history tab's GitHub avatars.
 reqwest = { version = "0.13", default-features = false, features = ["json", "rustls-no-provider"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }

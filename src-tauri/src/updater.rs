@@ -1,19 +1,31 @@
 //! App updates from GitHub Releases (`plugins.updater` in tauri.conf.json).
 //! Nothing is downloaded until the user asks: `update_check` only reads
-//! `latest.json`; `update_install` downloads, stops the agents and
-//! terminals, installs and restarts.
+//! `latest.json` (the latest release's, or on the pre-release channel the
+//! highest-versioned release's); `update_install` downloads, stops the agents
+//! and terminals, installs and restarts. Never offers a lower version than
+//! the running one, so leaving the pre-release channel waits for stable to
+//! catch up.
 
 use std::sync::Mutex;
 use std::time::Duration;
 
 use hive_engine::Engine;
-use serde::Serialize;
+use hive_proto::UpdateChannel;
+use hive_store::SettingsFile;
+use semver::Version;
+use serde::{Deserialize, Serialize};
 use tauri::ipc::Channel;
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, State, Url};
 use tauri_plugin_updater::{Update, UpdaterExt};
 
+use crate::http;
 use crate::terminals::Terminals;
 
+/// Where releases are published; the same repository as
+/// `plugins.updater.endpoints` in tauri.conf.json.
+const REPO: &str = "ChillWoW/hive";
+/// Releases read for the pre-release channel, newest first.
+const RELEASES_PAGE: usize = 30;
 /// How long agents get to exit before the installer takes over.
 const SHUTDOWN_GRACE: Duration = Duration::from_secs(5);
 /// Progress is reported at most this often (in bytes).
@@ -39,21 +51,30 @@ pub enum UpdateProgress {
     Installing,
 }
 
-/// The newer release, if there is one. Dev builds never update.
+/// The newer release on the `updates.channel` setting, if there is one. Dev
+/// builds never update.
 #[tauri::command]
 pub async fn update_check(
     app: AppHandle,
     updates: State<'_, Updates>,
+    settings: State<'_, SettingsFile>,
 ) -> Result<Option<UpdateInfo>, String> {
     if cfg!(debug_assertions) {
         return Ok(None);
     }
-    let update = app
-        .updater()
-        .map_err(|e| e.to_string())?
-        .check()
-        .await
-        .map_err(|e| e.to_string())?;
+    let updater = match settings.get().updates.channel {
+        // `plugins.updater.endpoints`: GitHub's latest release, which is
+        // never a pre-release.
+        UpdateChannel::Stable => app.updater(),
+        UpdateChannel::Prerelease => {
+            let endpoint = newest_release_manifest().await?;
+            app.updater_builder()
+                .endpoints(vec![endpoint])
+                .and_then(|builder| builder.build())
+        }
+    }
+    .map_err(|e| e.to_string())?;
+    let update = updater.check().await.map_err(|e| e.to_string())?;
     let info = update.as_ref().map(|u| UpdateInfo {
         version: u.version.clone(),
         current_version: u.current_version.clone(),
@@ -61,6 +82,52 @@ pub async fn update_check(
     });
     *updates.0.lock().unwrap() = update;
     Ok(info)
+}
+
+#[derive(Deserialize)]
+struct GitHubRelease {
+    tag_name: String,
+    draft: bool,
+    assets: Vec<GitHubAsset>,
+}
+
+#[derive(Deserialize)]
+struct GitHubAsset {
+    name: String,
+    browser_download_url: String,
+}
+
+/// The `latest.json` of the highest-versioned release, pre-releases
+/// included. Only releases that have one count (a build still uploading
+/// doesn't yet).
+async fn newest_release_manifest() -> Result<Url, String> {
+    let request = http::github_get(&format!(
+        "https://api.github.com/repos/{REPO}/releases?per_page={RELEASES_PAGE}"
+    ))
+    .ok_or("Couldn't start an HTTP client.")?;
+    let response = request
+        .send()
+        .await
+        .map_err(|e| format!("Couldn't reach GitHub: {e}"))?;
+    if !response.status().is_success() {
+        return Err(format!("GitHub answered {} listing releases.", response.status()));
+    }
+    let releases: Vec<GitHubRelease> = response
+        .json()
+        .await
+        .map_err(|e| format!("Couldn't read GitHub's release list: {e}"))?;
+    let url = releases
+        .into_iter()
+        .filter(|r| !r.draft)
+        .filter_map(|r| {
+            let version = Version::parse(r.tag_name.trim_start_matches('v')).ok()?;
+            let manifest = r.assets.into_iter().find(|a| a.name == "latest.json")?;
+            Some((version, manifest.browser_download_url))
+        })
+        .max_by(|a, b| a.0.cmp(&b.0))
+        .map(|(_, url)| url)
+        .ok_or("No release has an update manifest yet.")?;
+    Url::parse(&url).map_err(|e| e.to_string())
 }
 
 /// Downloads the update `update_check` found, then stops every agent and

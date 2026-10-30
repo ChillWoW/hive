@@ -39,4 +39,6 @@ jobs:
           releaseName: Hive ${{ github.ref_name }}
           generateReleaseNotes: true
           releaseDraft: false
-          prerelease: false
+          # A tag like v0.1.0-beta.1 is a pre-release: GitHub's "latest" (the
+          # stable channel) skips it; the pre-release channel picks it up.
+          prerelease: ${{ contains(github.ref_name, '-') }}

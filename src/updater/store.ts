@@ -1,6 +1,7 @@
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { create } from "zustand";
 import { save, useDocsStore } from "@/editor/documents";
+import { hydrateSettings, useSettingsStore } from "@/settings/store";
 import { checkForUpdate, installUpdate, type UpdateInfo } from "./api";
 
 /** How often Hive looks for a release while it's open. */
@@ -15,9 +16,18 @@ export type UpdateState =
     | { phase: "installing"; update: UpdateInfo }
     | { phase: "failed"; update: UpdateInfo; error: string };
 
-export const useUpdaterStore = create<{ state: UpdateState; checkedAt: number }>()(() => ({
+export const useUpdaterStore = create<{
+    state: UpdateState;
+    /** When the last check started; 0 before the first. */
+    checkedAt: number;
+    checking: boolean;
+    /** Why the last check failed; cleared by the next one that doesn't. */
+    error: string | null;
+}>()(() => ({
     state: { phase: "none" },
-    checkedAt: 0
+    checkedAt: 0,
+    checking: false,
+    error: null
 }));
 
 const set = (state: UpdateState) => useUpdaterStore.setState({ state });
@@ -27,16 +37,27 @@ const busy = () => {
     return phase === "downloading" || phase === "installing";
 };
 
+/** Only the newest check's answer counts (a channel switch starts another). */
+let latestCheck = 0;
+
 /** Looks for a newer release. A failed check keeps what the last one found. */
 export async function checkNow() {
     if (busy()) return;
-    useUpdaterStore.setState({ checkedAt: Date.now() });
+    const id = ++latestCheck;
+    useUpdaterStore.setState({ checkedAt: Date.now(), checking: true });
     try {
         const update = await checkForUpdate();
+        if (id !== latestCheck) return;
+        useUpdaterStore.setState({ checking: false, error: null });
         if (busy()) return;
         set(update ? { phase: "available", update } : { phase: "none" });
     } catch (e) {
+        if (id !== latestCheck) return;
         console.warn("update check failed:", e);
+        useUpdaterStore.setState({
+            checking: false,
+            error: e instanceof Error ? e.message : String(e)
+        });
     }
 }
 
@@ -70,9 +91,29 @@ export async function install() {
     }
 }
 
-/** Mounted in `App`: checks at launch, every few hours and on window focus. */
+/**
+ * Mounted in `App`. With `updates.autoCheck` on: checks at launch (once the
+ * settings file is read), every few hours and on window focus. A channel
+ * switch checks again either way.
+ */
 export function useUpdaterRuntime() {
+    const [ready, setReady] = useState(false);
+    const autoCheck = useSettingsStore((s) => s.settings.updates.autoCheck);
+    const channel = useSettingsStore((s) => s.settings.updates.channel);
+    const lastChannel = useRef(channel);
+
     useEffect(() => {
+        let live = true;
+        void hydrateSettings().then(() => {
+            if (live) setReady(true);
+        });
+        return () => {
+            live = false;
+        };
+    }, []);
+
+    useEffect(() => {
+        if (!ready || !autoCheck) return;
         void checkNow();
         const timer = window.setInterval(() => void checkNow(), CHECK_EVERY_MS);
         const onFocus = () => {
@@ -85,5 +126,15 @@ export function useUpdaterRuntime() {
             window.clearInterval(timer);
             window.removeEventListener("focus", onFocus);
         };
-    }, []);
+    }, [ready, autoCheck]);
+
+    useEffect(() => {
+        if (!ready) {
+            lastChannel.current = channel;
+            return;
+        }
+        if (lastChannel.current === channel) return;
+        lastChannel.current = channel;
+        void checkNow();
+    }, [ready, channel]);
 }

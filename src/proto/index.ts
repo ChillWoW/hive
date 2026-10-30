@@ -64,6 +64,8 @@ export type { TodoItem } from "./TodoItem";
 export type { TodoStatus } from "./TodoStatus";
 export type { ToolCall } from "./ToolCall";
 export type { ToolDiff } from "./ToolDiff";
+export type { UpdateChannel } from "./UpdateChannel";
+export type { UpdatesSettings } from "./UpdatesSettings";
 export type { UsageCost } from "./UsageCost";
 export type { UsageHarness } from "./UsageHarness";
 export type { UsageModel } from "./UsageModel";

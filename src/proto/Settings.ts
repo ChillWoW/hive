@@ -3,6 +3,7 @@ import type { ChatsSettings } from "./ChatsSettings";
 import type { KeyboardSettings } from "./KeyboardSettings";
 import type { NotificationsSettings } from "./NotificationsSettings";
 import type { ProvidersSettings } from "./ProvidersSettings";
+import type { UpdatesSettings } from "./UpdatesSettings";
 import type { WorktreesSettings } from "./WorktreesSettings";
 
-export type Settings = { version: number, chats: ChatsSettings, worktrees: WorktreesSettings, notifications: NotificationsSettings, keyboard: KeyboardSettings, providers: ProvidersSettings, };
+export type Settings = { version: number, chats: ChatsSettings, worktrees: WorktreesSettings, notifications: NotificationsSettings, keyboard: KeyboardSettings, providers: ProvidersSettings, updates: UpdatesSettings, };

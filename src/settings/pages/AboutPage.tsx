@@ -1,45 +1,27 @@
 import { useEffect, useState } from "react";
-import { getVersion } from "@tauri-apps/api/app";
 import {
     ArrowCounterClockwiseIcon,
     FolderOpenIcon
 } from "@phosphor-icons/react";
 import { tildify, useHomeDir } from "@/lib/home";
-import { isTauri } from "@/lib/platform";
 import { Button } from "@/ui";
 import { settingsApi } from "../api";
 import { CopyButton } from "../CopyButton";
 import { SettingRow, SettingsSection } from "../SettingsSection";
 import { useSettingsStore } from "../store";
+import { UpdatesSection } from "./UpdatesSection";
 
 export function AboutPage() {
-    const [version, setVersion] = useState<string | null>(null);
     const [path, setPath] = useState<string | null>(null);
     const home = useHomeDir();
 
     useEffect(() => {
-        if (isTauri) getVersion().then(setVersion, () => {});
         settingsApi.path().then(setPath, () => {});
     }, []);
 
     return (
         <>
-            <SettingsSection title="Hive">
-                <SettingRow
-                    label="Version"
-                    keywords="about version release build"
-                    description={
-                        isTauri
-                            ? undefined
-                            : "Browser preview, no desktop shell"
-                    }
-                    control={
-                        <span className="font-mono text-xs text-dark-100 tabular-nums">
-                            {version ?? "dev"}
-                        </span>
-                    }
-                />
-            </SettingsSection>
+            <UpdatesSection />
 
             <SettingsSection title="Settings file">
                 <SettingRow

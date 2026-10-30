@@ -5,6 +5,7 @@ mod engine;
 mod files;
 mod folders;
 mod git;
+mod http;
 mod mcp;
 mod providers;
 mod secrets;

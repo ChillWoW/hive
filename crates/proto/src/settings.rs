@@ -28,6 +28,7 @@ pub struct Settings {
     pub notifications: NotificationsSettings,
     pub keyboard: KeyboardSettings,
     pub providers: ProvidersSettings,
+    pub updates: UpdatesSettings,
 }
 
 impl Default for Settings {
@@ -39,6 +40,7 @@ impl Default for Settings {
             notifications: NotificationsSettings::default(),
             keyboard: KeyboardSettings::default(),
             providers: ProvidersSettings::default(),
+            updates: UpdatesSettings::default(),
         }
     }
 }
@@ -200,6 +202,37 @@ impl Default for ProvidersSettings {
             codex: true,
             opencode: true,
             mock: true,
+        }
+    }
+}
+
+/// Which releases the updater offers.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "kebab-case")]
+pub enum UpdateChannel {
+    /// The release GitHub marks as latest (pre-releases never are).
+    #[default]
+    Stable,
+    /// The newest release, pre-releases included.
+    Prerelease,
+}
+
+/// App updates. `auto_check` is read by the frontend (`src/updater/`), the
+/// channel by `update_check` (`src-tauri/src/updater.rs`).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase", default)]
+pub struct UpdatesSettings {
+    /// Look for a release at launch, every few hours and on window focus.
+    /// Off, only Check now on Settings › About does.
+    pub auto_check: bool,
+    pub channel: UpdateChannel,
+}
+
+impl Default for UpdatesSettings {
+    fn default() -> Self {
+        Self {
+            auto_check: true,
+            channel: UpdateChannel::Stable,
         }
     }
 }

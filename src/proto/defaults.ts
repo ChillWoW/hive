@@ -43,5 +43,9 @@ export const DEFAULT_SETTINGS: Settings = {
     "codex": true,
     "opencode": true,
     "mock": true
+  },
+  "updates": {
+    "autoCheck": true,
+    "channel": "stable"
   }
 };

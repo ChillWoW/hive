@@ -81,6 +81,7 @@ dependencies = [
  "portable-pty",
  "reqwest",
  "rustls",
+ "semver",
  "serde",
  "serde_json",
  "sha2",
