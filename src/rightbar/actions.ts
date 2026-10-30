@@ -40,6 +40,18 @@ export function openTerminalTab(cwd: string | null = activeFolder()) {
     useLayoutStore.getState().show("right");
 }
 
+/**
+ * Shows the diff tab (there's one; it follows the open chat's folder),
+ * adding it if it isn't open, and shows the right sidebar.
+ */
+export function openDiffTab() {
+    const { tabs, activate, add } = useRightbarStore.getState();
+    const open = tabs.find((t) => t.kind === "diff");
+    if (open) activate(open.id);
+    else add({ kind: "diff" }, "Diff");
+    useLayoutStore.getState().show("right");
+}
+
 /** Closes a tab, saving its file first; a failed save keeps it open and says so. */
 export async function closeTab(id: string) {
     const doc = useDocsStore.getState().docs[id];

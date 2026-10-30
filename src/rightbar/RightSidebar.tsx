@@ -1,3 +1,4 @@
+import { DiffTab } from "./DiffTab";
 import { FileTab } from "./FileTab";
 import { TerminalTab } from "./TerminalTab";
 import { useDiskChecks } from "./useDiskChecks";
@@ -14,9 +15,12 @@ export function RightSidebar() {
                 <FileTab key={tab.id} tab={tab} />
             ) : tab?.kind === "terminal" ? (
                 <TerminalTab key={tab.id} tab={tab} />
+            ) : tab?.kind === "diff" ? (
+                <DiffTab key={tab.id} />
             ) : (
                 <div className="flex flex-1 items-center justify-center p-4 text-center text-[11.5px] text-dark-250">
-                    No tabs open. Open a file from the file panel, or a terminal with +.
+                    No tabs open. Open a file from the file panel, or a terminal or the diff
+                    with +.
                 </div>
             )}
         </div>

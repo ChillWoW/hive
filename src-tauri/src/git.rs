@@ -1,8 +1,8 @@
-//! The branch picker's git commands, over `hive_git`, for a chat's folder.
+//! The branch picker's and diff tab's git commands, over `hive_git`, for a chat's folder.
 
 use std::path::Path;
 
-use hive_proto::GitRepo;
+use hive_proto::{GitDiff, GitRepo};
 
 /// Null when `cwd` isn't in a checkout.
 #[tauri::command]
@@ -28,6 +28,15 @@ pub async fn git_create_branch(cwd: String, name: String, from: String) -> Resul
 #[tauri::command]
 pub async fn git_delete_branch(cwd: String, name: String) -> Result<(), String> {
     hive_git::delete(Path::new(&cwd), &name)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// The checkout's changes against HEAD, or with `base` against its merge
+/// base with HEAD; null when `cwd` isn't in a checkout.
+#[tauri::command]
+pub async fn git_diff(cwd: String, base: Option<String>) -> Result<Option<GitDiff>, String> {
+    hive_git::diff(Path::new(&cwd), base.as_deref())
         .await
         .map_err(|e| e.to_string())
 }

@@ -1,6 +1,6 @@
 //! hive-git — a project folder's branches and Hive's worktrees, over the
 //! `git` the user has installed: list branches, switch, branch off one,
-//! delete one; add, restore and remove a chat's worktree.
+//! delete one; add, restore and remove a chat's worktree; diff a checkout.
 
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
@@ -8,6 +8,9 @@ use std::time::Duration;
 
 use hive_proto::{GitBranch, GitRepo, Worktree};
 use tokio::process::Command;
+
+mod diff;
+pub use diff::{diff, MAX_PATCH_BYTES};
 
 #[derive(Debug, thiserror::Error)]
 pub enum GitError {
@@ -535,6 +538,39 @@ mod tests {
         }
         assert_eq!(repo(dir.path()).await.unwrap(), None);
         assert_eq!(repo(Path::new("/definitely/not/here")).await.unwrap(), None);
+    }
+
+    #[tokio::test]
+    async fn diffs_the_working_tree_and_a_branch() {
+        let Some(dir) = fixture().await else { return };
+        let path = dir.path();
+
+        let clean = diff(path, None).await.unwrap().unwrap();
+        assert_eq!(clean.branch.as_deref(), Some("main"));
+        assert!(clean.patch.is_empty() && !clean.truncated);
+
+        std::fs::write(path.join("a.txt"), "b\n").unwrap();
+        std::fs::create_dir(path.join("new dir")).unwrap();
+        std::fs::write(path.join("new dir/n.txt"), "x\ny\n").unwrap();
+        let d = diff(path, None).await.unwrap().unwrap();
+        assert!(d.patch.contains("diff --git a/a.txt b/a.txt"), "{}", d.patch);
+        assert!(d.patch.contains("-a\n"));
+        assert!(d.patch.contains("+b\n"));
+        assert!(d.patch.contains("diff --git a/new dir/n.txt b/new dir/n.txt\nnew file mode"));
+        assert!(d.patch.contains("+x\n+y\n"));
+
+        // On a branch with a commit: against main, both the commit and the
+        // working tree; against HEAD only the working tree.
+        create(path, "feat/x", "main").await.unwrap();
+        git(path, &["add", "a.txt"]).await.unwrap();
+        git(path, &["commit", "-q", "-m", "change a"]).await.unwrap();
+        let d = diff(path, None).await.unwrap().unwrap();
+        assert!(!d.patch.contains("a/a.txt"));
+        let d = diff(path, Some("main")).await.unwrap().unwrap();
+        assert!(d.merge_base.is_some());
+        assert!(d.patch.contains("diff --git a/a.txt b/a.txt"));
+        assert!(d.patch.contains("new dir/n.txt"));
+        assert!(diff(path, Some("nope")).await.is_err());
     }
 
     #[tokio::test]

@@ -19,6 +19,7 @@ export type { DoneStatus } from "./DoneStatus";
 export type { FileText } from "./FileText";
 export type { FinishedTask } from "./FinishedTask";
 export type { GitBranch } from "./GitBranch";
+export type { GitDiff } from "./GitDiff";
 export type { GitRepo } from "./GitRepo";
 export type { HarnessCapabilities } from "./HarnessCapabilities";
 export type { HarnessCatalog } from "./HarnessCatalog";

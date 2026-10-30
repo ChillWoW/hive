@@ -49,3 +49,25 @@ pub struct GitBranch {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub subject: Option<String>,
 }
+
+/// A checkout's changes as one unified patch, for the diff tab: the working
+/// tree (untracked files as new ones) against HEAD, or against the merge
+/// base with another branch.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(optional_fields)]
+pub struct GitDiff {
+    /// The checkout's top folder; the patch's paths are relative to it.
+    pub root: String,
+    /// The checked-out branch; missing on a detached HEAD.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub branch: Option<String>,
+    /// The short hash compared against when a base branch was given (its
+    /// merge base with HEAD).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub merge_base: Option<String>,
+    /// `git diff` output, then a section per untracked file.
+    pub patch: String,
+    /// The patch was cut at its size cap, or some files were left out.
+    pub truncated: bool,
+}

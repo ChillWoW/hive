@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { PlusIcon, TerminalWindowIcon, XIcon } from "@phosphor-icons/react";
+import { GitDiffIcon, PlusIcon, TerminalWindowIcon, XIcon } from "@phosphor-icons/react";
+import { SCOPE_LABELS, useDiffPrefs } from "@/diff/store";
 import { ShortcutKeys, useBinding, type ActionId } from "@/keybindings";
 import { cn } from "@/lib/cn";
 import { useDocsStore } from "@/editor";
@@ -209,13 +210,16 @@ function TabChip({
 }) {
     // Unsaved changes: a dot where the ✕ shows on hover, as in zeron.
     const dirty = useDocsStore((s) => !!s.docs[tab.id]?.dirty);
+    // The diff tab is titled with what it compares, as zeron's is.
+    const scope = useDiffPrefs((s) => s.scope);
+    const title = tab.kind === "diff" ? SCOPE_LABELS[scope] : tab.title;
     const chip = (
         <div
             role="tab"
             tabIndex={0}
             data-tab={tab.id}
             aria-selected={active}
-            aria-label={tab.title}
+            aria-label={title}
             {...pointer}
             onKeyDown={(event) => {
                 if (event.key === "Enter" || event.key === " ") {
@@ -236,13 +240,15 @@ function TabChip({
             )}
         >
             <span className="flex size-[18px] shrink-0 items-center justify-center">
-                {tab.kind === "terminal" ? (
+                {tab.kind === "diff" ? (
+                    <GitDiffIcon className={cn("size-3.5", !active && "opacity-80")} />
+                ) : tab.kind === "terminal" ? (
                     <TerminalWindowIcon className={cn("size-3.5", !active && "opacity-80")} />
                 ) : (
                     <FileIcon name={tab.title} className={cn("size-3.5", !active && "opacity-80")} />
                 )}
             </span>
-            <span className="min-w-0 flex-1 truncate text-[11.5px]">{tab.title}</span>
+            <span className="min-w-0 flex-1 truncate text-[11.5px]">{title}</span>
             <button
                 type="button"
                 aria-label={dirty ? "Close tab (unsaved changes)" : "Close tab"}
@@ -270,7 +276,11 @@ function TabChip({
         <Tooltip disabled={dragging}>
             <Tooltip.Trigger delay={350} render={chip} />
             <Tooltip.Content side="bottom">
-                {tab.kind === "file" ? tab.path : (tab.cwd ?? "Home folder")}
+                {tab.kind === "file"
+                    ? tab.path
+                    : tab.kind === "diff"
+                      ? "Changes in the open chat's folder"
+                      : (tab.cwd ?? "Home folder")}
             </Tooltip.Content>
         </Tooltip>
     );

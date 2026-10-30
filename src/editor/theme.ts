@@ -1,4 +1,4 @@
-import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
+import { HighlightStyle, syntaxHighlighting, type TagStyle } from "@codemirror/language";
 import { EditorView } from "@codemirror/view";
 import { tags as t } from "@lezer/highlight";
 
@@ -79,7 +79,8 @@ const chrome = EditorView.theme(
     { dark: true }
 );
 
-const highlight = HighlightStyle.define([
+/** The syntax colours, shared with the diff tab's highlighting. */
+export const HIGHLIGHT_SPECS: TagStyle[] = [
     { tag: [t.comment, t.lineComment, t.blockComment, t.docComment], color: "#8b949e" },
     {
         tag: [t.keyword, t.controlKeyword, t.operatorKeyword, t.definitionKeyword, t.modifier],
@@ -108,6 +109,8 @@ const highlight = HighlightStyle.define([
     { tag: t.invalid, color: "#ffa198" },
     { tag: [t.inserted], color: "#aff5b4" },
     { tag: [t.deleted], color: "#ffdcd7" }
-]);
+];
+
+const highlight = HighlightStyle.define(HIGHLIGHT_SPECS);
 
 export const editorTheme = [chrome, syntaxHighlighting(highlight)];

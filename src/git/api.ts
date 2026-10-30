@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { GitBranch, GitRepo } from "@/proto";
+import type { GitBranch, GitDiff, GitRepo } from "@/proto";
 import { isTauri } from "@/lib/platform";
 
 /**
@@ -46,9 +46,62 @@ function fakeChange(change: () => void): Promise<void> {
     }
 }
 
+const FAKE_PATCH = `diff --git a/src/App.tsx b/src/App.tsx
+index 1a2b3c4..5d6e7f8 100644
+--- a/src/App.tsx
++++ b/src/App.tsx
+@@ -1,9 +1,11 @@
+ import { useEffect } from "react";
+-import { Sidebar } from "./layout";
++import { Sidebar, TopBar } from "./layout";
++import { RightSidebar } from "./rightbar";
+
+ export function App() {
+     useEffect(() => {
+-        document.title = "Hive";
++        // The window's title, as the taskbar shows it.
++        document.title = "Hive Dev";
+     }, []);
+-    return <Sidebar />;
++    return <TopBar />;
+ }
+diff --git a/src/rightbar/kinds.ts b/src/rightbar/kinds.ts
+index 9f8e7d6..c5b4a39 100644
+--- a/src/rightbar/kinds.ts
++++ b/src/rightbar/kinds.ts
+@@ -12,3 +12,8 @@ export const NEW_TABS: readonly NewTab[] = [
+         open: () => openTerminalTab()
+-    }
++    },
++    {
++        label: "Diff",
++        open: () => openDiffTab()
++    }
+ ];
+diff --git a/notes.md b/notes.md
+new file mode 100644
+--- /dev/null
++++ b/notes.md
+@@ -0,0 +1,3 @@
++# Notes
++
++A made-up diff, shown under \`bun run dev\`.
+`;
+
 export const gitApi = {
     repo: (cwd: string): Promise<GitRepo | null> =>
         isTauri ? invoke("git_repo", { cwd }) : Promise.resolve(fakeRepo(cwd)),
+    /** The checkout's changes against HEAD, or with `base` against its merge base. */
+    diff: (cwd: string, base?: string): Promise<GitDiff | null> =>
+        isTauri
+            ? invoke("git_diff", { cwd, base: base ?? null })
+            : Promise.resolve({
+                  root: cwd,
+                  branch: fake.current,
+                  mergeBase: base ? "1f2e3d4" : undefined,
+                  patch: FAKE_PATCH,
+                  truncated: false
+              }),
     switchBranch: (cwd: string, name: string): Promise<void> =>
         isTauri
             ? invoke("git_switch_branch", { cwd, name })

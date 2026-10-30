@@ -2,11 +2,13 @@ import { create } from "zustand";
 
 /**
  * What a tab shows: a file of a chat's folder in the editor, or a terminal
- * started in a folder (the home folder without one).
+ * started in a folder (the home folder without one), or the diff of the open
+ * chat's folder (it follows the open chat, as zeron's Diff tab does).
  */
 export type TabContent =
     | { kind: "file"; cwd: string; path: string }
-    | { kind: "terminal"; cwd: string | null };
+    | { kind: "terminal"; cwd: string | null }
+    | { kind: "diff" };
 
 export type RightTab = { id: string; title: string } & TabContent;
 

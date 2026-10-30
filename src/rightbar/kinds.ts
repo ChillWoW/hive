@@ -1,6 +1,6 @@
-import { TerminalWindowIcon, type Icon } from "@phosphor-icons/react";
+import { GitDiffIcon, TerminalWindowIcon, type Icon } from "@phosphor-icons/react";
 import type { ActionId } from "@/keybindings";
-import { openTerminalTab } from "./actions";
+import { openDiffTab, openTerminalTab } from "./actions";
 
 /** Something the "+" menu opens in a new tab. */
 export type NewTab = {
@@ -21,5 +21,10 @@ export const NEW_TABS: readonly NewTab[] = [
         icon: TerminalWindowIcon,
         shortcut: "newTerminal",
         open: () => openTerminalTab()
+    },
+    {
+        label: "Diff",
+        icon: GitDiffIcon,
+        open: () => openDiffTab()
     }
 ];

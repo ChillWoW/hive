@@ -26,9 +26,10 @@ import type { ReadOnlyReason } from "@/proto";
 import { cn } from "@/lib/cn";
 import { useLayoutStore } from "@/stores/useLayoutStore";
 import { Markdown } from "@/transcript/Markdown";
-import { Button, FileIcon, iconButtonClassName, Tooltip } from "@/ui";
+import { Button, FileIcon, Tooltip } from "@/ui";
 import { discardTab } from "./actions";
 import type { RightTab } from "./store";
+import { ToolButton } from "./ToolButton";
 
 const IMAGE_TYPES: Record<string, string> = {
     png: "image/png",
@@ -161,37 +162,6 @@ function Toolbar({
                 </ToolButton>
             )}
         </div>
-    );
-}
-
-function ToolButton({
-    label,
-    pressed,
-    onClick,
-    children
-}: {
-    label: string;
-    pressed?: boolean;
-    onClick: () => void;
-    children: ReactNode;
-}) {
-    return (
-        <Tooltip>
-            <Tooltip.Trigger
-                render={
-                    <button
-                        type="button"
-                        aria-label={label}
-                        aria-pressed={pressed}
-                        onClick={onClick}
-                        className={cn(iconButtonClassName, pressed && "bg-white/10 text-dark-50")}
-                    >
-                        {children}
-                    </button>
-                }
-            />
-            <Tooltip.Content side="bottom">{label}</Tooltip.Content>
-        </Tooltip>
     );
 }
 

@@ -76,6 +76,7 @@ pub fn run() {
       git::git_switch_branch,
       git::git_create_branch,
       git::git_delete_branch,
+      git::git_diff,
       providers::provider_status,
       providers::provider_usage,
       providers::provider_install,
