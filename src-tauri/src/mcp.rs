@@ -13,7 +13,7 @@ use hive_mcp::{Ctx, Host, McpServer, Tools};
 use serde_json::{json, Value};
 use tauri::{AppHandle, Manager};
 
-use crate::secrets;
+use crate::{html, secrets};
 
 /// Starts the host and returns how agents launch a bridge to it; None (and
 /// agents run without it) when it can't.
@@ -31,6 +31,8 @@ pub fn start(app: &AppHandle, data_dir: &Path) -> Option<McpServer> {
 fn tools(app: &AppHandle) -> Tools {
     let whoami_app = app.clone();
     let secrets_app = app.clone();
+    let preview_app = app.clone();
+    let render_app = app.clone();
     Tools::new()
         .tool(
             "whoami",
@@ -46,6 +48,18 @@ fn tools(app: &AppHandle) -> Tools {
             secrets::DESCRIPTION,
             secrets::schema(),
             move |ctx, args| secrets::request(secrets_app.clone(), ctx, args),
+        )
+        .tool(
+            html::PREVIEW_TOOL,
+            html::preview_description(),
+            html::preview_schema(),
+            move |_, args| html::preview(preview_app.clone(), args),
+        )
+        .tool(
+            html::RENDER_TOOL,
+            html::render_description(),
+            html::render_schema(),
+            move |ctx, args| html::render(render_app.clone(), ctx, args),
         )
 }
 

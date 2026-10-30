@@ -5,8 +5,9 @@ import { cn } from "@/lib/cn";
 import { DOT_MATRIX_FULL, DotMatrixSpinner, Tooltip } from "@/ui";
 import { Markdown } from "./Markdown";
 import { CompactionRow, ErrorChip, InputRow, SubagentChip, WakeRow } from "./parts";
+import { HtmlPage } from "@/htmlpage";
 import { ToolGroup } from "./ToolGroup";
-import type { GroupItem, ToolPart } from "./tools";
+import { pageOf, type GroupItem, type ToolPart } from "./tools";
 
 /**
  * What a turn renders as, in order: a group of calls and thoughts, a stack
@@ -34,6 +35,12 @@ function toBlocks(parts: MessagePart[], streaming: boolean): Block[] {
     parts.forEach((part, index) => {
         if ((part.kind === "text" || part.kind === "reasoning") && !part.text.trim()) return;
 
+        // A page `render_html` showed stands on its own, where it was called.
+        if (part.kind === "tool" && pageOf(part)) {
+            open = undefined;
+            blocks.push({ kind: "part", part, index });
+            return;
+        }
         if (isAgent(part)) {
             if (open?.kind !== "agents") blocks.push((open = { kind: "agents", parts: [], first: index }));
             open.parts.push(part as ToolPart);
@@ -193,6 +200,10 @@ export function AssistantMessage({
                 return <WakeRow key={part.id} part={part} />;
             case "compaction":
                 return <CompactionRow key={part.id} part={part} streaming={streaming} />;
+            case "tool": {
+                const page = pageOf(part);
+                return page ? <HtmlPage key={part.id} page={page} /> : null;
+            }
             default:
                 return null;
         }

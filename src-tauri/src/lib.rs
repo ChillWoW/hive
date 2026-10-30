@@ -5,6 +5,7 @@ mod engine;
 mod files;
 mod folders;
 mod git;
+mod html;
 mod http;
 mod mcp;
 mod providers;
@@ -67,6 +68,7 @@ pub fn run() {
       engine::mark_chat_seen,
       engine::delete_chat,
       secrets::answer_secret_request,
+      html::answer_html_check,
       files::list_files,
       files::list_directory,
       files::rename_entry,
@@ -142,6 +144,7 @@ pub fn run() {
       let secrets = secrets::Secrets::new(&data_dir);
       secrets.sweep_every_hour();
       app.manage(secrets);
+      app.manage(Arc::new(html::HtmlChecks::default()));
       let config = EngineConfig {
         resume_interrupted: chats.resume_interrupted,
         auto_title: chats.auto_title,

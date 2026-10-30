@@ -2,6 +2,7 @@ import { useState, type CSSProperties } from "react";
 import { ChatView } from "@/chat/ChatView";
 import { useChat, useChatsRuntime, useChatsStore } from "@/chats";
 import { folderName } from "@/composer";
+import { useHtmlCheckRuntime } from "@/htmlpage";
 import { useKeybindingsRuntime } from "@/keybindings";
 import { RightPanels, Sidebar, TopBar, WINDOW_CONTROLS_WIDTH } from "@/layout";
 import { isMac } from "@/lib/platform";
@@ -20,6 +21,7 @@ export function App() {
     useUpdaterRuntime();
     useUsageRuntime();
     usePaletteRuntime();
+    useHtmlCheckRuntime();
     const chat = useChat(useChatsStore((s) => s.activeChatId));
     const title = chat ? (chat.title ?? folderName(chat.cwd)) : undefined;
     // Overlays mount here, below the top bar, so an open modal never takes

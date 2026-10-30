@@ -15,6 +15,7 @@ import {
 import type { ComponentType } from "react";
 import type { MessagePart, ToolCall } from "@/proto";
 import type { JsonValue } from "@/proto/serde_json/JsonValue";
+import type { PageRef } from "@/htmlpage";
 import { HiveMark } from "@/ui";
 
 export type ToolPart = Extract<MessagePart, { kind: "tool" }>;
@@ -78,12 +79,59 @@ type HiveTool = { label?: string; detail?: (input: JsonValue | undefined) => str
 const HIVE_TOOLS: Record<string, HiveTool> = {
     request_secret: {
         label: "Asking for a secret",
-        detail: (input) =>
-            input && typeof input === "object" && !Array.isArray(input) && typeof input.label === "string"
-                ? input.label
-                : ""
+        detail: (input) => stringField(input, "label") ?? ""
+    },
+    preview_html: {
+        label: "Check page",
+        detail: (input) => /<title[^>]*>([^<]*)</i.exec(stringField(input, "html") ?? "")?.[1] ?? ""
+    },
+    render_html: {
+        label: "Show page",
+        detail: (input) => stringField(input, "title") ?? ""
     }
 };
+
+function stringField(input: JsonValue | undefined, key: string): string | undefined {
+    if (!input || typeof input !== "object" || Array.isArray(input)) return undefined;
+    const value = input[key];
+    return typeof value === "string" ? value : undefined;
+}
+
+/**
+ * The page a finished `render_html` call showed (`src-tauri/src/html.rs`):
+ * the saved copy its result names, else the HTML it was sent.
+ */
+export function pageOf(part: ToolPart): PageRef | undefined {
+    const call = part.call;
+    if (call.kind !== "mcp" || call.server !== HIVE_SERVER || call.tool !== "render_html") return undefined;
+    if (!part.resolved || part.isError) return undefined;
+    const page = resultPage(part.output);
+    const html = stringField(call.input, "html");
+    const file = typeof page?.file === "string" ? page.file : undefined;
+    if (!file && html === undefined) return undefined;
+    const height = page?.height ?? (call.input as { height?: unknown } | undefined)?.height;
+    return {
+        title: (typeof page?.title === "string" ? page.title : stringField(call.input, "title")) ?? "Page",
+        file,
+        html,
+        height: typeof height === "number" ? height : undefined
+    };
+}
+
+/** `page` from the tool's JSON result, wherever a CLI put the JSON in its output. */
+function resultPage(output: string | undefined): Record<string, unknown> | undefined {
+    if (!output) return undefined;
+    const start = output.indexOf("{");
+    const end = output.lastIndexOf("}");
+    if (start === -1 || end < start) return undefined;
+    try {
+        const parsed: unknown = JSON.parse(output.slice(start, end + 1));
+        const page = (parsed as { page?: unknown } | null)?.page;
+        return page && typeof page === "object" ? (page as Record<string, unknown>) : undefined;
+    } catch {
+        return undefined;
+    }
+}
 
 function isHiveTool(call: ToolCall): boolean {
     return call.kind === "mcp" && call.server === HIVE_SERVER;

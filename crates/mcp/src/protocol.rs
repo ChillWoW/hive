@@ -19,7 +19,9 @@ const PROTOCOL_VERSIONS: [&str; 4] = ["2025-11-25", "2025-06-18", "2025-03-26", 
 const LATEST_PROTOCOL: &str = PROTOCOL_VERSIONS[0];
 
 const INSTRUCTIONS: &str = "Hive is the desktop app running this session. \
-These tools act on Hive itself (its chats, its window), not on the files you work on.";
+These tools act on Hive itself (its chats, its window), not on the files you work on. \
+To show the user an interactive chart, diagram, dashboard or mockup, check an HTML page \
+with preview_html, then show it in the chat with render_html.";
 
 const PARSE_ERROR: i64 = -32700;
 const INVALID_REQUEST: i64 = -32600;
