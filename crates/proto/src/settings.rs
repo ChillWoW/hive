@@ -58,6 +58,11 @@ pub struct ChatsSettings {
     /// Name new chats with a short model run after their first turn. Off, the
     /// first prompt's opening words name them instead.
     pub auto_title: bool,
+    /// Archive chats nothing has happened in for `auto_archive_days`. Pinned
+    /// chats and ones with work running are left alone.
+    pub auto_archive: bool,
+    /// Days of inactivity before a chat is archived; 1–365.
+    pub auto_archive_days: u32,
 }
 
 impl Default for ChatsSettings {
@@ -65,6 +70,8 @@ impl Default for ChatsSettings {
         Self {
             resume_interrupted: false,
             auto_title: true,
+            auto_archive: true,
+            auto_archive_days: 3,
         }
     }
 }
@@ -288,6 +295,7 @@ impl Settings {
     /// Clamps values the types alone can't constrain.
     pub fn normalize(&mut self) {
         self.version = SETTINGS_VERSION;
+        self.chats.auto_archive_days = self.chats.auto_archive_days.clamp(1, 365);
         let worktrees = &mut self.worktrees;
         worktrees.location = worktrees.location.trim().to_owned();
         worktrees.branch_prefix = worktrees

@@ -5,7 +5,9 @@ export const DEFAULT_SETTINGS: Settings = {
   "version": 1,
   "chats": {
     "resumeInterrupted": false,
-    "autoTitle": true
+    "autoTitle": true,
+    "autoArchive": true,
+    "autoArchiveDays": 3
   },
   "textGeneration": {
     "harness": null,

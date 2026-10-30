@@ -28,7 +28,7 @@
 
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
@@ -164,6 +164,8 @@ struct Inner {
     text_generation: Mutex<TextGenerationSettings>,
     /// Starts as `config.auto_title`; follows the setting.
     auto_title: AtomicBool,
+    /// Days before an idle chat is archived; 0 = never. Follows the setting.
+    auto_archive_days: AtomicU32,
     /// Starts as `config.worktrees_location` / `branch_naming` /
     /// `branch_prefix` / `delete_worktree_branch`; follows the settings.
     worktrees: Mutex<WorktreeOptions>,
@@ -326,6 +328,7 @@ impl Engine {
                 order: harnesses.iter().map(|h| h.id()).collect(),
                 harnesses: harnesses.into_iter().map(|h| (h.id(), h)).collect(),
                 auto_title: AtomicBool::new(config.auto_title),
+                auto_archive_days: AtomicU32::new(0),
                 text_generation: Mutex::default(),
                 worktrees: Mutex::new(WorktreeOptions {
                     location: config.worktrees_location.clone(),
@@ -593,6 +596,38 @@ impl Engine {
                 chat.pinned_at = None;
             }
         })
+    }
+
+    /// Archives every unpinned chat whose last activity is older than the
+    /// auto-archive age and that has no work running; returns how many.
+    pub fn archive_stale(&self) -> Result<usize> {
+        let days = self.inner.auto_archive_days.load(Ordering::Relaxed);
+        if days == 0 {
+            return Ok(0);
+        }
+        let cutoff = now_ms() - i64::from(days) * 24 * 60 * 60 * 1000;
+        let mut archived = 0;
+        for chat in self.store().chats()? {
+            let active = chat.last_message_at.unwrap_or(chat.created_at);
+            if chat.archived || chat.pinned_at.is_some() || active >= cutoff {
+                continue;
+            }
+            let runtime = self.runtime_for(&chat.id);
+            if lock(&runtime.state).busy() {
+                continue;
+            }
+            self.set_archived(&chat.id, true)?;
+            archived += 1;
+        }
+        Ok(archived)
+    }
+
+    /// Days of inactivity before [`Engine::archive_stale`] archives a chat;
+    /// None turns it off.
+    pub fn set_auto_archive(&self, days: Option<u32>) {
+        self.inner
+            .auto_archive_days
+            .store(days.unwrap_or(0), Ordering::Relaxed);
     }
 
     /// Pinning unarchives; a chat already pinned keeps its place.

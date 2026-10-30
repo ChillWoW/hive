@@ -175,6 +175,16 @@ pub fn run() {
         recovery.expired_commands,
         recovery.aborted_messages.len()
       );
+      // `apply` swept once; idle chats keep ageing while Hive stays open.
+      let sweeper = engine.clone();
+      tauri::async_runtime::spawn(async move {
+        loop {
+          tokio::time::sleep(std::time::Duration::from_secs(10 * 60)).await;
+          if let Err(e) = sweeper.archive_stale() {
+            log::warn!("auto-archiving chats: {e}");
+          }
+        }
+      });
       app.manage(engine);
       app.manage(engine::Watches::default());
       app.manage(providers::SignIns::default());

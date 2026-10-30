@@ -10,4 +10,13 @@ resumeInterrupted: boolean,
  * Name new chats with a short model run after their first turn. Off, the
  * first prompt's opening words name them instead.
  */
-autoTitle: boolean, };
+autoTitle: boolean, 
+/**
+ * Archive chats nothing has happened in for `auto_archive_days`. Pinned
+ * chats and ones with work running are left alone.
+ */
+autoArchive: boolean, 
+/**
+ * Days of inactivity before a chat is archived; 1–365.
+ */
+autoArchiveDays: number, };

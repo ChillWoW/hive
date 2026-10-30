@@ -1,4 +1,4 @@
-import { Switch } from "@/ui";
+import { NumberInput, Switch } from "@/ui";
 import { SettingRow, SettingsSection } from "../SettingsSection";
 import { useSetting } from "../store";
 import { TextGenerationRow } from "./TextGenerationRow";
@@ -6,6 +6,8 @@ import { TextGenerationRow } from "./TextGenerationRow";
 export function ChatsPage() {
     const resume = useSetting("chats", "resumeInterrupted");
     const autoTitle = useSetting("chats", "autoTitle");
+    const autoArchive = useSetting("chats", "autoArchive");
+    const archiveDays = useSetting("chats", "autoArchiveDays");
 
     return (
         <>
@@ -27,6 +29,45 @@ export function ChatsPage() {
 
             <SettingsSection title="Text generation">
                 <TextGenerationRow />
+            </SettingsSection>
+
+            <SettingsSection title="Archiving">
+                <SettingRow
+                    label="Auto-archive chats"
+                    description="Chats with no activity for a while move to Archived. Pinned chats and running ones stay"
+                    keywords="archive auto old inactive idle cleanup sidebar"
+                    setting={autoArchive}
+                    control={
+                        <Switch
+                            checked={autoArchive.value}
+                            onCheckedChange={autoArchive.set}
+                            aria-label="Auto-archive chats"
+                        />
+                    }
+                />
+                {autoArchive.value && (
+                    <SettingRow
+                        label="Archive after"
+                        description="Days without activity. A new message brings a chat back"
+                        keywords="archive days time age old inactive idle"
+                        setting={archiveDays}
+                        control={
+                            <NumberInput
+                                size="sm"
+                                align="right"
+                                decimalPlaces={0}
+                                min={1}
+                                max={365}
+                                value={archiveDays.value}
+                                onValueChange={(days) => {
+                                    if (days !== null && days >= 1) archiveDays.set(days);
+                                }}
+                                suffix="days"
+                                aria-label="Days before archiving"
+                            />
+                        }
+                    />
+                )}
             </SettingsSection>
 
             <SettingsSection title="Sessions">
