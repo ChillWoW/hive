@@ -107,16 +107,18 @@ function ByModel({ summary, metric }: { summary: Summary; metric: "cost" | "toke
                         <td className={cn(td, "w-full max-w-0 text-left")}>
                             <div className="flex min-w-0 items-center gap-2">
                                 <HarnessIcon harness={r.harness} className="size-3.5 shrink-0" />
-                                <span className="min-w-0 truncate text-dark-50">{r.model}</span>
-                            </div>
-                            <div className="mt-1.5 ml-5.5 h-0.5 rounded-full bg-dark-700">
-                                <div
-                                    className="h-full rounded-full"
-                                    style={{
-                                        width: `${top ? Math.max((value / top) * 100, 1) : 0}%`,
-                                        background: HARNESS_COLOR[r.harness]
-                                    }}
-                                />
+                                <div className="min-w-0 flex-1">
+                                    <div className="truncate text-dark-50">{r.model}</div>
+                                    <div className="mt-1.5 h-0.5 rounded-full bg-dark-700">
+                                        <div
+                                            className="h-full rounded-full"
+                                            style={{
+                                                width: `${top ? Math.max((value / top) * 100, 1) : 0}%`,
+                                                background: HARNESS_COLOR[r.harness]
+                                            }}
+                                        />
+                                    </div>
+                                </div>
                             </div>
                         </td>
                         <td className={cn(td, "text-dark-50")}>
