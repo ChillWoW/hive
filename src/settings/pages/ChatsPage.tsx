@@ -27,10 +27,6 @@ export function ChatsPage() {
                 />
             </SettingsSection>
 
-            <SettingsSection title="Text generation">
-                <TextGenerationRow />
-            </SettingsSection>
-
             <SettingsSection title="Archiving">
                 <SettingRow
                     label="Auto-archive chats"
@@ -84,6 +80,10 @@ export function ChatsPage() {
                         />
                     }
                 />
+            </SettingsSection>
+
+            <SettingsSection title="Text generation">
+                <TextGenerationRow />
             </SettingsSection>
         </>
     );
