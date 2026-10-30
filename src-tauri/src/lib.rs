@@ -128,7 +128,7 @@ pub fn run() {
             .build(),
         )?;
       }
-      let data_dir = app.path().app_data_dir()?;
+      let data_dir = data_dir(app)?;
       let settings = hive_store::SettingsFile::open(&data_dir)?;
       // Resuming only happens at launch; titles follow the setting live.
       let chats = settings.get().chats;
@@ -176,4 +176,16 @@ pub fn run() {
     })
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
+}
+
+/// `~/.hive`, or `~/.hive.dev` for the dev config (`com.hive.dev`).
+fn data_dir(app: &tauri::App) -> tauri::Result<std::path::PathBuf> {
+  let name = if app.config().identifier.ends_with(".dev") {
+    ".hive.dev"
+  } else {
+    ".hive"
+  };
+  let dir = app.path().home_dir()?.join(name);
+  std::fs::create_dir_all(&dir)?;
+  Ok(dir)
 }
