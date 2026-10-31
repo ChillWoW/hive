@@ -89,6 +89,13 @@ const states = new Map<string, EditorState>();
 const views = new Map<string, EditorView>();
 /** What's on disk, as last read or saved: the doc is dirty when it differs. */
 const saved = new Map<string, Text>();
+/** A line to show once the doc is read (`revealLine` before it was). */
+const pendingReveal = new Map<string, LinePosition>();
+/** Docs whose cursor should be scrolled into view when their editor is next shown. */
+const scrollOnAttach = new Set<string>();
+
+/** A 1-based line and, optionally, column. */
+export type LinePosition = { line: number; column?: number };
 
 const MARKDOWN = /\.(md|markdown|mdx)$/i;
 export const isMarkdown = (path: string) => MARKDOWN.test(path);
@@ -216,6 +223,9 @@ export async function openDoc(id: string, cwd: string, path: string) {
             void loadLanguage(id, path);
         }
         setDoc(id, { phase: "ready", file });
+        const at = pendingReveal.get(id);
+        pendingReveal.delete(id);
+        if (at) revealLine(id, at);
     } catch (error) {
         setDoc(id, { phase: "error", error: message(error) });
     }
@@ -227,6 +237,8 @@ export function dropDoc(id: string) {
     views.delete(id);
     states.delete(id);
     saved.delete(id);
+    pendingReveal.delete(id);
+    scrollOnAttach.delete(id);
     useDocsStore.setState((s) => {
         const { [id]: _, ...docs } = s.docs;
         return { docs };
@@ -239,7 +251,34 @@ export function attachView(id: string, parent: HTMLElement) {
     if (!state || views.has(id)) return null;
     const view = new EditorView({ state, parent });
     views.set(id, view);
+    if (scrollOnAttach.delete(id)) {
+        view.dispatch({ effects: EditorView.scrollIntoView(state.selection.main.head, { y: "center" }) });
+        view.focus();
+    }
     return view;
+}
+
+/**
+ * Puts the tab `id`'s cursor on `at` and scrolls it into view (once the file
+ * is read, if it isn't yet); a Markdown file leaves its preview for the code.
+ */
+export function revealLine(id: string, at: LinePosition) {
+    const state = currentState(id);
+    if (!state) {
+        if (getDoc(id)?.phase === "loading") pendingReveal.set(id, at);
+        return;
+    }
+    const line = state.doc.line(Math.min(Math.max(Math.floor(at.line), 1), state.doc.lines));
+    const pos = Math.min(line.from + Math.max((at.column ?? 1) - 1, 0), line.to);
+    if (getDoc(id)?.preview) setDoc(id, { preview: false });
+    const view = views.get(id);
+    if (view) {
+        view.dispatch({ selection: { anchor: pos }, effects: EditorView.scrollIntoView(pos, { y: "center" }) });
+        view.focus();
+    } else {
+        dispatchTo(id, { selection: { anchor: pos } });
+        scrollOnAttach.add(id);
+    }
 }
 
 export function detachView(id: string, view: EditorView) {

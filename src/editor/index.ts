@@ -10,11 +10,13 @@ export {
     openDoc,
     overwrite,
     reloadFromDisk,
+    revealLine,
     save,
     togglePreview,
     unblockClose,
     useDocsStore,
     useEditorPrefs,
     type Doc,
-    type DocStatus
+    type DocStatus,
+    type LinePosition
 } from "./documents";
