@@ -7,7 +7,7 @@ import { Markdown } from "./Markdown";
 import { CompactionRow, ErrorChip, InputRow, SubagentChip, WakeRow } from "./parts";
 import { HtmlPage } from "@/htmlpage";
 import { ToolGroup } from "./ToolGroup";
-import { pageOf, type GroupItem, type ToolPart } from "./tools";
+import { pageOf, pushCall, type GroupItem, type ToolPart } from "./tools";
 
 /**
  * What a turn renders as, in order: a group of calls and thoughts, a stack
@@ -50,13 +50,10 @@ function toBlocks(parts: MessagePart[], streaming: boolean): Block[] {
             if (open?.kind !== "group") {
                 blocks.push((open = { kind: "group", items: [], first: index, last: index }));
             }
-            open.items.push(
-                part.kind === "tool"
-                    ? { kind: "call", part }
-                    // Live only while it's the tail of the turn: once
-                    // anything follows, the thought is finished.
-                    : { kind: "thought", part, live: streaming && index === last }
-            );
+            if (part.kind === "tool") pushCall(open.items, part);
+            // Live only while it's the tail of the turn: once anything
+            // follows, the thought is finished.
+            else open.items.push({ kind: "thought", part, live: streaming && index === last });
             open.last = index;
             return;
         }

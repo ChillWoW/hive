@@ -23,10 +23,62 @@ import { ThoughtIcon } from "./ThoughtIcon";
 export type ToolPart = Extract<MessagePart, { kind: "tool" }>;
 export type ReasoningPart = Extract<MessagePart, { kind: "reasoning" }>;
 
-/** One line in a tool group: a call, or a thought riding along with them. */
+/**
+ * One line in a tool group: a call, a run of back-to-back file changes (two
+ * or more, any files), or a thought riding along with them.
+ */
 export type GroupItem =
     | { kind: "call"; part: ToolPart }
+    | { kind: "edits"; parts: ToolPart[] }
     | { kind: "thought"; part: ReasoningPart; live: boolean };
+
+/** The file a call changes, when it's a write, edit or one-file patch. */
+function changedPath(call: ToolCall): string | undefined {
+    switch (call.kind) {
+        case "writeFile":
+        case "editFile":
+            return call.path;
+        case "applyPatch":
+            return call.path ?? undefined;
+        default:
+            return undefined;
+    }
+}
+
+/** A path as a comparison key: forward slashes, case folded on a Windows drive. */
+function pathKey(path: string): string {
+    const p = path.replace(/\\/g, "/");
+    return /^[a-z]:/i.test(p) ? p.toLowerCase() : p;
+}
+
+/** The distinct files a run of changes touched, in first-touched order. */
+export function editedFiles(parts: ToolPart[]): string[] {
+    const files = new Map<string, string>();
+    for (const part of parts) {
+        const path = changedPath(part.call);
+        if (path && !files.has(pathKey(path))) files.set(pathKey(path), path);
+    }
+    return [...files.values()];
+}
+
+/**
+ * Adds a call to a group, folding it into the line before when both change
+ * files: consecutive only, so rows never move while a turn streams. A failed
+ * change stands on its own and ends the run.
+ */
+export function pushCall(items: GroupItem[], part: ToolPart) {
+    const change = !part.isError && changedPath(part.call) !== undefined;
+    const prev = items.at(-1);
+    if (change && prev?.kind === "edits") {
+        prev.parts.push(part);
+        return;
+    }
+    if (change && prev?.kind === "call" && !prev.part.isError && changedPath(prev.part.call) !== undefined) {
+        items[items.length - 1] = { kind: "edits", parts: [prev.part, part] };
+        return;
+    }
+    items.push({ kind: "call", part });
+}
 
 /** A call still waiting for its result while the turn runs. */
 export function isRunning(part: ToolPart, streaming: boolean) {
@@ -340,6 +392,10 @@ export function summarize(items: GroupItem[]): SummarySegment[] {
     for (const item of items) {
         if (item.kind === "thought") {
             thoughts++;
+            continue;
+        }
+        if (item.kind === "edits") {
+            for (const path of editedFiles(item.parts)) edited.add(path);
             continue;
         }
         const { call, isError } = item.part;

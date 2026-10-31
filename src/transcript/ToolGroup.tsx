@@ -5,7 +5,8 @@ import {
     CaretRightIcon,
     CheckIcon,
     CircleIcon,
-    CircleNotchIcon
+    CircleNotchIcon,
+    PencilSimpleIcon
 } from "@phosphor-icons/react";
 import type { JsonValue } from "@/proto/serde_json/JsonValue";
 import { cn } from "@/lib/cn";
@@ -16,6 +17,7 @@ import { DiffView } from "./DiffView";
 import { Markdown } from "./Markdown";
 import {
     chipContent,
+    editedFiles,
     fileName,
     iconOf,
     isRunning,
@@ -81,7 +83,9 @@ export function ToolGroup({
                 <div className="flex flex-col pt-0.5">
                     {items.map((item, i) => (
                         <Item
-                            key={item.part.id}
+                            // A run keeps its first call's key, so the row
+                            // stays put (and keeps its fold) as it grows.
+                            key={item.kind === "edits" ? item.parts[0]!.id : item.part.id}
                             item={item}
                             last={i === items.length - 1}
                             streaming={streaming}
@@ -135,11 +139,16 @@ function Item({ item, last, streaming }: { item: GroupItem; last: boolean; strea
     const thought = item.kind === "thought";
     const call = item.kind === "call" ? item.part.call : undefined;
     const failed = item.kind === "call" && item.part.isError;
-    const running = item.kind === "call" && isRunning(item.part, streaming);
+    const running =
+        (item.kind === "call" && isRunning(item.part, streaming)) ||
+        (item.kind === "edits" && item.parts.some((p) => isRunning(p, streaming)));
+    const files = item.kind === "edits" ? editedFiles(item.parts) : undefined;
     const { label, detail } =
         item.kind === "call"
             ? chipContent(item.part.call, cwd, item.part.output)
-            : { label: item.live ? "Thinking" : "Thought", detail: thoughtPreview(item.part.text, item.live) };
+            : item.kind === "edits"
+              ? { label: files!.length === 1 ? "Edited" : `Edited ${files!.length} files`, detail: "" }
+              : { label: item.live ? "Thinking" : "Thought", detail: thoughtPreview(item.part.text, item.live) };
     const path = call && pathOf(call);
     const body =
         item.kind === "thought" ? (
@@ -150,6 +159,18 @@ function Item({ item, last, streaming }: { item: GroupItem; last: boolean; strea
                     </Markdown>
                 </div>
             )
+        ) : item.kind === "edits" ? (
+            // Every change on its own line, on a rail of its own.
+            <div className="flex flex-col pb-1">
+                {item.parts.map((part, i) => (
+                    <Item
+                        key={part.id}
+                        item={{ kind: "call", part }}
+                        last={i === item.parts.length - 1}
+                        streaming={streaming}
+                    />
+                ))}
+            </div>
         ) : (
             <CallBody part={item.part} />
         );
@@ -171,7 +192,13 @@ function Item({ item, last, streaming }: { item: GroupItem; last: boolean; strea
                 {label}
             </span>
             {failed && <span className="shrink-0 text-danger">Failed</span>}
-            {path ? (
+            {files ? (
+                <span className="flex min-w-0 items-center gap-1 overflow-hidden">
+                    {files.map((file) => (
+                        <FileBadge key={file} path={file} failed={false} />
+                    ))}
+                </span>
+            ) : path ? (
                 <FileBadge path={path} failed={failed} />
             ) : (
                 detail && (
@@ -185,7 +212,8 @@ function Item({ item, last, streaming }: { item: GroupItem; last: boolean; strea
                     </span>
                 )
             )}
-            {call && <Trailing part={item.part as ToolPart} />}
+            {item.kind === "call" && <Trailing parts={[item.part]} />}
+            {item.kind === "edits" && <Trailing parts={item.parts} />}
             {body && (
                 <span className="ml-auto flex size-[18px] shrink-0 items-center justify-center text-dark-250 opacity-0 transition-opacity group-hover/item:opacity-100 group-data-panel-open/item:opacity-100">
                     <CaretRightIcon
@@ -200,7 +228,7 @@ function Item({ item, last, streaming }: { item: GroupItem; last: boolean; strea
 
     return (
         <div className="flex min-w-0">
-            <Rail icon={call ? iconOf(call) : THOUGHT_ICON} failed={failed} last={last} />
+            <Rail icon={call ? iconOf(call) : files ? PencilSimpleIcon : THOUGHT_ICON} failed={failed} last={last} />
             <div className="ml-2 min-w-0 flex-1">
                 {body ? (
                     <Collapsible.Root open={open} onOpenChange={setUserOpen}>
@@ -215,11 +243,19 @@ function Item({ item, last, streaming }: { item: GroupItem; last: boolean; strea
     );
 }
 
-/** After the detail: +/- counts for a file change. */
-function Trailing({ part }: { part: ToolPart }) {
-    const change = useChange(part);
-    if (!change) return null;
-    const { additions: added, deletions: removed } = change;
+/** After the detail: +/- counts for a file change, summed over a run of them. */
+function Trailing({ parts }: { parts: ToolPart[] }) {
+    const counts = useMemo(() => {
+        let added = 0;
+        let removed = 0;
+        for (const part of parts) {
+            const change = changeOf(part);
+            added += change?.additions ?? 0;
+            removed += change?.deletions ?? 0;
+        }
+        return { added, removed };
+    }, [parts]);
+    const { added, removed } = counts;
     if (!added && !removed) return null;
     return (
         <span className="shrink-0 tabular-nums">
@@ -234,21 +270,23 @@ function Trailing({ part }: { part: ToolPart }) {
  * Before → after of a file change: the result's diff, else what the call
  * asked for. Line numbers only for a new file's content, the whole file.
  */
+function changeOf(part: ToolPart) {
+    if (part.diff) {
+        const { path, oldText, newText } = part.diff;
+        return toFileDiff(path, diffLines(oldText ?? "", newText), oldText === undefined);
+    }
+    const call = part.call;
+    if (call.kind === "editFile" && (call.oldString !== undefined || call.newString !== undefined)) {
+        return toFileDiff(call.path, diffLines(call.oldString ?? "", call.newString ?? ""), false);
+    }
+    if (call.kind === "writeFile" && call.content !== undefined) {
+        return toFileDiff(call.path, diffLines("", call.content), true);
+    }
+    return undefined;
+}
+
 function useChange(part: ToolPart) {
-    return useMemo(() => {
-        if (part.diff) {
-            const { path, oldText, newText } = part.diff;
-            return toFileDiff(path, diffLines(oldText ?? "", newText), oldText === undefined);
-        }
-        const call = part.call;
-        if (call.kind === "editFile" && (call.oldString !== undefined || call.newString !== undefined)) {
-            return toFileDiff(call.path, diffLines(call.oldString ?? "", call.newString ?? ""), false);
-        }
-        if (call.kind === "writeFile" && call.content !== undefined) {
-            return toFileDiff(call.path, diffLines("", call.content), true);
-        }
-        return undefined;
-    }, [part]);
+    return useMemo(() => changeOf(part), [part]);
 }
 
 /** Verbatim mono lines, the tail past `MAX_LINES` counted rather than shown. */
@@ -320,8 +358,27 @@ function invocationOf(part: ToolPart, cwd: string | undefined): string {
 /** An open call: the invocation, then what came back — a diff, a task list or the output. */
 function CallBody({ part }: { part: ToolPart }): ReactNode {
     const cwd = use(ChatCwd);
-    const change = useChange(part);
     const invocation = invocationOf(part, cwd);
+    const result = <CallResult part={part} />;
+    if (!invocation && !hasResult(part)) return null;
+    return (
+        <div className="pb-1.5">
+            {invocation && <Lines text={invocation} className="text-dark-200" />}
+            {result}
+        </div>
+    );
+}
+
+function hasResult(part: ToolPart): boolean {
+    if (part.call.kind === "todo") return true;
+    const change = changeOf(part);
+    if (change && change.lineCount > 0 && !part.isError) return true;
+    return !!part.output?.trim();
+}
+
+/** What a call came back with: a diff, a task list or the output. */
+function CallResult({ part }: { part: ToolPart }): ReactNode {
+    const change = useChange(part);
     const call = part.call;
 
     let result: ReactNode = null;
@@ -359,12 +416,5 @@ function CallBody({ part }: { part: ToolPart }): ReactNode {
             <Lines text={part.output} className={part.isError ? "text-danger/80" : "text-dark-250"} />
         );
     }
-
-    if (!invocation && !result) return null;
-    return (
-        <div className="pb-1.5">
-            {invocation && <Lines text={invocation} className="text-dark-200" />}
-            {result}
-        </div>
-    );
+    return result;
 }
