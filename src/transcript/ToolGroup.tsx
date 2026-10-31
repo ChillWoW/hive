@@ -136,7 +136,6 @@ function FileBadge({ path, failed }: { path: string; failed: boolean }) {
 
 function Item({ item, last, streaming }: { item: GroupItem; last: boolean; streaming: boolean }) {
     const cwd = use(ChatCwd);
-    const thought = item.kind === "thought";
     const call = item.kind === "call" ? item.part.call : undefined;
     const failed = item.kind === "call" && item.part.isError;
     const running =
@@ -175,10 +174,10 @@ function Item({ item, last, streaming }: { item: GroupItem; last: boolean; strea
             <CallBody part={item.part} />
         );
 
-    // A live thought is open, so the thinking can be watched; everything
-    // else waits for a click.
+    // Everything starts folded (a live thought's preview line is in the
+    // header); a click opens it.
     const [userOpen, setUserOpen] = useState<boolean>();
-    const open = userOpen ?? (thought && item.live);
+    const open = userOpen ?? false;
 
     const header = (
         <>
