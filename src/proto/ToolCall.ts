@@ -6,4 +6,12 @@ import type { JsonValue } from "./serde_json/JsonValue";
  * A decoded tool invocation, reduced to the fields each kind renders.
  * Anything a driver can't map lands in `Unknown` with its raw input.
  */
-export type ToolCall = { "kind": "exec", command: string, } | { "kind": "readFile", path: string, } | { "kind": "writeFile", path: string, content?: string, } | { "kind": "editFile", path: string, oldString?: string, newString?: string, } | { "kind": "applyPatch", path?: string, } | { "kind": "search", pattern: string, path?: string, } | { "kind": "glob", pattern: string, } | { "kind": "webFetch", url: string, prompt?: string, } | { "kind": "webSearch", query: string, } | { "kind": "todo", items: Array<TodoItem>, } | { "kind": "subagent", description: string, model?: string, } | { "kind": "mcp", server: string, tool: string, input?: JsonValue, } | { "kind": "unknown", name: string, input?: JsonValue, };
+export type ToolCall = { "kind": "exec", command: string, } | { "kind": "readFile", path: string, } | { "kind": "writeFile", path: string, content?: string, } | { "kind": "editFile", path: string, oldString?: string, newString?: string, } | { "kind": "applyPatch", path?: string, } | { "kind": "search", pattern: string, path?: string, } | { "kind": "glob", pattern: string, } | { "kind": "webFetch", url: string, prompt?: string, } | { "kind": "webSearch", query: string, } | { "kind": "todo", items: Array<TodoItem>, } | { "kind": "subagent", description: string, model?: string, 
+/**
+ * The task it was given, in full.
+ */
+prompt?: string, 
+/**
+ * Its type (`general-purpose`, `Explore`, a custom agent's name).
+ */
+agent?: string, } | { "kind": "mcp", server: string, tool: string, input?: JsonValue, } | { "kind": "unknown", name: string, input?: JsonValue, };

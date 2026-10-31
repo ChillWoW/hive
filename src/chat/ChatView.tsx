@@ -22,8 +22,8 @@ import {
 } from "@/harnesses";
 import { BranchPicker, useGitRepo, WorkspaceChip, WorkspacePicker } from "@/git";
 import { useShortcut } from "@/keybindings";
-import type { Attachment, ChatConfig, MessagePart } from "@/proto";
-import { Transcript } from "@/transcript";
+import type { Attachment, BackgroundTask, ChatConfig, MessagePart } from "@/proto";
+import { LiveTasks, Transcript, useSubagentStore } from "@/transcript";
 import { MorphHeight } from "@/ui";
 import { AgentUpdates } from "./AgentUpdates";
 import { BackgroundTasks } from "./BackgroundTasks";
@@ -31,6 +31,7 @@ import { type CompactAction, ContextRing } from "./ContextRing";
 import { GoalTray } from "./GoalTray";
 import { QueuedTray } from "./QueuedTray";
 import { SecretRequestCard } from "./SecretRequestCard";
+import { SubagentView } from "./SubagentView";
 import { UsageRing } from "./UsageRing";
 
 type InputPart = Extract<MessagePart, { kind: "input" }>;
@@ -58,6 +59,15 @@ export function ChatView() {
     const newChat = useComposerStore((s) => s.newChat);
     const setNewChat = useComposerStore((s) => s.setNewChat);
     const [needFolder, setNeedFolder] = useState(false);
+    const subagent = useSubagentStore((s) =>
+        s.open && s.open.chatId === chatId ? s.open.path.at(-1) : undefined
+    );
+    const openSubagent = useSubagentStore((s) => s.openSubagent);
+    // A subagent's thread belongs to the chat it was opened in.
+    useEffect(() => {
+        const { open, close } = useSubagentStore.getState();
+        if (open && open.chatId !== chatId) close();
+    }, [chatId]);
     // A new chat gets a worktree only in a checkout with a commit to start from.
     const newRepo = useGitRepo(chat ? null : newChat.cwd)?.repo;
     const worktreeMode = !chat && newChat.workspace === "worktree" && !!newRepo?.commit;
@@ -277,6 +287,19 @@ export function ChatView() {
         </div>
     );
 
+    if (chat && subagent) {
+        return (
+            <SubagentView
+                chatId={chat.id}
+                id={subagent}
+                messages={shown}
+                tasks={session?.background}
+                cwd={workDir(chat)}
+                harness={chat.config.harness}
+            />
+        );
+    }
+
     if (hero) {
         return (
             <div className="relative flex h-full w-full flex-col items-center justify-center pb-16">
@@ -290,23 +313,29 @@ export function ChatView() {
     }
 
     return (
-        <div className="flex h-full w-full flex-col">
-            {loading ? (
-                <div className="flex-1" />
-            ) : (
-                <Transcript
-                    key={chatId ?? "new"}
-                    messages={shown}
-                    cwd={chat ? workDir(chat) : (newChat.cwd ?? undefined)}
-                    waiting={!!input || !!secret}
-                    error={error}
-                    onRetry={retry}
-                    onDiscard={(m) => chats.discard(m.id)}
-                    worktree={chat?.worktree}
-                    agent={catalog?.label}
-                />
-            )}
-            {bottom}
-        </div>
+        <LiveTasks value={session?.background ?? NO_TASKS}>
+            <div className="flex h-full w-full flex-col">
+                {loading ? (
+                    <div className="flex-1" />
+                ) : (
+                    <Transcript
+                        key={chatId ?? "new"}
+                        messages={shown}
+                        cwd={chat ? workDir(chat) : (newChat.cwd ?? undefined)}
+                        waiting={!!input || !!secret}
+                        error={error}
+                        onRetry={retry}
+                        onDiscard={(m) => chats.discard(m.id)}
+                        worktree={chat?.worktree}
+                        agent={catalog?.label}
+                        harness={chat?.config.harness}
+                        onOpenSubagent={chat ? (id) => openSubagent(chat.id, id) : undefined}
+                    />
+                )}
+                {bottom}
+            </div>
+        </LiveTasks>
     );
 }
+
+const NO_TASKS: BackgroundTask[] = [];

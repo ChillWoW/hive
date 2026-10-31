@@ -2,10 +2,10 @@ import { Fragment, useEffect, useRef, useState } from "react";
 import { ArrowDownIcon } from "@phosphor-icons/react";
 import { useWorktreeSetup, type TranscriptMessage } from "@/chats";
 import { cn } from "@/lib/cn";
-import type { Worktree } from "@/proto";
+import type { HarnessId, Worktree } from "@/proto";
 import { WorktreeSetupCard } from "./WorktreeSetupCard";
 import { AssistantMessage } from "./AssistantMessage";
-import { ChatCwd } from "./context";
+import { ChatCwd, OpenSubagent } from "./context";
 import { CompactionRow } from "./parts";
 import { UserMessage } from "./UserMessage";
 
@@ -24,6 +24,10 @@ type TranscriptProps = {
     worktree?: Worktree;
     /** The harness's name, for the worktree setup's "Start agent" step. */
     agent?: string;
+    /** The chat's harness, for its subagents' avatars. */
+    harness?: HarnessId;
+    /** Opens a subagent row's thread; unset, rows aren't clickable. */
+    onOpenSubagent?: (id: string) => void;
     /** Under the messages, inside the scroller (the composer's spacer). */
     className?: string;
 };
@@ -85,6 +89,8 @@ export function Transcript({
     onDiscard,
     worktree,
     agent,
+    harness,
+    onOpenSubagent,
     className
 }: TranscriptProps) {
     const scrollRef = useRef<HTMLDivElement>(null);
@@ -153,6 +159,7 @@ export function Transcript({
                 className="min-h-0 flex-1 overflow-y-auto px-6 [scrollbar-gutter:stable_both-edges]"
             >
                 <ChatCwd value={cwd}>
+                <OpenSubagent value={onOpenSubagent}>
                     <div
                         ref={contentRef}
                         className={cn("mx-auto flex w-full max-w-3xl flex-col gap-5 py-6", className)}
@@ -184,11 +191,13 @@ export function Transcript({
                                     key={message.id}
                                     message={message}
                                     waiting={waiting && message === lastMessage}
+                                    harness={harness}
                                 />
                             )
                         )}
                         {error && <p className="text-sm text-danger">{error}</p>}
                     </div>
+                </OpenSubagent>
                 </ChatCwd>
             </div>
             <button

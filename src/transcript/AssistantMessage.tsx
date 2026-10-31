@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { CheckIcon, CopyIcon } from "@phosphor-icons/react";
-import type { Message, MessagePart } from "@/proto";
+import type { HarnessId, Message, MessagePart } from "@/proto";
 import { cn } from "@/lib/cn";
 import { DOT_MATRIX_FULL, DotMatrixSpinner, Tooltip } from "@/ui";
 import { Markdown } from "./Markdown";
@@ -145,11 +145,14 @@ function CopyButton({ text }: { text: string }) {
  */
 export function AssistantMessage({
     message,
-    waiting = false
+    waiting = false,
+    harness
 }: {
     message: Message;
     /** The turn is held on a question for the user. */
     waiting?: boolean;
+    /** The chat's harness, for its subagents' avatars. */
+    harness?: HarnessId;
 }) {
     const streaming = message.status === "streaming";
     const parts = message.parts;
@@ -177,9 +180,9 @@ export function AssistantMessage({
                 );
             case "agents":
                 return (
-                    <div key={`a${block.first}`} className="flex flex-col gap-2">
+                    <div key={`a${block.first}`} className="-mx-2 flex flex-col">
                         {block.parts.map((part) => (
-                            <SubagentChip key={part.id} part={part} streaming={streaming} />
+                            <SubagentChip key={part.id} part={part} streaming={streaming} harness={harness} />
                         ))}
                     </div>
                 );

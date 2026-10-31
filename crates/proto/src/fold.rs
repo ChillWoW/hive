@@ -60,6 +60,7 @@ pub fn fold_event(parts: &mut Vec<MessagePart>, event: &AgentEvent) {
                     diff: None,
                     subagent: matches!(call, ToolCall::Subagent { .. })
                         .then_some(SubagentStatus::Running),
+                    thread: Vec::new(),
                 });
             }
         }
@@ -181,8 +182,10 @@ pub fn fold_event(parts: &mut Vec<MessagePart>, event: &AgentEvent) {
             }
         }
 
-        // The parent transcript keeps only the spawn chip; this tracks its
-        // lifecycle. The subagent's own content folds into its own view.
+        // The parent transcript keeps only the spawn chip; the subagent's own
+        // content folds into the chip's `thread`, its view. A nested spawn's
+        // traffic can come tagged with its own id, so the spawn is looked
+        // for in threads too.
         AgentEvent::Subagent {
             parent_tool_id,
             event,
@@ -190,11 +193,15 @@ pub fn fold_event(parts: &mut Vec<MessagePart>, event: &AgentEvent) {
             let Some(MessagePart::Tool {
                 call: ToolCall::Subagent { .. },
                 subagent,
+                thread,
                 ..
-            }) = find_tool(parts, parent_tool_id)
+            }) = find_spawn(parts, parent_tool_id)
             else {
                 return;
             };
+            if !matches!(event.as_ref(), AgentEvent::SessionStarted { .. }) {
+                fold_event(thread, event);
+            }
             match event.as_ref() {
                 AgentEvent::Done { status, .. } => {
                     *subagent = Some(match status {
@@ -245,6 +252,44 @@ fn find_tool<'a>(parts: &'a mut [MessagePart], id: &str) -> Option<&'a mut Messa
     parts
         .iter_mut()
         .find(|p| matches!(p, MessagePart::Tool { id: pid, .. } if pid == id))
+}
+
+/// Whether `parts` hold the subagent spawn `id`, nested ones included: where
+/// its [`AgentEvent::Subagent`] traffic folds.
+pub fn has_spawn(parts: &[MessagePart], id: &str) -> bool {
+    parts.iter().any(|p| match p {
+        MessagePart::Tool {
+            id: pid,
+            call: ToolCall::Subagent { .. },
+            ..
+        } if pid == id => true,
+        MessagePart::Tool { thread, .. } => has_spawn(thread, id),
+        _ => false,
+    })
+}
+
+/// Whether a subagent spawned in `parts` (nested ones included) still runs.
+pub fn has_running_spawn(parts: &[MessagePart]) -> bool {
+    parts.iter().any(|p| match p {
+        MessagePart::Tool {
+            subagent, thread, ..
+        } => *subagent == Some(SubagentStatus::Running) || has_running_spawn(thread),
+        _ => false,
+    })
+}
+
+/// A subagent spawn by its call id, at this level or in a spawn's thread.
+fn find_spawn<'a>(parts: &'a mut [MessagePart], id: &str) -> Option<&'a mut MessagePart> {
+    if let Some(i) = parts
+        .iter()
+        .position(|p| matches!(p, MessagePart::Tool { id: pid, .. } if pid == id))
+    {
+        return Some(&mut parts[i]);
+    }
+    parts.iter_mut().find_map(|p| match p {
+        MessagePart::Tool { thread, .. } => find_spawn(thread, id),
+        _ => None,
+    })
 }
 
 #[cfg(test)]
@@ -328,6 +373,8 @@ mod tests {
             call: ToolCall::Subagent {
                 description: "d".into(),
                 model: None,
+                prompt: None,
+                agent: None,
             },
         };
         let tagged = |event| AgentEvent::Subagent {
@@ -347,6 +394,43 @@ mod tests {
                 ..
             }
         ));
+    }
+
+    #[test]
+    fn subagent_traffic_folds_into_its_thread_nested_spawns_too() {
+        let spawn = |id: &str| AgentEvent::ToolCall {
+            id: id.into(),
+            call: ToolCall::Subagent {
+                description: "d".into(),
+                model: None,
+                prompt: None,
+                agent: None,
+            },
+        };
+        let tagged = |parent: &str, event| AgentEvent::Subagent {
+            parent_tool_id: parent.into(),
+            event: Box::new(event),
+        };
+        let parts = fold(&[
+            spawn("a"),
+            tagged("a", text("look")),
+            tagged("a", spawn("b")),
+            // Claude tags a nested subagent's traffic with its own spawn id.
+            tagged("b", text("deep")),
+            tagged("a", text("ed")),
+        ]);
+        assert_eq!(parts.len(), 1);
+        let MessagePart::Tool { thread, .. } = &parts[0] else {
+            panic!("spawn part");
+        };
+        assert_eq!(thread.len(), 3);
+        assert!(matches!(&thread[0], MessagePart::Text { text, .. } if text == "look"));
+        assert!(matches!(
+            &thread[1],
+            MessagePart::Tool { thread: inner, subagent: Some(SubagentStatus::Running), .. }
+                if matches!(&inner[..], [MessagePart::Text { text, .. }] if text == "deep")
+        ));
+        assert!(matches!(&thread[2], MessagePart::Text { text, .. } if text == "ed"));
     }
 
     #[test]

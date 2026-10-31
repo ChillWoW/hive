@@ -364,6 +364,8 @@ impl Normalizer {
                             .trim()
                             .to_owned(),
                         model: str_field(item, "model").map(str::to_owned),
+                        prompt: prompt.clone(),
+                        agent: None,
                     },
                     tool => ToolCall::Unknown {
                         name: agent_tool_label(tool.unwrap_or_default()).to_owned(),

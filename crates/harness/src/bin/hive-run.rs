@@ -434,7 +434,7 @@ fn tool_summary(call: &ToolCall) -> String {
                 .collect();
             format!("todos {}", list.join("  "))
         }
-        ToolCall::Subagent { description, model } => match model {
+        ToolCall::Subagent { description, model, .. } => match model {
             Some(model) => format!("agent ({model}) {description}"),
             None => format!("agent {description}"),
         },

@@ -228,6 +228,12 @@ pub enum ToolCall {
         description: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         model: Option<String>,
+        /// The task it was given, in full.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        prompt: Option<String>,
+        /// Its type (`general-purpose`, `Explore`, a custom agent's name).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        agent: Option<String>,
     },
     Mcp {
         server: String,

@@ -137,12 +137,15 @@ export function foldEvent(parts: MessagePart[], event: AgentEvent) {
             return;
         }
 
-        // The parent transcript keeps only the spawn chip; this tracks its
-        // lifecycle. The subagent's own content would fold into its own view.
+        // The parent transcript keeps only the spawn chip; the subagent's own
+        // content folds into the chip's `thread`, its view. A nested spawn's
+        // traffic can come tagged with its own id, so the spawn is looked for
+        // in threads too.
         case "subagent": {
-            const tool = findTool(parts, event.parentToolId);
+            const tool = findSpawn(parts, event.parentToolId);
             if (!tool || tool.call.kind !== "subagent") return;
             const inner = event.event;
+            if (inner.type !== "sessionStarted") foldEvent((tool.thread ??= []), inner);
             if (inner.type === "done") {
                 tool.subagent = inner.status === "errored" ? "failed" : "done";
             } else if (tool.subagent !== "done" && tool.subagent !== "failed") {
@@ -178,3 +181,17 @@ function findTool(parts: MessagePart[], id: string) {
     const part = parts.find((p) => p.kind === "tool" && p.id === id);
     return part?.kind === "tool" ? part : undefined;
 }
+
+/** A subagent spawn by its call id, at this level or in a spawn's thread. */
+export function findSpawn(parts: MessagePart[], id: string): ToolPartOf | undefined {
+    const here = findTool(parts, id);
+    if (here) return here;
+    for (const p of parts) {
+        if (p.kind !== "tool" || !p.thread) continue;
+        const found = findSpawn(p.thread, id);
+        if (found) return found;
+    }
+    return undefined;
+}
+
+type ToolPartOf = Extract<MessagePart, { kind: "tool" }>;

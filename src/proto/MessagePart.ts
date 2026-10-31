@@ -22,4 +22,10 @@ resolved: boolean, isError: boolean, output?: string, diff?: ToolDiff,
  * Only on `ToolCall::Subagent` calls. Separate from `resolved`: the
  * spawn's own result can land while the subagent still runs.
  */
-subagent?: SubagentStatus, } | { "kind": "input", id: string, requestId: string, questions: Array<UserInputQuestion>, resolved: boolean, } | { "kind": "error", id: string, message: string, } | { "kind": "wake", id: string, finished: Array<FinishedTask>, } | { "kind": "compaction", id: string, status: CompactionStatus, auto: boolean, beforeTokens?: number, afterTokens?: number, error?: string, };
+subagent?: SubagentStatus, 
+/**
+ * Only on `ToolCall::Subagent` calls: the subagent's own transcript,
+ * folded from its `AgentEvent::Subagent` events (a nested spawn's in
+ * that spawn's part).
+ */
+thread?: Array<MessagePart>, } | { "kind": "input", id: string, requestId: string, questions: Array<UserInputQuestion>, resolved: boolean, } | { "kind": "error", id: string, message: string, } | { "kind": "wake", id: string, finished: Array<FinishedTask>, } | { "kind": "compaction", id: string, status: CompactionStatus, auto: boolean, beforeTokens?: number, afterTokens?: number, error?: string, };

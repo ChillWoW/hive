@@ -505,6 +505,8 @@ pub(crate) fn decode_tool_use(name: &str, input: &Value) -> ToolCall {
         _ if is_spawn(name) => ToolCall::Subagent {
             description: str_field(input, "description"),
             model: opt_str_field(input, "model"),
+            prompt: opt_str_field(input, "prompt"),
+            agent: opt_str_field(input, "subagent_type"),
         },
         // MCP tools arrive as `mcp__<server>__<tool>`.
         _ => match name
@@ -890,10 +892,15 @@ mod tests {
     #[test]
     fn decodes_spawns_and_mcp_tools() {
         assert_eq!(
-            decode_tool_use("Task", &json!({"description":"scan","model":"haiku"})),
+            decode_tool_use(
+                "Task",
+                &json!({"description":"scan","model":"haiku","prompt":"Scan it.","subagent_type":"Explore"})
+            ),
             ToolCall::Subagent {
                 description: "scan".into(),
-                model: Some("haiku".into())
+                model: Some("haiku".into()),
+                prompt: Some("Scan it.".into()),
+                agent: Some("Explore".into())
             }
         );
         assert!(matches!(

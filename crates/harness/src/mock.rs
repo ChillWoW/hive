@@ -542,6 +542,8 @@ fn background_script(turn: usize) -> Vec<Step> {
             call: ToolCall::Subagent {
                 description: "Survey the codebase".into(),
                 model: None,
+                prompt: Some("Map out the codebase's main modules and summarise them.".into()),
+                agent: Some("Explore".into()),
             },
         },
     );
@@ -675,17 +677,46 @@ fn script(request: &RunRequest, prompt: &str, turn: usize) -> Vec<Step> {
             call: ToolCall::Subagent {
                 description: "Investigate failing smoke test".into(),
                 model: Some("haiku".into()),
+                prompt: Some(
+                    "The smoke test in `tests/smoke.rs` fails. Find out what it expects \
+                     and why the output differs. Report the cause in one or two sentences."
+                        .into(),
+                ),
+                agent: Some("general-purpose".into()),
             },
         },
     );
+    let sub = |event| AgentEvent::Subagent {
+        parent_tool_id: agent.clone(),
+        event: Box::new(event),
+    };
     for text in ["Looking at ", "the smoke test", "…"] {
-        s.emit(
-            120,
-            AgentEvent::Subagent {
-                parent_tool_id: agent.clone(),
-                event: Box::new(AgentEvent::TextDelta { text: text.into() }),
+        s.emit(120, sub(AgentEvent::TextDelta { text: text.into() }));
+    }
+    let read = id("sub-read");
+    s.emit(
+        200,
+        sub(AgentEvent::ToolCall {
+            id: read.clone(),
+            call: ToolCall::ReadFile {
+                path: "tests/smoke.rs".into(),
             },
-        );
+        }),
+    );
+    s.emit(
+        300,
+        sub(AgentEvent::ToolResult {
+            id: read,
+            is_error: false,
+            output: Some("fn smoke() {\n    assert_eq!(greet(), \"hello, world\");\n}".into()),
+            diff: None,
+        }),
+    );
+    for text in [
+        "\n\nThe test expects `hello, world`, ",
+        "but `greet()` returns `Hello, World!`.",
+    ] {
+        s.emit(150, sub(AgentEvent::TextDelta { text: text.into() }));
     }
     s.tool(
         &id("grep"),

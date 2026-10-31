@@ -64,6 +64,12 @@ pub enum MessagePart {
         /// spawn's own result can land while the subagent still runs.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         subagent: Option<SubagentStatus>,
+        /// Only on `ToolCall::Subagent` calls: the subagent's own transcript,
+        /// folded from its `AgentEvent::Subagent` events (a nested spawn's in
+        /// that spawn's part).
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        #[ts(as = "Option<Vec<MessagePart>>", optional)]
+        thread: Vec<MessagePart>,
     },
     #[serde(rename_all = "camelCase")]
     Input {
@@ -172,6 +178,7 @@ mod tests {
             output: None,
             diff: None,
             subagent: None,
+            thread: Vec::new(),
         };
         assert_eq!(
             serde_json::to_value(&part).unwrap(),

@@ -36,7 +36,7 @@ use hive_harness::{Harness, RunHandle};
 use hive_proto::{
     AgentEvent, Attachment, BackgroundTask, BranchNaming, Chat, ChatConfig, ChatsUpdate, Command,
     CommandPayload, CommandStatus, ContextUsage, DoneStatus, HarnessCatalog, HarnessId,
-    McpServer, MessageStatus, MessagesUpdate, NewWorktree, RunRequest, SecretRequest, Session,
+    has_running_spawn, has_spawn, McpServer, MessageStatus, MessagesUpdate, NewWorktree, RunRequest, SecretRequest, Session,
     WorktreeStep,
     SessionStatus, SlashCommand, TaskOutput, TextGenerationSettings, UserInputAnswer,
 };
@@ -51,6 +51,9 @@ pub use hive_store;
 /// How long a file attached to a draft but never sent is kept: the app keeps
 /// drafts across restarts.
 const DRAFT_FILES_GRACE: Duration = Duration::from_secs(30 * 24 * 60 * 60);
+
+/// Earlier replies kept for subagents still running in them, oldest dropped first.
+const MAX_EARLIER_TURNS: usize = 8;
 
 /// Sent in place of the user when a turn Hive's exit cut short is resumed.
 pub const RESUME_PROMPT: &str =
@@ -227,6 +230,10 @@ struct ChatState {
     /// The latest turn; kept after its `Done` so late subagent events still
     /// fold into it.
     turn: Option<Turn>,
+    /// Earlier turns with a subagent still running (one left in the
+    /// background): its traffic keeps folding into the reply that spawned
+    /// it, not the live one. Dropped once their spawns settle or the run ends.
+    earlier: Vec<Turn>,
     /// Prompts sent while a turn was in flight, next first.
     queued: VecDeque<Queued>,
     /// The in-flight turn was interrupted to run the queue's front next,
@@ -1270,7 +1277,17 @@ impl Engine {
                 },
             );
         }
-        st.turn = Some(turn);
+        if let Some(mut previous) = st.turn.replace(turn) {
+            if has_running_spawn(&previous.assistant.parts) {
+                if let Err(e) = self.store().flush(&mut previous) {
+                    log::warn!("chat {chat_id}: saving a reply: {e}");
+                }
+                st.earlier.push(previous);
+                if st.earlier.len() > MAX_EARLIER_TURNS {
+                    st.earlier.remove(0);
+                }
+            }
+        }
         self.publish_chat(chat_id);
     }
 
@@ -1363,6 +1380,33 @@ impl Engine {
                 return;
             }
             self.set_status(chat_id, st, SessionStatus::Working);
+        }
+
+        // A subagent spawned in an earlier reply reports into that reply.
+        if let AgentEvent::Subagent { parent_tool_id, .. } = &event {
+            let live = st
+                .turn
+                .as_ref()
+                .is_some_and(|t| has_spawn(&t.assistant.parts, parent_tool_id));
+            let earlier = st
+                .earlier
+                .iter()
+                .position(|t| has_spawn(&t.assistant.parts, parent_tool_id));
+            if let (false, Some(i)) = (live, earlier) {
+                let turn = &mut st.earlier[i];
+                if let Err(e) = store.record(turn, &event) {
+                    log::warn!("chat {chat_id}: recording an event: {e}");
+                }
+                let message_id = turn.assistant.id.clone();
+                if !has_running_spawn(&turn.assistant.parts) {
+                    if let Err(e) = store.flush(turn) {
+                        log::warn!("chat {chat_id}: saving a reply: {e}");
+                    }
+                    st.earlier.remove(i);
+                }
+                publish(&mut st.watchers, MessagesUpdate::Event { message_id, event });
+                return;
+            }
         }
 
         let Some(turn) = &mut st.turn else {
@@ -1533,6 +1577,12 @@ impl Engine {
             run.handle.close();
         }
         st.restart = false;
+        // Their subagents went with the run.
+        for mut turn in st.earlier.drain(..) {
+            if let Err(e) = self.store().flush(&mut turn) {
+                log::warn!("chat {chat_id}: saving a reply: {e}");
+            }
+        }
         st.commands.clear();
         st.secrets.clear();
         if st.session.take().is_some() {

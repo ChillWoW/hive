@@ -460,6 +460,8 @@ pub(super) fn tool_call(name: &str, input: &Value) -> ToolCall {
                 .or_else(|| s(&["prompt"]).and_then(|p| p.lines().next().map(str::to_owned)))
                 .unwrap_or_else(|| "Subagent".into()),
             model: None,
+            prompt: s(&["prompt"]),
+            agent: s(&["subagent_type"]).or_else(|| s(&["agent"])),
         },
         // MCP tools arrive as `<server>_<tool>`; only Hive's own server is
         // known, the rest can't be told from built-in tools.

@@ -1,54 +1,153 @@
 import {
     ArrowElbowDownRightIcon,
     ArrowsInLineVerticalIcon,
+    CaretRightIcon,
     ChatCircleDotsIcon,
-    CircleNotchIcon,
     RobotIcon,
     WarningCircleIcon
 } from "@phosphor-icons/react";
-import type { FinishedTask, MessagePart } from "@/proto";
+import { useContext } from "react";
+import type { FinishedTask, HarnessId, MessagePart } from "@/proto";
+import { HarnessIcon } from "@/harnesses";
 import { cn } from "@/lib/cn";
 import { formatTokens } from "@/usage/format";
+import { OpenSubagent } from "./context";
+import {
+    formatElapsed,
+    spawnResult,
+    SUBAGENT_STATE,
+    useSubagent,
+    type SubagentPhase
+} from "./subagents";
 import type { ToolPart } from "./tools";
 
 type Part<K extends MessagePart["kind"]> = Extract<MessagePart, { kind: K }>;
 
-/**
- * A spawned subagent, as a card of its own rather than a line in a tool
- * group, so a running one is visible without opening anything. Its state is
- * shown in the card's own terms: a spinner while it runs, the danger tint
- * if it failed, nothing extra once done.
- */
-export function SubagentChip({ part, streaming }: { part: ToolPart; streaming: boolean }) {
-    if (part.call.kind !== "subagent") return null;
-    const state = part.subagent ?? (part.isError ? "failed" : part.resolved ? "done" : "running");
-    // A turn that ended under a running subagent left it unfinished.
-    const running = state === "running" && streaming;
-    const failed = state === "failed";
+/** A line as plain text: markdown links, emphasis and list markers dropped. */
+function plainLine(line: string): string {
+    return line
+        .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+        .replace(/[`*_#>]/g, "")
+        .replace(/^\s*[-+]\s+/, "")
+        .trim();
+}
 
+/** The first line of a subagent's result, as plain text. */
+function resultLine(output: string | undefined): string | null {
+    return output?.split("\n").map(plainLine).find(Boolean) ?? null;
+}
+
+/** What a running subagent last said: the last line of its latest text. */
+function progressLine(thread: MessagePart[] | undefined): string | null {
+    const text = thread?.findLast((p) => p.kind === "text");
+    return text?.kind === "text" ? (text.text.split("\n").map(plainLine).findLast(Boolean) ?? null) : null;
+}
+
+/** A subagent's round avatar: the harness's mark, its state as a dot on the corner. */
+export function SubagentAvatar({ harness, state }: { harness?: HarnessId; state: SubagentPhase }) {
     return (
-        <div
+        <span className="relative inline-flex size-6 shrink-0 items-center justify-center rounded-full border border-dark-600 bg-dark-800 ring-2 ring-dark-900">
+            {harness ? (
+                <HarnessIcon harness={harness} className="size-3.5" />
+            ) : (
+                <RobotIcon className="size-3.5 text-dark-200" />
+            )}
+            <span
+                className={cn(
+                    "absolute -right-px -bottom-px size-2 rounded-full ring-2 ring-dark-900",
+                    SUBAGENT_STATE[state].dot,
+                    state === "running" && "animate-pulse"
+                )}
+            />
+        </span>
+    );
+}
+
+/**
+ * A spawned subagent, as t3code draws one: a round avatar (the harness's
+ * mark, a status dot on its corner), the task over what it last said, its
+ * state or the first line of its result, and how long it ran. A row of its
+ * own rather than a line in a tool group, so a running one is visible without
+ * opening anything; click opens its thread in the main pane.
+ */
+export function SubagentChip({
+    part,
+    streaming,
+    harness
+}: {
+    part: ToolPart;
+    streaming: boolean;
+    harness?: HarnessId;
+}) {
+    const open = useContext(OpenSubagent);
+    const { state, elapsed } = useSubagent(part, streaming);
+    const running = state === "running";
+    const call = part.call;
+    if (call.kind !== "subagent") return null;
+    const visual = SUBAGENT_STATE[state];
+    const failed = state === "failed";
+    // A background agent's result never comes back on its call: its last words stand in.
+    const detail = running
+        ? progressLine(part.thread)
+        : (resultLine(spawnResult(part)) ?? progressLine(part.thread));
+    const title = call.description || "Subagent";
+
+    const content = (
+        <>
+            <SubagentAvatar harness={harness} state={state} />
+            <span className="min-w-0 flex-1">
+                <span className="flex items-baseline gap-2">
+                    <span className="min-w-0 truncate text-xs font-medium text-dark-50">{title}</span>
+                    {(call.agent || call.model) && (
+                        <span className="shrink-0 text-[11px] text-dark-250">
+                            {[call.agent, call.model].filter(Boolean).join(" · ")}
+                        </span>
+                    )}
+                </span>
+                <span
+                    className={cn(
+                        "block truncate text-[11px] leading-relaxed",
+                        failed ? "text-danger" : "text-dark-200",
+                        running && !detail && "shimmer"
+                    )}
+                >
+                    {detail ?? visual.label}
+                </span>
+            </span>
+            {detail !== null && state !== "done" && (
+                <span
+                    className={cn(
+                        "shrink-0 text-xs",
+                        failed ? "text-danger" : "text-dark-200",
+                        running && "shimmer"
+                    )}
+                >
+                    {visual.label}
+                </span>
+            )}
+            {elapsed !== null && (
+                <span className="shrink-0 text-xs text-dark-200 tabular-nums">{formatElapsed(elapsed)}</span>
+            )}
+            {open && (
+                <CaretRightIcon className="size-3.5 shrink-0 text-dark-250 transition-colors group-hover/subagent:text-dark-50" />
+            )}
+        </>
+    );
+    const className = "group/subagent flex w-full min-w-0 items-center gap-2.5 rounded-md px-2 py-1.5 text-left";
+    return open ? (
+        <button
+            type="button"
+            aria-label={`Open ${title}`}
+            onClick={() => open(part.id)}
             className={cn(
-                "flex h-[30px] min-w-0 items-center gap-2 rounded-[9px] border border-white/[0.07] bg-white/[0.03] px-2 text-xs",
-                failed && "border-danger/25"
+                className,
+                "cursor-pointer transition-colors hover:bg-white/[0.04] focus-visible:ring-2 focus-visible:ring-primary-500/60 focus-visible:outline-none focus-visible:ring-inset"
             )}
         >
-            <span className="flex size-[18px] shrink-0 items-center justify-center rounded-[5px] bg-white/[0.08]">
-                <RobotIcon className={cn("size-3", failed ? "text-danger" : "text-dark-200")} />
-            </span>
-            <span className={cn("shrink-0 font-medium", failed ? "text-danger" : "text-dark-200")}>
-                Agent
-            </span>
-            <span className={cn("min-w-0 flex-1 truncate", failed ? "text-danger" : "text-dark-50/85")}>
-                {part.call.description}
-            </span>
-            {part.call.model && (
-                <span className="shrink-0 text-[11px] text-dark-250">{part.call.model}</span>
-            )}
-            {running && (
-                <CircleNotchIcon weight="bold" className="size-3.5 shrink-0 animate-spin text-dark-200" />
-            )}
-        </div>
+            {content}
+        </button>
+    ) : (
+        <div className={className}>{content}</div>
     );
 }
 
