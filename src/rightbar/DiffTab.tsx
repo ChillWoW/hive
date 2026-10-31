@@ -9,6 +9,7 @@ import {
     TextAlignLeftIcon
 } from "@phosphor-icons/react";
 import { useChatsStore } from "@/chats";
+import { CommentingProvider, useCommenting } from "@/diff/comments";
 import { FileSection } from "@/diff/DiffFiles";
 import { parsePatchReusing, totals, type FileDiff } from "@/diff/patch";
 import { SCOPE_LABELS, useCheckoutDiff, useDiffPrefs, useTurnDiff, type DiffScope } from "@/diff/store";
@@ -86,6 +87,7 @@ function DiffPane({ folder }: { folder: string | null }) {
     );
 
     const root = diff?.root;
+    const commenting = useCommenting(chatId, folder, root);
     const open = useCallback(
         (path: string) => {
             if (root && folder) openPatchFile(folder, root, path);
@@ -150,18 +152,20 @@ function DiffPane({ folder }: { folder: string | null }) {
                     )}
                 </div>
                 <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-                    {files.map((file, i) => (
-                        <FileSection
-                            key={file.path}
-                            file={file}
-                            first={i === 0}
-                            folded={isFolded(file)}
-                            split={split}
-                            wrap={wrap}
-                            onToggle={toggle}
-                            onOpen={file.status === "deleted" ? undefined : open}
-                        />
-                    ))}
+                    <MaybeCommenting value={commenting}>
+                        {files.map((file, i) => (
+                            <FileSection
+                                key={file.path}
+                                file={file}
+                                first={i === 0}
+                                folded={isFolded(file)}
+                                split={split}
+                                wrap={wrap}
+                                onToggle={toggle}
+                                onOpen={file.status === "deleted" ? undefined : open}
+                            />
+                        ))}
+                    </MaybeCommenting>
                 </div>
             </>
         );
@@ -271,6 +275,16 @@ function BaseStrip({
             </Menu>
         </div>
     );
+}
+
+function MaybeCommenting({
+    value,
+    children
+}: {
+    value: ReturnType<typeof useCommenting>;
+    children: ReactNode;
+}) {
+    return value ? <CommentingProvider value={value}>{children}</CommentingProvider> : children;
 }
 
 function Notice({ children, tone }: { children: ReactNode; tone?: "warning" }) {

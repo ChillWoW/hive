@@ -24,7 +24,15 @@ import { SlashMenu } from "./SlashMenu";
 import { appCommands, type AppCommandId, standaloneAppCommand } from "./slashCommands";
 import { useMentionMenu } from "./useMentionMenu";
 import { useSlashMenu } from "./useSlashMenu";
-import { composer, useComposerStore, useDraft, useDraftAttachments } from "./store";
+import { withDiffComments } from "@/review/comments";
+import { CommentChips } from "@/review/CommentChips";
+import {
+    composer,
+    useComposerStore,
+    useDraft,
+    useDraftAttachments,
+    useDraftComments
+} from "./store";
 import { usePromptHistory } from "./history";
 
 /** Past this the field scrolls. */
@@ -109,6 +117,9 @@ export function Composer({
     const addFiles = useComposerStore((s) => s.addFiles);
     const removeAttachment = useComposerStore((s) => s.removeAttachment);
     const takeAttachments = useComposerStore((s) => s.takeAttachments);
+    const comments = useDraftComments(chatId);
+    const removeComment = useComposerStore((s) => s.removeComment);
+    const takeComments = useComposerStore((s) => s.takeComments);
     const focusToken = useComposerStore((s) => s.focusToken);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -186,7 +197,7 @@ export function Composer({
         commands,
         app,
         started: chatId !== null,
-        attached: attachments.length > 0,
+        attached: attachments.length > 0 || comments.length > 0,
         enabled: focused,
         complete,
         onApp: runApp
@@ -325,7 +336,7 @@ export function Composer({
     }, []);
 
     const prompt = draft.trim();
-    const content = prompt !== "" || attachments.length > 0;
+    const content = prompt !== "" || attachments.length > 0 || comments.length > 0;
     /** Every file is copied in; one still copying or failed holds the send. */
     const filesReady = attachments.every((a) => a.attachment);
     const mode: Mode = content
@@ -347,7 +358,7 @@ export function Composer({
         if (!content || !filesReady) return;
         // `/plan` and the like on their own run here; they never reach the agent.
         const standalone =
-            attachments.length === 0
+            attachments.length === 0 && comments.length === 0
                 ? standaloneAppCommand(prompt, [
                       "model",
                       "usage-limits",
@@ -362,10 +373,11 @@ export function Composer({
             return;
         }
         const files = attachments.flatMap((a) => (a.attachment ? [a.attachment] : []));
-        if (onSend(prompt, files) !== false) {
+        if (onSend(withDiffComments(prompt, comments), files) !== false) {
             setDraft("");
             takeAttachments(chatId);
-            rememberPrompt(prompt);
+            takeComments(chatId);
+            if (prompt) rememberPrompt(prompt);
             recallRef.current = null;
         }
     };
@@ -384,7 +396,9 @@ export function Composer({
         if (el.selectionStart !== el.selectionEnd) return false;
         const current = recallRef.current;
         const browsing = current !== null && draft === current.text;
-        if (!browsing && (draft !== "" || attachments.length > 0)) return false;
+        if (!browsing && (draft !== "" || attachments.length > 0 || comments.length > 0)) {
+            return false;
+        }
         const index = browsing ? current.index : -1;
         const entries = usePromptHistory.getState().entries;
 
@@ -519,6 +533,9 @@ export function Composer({
                 menu={mention}
                 className="absolute inset-x-0 bottom-full z-20 mb-2"
             />
+            {comments.length > 0 && (
+                <CommentChips comments={comments} onRemove={(id) => removeComment(chatId, id)} />
+            )}
             {attachments.length > 0 && (
                 <div className="flex flex-wrap items-end gap-2 px-1 pt-1">
                     {attachments.map((a) =>

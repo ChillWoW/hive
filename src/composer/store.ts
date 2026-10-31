@@ -3,6 +3,7 @@ import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import type { Attachment, ChatConfig } from "@/proto";
 import { isImage, primeAttachmentUrl, saveAttachment } from "@/attachments";
+import type { DiffComment } from "@/review/comments";
 
 /** New-chat drafts are keyed `new:<uuid>`; chat ids are UUIDs, so they can't collide. */
 const NEW_PREFIX = "new:";
@@ -53,6 +54,8 @@ type ComposerState = {
     drafts: Record<string, string>;
     /** Files attached to each draft, by the same keys. */
     attachments: Record<string, DraftAttachment[]>;
+    /** Comments on diff lines, sent with each draft's next prompt; same keys. */
+    comments: Record<string, DiffComment[]>;
     /** The new-chat draft the new-chat view edits (with `newChat`). */
     newDraftId: string;
     /** The other new-chat drafts, by key; their text is in `drafts`. */
@@ -70,6 +73,13 @@ type ComposerState = {
     removeAttachment: (chatId: string | null, id: string) => void;
     /** Empties the draft's files, returning the copied ones (to send). */
     takeAttachments: (chatId: string | null) => Attachment[];
+    /** Adds a comment, or replaces the one with its id. */
+    putComment: (chatId: string | null, comment: DiffComment) => void;
+    removeComment: (chatId: string | null, id: string) => void;
+    /** Appends comments taken back from a queued prompt. */
+    restoreComments: (chatId: string | null, comments: DiffComment[]) => void;
+    /** Empties the draft's comments, returning them (to send). */
+    takeComments: (chatId: string | null) => DiffComment[];
     focus: () => void;
     setNewChat: (patch: Partial<NewChatSettings>) => void;
     /**
@@ -205,6 +215,41 @@ export const useComposerStore = create<ComposerState>()(
                 });
                 return sent;
             },
+            comments: {},
+            putComment: (chatId, comment) => {
+                const key = keyOf(chatId);
+                set((s) => {
+                    const list = s.comments[key] ?? [];
+                    const next = list.some((c) => c.id === comment.id)
+                        ? list.map((c) => (c.id === comment.id ? comment : c))
+                        : [...list, comment];
+                    return { comments: { ...s.comments, [key]: next } };
+                });
+            },
+            removeComment: (chatId, id) => {
+                const key = keyOf(chatId);
+                set((s) => {
+                    const rest = (s.comments[key] ?? []).filter((c) => c.id !== id);
+                    const { [key]: _, ...others } = s.comments;
+                    return { comments: rest.length ? { ...others, [key]: rest } : others };
+                });
+            },
+            restoreComments: (chatId, restored) => {
+                if (restored.length === 0) return;
+                const key = keyOf(chatId);
+                set((s) => ({
+                    comments: { ...s.comments, [key]: [...(s.comments[key] ?? []), ...restored] }
+                }));
+            },
+            takeComments: (chatId) => {
+                const key = keyOf(chatId);
+                const list: DiffComment[] = useComposerStore.getState().comments[key] ?? [];
+                set((s) => {
+                    const { [key]: _, ...others } = s.comments;
+                    return { comments: others };
+                });
+                return list;
+            },
             focus: () => set((s) => ({ focusToken: s.focusToken + 1 })),
             setNewChat: (patch) =>
                 set((s) => ({ newChat: { ...s.newChat, ...patch } })),
@@ -234,8 +279,9 @@ export const useComposerStore = create<ComposerState>()(
                     }
                     const { [key]: _d, ...drafts } = s.drafts;
                     const { [key]: _a, ...attachments } = s.attachments;
+                    const { [key]: _c, ...comments } = s.comments;
                     const { [key]: _p, ...parked } = s.parked;
-                    return { drafts, attachments, parked };
+                    return { drafts, attachments, comments, parked };
                 }),
             discardFolderDrafts: (cwd) =>
                 set((s) => {
@@ -257,17 +303,26 @@ export const useComposerStore = create<ComposerState>()(
                     return {
                         drafts: drop(s.drafts),
                         attachments: drop(s.attachments),
+                        comments: drop(s.comments),
                         parked: drop(s.parked)
                     };
                 }),
             pruneDrafts: (chatIds) =>
                 set((s) => {
                     const gone = (key: string) => !isNewDraftKey(key) && !chatIds.has(key);
-                    const keys = [...Object.keys(s.drafts), ...Object.keys(s.attachments)];
+                    const keys = [
+                        ...Object.keys(s.drafts),
+                        ...Object.keys(s.attachments),
+                        ...Object.keys(s.comments)
+                    ];
                     if (!keys.some(gone)) return s;
                     const keep = <T,>(record: Record<string, T>) =>
                         Object.fromEntries(Object.entries(record).filter(([k]) => !gone(k)));
-                    return { drafts: keep(s.drafts), attachments: keep(s.attachments) };
+                    return {
+                        drafts: keep(s.drafts),
+                        attachments: keep(s.attachments),
+                        comments: keep(s.comments)
+                    };
                 }),
             favorites: [],
             toggleFavorite: (key) =>
@@ -300,6 +355,7 @@ export const useComposerStore = create<ComposerState>()(
                         return kept.length ? [[key, kept]] : [];
                     })
                 ),
+                comments: s.comments,
                 newDraftId: s.newDraftId,
                 parked: s.parked
             }),
@@ -315,6 +371,7 @@ export const useComposerStore = create<ComposerState>()(
                     attachments: isRecord(persisted?.attachments)
                         ? persisted.attachments
                         : current.attachments,
+                    comments: isRecord(persisted?.comments) ? persisted.comments : current.comments,
                     newDraftId:
                         typeof persisted?.newDraftId === "string"
                             ? persisted.newDraftId
@@ -343,7 +400,7 @@ function keyOf(chatId: string | null) {
 }
 
 function isEmpty(s: ComposerState, key: string) {
-    return !s.drafts[key]?.trim() && !s.attachments[key]?.length;
+    return !s.drafts[key]?.trim() && !s.attachments[key]?.length && !s.comments[key]?.length;
 }
 
 /** Parks the open new-chat draft, if it has anything in it. */
@@ -368,6 +425,13 @@ export function useDraftAttachments(chatId: string | null): DraftAttachment[] {
     return useComposerStore((s) => s.attachments[chatId ?? s.newDraftId] ?? NO_ATTACHMENTS);
 }
 
+const NO_COMMENTS: DiffComment[] = [];
+
+/** The draft's comments on diff lines. */
+export function useDraftComments(chatId: string | null): DiffComment[] {
+    return useComposerStore((s) => s.comments[chatId ?? s.newDraftId] ?? NO_COMMENTS);
+}
+
 /** Whether the chat has unsent text or files. */
 export function useHasDraft(chatId: string): boolean {
     return useComposerStore((s) => !isEmpty(s, chatId));
@@ -387,18 +451,23 @@ export type NewChatDraft = {
 export function useNewChatDrafts(): NewChatDraft[] {
     const drafts = useComposerStore((s) => s.drafts);
     const attachments = useComposerStore((s) => s.attachments);
+    const comments = useComposerStore((s) => s.comments);
     const newDraftId = useComposerStore((s) => s.newDraftId);
     const cwd = useComposerStore((s) => s.newChat.cwd);
     const parked = useComposerStore((s) => s.parked);
 
     return useMemo(() => {
-        const keys = new Set([...Object.keys(drafts), ...Object.keys(attachments)]);
+        const keys = new Set([
+            ...Object.keys(drafts),
+            ...Object.keys(attachments),
+            ...Object.keys(comments)
+        ]);
         const list: (NewChatDraft & { at: number })[] = [];
         for (const key of keys) {
             if (!isNewDraftKey(key)) continue;
             const text = drafts[key]?.trim() ?? "";
             const files = attachments[key]?.length ?? 0;
-            if (!text && !files) continue;
+            if (!text && !files && !comments[key]?.length) continue;
             const open = key === newDraftId;
             const left = parked[key];
             list.push({
@@ -411,7 +480,7 @@ export function useNewChatDrafts(): NewChatDraft[] {
             });
         }
         return list.sort((a, b) => b.at - a.at);
-    }, [drafts, attachments, newDraftId, cwd, parked]);
+    }, [drafts, attachments, comments, newDraftId, cwd, parked]);
 }
 
 /** Same actions outside React. */
@@ -422,6 +491,12 @@ export const composer = {
         useComposerStore.getState().setDraft(chatId, text),
     restoreAttachments: (chatId: string | null, attachments: Attachment[]) =>
         useComposerStore.getState().restoreAttachments(chatId, attachments),
+    restoreComments: (chatId: string | null, comments: DiffComment[]) =>
+        useComposerStore.getState().restoreComments(chatId, comments),
+    putComment: (chatId: string | null, comment: DiffComment) =>
+        useComposerStore.getState().putComment(chatId, comment),
+    removeComment: (chatId: string | null, id: string) =>
+        useComposerStore.getState().removeComment(chatId, id),
     focus: () => useComposerStore.getState().focus(),
     startNewChat: (cwd?: string) => useComposerStore.getState().startNewChat(cwd),
     openDraft: (key: string) => useComposerStore.getState().openDraft(key),

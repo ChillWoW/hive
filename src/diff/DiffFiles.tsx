@@ -1,7 +1,17 @@
-import { memo, useEffect, useState, type CSSProperties, type ReactNode } from "react";
-import { ArrowSquareOutIcon, CaretRightIcon } from "@phosphor-icons/react";
+import { Fragment, memo, useEffect, useState, type CSSProperties, type ReactNode } from "react";
+import { ArrowSquareOutIcon, CaretRightIcon, PlusIcon } from "@phosphor-icons/react";
 import { cn } from "@/lib/cn";
+import { lineRef, refKey } from "@/review/comments";
 import { FileIcon, iconButtonClassName, Tooltip } from "@/ui";
+import {
+    itemsAfter,
+    MeasuredSlot,
+    SlotSpacer,
+    SlotView,
+    useFileSlots,
+    type FileSlots,
+    type SlotItem
+} from "./comments";
 import { highlightFile, type Span } from "./highlight";
 import { fileNotices, splitPairs, type FileDiff, type Hunk, type PatchLine } from "./patch";
 
@@ -186,20 +196,27 @@ function useHighlights(file: FileDiff) {
 export function FileBody({ file, split, wrap }: { file: FileDiff; split: boolean; wrap: boolean }) {
     const spans = useHighlights(file);
     const gutter = gutterWidth(file);
+    const slots = useFileSlots(file);
+    const row = rowProps(file, slots);
     if (!split) {
         return (
-            <Scroller wrap={wrap}>
+            <Scroller wrap={wrap} container={!!slots}>
                 {file.hunks.map((hunk, h) => (
                     <div key={h}>
                         {hunk.header && <HunkHeader header={hunk.header} />}
                         {hunk.lines.map((line, i) => (
-                            <UnifiedRow
-                                key={i}
-                                line={line}
-                                spans={spans?.get(line)}
-                                gutter={gutter}
-                                wrap={wrap}
-                            />
+                            <Fragment key={i}>
+                                <UnifiedRow
+                                    line={line}
+                                    spans={spans?.get(line)}
+                                    gutter={gutter}
+                                    wrap={wrap}
+                                    {...row(line)}
+                                />
+                                {itemsAfter(slots, [line]).map((item) => (
+                                    <SlotView key={item.key} file={file} item={item} sticky={!wrap} />
+                                ))}
+                            </Fragment>
                         ))}
                     </div>
                 ))}
@@ -214,25 +231,47 @@ export function FileBody({ file, split, wrap }: { file: FileDiff; split: boolean
                 {file.hunks.map((hunk, h) => (
                     <div key={h}>
                         <HunkHeader header={hunk.header} />
-                        {splitPairs(hunk.lines).map(([left, right], i) => (
-                            <div key={i} className="grid grid-cols-2">
-                                <SplitCell
-                                    line={pick(hunk, left)}
-                                    side="old"
-                                    spans={spans}
-                                    gutter={gutter}
-                                    wrap
-                                />
-                                <SplitCell
-                                    line={pick(hunk, right)}
-                                    side="new"
-                                    spans={spans}
-                                    gutter={gutter}
-                                    wrap
-                                    divider
-                                />
-                            </div>
-                        ))}
+                        {splitPairs(hunk.lines).map(([left, right], i) => {
+                            const l = pick(hunk, left);
+                            const r = pick(hunk, right);
+                            return (
+                                <Fragment key={i}>
+                                    <div className="grid grid-cols-2">
+                                        <SplitCell
+                                            line={l}
+                                            side="old"
+                                            spans={spans}
+                                            gutter={gutter}
+                                            wrap
+                                            {...(l && row(l))}
+                                        />
+                                        <SplitCell
+                                            line={r}
+                                            side="new"
+                                            spans={spans}
+                                            gutter={gutter}
+                                            wrap
+                                            divider
+                                            {...(r && row(r))}
+                                        />
+                                    </div>
+                                    {itemsAfter(slots, [l, r]).map((item) => (
+                                        <div key={item.key} className="grid grid-cols-2">
+                                            <div>
+                                                {item.side === "old" && (
+                                                    <SlotView file={file} item={item} sticky={false} />
+                                                )}
+                                            </div>
+                                            <div className="border-l border-dark-600">
+                                                {item.side === "new" && (
+                                                    <SlotView file={file} item={item} sticky={false} />
+                                                )}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </Fragment>
+                            );
+                        })}
                     </div>
                 ))}
             </div>
@@ -242,20 +281,42 @@ export function FileBody({ file, split, wrap }: { file: FileDiff; split: boolean
     return (
         <div className="grid grid-cols-2">
             {(["old", "new"] as const).map((side) => (
-                <Scroller key={side} wrap={false} className={side === "new" ? "border-l border-dark-600" : undefined}>
+                <Scroller
+                    key={side}
+                    wrap={false}
+                    container={!!slots}
+                    className={side === "new" ? "border-l border-dark-600" : undefined}
+                >
                     {file.hunks.map((hunk, h) => (
                         <div key={h}>
                             <HunkHeader header={side === "old" ? hunk.header : ""} />
-                            {pairs[h]!.map((pair, i) => (
-                                <SplitCell
-                                    key={i}
-                                    line={pick(hunk, side === "old" ? pair[0] : pair[1])}
-                                    side={side}
-                                    spans={spans}
-                                    gutter={gutter}
-                                    wrap={false}
-                                />
-                            ))}
+                            {pairs[h]!.map((pair, i) => {
+                                const line = pick(hunk, side === "old" ? pair[0] : pair[1]);
+                                const items = itemsAfter(slots, [
+                                    pick(hunk, pair[0]),
+                                    pick(hunk, pair[1])
+                                ]);
+                                return (
+                                    <Fragment key={i}>
+                                        <SplitCell
+                                            line={line}
+                                            side={side}
+                                            spans={spans}
+                                            gutter={gutter}
+                                            wrap={false}
+                                            {...(line && row(line))}
+                                        />
+                                        {items.map((item) => (
+                                            <SplitSlot
+                                                key={item.key}
+                                                file={file}
+                                                item={item}
+                                                side={side}
+                                            />
+                                        ))}
+                                    </Fragment>
+                                );
+                            })}
                         </div>
                     ))}
                 </Scroller>
@@ -267,18 +328,53 @@ export function FileBody({ file, split, wrap }: { file: FileDiff; split: boolean
 const pick = (hunk: Hunk, index: number | undefined) =>
     index === undefined ? undefined : hunk.lines[index];
 
+/** A row's commenting props: its gutter opens the comment box, the box's lines tinted. */
+type CommentProps = { onComment?: (line: PatchLine, extend: boolean) => void; picked?: boolean };
+
+function rowProps(file: FileDiff, slots: FileSlots | null) {
+    return (line: PatchLine): CommentProps => {
+        const ref = slots && lineRef(line);
+        if (!slots || !ref) return {};
+        return {
+            onComment: (l, extend) => slots.begin(file, l, extend),
+            picked: slots.picked?.has(refKey(ref)) ?? false
+        };
+    };
+}
+
+/** An item in its own column; a spacer as tall in the other one, keeping rows paired. */
+function SplitSlot({ file, item, side }: { file: FileDiff; item: SlotItem; side: "old" | "new" }) {
+    const id = `${file.path}|${item.key}`;
+    if (item.side !== side) return <SlotSpacer id={id} />;
+    return (
+        <MeasuredSlot id={id}>
+            <SlotView file={file} item={item} sticky />
+        </MeasuredSlot>
+    );
+}
+
 /** Scrolls sideways as one when lines don't wrap. */
 function Scroller({
     wrap,
+    container,
     className,
     children
 }: {
     wrap: boolean;
+    /** Sizes comments to the visible width (`cqw`). */
+    container?: boolean;
     className?: string;
     children: ReactNode;
 }) {
     return (
-        <div className={cn("min-w-0", !wrap && "overflow-x-auto overscroll-x-contain", className)}>
+        <div
+            className={cn(
+                "min-w-0",
+                container && "@container",
+                !wrap && "overflow-x-auto overscroll-x-contain",
+                className
+            )}
+        >
             {/* As wide as its longest line, or the panel if that's wider. */}
             <div className={cn(!wrap && "w-max min-w-full")}>{children}</div>
         </div>
@@ -307,20 +403,30 @@ function UnifiedRow({
     line,
     spans,
     gutter,
-    wrap
+    wrap,
+    onComment,
+    picked
 }: {
     line: PatchLine;
     spans: Span[] | undefined;
     gutter: number;
     wrap: boolean;
-}) {
+} & CommentProps) {
     const tone = ROW[line.kind];
     if (line.kind === "meta") return <MetaRow text={line.text} />;
     return (
-        <div className={cn("relative flex", tone.row)} style={{ minHeight: LINE_HEIGHT }}>
+        <div className={cn("group/row relative flex", tone.row)} style={{ minHeight: LINE_HEIGHT }}>
+            {picked && <Picked />}
             {/* The numbers stay put while the code scrolls sideways. */}
-            <div className="sticky left-0 z-[1] flex shrink-0 bg-dark-850">
+            <div
+                {...gutterProps(line, onComment)}
+                className={cn(
+                    "sticky left-0 z-[2] flex shrink-0 bg-dark-850",
+                    onComment && "cursor-pointer"
+                )}
+            >
                 <span className={cn("absolute inset-0", tone.row)} />
+                {picked && <Picked />}
                 {tone.accent && <span className={cn("absolute inset-y-0 left-0 w-[3px]", tone.accent)} />}
                 {gutter > 0 && (
                     <>
@@ -328,7 +434,7 @@ function UnifiedRow({
                         <LineNo no={line.newNo} width={gutter} className={tone.no} />
                     </>
                 )}
-                <Marker kind={line.kind} />
+                <Marker kind={line.kind} commentable={!!onComment} />
             </div>
             <Code text={line.text} spans={spans} wrap={wrap} />
         </div>
@@ -341,7 +447,9 @@ function SplitCell({
     spans,
     gutter,
     wrap,
-    divider
+    divider,
+    onComment,
+    picked
 }: {
     line: PatchLine | undefined;
     side: "old" | "new";
@@ -349,7 +457,7 @@ function SplitCell({
     gutter: number;
     wrap: boolean;
     divider?: boolean;
-}) {
+} & CommentProps) {
     const border = divider && "border-l border-dark-600";
     if (!line) {
         // Nothing on this side: a quiet filler the height of a line.
@@ -364,9 +472,20 @@ function SplitCell({
     }
     const tone = ROW[line.kind];
     return (
-        <div className={cn("relative flex min-w-0", tone.row, border)} style={{ minHeight: LINE_HEIGHT }}>
-            <div className="sticky left-0 z-[1] flex shrink-0 bg-dark-850">
+        <div
+            className={cn("group/row relative flex min-w-0", tone.row, border)}
+            style={{ minHeight: LINE_HEIGHT }}
+        >
+            {picked && <Picked />}
+            <div
+                {...gutterProps(line, onComment)}
+                className={cn(
+                    "sticky left-0 z-[2] flex shrink-0 bg-dark-850",
+                    onComment && "cursor-pointer"
+                )}
+            >
                 <span className={cn("absolute inset-0", tone.row)} />
+                {picked && <Picked />}
                 {tone.accent && <span className={cn("absolute inset-y-0 left-0 w-[3px]", tone.accent)} />}
                 {gutter > 0 && (
                     <LineNo
@@ -375,7 +494,7 @@ function SplitCell({
                         className={tone.no}
                     />
                 )}
-                <Marker kind={line.kind} narrow />
+                <Marker kind={line.kind} narrow commentable={!!onComment} />
             </div>
             <Code text={line.text} spans={spans?.get(line)} wrap={wrap} />
         </div>
@@ -393,7 +512,15 @@ function LineNo({ no, width, className }: { no?: number; width: number; classNam
     );
 }
 
-function Marker({ kind, narrow }: { kind: PatchLine["kind"]; narrow?: boolean }) {
+function Marker({
+    kind,
+    narrow,
+    commentable
+}: {
+    kind: PatchLine["kind"];
+    narrow?: boolean;
+    commentable?: boolean;
+}) {
     return (
         <span
             style={{ lineHeight: `${LINE_HEIGHT}px` }}
@@ -403,9 +530,38 @@ function Marker({ kind, narrow }: { kind: PatchLine["kind"]; narrow?: boolean })
                 ROW[kind].marker
             )}
         >
-            {kind === "add" ? "+" : kind === "del" ? "−" : ""}
+            <span className={cn(commentable && "group-hover/row:invisible")}>
+                {kind === "add" ? "+" : kind === "del" ? "−" : ""}
+            </span>
+            {commentable && (
+                <span
+                    aria-hidden="true"
+                    className="absolute top-1/2 left-1/2 hidden size-4 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded bg-info text-dark-900 group-hover/row:flex"
+                >
+                    <PlusIcon className="size-3" weight="bold" />
+                </span>
+            )}
         </span>
     );
+}
+
+/** The comment box's lines, tinted. */
+function Picked() {
+    return <span className="pointer-events-none absolute inset-0 z-[1] bg-info/[0.14]" />;
+}
+
+/** The gutter as the line's comment button: click comments, Shift+click stretches the range. */
+function gutterProps(line: PatchLine, onComment: CommentProps["onComment"]) {
+    if (!onComment) return {};
+    return {
+        role: "button" as const,
+        "aria-label": "Comment on this line",
+        onMouseDown: (event: React.MouseEvent) => {
+            // Shift+click would select text from the last click.
+            if (event.shiftKey) event.preventDefault();
+        },
+        onClick: (event: React.MouseEvent) => onComment(line, event.shiftKey)
+    };
 }
 
 function MetaRow({ text }: { text: string }) {

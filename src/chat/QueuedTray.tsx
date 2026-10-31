@@ -11,6 +11,7 @@ import {
 import { chats, type TranscriptMessage } from "@/chats";
 import { composer } from "@/composer";
 import { cn } from "@/lib/cn";
+import { restoredComments, splitDiffComments } from "@/review/comments";
 import { iconButtonClassName, Tooltip } from "@/ui";
 
 /** Every row is one line tall, so a drag can count rows by distance. */
@@ -68,9 +69,10 @@ export function QueuedTray({
         const withdrawn = await chats.cancelQueued(message.id).catch(() => false);
         if (!withdrawn) return;
         const draft = composer.draft(chatId).trim();
-        const text = promptText(message);
+        const { prompt: text, comments } = splitDiffComments(promptText(message));
         composer.setDraft(chatId, draft && text ? `${draft}\n\n${text}` : draft || text);
         composer.restoreAttachments(chatId, message.attachments ?? []);
+        composer.restoreComments(chatId, restoredComments(comments));
         composer.focus();
     };
 
@@ -101,7 +103,10 @@ export function QueuedTray({
             <ul className="relative flex flex-col">
                 {messages.map((m, i) => {
                     const dragged = drag?.id === m.id;
-                    const text = promptText(m);
+                    const split = splitDiffComments(promptText(m));
+                    const n = split.comments.length;
+                    const text =
+                        split.prompt || (n ? `${n} diff comment${n === 1 ? "" : "s"}` : "");
                     return (
                         <li
                             key={m.id}

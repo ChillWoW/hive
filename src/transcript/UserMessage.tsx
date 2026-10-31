@@ -10,6 +10,8 @@ import type { TranscriptMessage } from "@/chats";
 import { FileTag, splitMentions } from "@/files";
 import { cn } from "@/lib/cn";
 import type { Attachment } from "@/proto";
+import { splitDiffComments } from "@/review/comments";
+import { SentComments } from "@/review/SentComments";
 
 /** A file the user sent; a click opens it in its default app. */
 function SentAttachment({ attachment }: { attachment: Attachment }) {
@@ -90,9 +92,9 @@ export function UserMessage({
     onRetry?: () => void;
     onDiscard?: () => void;
 }) {
-    const text = message.parts
-        .flatMap((p) => (p.kind === "text" ? [p.text] : []))
-        .join("\n\n");
+    const { prompt: text, comments } = splitDiffComments(
+        message.parts.flatMap((p) => (p.kind === "text" ? [p.text] : [])).join("\n\n")
+    );
     const delivery = message.delivery;
     const attachments = message.attachments ?? [];
 
@@ -127,6 +129,11 @@ export function UserMessage({
                             )
                         )}
                     </Collapsible>
+                </div>
+            )}
+            {comments.length > 0 && (
+                <div className={cn("w-full", delivery?.state === "sending" && "opacity-70")}>
+                    <SentComments comments={comments} />
                 </div>
             )}
             {delivery?.state === "failed" && (
