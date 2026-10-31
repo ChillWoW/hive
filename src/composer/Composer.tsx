@@ -25,6 +25,7 @@ import { appCommands, type AppCommandId, standaloneAppCommand } from "./slashCom
 import { useMentionMenu } from "./useMentionMenu";
 import { useSlashMenu } from "./useSlashMenu";
 import { composer, useComposerStore, useDraft, useDraftAttachments } from "./store";
+import { usePromptHistory } from "./history";
 
 /** Past this the field scrolls. */
 const MAX_ROWS = 12;
@@ -139,6 +140,12 @@ export function Composer({
     const [, setWidth] = useState(0);
     const [focused, setFocused] = useState(false);
     const [caret, setCaret] = useState(0);
+    const rememberPrompt = usePromptHistory((s) => s.remember);
+    /** The history entry ↑/↓ last put in the field, while browsing it. */
+    const recallRef = useRef<{ index: number; text: string } | null>(null);
+    useEffect(() => {
+        recallRef.current = null;
+    }, [chatId]);
 
     /** Sets the field's text from a menu, with the caret at `at`. */
     const complete = (text: string, at: number) => {
@@ -349,6 +356,8 @@ export function Composer({
                 : null;
         if (standalone) {
             setDraft("");
+            rememberPrompt(prompt);
+            recallRef.current = null;
             runApp(standalone);
             return;
         }
@@ -356,7 +365,44 @@ export function Composer({
         if (onSend(prompt, files) !== false) {
             setDraft("");
             takeAttachments(chatId);
+            rememberPrompt(prompt);
+            recallRef.current = null;
         }
+    };
+
+    /**
+     * ↑ in an empty field brings back the last prompt sent, ↑ again older
+     * ones, ↓ newer ones and then the empty field again — as long as the
+     * recalled text is left as it is. In a multi-line one the caret first
+     * moves line by line, as usual, until it's on the first (↑) or last (↓).
+     */
+    const recall = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+        if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return false;
+        if (event.shiftKey || event.altKey || event.ctrlKey || event.metaKey) return false;
+        if (event.nativeEvent.isComposing) return false;
+        const el = event.currentTarget;
+        if (el.selectionStart !== el.selectionEnd) return false;
+        const current = recallRef.current;
+        const browsing = current !== null && draft === current.text;
+        if (!browsing && (draft !== "" || attachments.length > 0)) return false;
+        const index = browsing ? current.index : -1;
+        const entries = usePromptHistory.getState().entries;
+
+        if (event.key === "ArrowUp") {
+            if (draft.lastIndexOf("\n", el.selectionStart - 1) !== -1) return false;
+            const next = index + 1;
+            if (next >= entries.length) return browsing;
+            recallRef.current = { index: next, text: entries[next] };
+            complete(entries[next], entries[next].length);
+            return true;
+        }
+        if (!browsing) return false;
+        if (draft.indexOf("\n", el.selectionEnd) !== -1) return false;
+        const next = index - 1;
+        const text = next < 0 ? "" : entries[next];
+        recallRef.current = next < 0 ? null : { index: next, text };
+        complete(text, text.length);
+        return true;
     };
 
     const attach = (files: File[]) => {
@@ -407,7 +453,7 @@ export function Composer({
     };
 
     const onKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
-        if (mention.onKeyDown(event) || slash.onKeyDown(event)) {
+        if (mention.onKeyDown(event) || slash.onKeyDown(event) || recall(event)) {
             event.preventDefault();
             return;
         }
