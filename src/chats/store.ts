@@ -12,8 +12,10 @@ import type {
     Session,
     UserInputAnswer
 } from "@/proto";
+import { useSettingsStore } from "@/settings/store";
 import { foldEvent } from "@/transcript/fold";
 import { chatsApi, type Unwatch } from "./api";
+import { setups } from "./setups";
 
 /**
  * Chats on the frontend: the list (with live sessions) from one app-wide
@@ -320,8 +322,22 @@ export const useChatsStore = create<ChatsState>()(
                         // A files-only prompt names the branch after its files.
                         hint: prompt || attachments.map((a) => a.name).join(" ")
                     };
-                    const chat = await chatsApi.create(target.cwd, target.config, worktree);
+                    if (worktree) {
+                        const naming =
+                            useSettingsStore.getState().settings.worktrees.branchNaming ===
+                            "semantic";
+                        setups.begin(messageId, naming);
+                    }
+                    const chat = await chatsApi
+                        .create(target.cwd, target.config, worktree, (step) =>
+                            setups.step(messageId, step)
+                        )
+                        .catch((error: unknown) => {
+                            setups.failed(messageId, errorText(error));
+                            throw error;
+                        });
                     chatId = chat.id;
+                    if (worktree) setups.created(messageId, chat.id, chat.worktree);
                     // One update, so the prompt never drops out of view.
                     set((s) => {
                         upsertChat(s, chat);
@@ -343,18 +359,23 @@ export const useChatsStore = create<ChatsState>()(
                     ...(attachments.length > 0 && { attachments })
                 });
                 edit((o) => track(o, command, true));
+                if (command.status === "rejected" || command.status === "expired") {
+                    setups.failed(messageId, command.resolution ?? NOT_SENT);
+                }
             } catch (error) {
+                setups.failed(messageId, errorText(error));
                 edit((o) => {
                     o.error = errorText(error);
                 });
             }
         },
 
-        discard: (messageId) =>
-            set((s) => {
-                const o = s.outbox.find((o) => o.messageId === messageId);
-                if (o?.error) removeOutgoing(s, messageId);
-            }),
+        discard: (messageId) => {
+            const o = useChatsStore.getState().outbox.find((o) => o.messageId === messageId);
+            if (!o?.error) return;
+            set((s) => removeOutgoing(s, messageId));
+            setups.drop(messageId);
+        },
 
         cancelQueued: async (messageId) => {
             const o = findQueued(messageId);
@@ -700,6 +721,10 @@ function applyMessages(chatId: string, update: MessagesUpdate) {
                 return;
         }
     });
+    if (update.type !== "queue" && update.type !== "command") {
+        const messages = useChatsStore.getState().transcripts[chatId]?.messages;
+        if (messages) setups.observe(chatId, messages);
+    }
 }
 
 let chatsHydration: Promise<void> | null = null;

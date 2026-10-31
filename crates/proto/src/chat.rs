@@ -98,6 +98,18 @@ pub struct NewWorktree {
     pub hint: Option<String>,
 }
 
+/// How far `create_chat` got making a chat's worktree, streamed while it
+/// works; the chat it returns has the result.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(tag = "step", rename_all = "camelCase")]
+pub enum WorktreeStep {
+    /// A text run is naming the branch (semantic naming).
+    Naming,
+    /// `git worktree add` is checking the branch out; `branch` is the name
+    /// asked for (numbered if it turns out taken).
+    CheckingOut { branch: String },
+}
+
 impl Chat {
     /// Where the agent runs: the worktree's folder, else `cwd`.
     pub fn work_dir(&self) -> &str {

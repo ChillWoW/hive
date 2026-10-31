@@ -302,6 +302,8 @@ export function ChatView() {
                     error={error}
                     onRetry={retry}
                     onDiscard={(m) => chats.discard(m.id)}
+                    worktree={chat?.worktree}
+                    agent={catalog?.label}
                 />
             )}
             {bottom}

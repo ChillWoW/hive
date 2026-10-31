@@ -32,7 +32,7 @@ import {
 /** Output past this many lines folds into a "N more lines" row. */
 const MAX_LINES = 24;
 
-const panelTransition =
+export const panelTransition =
     "h-(--collapsible-panel-height) overflow-hidden transition-[height] duration-200 ease-out data-ending-style:h-0 data-starting-style:h-0";
 
 /**
@@ -97,7 +97,7 @@ export function ToolGroup({
  * icon, and the trunk carrying on past an open item's body to the next.
  * Opaque strokes, so the joints don't double up the way alpha would.
  */
-function Rail({ icon: RailIcon, failed, last }: { icon: ToolIcon; failed: boolean; last: boolean }) {
+export function Rail({ icon: RailIcon, failed, last }: { icon: ToolIcon; failed: boolean; last: boolean }) {
     return (
         <div aria-hidden className="relative w-12 shrink-0 self-stretch">
             <span className="absolute top-0 left-3 h-2.5 w-px bg-dark-600" />

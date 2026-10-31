@@ -15,3 +15,10 @@ export {
     type Transcript,
     type TranscriptMessage
 } from "./store";
+export {
+    useWorktreeSetup,
+    type SetupStage,
+    type SetupStageId,
+    type SetupStatus,
+    type WorktreeSetup
+} from "./setups";

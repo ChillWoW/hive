@@ -37,6 +37,7 @@ use hive_proto::{
     AgentEvent, Attachment, BackgroundTask, BranchNaming, Chat, ChatConfig, ChatsUpdate, Command,
     CommandPayload, CommandStatus, ContextUsage, DoneStatus, HarnessCatalog, HarnessId,
     McpServer, MessageStatus, MessagesUpdate, NewWorktree, RunRequest, SecretRequest, Session,
+    WorktreeStep,
     SessionStatus, SlashCommand, TaskOutput, TextGenerationSettings, UserInputAnswer,
 };
 use hive_store::{new_id, now_ms, Recovery, Store, StoreError, Turn};
@@ -466,6 +467,19 @@ impl Engine {
         config: ChatConfig,
         worktree: NewWorktree,
     ) -> Result<Chat> {
+        self.create_chat_in_worktree_with(cwd, config, worktree, |_| {})
+            .await
+    }
+
+    /// [`Engine::create_chat_in_worktree`], telling `progress` each step as
+    /// it starts.
+    pub async fn create_chat_in_worktree_with(
+        &self,
+        cwd: impl Into<String>,
+        config: ChatConfig,
+        worktree: NewWorktree,
+        progress: impl Fn(WorktreeStep) + Send + Sync,
+    ) -> Result<Chat> {
         let cwd = cwd.into();
         // Short, since the path shows in every tool call.
         let key: String = new_id()
@@ -488,8 +502,18 @@ impl Engine {
         let hint = worktree.hint.as_deref().unwrap_or_default();
         let (prefix, hint) = match naming {
             BranchNaming::Static => (prefix, hint.to_owned()),
-            BranchNaming::Semantic => self.semantic_branch(config.harness, hint).await,
+            BranchNaming::Semantic => {
+                progress(WorktreeStep::Naming);
+                self.semantic_branch(config.harness, hint).await
+            }
         };
+        let branch = hive_git::branch_slug(&hint);
+        progress(WorktreeStep::CheckingOut {
+            branch: match prefix.trim().trim_matches('/') {
+                "" => branch,
+                prefix => format!("{prefix}/{branch}"),
+            },
+        });
         let made = hive_git::add_worktree(
             Path::new(&cwd),
             &dir,

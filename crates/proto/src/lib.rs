@@ -71,6 +71,7 @@ mod export {
         GitDiff::export_all(&cfg).unwrap();
         GitHistoryPage::export_all(&cfg).unwrap();
         NewWorktree::export_all(&cfg).unwrap();
+        WorktreeStep::export_all(&cfg).unwrap();
         WorkspaceEntry::export_all(&cfg).unwrap();
         DirectoryEntry::export_all(&cfg).unwrap();
         FileText::export_all(&cfg).unwrap();

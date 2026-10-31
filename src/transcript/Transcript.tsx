@@ -1,7 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { ArrowDownIcon } from "@phosphor-icons/react";
-import type { TranscriptMessage } from "@/chats";
+import { useWorktreeSetup, type TranscriptMessage } from "@/chats";
 import { cn } from "@/lib/cn";
+import type { Worktree } from "@/proto";
+import { WorktreeSetupCard } from "./WorktreeSetupCard";
 import { AssistantMessage } from "./AssistantMessage";
 import { ChatCwd } from "./context";
 import { CompactionRow } from "./parts";
@@ -18,6 +20,10 @@ type TranscriptProps = {
     error?: string;
     onRetry?: (message: TranscriptMessage) => void;
     onDiscard?: (message: TranscriptMessage) => void;
+    /** The chat's worktree, shown under its first prompt. */
+    worktree?: Worktree;
+    /** The harness's name, for the worktree setup's "Start agent" step. */
+    agent?: string;
     /** Under the messages, inside the scroller (the composer's spacer). */
     className?: string;
 };
@@ -39,6 +45,21 @@ const hasCompaction = (message: TranscriptMessage | undefined) =>
  */
 const compacting = (reply: TranscriptMessage | undefined) =>
     !reply || hasCompaction(reply) || (reply.role === "assistant" && reply.status === "streaming");
+
+/** The worktree made for a prompt's chat, as it was being made if that was this session. */
+function SetupSlot({
+    messageId,
+    worktree,
+    agent
+}: {
+    messageId: string;
+    worktree?: Worktree;
+    agent?: string;
+}) {
+    const setup = useWorktreeSetup(messageId);
+    if (!setup && !worktree) return null;
+    return <WorktreeSetupCard setup={setup} worktree={worktree} agent={agent} />;
+}
 
 /** A `/compact` on its way, before its reply has said anything. */
 function PendingCompaction() {
@@ -62,6 +83,8 @@ export function Transcript({
     error,
     onRetry,
     onDiscard,
+    worktree,
+    agent,
     className
 }: TranscriptProps) {
     const scrollRef = useRef<HTMLDivElement>(null);
@@ -120,6 +143,7 @@ export function Transcript({
     };
 
     const lastMessage = messages.at(-1);
+    const firstUser = messages.find((m) => m.role === "user")?.id;
 
     return (
         <div className="relative flex min-h-0 flex-1 flex-col">
@@ -143,12 +167,18 @@ export function Transcript({
                                     <PendingCompaction key={message.id} />
                                 )
                             ) : message.role === "user" ? (
-                                <UserMessage
-                                    key={message.id}
-                                    message={message}
-                                    onRetry={onRetry && (() => onRetry(message))}
-                                    onDiscard={onDiscard && (() => onDiscard(message))}
-                                />
+                                <Fragment key={message.id}>
+                                    <UserMessage
+                                        message={message}
+                                        onRetry={onRetry && (() => onRetry(message))}
+                                        onDiscard={onDiscard && (() => onDiscard(message))}
+                                    />
+                                    <SetupSlot
+                                        messageId={message.id}
+                                        worktree={message.id === firstUser ? worktree : undefined}
+                                        agent={agent}
+                                    />
+                                </Fragment>
                             ) : (
                                 <AssistantMessage
                                     key={message.id}

@@ -7,7 +7,8 @@ import type {
     CommandPayload,
     MessagesUpdate,
     NewWorktree,
-    TaskOutput
+    TaskOutput,
+    WorktreeStep
 } from "@/proto";
 import { isTauri } from "@/lib/platform";
 
@@ -42,11 +43,26 @@ function watch<T>(
 }
 
 export const chatsApi = {
-    /** With `worktree`, the chat works in a worktree of its own. */
-    create: (cwd: string, config: ChatConfig, worktree?: NewWorktree): Promise<Chat> =>
-        isTauri
-            ? invoke<Chat>("create_chat", { cwd, config, worktree: worktree ?? null })
-            : Promise.reject(new Error(NO_BACKEND)),
+    /**
+     * With `worktree`, the chat works in a worktree of its own;
+     * `onProgress` hears each step of making it.
+     */
+    create: (
+        cwd: string,
+        config: ChatConfig,
+        worktree?: NewWorktree,
+        onProgress?: (step: WorktreeStep) => void
+    ): Promise<Chat> => {
+        if (!isTauri) return Promise.reject(new Error(NO_BACKEND));
+        const channel = new Channel<WorktreeStep>();
+        if (onProgress) channel.onmessage = onProgress;
+        return invoke<Chat>("create_chat", {
+            cwd,
+            config,
+            worktree: worktree ?? null,
+            onProgress: channel
+        });
+    },
 
     /** A live run picks the new settings up from its next turn. */
     updateConfig: (chatId: string, config: ChatConfig): Promise<Chat> =>
