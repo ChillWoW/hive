@@ -14,7 +14,7 @@ import {
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import type { SetupStage, SetupStatus, WorktreeSetup } from "@/chats";
 import { cn } from "@/lib/cn";
-import { isTauri, platform } from "@/lib/platform";
+import { isTauri, REVEAL_LABEL } from "@/lib/platform";
 import type { Worktree } from "@/proto";
 import { openTerminalTab } from "@/rightbar";
 import { panelTransition, Rail } from "./ToolGroup";
@@ -25,13 +25,6 @@ const STAGE_LABELS: Record<SetupStage["id"], string> = {
     checkout: "Create worktree",
     agent: "Start agent"
 };
-
-const REVEAL_LABEL =
-    platform === "macos"
-        ? "Reveal in Finder"
-        : platform === "windows"
-          ? "Show in Explorer"
-          : "Show in folder";
 
 /** `0.4s`, `12s`, `1m 05s`. */
 function formatDuration(ms: number) {

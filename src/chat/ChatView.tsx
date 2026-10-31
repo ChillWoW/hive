@@ -243,19 +243,14 @@ export function ChatView() {
                         </>
                     ) : (
                         <>
-                            {worktreeMode ? (
-                                <BranchPicker
-                                    cwd={newChat.cwd}
-                                    base={base}
-                                    onBaseChange={(next) => setNewChat({ base: next })}
-                                />
-                            ) : (
-                                <BranchPicker cwd={newChat.cwd} />
-                            )}
+                            {/* A worktree's base is picked in the workspace chip. */}
+                            {!worktreeMode && <BranchPicker cwd={newChat.cwd} />}
                             <WorkspacePicker
                                 cwd={newChat.cwd}
                                 value={newChat.workspace}
                                 onChange={(workspace) => setNewChat({ workspace })}
+                                base={base}
+                                onBaseChange={(next) => setNewChat({ base: next })}
                             />
                         </>
                     )}

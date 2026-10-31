@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { Combobox } from "@base-ui/react/combobox";
 import {
+    CheckIcon,
+    CopyIcon,
     DotsThreeIcon,
     FolderIcon,
     FolderOpenIcon,
@@ -9,18 +11,26 @@ import {
     TrashIcon
 } from "@phosphor-icons/react";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { projects, useProjects } from "@/projects";
 import { folderName } from "./paths";
 import { cn } from "@/lib/cn";
-import { isTauri } from "@/lib/platform";
+import { isTauri, REVEAL_LABEL } from "@/lib/platform";
 import { Menu, Tooltip, usePortalContainer } from "@/ui";
 import {
+    cardClassName,
+    cardFooterButtonClassName,
+    cardFooterClassName,
+    cardListClassName,
+    cardRowClassName,
+    cardSearchClassName,
     chipClassName,
     chipTriggerClassName,
-    footerButtonClassName,
-    popupClassName,
-    rowClassName,
-    searchInputClassName
+    rowMenuTriggerClassName,
+    rowMetaClassName,
+    searchInputClassName,
+    sideMenuClassName,
+    sideMenuItemClassName
 } from "./chip";
 import { ProjectIcon } from "./ProjectIcon";
 import { composer } from "./store";
@@ -47,7 +57,7 @@ export function FolderPicker({
                 <Tooltip.Trigger
                     render={
                         <span className={cn(chipClassName, "cursor-default")}>
-                            <FolderIcon className="size-3.5 shrink-0" />
+                            <ProjectIcon path={cwd} className="size-3.5" />
                             <span className="truncate">{folderName(cwd)}</span>
                         </span>
                     }
@@ -127,7 +137,11 @@ function FolderCombobox({
                         <Combobox.Trigger
                             className={cn(chipTriggerClassName, !cwd && "text-warning")}
                         >
-                            <FolderIcon className="size-3.5 shrink-0" />
+                            {cwd ? (
+                                <ProjectIcon path={cwd} className="size-3.5" />
+                            ) : (
+                                <FolderIcon className="size-3.5 shrink-0" />
+                            )}
                             <span className="truncate">
                                 {cwd ? folderName(cwd) : "Choose a folder"}
                             </span>
@@ -149,56 +163,63 @@ function FolderCombobox({
                 >
                     <Combobox.Popup
                         aria-label="Choose a folder"
-                        className={cn(popupClassName, "w-72")}
+                        className={cn(cardClassName, "w-72")}
                     >
-                        <div className="flex items-center gap-2 border-b border-dark-600 px-2.5">
+                        <label className={cardSearchClassName}>
                             <MagnifyingGlassIcon className="size-3.5 shrink-0 text-dark-250" />
                             <Combobox.Input
                                 placeholder="Search or paste a path"
                                 className={searchInputClassName}
                             />
-                        </div>
+                        </label>
 
                         <Combobox.Empty className="px-2.5 py-3 text-center text-xs text-dark-250 empty:hidden">
-                            {items.length ? "No folders match." : "No recent folders."}
+                            {items.length ? "No projects match." : "No projects yet."}
                         </Combobox.Empty>
 
-                        <Combobox.List className="hide-scrollbar max-h-72 overflow-y-auto overscroll-contain p-1 empty:hidden">
-                            {(path: string) => (
-                                <Combobox.Item
-                                    key={path}
-                                    value={path}
-                                    className={cn(
-                                        rowClassName,
-                                        "group/row grid-cols-[0.875rem_1fr_1.25rem] py-1"
-                                    )}
-                                >
-                                    <ProjectIcon
-                                        path={path}
-                                        selected={path === cwd}
-                                        className="size-3.5"
-                                    />
-                                    <span className="truncate">{folderName(path)}</span>
-                                    <ProjectMenu
-                                        path={path}
-                                        open={menuFor === path}
-                                        onOpenChange={(next) => setMenuFor(next ? path : null)}
-                                        onDelete={() => {
-                                            projects.remove(path);
-                                            composer.discardFolderDrafts(path);
-                                            if (path === cwd) onChange?.(null);
-                                        }}
-                                    />
-                                </Combobox.Item>
-                            )}
+                        <Combobox.List className={cardListClassName}>
+                            {(path: string) => {
+                                const menuOpen = menuFor === path;
+                                return (
+                                    <Combobox.Item
+                                        key={path}
+                                        value={path}
+                                        className={cardRowClassName}
+                                    >
+                                        <ProjectIcon
+                                            path={path}
+                                            selected={path === cwd}
+                                            className="size-3.5"
+                                        />
+                                        <span className="min-w-0 flex-1 truncate">
+                                            {folderName(path)}
+                                        </span>
+                                        <span className={cn(rowMetaClassName, menuOpen && "hidden")}>
+                                            {path === cwd && (
+                                                <CheckIcon className="size-3" weight="bold" />
+                                            )}
+                                        </span>
+                                        <ProjectMenu
+                                            path={path}
+                                            open={menuOpen}
+                                            onOpenChange={(next) => setMenuFor(next ? path : null)}
+                                            onRemove={() => {
+                                                projects.remove(path);
+                                                composer.discardFolderDrafts(path);
+                                                if (path === cwd) onChange?.(null);
+                                            }}
+                                        />
+                                    </Combobox.Item>
+                                );
+                            }}
                         </Combobox.List>
 
-                        <div className="border-t border-dark-600 p-1">
+                        <div className={cardFooterClassName}>
                             {usable && (
                                 <button
                                     type="button"
                                     onClick={() => pick(typed)}
-                                    className={footerButtonClassName}
+                                    className={cardFooterButtonClassName}
                                 >
                                     <PlusIcon className="size-3.5 shrink-0 text-dark-200" />
                                     <span className="truncate">Use {typed}</span>
@@ -209,10 +230,10 @@ function FolderCombobox({
                                 // No native dialog in a browser-only run.
                                 disabled={!isTauri}
                                 onClick={() => void browse()}
-                                className={footerButtonClassName}
+                                className={cardFooterButtonClassName}
                             >
                                 <FolderOpenIcon className="size-3.5 shrink-0 text-dark-200" />
-                                Browse…
+                                Open folder…
                             </button>
                         </div>
                     </Combobox.Popup>
@@ -224,19 +245,19 @@ function FolderCombobox({
 
 /**
  * A project row's "⋯" menu, on the right of the row: shown while the row is
- * highlighted or the menu is open. Its presses stay off the row, so opening
- * it doesn't pick the project.
+ * highlighted or the menu is open, opening as a card beside the row. Its
+ * presses stay off the row, so opening it doesn't pick the project.
  */
 function ProjectMenu({
     path,
     open,
     onOpenChange,
-    onDelete
+    onRemove
 }: {
     path: string;
     open: boolean;
     onOpenChange: (open: boolean) => void;
-    onDelete: () => void;
+    onRemove: () => void;
 }) {
     const stop = (event: React.SyntheticEvent) => event.stopPropagation();
     return (
@@ -252,13 +273,7 @@ function ProjectMenu({
                     stop(event);
                     onOpenChange(!open);
                 }}
-                className={cn(
-                    "inline-flex size-5 items-center justify-center rounded-sm text-dark-250 outline-none",
-                    "transition-[color,background-color,opacity] duration-100",
-                    "hover:bg-dark-600 hover:text-dark-50",
-                    "data-[popup-open]:bg-dark-600 data-[popup-open]:text-dark-50",
-                    "opacity-0 group-data-[highlighted]/row:opacity-100 data-[popup-open]:opacity-100"
-                )}
+                className={rowMenuTriggerClassName}
             >
                 <DotsThreeIcon className="size-3.5" weight="bold" />
             </Menu.Trigger>
@@ -267,17 +282,38 @@ function ProjectMenu({
             <Menu.Content
                 side="right"
                 align="start"
-                sideOffset={8}
+                sideOffset={12}
+                alignOffset={-5}
                 onPointerDown={stop}
                 onPointerUp={stop}
                 onMouseDown={stop}
                 onMouseUp={stop}
                 onClick={stop}
-                className="w-36 min-w-0"
+                className={sideMenuClassName}
             >
-                <Menu.Item variant="danger" onClick={onDelete}>
+                <Menu.Item
+                    disabled={!isTauri}
+                    onClick={() => void revealItemInDir(path).catch(() => {})}
+                    className={sideMenuItemClassName}
+                >
+                    <FolderOpenIcon className="size-3.5" />
+                    {REVEAL_LABEL}
+                </Menu.Item>
+                <Menu.Item
+                    onClick={() => void navigator.clipboard.writeText(path).catch(() => {})}
+                    className={sideMenuItemClassName}
+                >
+                    <CopyIcon className="size-3.5" />
+                    Copy path
+                </Menu.Item>
+                <Menu.Separator />
+                <Menu.Item
+                    variant="danger"
+                    onClick={onRemove}
+                    className={sideMenuItemClassName}
+                >
                     <TrashIcon className="size-3.5" />
-                    Delete
+                    Remove
                 </Menu.Item>
             </Menu.Content>
         </Menu>

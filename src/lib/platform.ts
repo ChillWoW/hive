@@ -24,3 +24,11 @@ function detectPlatform(): Platform {
 
 export const platform = detectPlatform();
 export const isMac = platform === "macos";
+
+/** What the system's file manager calls showing a file in its folder. */
+export const REVEAL_LABEL =
+    platform === "macos"
+        ? "Reveal in Finder"
+        : platform === "windows"
+          ? "Show in Explorer"
+          : "Show in folder";

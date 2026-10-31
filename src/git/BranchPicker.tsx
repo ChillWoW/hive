@@ -5,17 +5,24 @@ import {
     CopyIcon,
     DotsThreeIcon,
     GitBranchIcon,
+    GitForkIcon,
     MagnifyingGlassIcon,
     PlusIcon,
     TrashIcon
 } from "@phosphor-icons/react";
 import {
+    cardClassName,
+    cardListClassName,
+    cardRowDetailClassName,
+    cardRowClassName,
+    cardSearchClassName,
     chipClassName,
     chipTriggerClassName,
-    footerButtonClassName,
-    popupClassName,
-    rowClassName,
-    searchInputClassName
+    rowMenuTriggerClassName,
+    rowMetaClassName,
+    searchInputClassName,
+    sideMenuClassName,
+    sideMenuItemClassName
 } from "@/composer/chip";
 import { cn } from "@/lib/cn";
 import type { GitBranch, GitRepo } from "@/proto";
@@ -26,31 +33,22 @@ import { errorText, git, useFolderBusy, useGitRepo } from "./store";
 
 const BUSY_NOTE = "An agent is working in this folder. Branches can change once it's done.";
 
+/** The list's first item while the search names a branch that isn't there. */
+const CREATE = "\u0000create";
+
 /**
  * The branch `cwd` has checked out, as a chip beside the folder chip (hidden
- * outside a checkout). It opens a list of the local branches, as the folder
- * picker does: pick one to switch to it, type a new name to branch off the
- * current one. Each row's "⋯": New branch from here, Copy name, and Delete
- * for any branch but the checked-out one. While an agent works in the folder
- * the branch can't move, and a branch checked out in another worktree can't
- * be switched to or deleted here.
- *
- * With `onBaseChange` it picks a new worktree's base instead (`base`, null
- * for the checked-out branch): nothing is checked out, and any branch will do.
+ * outside a checkout). It opens a card of the local branches, as the folder
+ * picker does: pick one to switch to it; a name that isn't listed puts
+ * "Create …" at the top, branching off the current one. Each row's "⋯" (a
+ * card beside it): New branch from here, Copy name, and Delete for any
+ * branch but the checked-out one. While an agent works in the folder the
+ * branch can't move, and a branch checked out in another worktree can't be
+ * switched to or deleted here.
  *
  * A chat already started is `locked`: the branch shows, but can't change.
  */
-export function BranchPicker({
-    cwd,
-    base,
-    onBaseChange,
-    locked = false
-}: {
-    cwd: string | null;
-    base?: string | null;
-    onBaseChange?: (base: string | null) => void;
-    locked?: boolean;
-}) {
+export function BranchPicker({ cwd, locked = false }: { cwd: string | null; locked?: boolean }) {
     const repo = useGitRepo(cwd)?.repo;
     if (!cwd || !repo) return null;
     if (locked) {
@@ -72,26 +70,14 @@ export function BranchPicker({
             </Tooltip>
         );
     }
-    return (
-        <BranchCombobox cwd={cwd} repo={repo} base={base ?? null} onBaseChange={onBaseChange} />
-    );
+    return <BranchCombobox cwd={cwd} repo={repo} />;
 }
 
 type Dialog =
     | { kind: "new"; from: string }
     | { kind: "delete"; branch: GitBranch };
 
-function BranchCombobox({
-    cwd,
-    repo,
-    base,
-    onBaseChange
-}: {
-    cwd: string;
-    repo: GitRepo;
-    base: string | null;
-    onBaseChange?: (base: string | null) => void;
-}) {
+function BranchCombobox({ cwd, repo }: { cwd: string; repo: GitRepo }) {
     const container = usePortalContainer();
     const busy = useFolderBusy(cwd);
     const now = useMinuteClock();
@@ -105,17 +91,13 @@ function BranchCombobox({
 
     const names = repo.branches.map((b) => b.name);
     const byName = new Map(repo.branches.map((b) => [b.name, b]));
-    const baseMode = !!onBaseChange;
-    /** The row with the check: the checked-out branch, or the picked base. */
-    const selected = baseMode && base && byName.has(base) ? base : (repo.branch ?? null);
     /** Where a new branch starts: the checked-out branch, or HEAD's commit. */
     const head = repo.branch ?? repo.commit ?? null;
-    const label = selected ?? repo.commit ?? "No commits";
+    const label = repo.branch ?? repo.commit ?? "No commits";
     const typed = query.trim();
-    const matches = names.filter((n) => n.toLowerCase().includes(typed.toLowerCase()));
     const canChange = !busy && !pending;
-    const canCreate =
-        !baseMode && typed.length > 0 && !byName.has(typed) && !!repo.commit && canChange;
+    const canCreate = typed.length > 0 && !byName.has(typed) && !!repo.commit && !!head;
+    const items = canCreate ? [CREATE, ...names] : names;
 
     const run = async (action: () => Promise<void>) => {
         setPending(true);
@@ -131,9 +113,8 @@ function BranchCombobox({
     };
 
     const pick = (name: string) => {
-        if (onBaseChange) {
-            onBaseChange(name === repo.branch ? null : name);
-            setOpen(false);
+        if (name === CREATE) {
+            if (canChange && head) void run(() => git.createBranch(cwd, typed, head));
             return;
         }
         if (name === repo.branch) {
@@ -142,11 +123,6 @@ function BranchCombobox({
         }
         if (!canChange || byName.get(name)?.worktree) return;
         void run(() => git.switchBranch(cwd, name));
-    };
-
-    const createTyped = () => {
-        if (!canCreate || !head) return;
-        void run(() => git.createBranch(cwd, typed, head));
     };
 
     const openDialog = (next: Dialog) => {
@@ -158,8 +134,10 @@ function BranchCombobox({
     return (
         <>
             <Combobox.Root
-                items={names}
-                value={selected}
+                items={items}
+                value={repo.branch ?? null}
+                // Typing lights the first match, so Enter takes it (or creates).
+                autoHighlight
                 open={open}
                 onOpenChange={(next, details) => {
                     // A row's menu takes focus and lives outside the popup; the
@@ -180,7 +158,7 @@ function BranchCombobox({
                     if (name) pick(name);
                 }}
                 filter={(name: string, q: string) =>
-                    name.toLowerCase().includes(q.trim().toLowerCase())
+                    name === CREATE || name.toLowerCase().includes(q.trim().toLowerCase())
                 }
             >
                 <Tooltip disabled={open}>
@@ -188,18 +166,12 @@ function BranchCombobox({
                         render={
                             <Combobox.Trigger className={chipTriggerClassName}>
                                 <GitBranchIcon className="size-3.5 shrink-0" />
-                                <span className="truncate">
-                                    {baseMode ? `From ${label}` : label}
-                                </span>
+                                <span className="truncate">{label}</span>
                             </Combobox.Trigger>
                         }
                     />
                     <Tooltip.Content side="top">
-                        {baseMode
-                            ? "Branch the worktree starts from"
-                            : repo.branch
-                              ? "Switch branch"
-                              : `Detached at ${repo.commit ?? "HEAD"}`}
+                        {repo.branch ? "Switch branch" : `Detached at ${repo.commit ?? "HEAD"}`}
                     </Tooltip.Content>
                 </Tooltip>
 
@@ -212,89 +184,70 @@ function BranchCombobox({
                         className="z-50 outline-none"
                     >
                         <Combobox.Popup
-                            aria-label={baseMode ? "Branch to start from" : "Switch branch"}
-                            className={cn(popupClassName, "w-80")}
+                            aria-label="Switch branch"
+                            className={cn(cardClassName, "w-80")}
                         >
-                            <div className="flex items-center gap-2 border-b border-dark-600 px-2.5">
+                            <label className={cardSearchClassName}>
                                 <MagnifyingGlassIcon className="size-3.5 shrink-0 text-dark-250" />
                                 <Combobox.Input
-                                    placeholder={
-                                        baseMode ? "Search branches" : "Search or name a new branch"
-                                    }
+                                    placeholder="Search or name a new branch"
                                     className={searchInputClassName}
-                                    onKeyDown={(event) => {
-                                        // Nothing listed to pick: Enter makes the branch.
-                                        if (event.key === "Enter" && matches.length === 0) {
-                                            event.preventDefault();
-                                            createTyped();
-                                        }
-                                    }}
                                 />
-                            </div>
+                            </label>
 
-                            {baseMode && (
-                                <p className="px-2.5 pt-2 pb-1 text-[11px] text-dark-250">
-                                    The worktree gets a new branch off this one.
-                                </p>
-                            )}
-
-                            {busy && !baseMode && (
-                                <p className="border-b border-dark-600 px-2.5 py-2 text-xs text-warning">
-                                    {BUSY_NOTE}
-                                </p>
+                            {busy && (
+                                <p className="border-b border-dark-600 px-2.5 py-2 text-xs text-warning">{BUSY_NOTE}</p>
                             )}
 
                             <Combobox.Empty className="px-2.5 py-3 text-center text-xs text-dark-250 empty:hidden">
                                 {names.length ? "No branches match." : "No branches yet."}
                             </Combobox.Empty>
 
-                            <Combobox.List className="hide-scrollbar max-h-72 overflow-y-auto overscroll-contain p-1 empty:hidden">
-                                {(name: string) => {
-                                    const branch = byName.get(name)!;
-                                    return (
+                            <Combobox.List className={cardListClassName}>
+                                {(name: string) =>
+                                    name === CREATE ? (
                                         <Combobox.Item
-                                            key={name}
-                                            value={name}
-                                            disabled={
-                                                !baseMode &&
-                                                !branch.current &&
-                                                (!canChange || !!branch.worktree)
-                                            }
-                                            className={cn(
-                                                rowClassName,
-                                                "group/row grid-cols-[0.875rem_1fr_auto_1.25rem] py-1"
-                                            )}
+                                            key={CREATE}
+                                            value={CREATE}
+                                            disabled={!canChange}
+                                            className={cardRowClassName}
                                         >
-                                            <GitBranchIcon
-                                                className={cn(
-                                                    "size-3.5",
-                                                    name === selected ? "text-dark-50" : "text-dark-250"
-                                                )}
-                                            />
-                                            <span
-                                                className={cn(
-                                                    "truncate",
-                                                    name === selected && "font-medium text-dark-50"
-                                                )}
-                                            >
-                                                {name}
+                                            <PlusIcon className="size-3.5 shrink-0 text-dark-250" />
+                                            <span className="flex min-w-0 flex-1 items-baseline gap-1.5">
+                                                <span className="min-w-0 truncate">
+                                                    Create {typed}
+                                                </span>
+                                                <span className="shrink-0 text-[11px] text-dark-250">
+                                                    from {label}
+                                                </span>
                                             </span>
-                                            <BranchMeta
-                                                branch={branch}
-                                                selected={name === selected}
-                                                now={now}
-                                            />
-                                            <BranchMenu
-                                                branch={branch}
-                                                canChange={canChange && !!repo.commit}
-                                                open={menuFor === name}
-                                                onOpenChange={(next) => setMenuFor(next ? name : null)}
-                                                onNewBranch={() => openDialog({ kind: "new", from: name })}
-                                                onDelete={() => openDialog({ kind: "delete", branch })}
-                                            />
                                         </Combobox.Item>
-                                    );
-                                }}
+                                    ) : (
+                                        <BranchRow
+                                            key={name}
+                                            branch={byName.get(name)!}
+                                            now={now}
+                                            disabled={
+                                                !byName.get(name)!.current &&
+                                                (!canChange || !!byName.get(name)!.worktree)
+                                            }
+                                            canChange={canChange && !!repo.commit}
+                                            menuOpen={menuFor === name}
+                                            onMenuOpenChange={(next) =>
+                                                setMenuFor(next ? name : null)
+                                            }
+                                            onNewBranch={() =>
+                                                openDialog({ kind: "new", from: name })
+                                            }
+                                            onDelete={() =>
+                                                openDialog({
+                                                    kind: "delete",
+                                                    branch: byName.get(name)!
+                                                })
+                                            }
+                                        />
+                                    )
+                                }
                             </Combobox.List>
 
                             {error && (
@@ -302,32 +255,6 @@ function BranchCombobox({
                                     {error}
                                 </p>
                             )}
-
-                            <div className="border-t border-dark-600 p-1 empty:hidden">
-                                {baseMode ? null : canCreate ? (
-                                    <button
-                                        type="button"
-                                        onClick={createTyped}
-                                        className={footerButtonClassName}
-                                    >
-                                        <PlusIcon className="size-3.5 shrink-0 text-dark-200" />
-                                        <span className="truncate">
-                                            Create <span className="text-dark-50">{typed}</span>
-                                            <span className="text-dark-250"> from {label}</span>
-                                        </span>
-                                    </button>
-                                ) : (
-                                    <button
-                                        type="button"
-                                        disabled={!canChange || !repo.commit || !head}
-                                        onClick={() => head && openDialog({ kind: "new", from: head })}
-                                        className={footerButtonClassName}
-                                    >
-                                        <PlusIcon className="size-3.5 shrink-0 text-dark-200" />
-                                        New branch…
-                                    </button>
-                                )}
-                            </div>
                         </Combobox.Popup>
                     </Combobox.Positioner>
                 </Combobox.Portal>
@@ -349,36 +276,77 @@ function BranchCombobox({
 }
 
 /**
- * The selected branch's check; else "worktree" for one checked out in
- * another worktree, or how long since its last commit.
+ * A branch: a fork for one checked out in another worktree, its name, how
+ * long since its last commit (the check on the checked-out one), and its
+ * "⋯" in place of that while it's highlighted.
  */
-function BranchMeta({
+function BranchRow({
     branch,
-    selected,
-    now
+    now,
+    disabled,
+    canChange,
+    menuOpen,
+    onMenuOpenChange,
+    onNewBranch,
+    onDelete
 }: {
     branch: GitBranch;
-    selected: boolean;
     now: number;
+    disabled: boolean;
+    canChange: boolean;
+    menuOpen: boolean;
+    onMenuOpenChange: (open: boolean) => void;
+    onNewBranch: () => void;
+    onDelete: () => void;
 }) {
-    if (selected) {
-        return <CheckIcon className="size-3.5 text-dark-50" weight="bold" />;
-    }
-    if (branch.worktree) {
-        return <span className="text-[11px] text-dark-250">worktree</span>;
-    }
-    if (branch.committedAt == null) return <span />;
+    const Icon = branch.worktree ? GitForkIcon : GitBranchIcon;
+    const detail = branch.worktree
+        ? "Checked out in another worktree"
+        : branch.committedAt != null
+          ? `Last commit ${timeAgo(branch.committedAt, now)} ago`
+          : null;
     return (
-        <span className="text-[11px] text-dark-250 tabular-nums">
-            {timeAgo(branch.committedAt, now)}
-        </span>
+        <Combobox.Item value={branch.name} disabled={disabled} className={cardRowClassName}>
+            <Icon
+                className={cn(
+                    "size-3.5 shrink-0",
+                    branch.current ? "text-dark-50" : "text-dark-250"
+                )}
+            />
+            <span className="flex min-w-0 flex-1 items-baseline gap-1.5">
+                <span
+                    className={cn("max-w-full shrink-0 truncate", branch.current && "text-dark-50")}
+                >
+                    {branch.name}
+                </span>
+                {detail && <span className={cardRowDetailClassName}>{detail}</span>}
+            </span>
+            <span className={cn(rowMetaClassName, menuOpen && "hidden")}>
+                {branch.current ? (
+                    <CheckIcon className="size-3.5 text-dark-50" weight="bold" />
+                ) : (
+                    branch.committedAt != null && (
+                        <span className="text-[11px] text-dark-250 tabular-nums">
+                            {timeAgo(branch.committedAt, now)}
+                        </span>
+                    )
+                )}
+            </span>
+            <BranchMenu
+                branch={branch}
+                canChange={canChange}
+                open={menuOpen}
+                onOpenChange={onMenuOpenChange}
+                onNewBranch={onNewBranch}
+                onDelete={onDelete}
+            />
+        </Combobox.Item>
     );
 }
 
 /**
- * A branch row's "⋯" menu, as on the folder picker's rows: shown while the
- * row is highlighted or the menu is open, and its presses stay off the row
- * so opening it doesn't switch branches.
+ * A branch row's "⋯" menu, as on the folder picker's rows: a card beside the
+ * row, and its presses stay off the row so opening it doesn't switch branches.
  */
 function BranchMenu({
     branch,
@@ -409,13 +377,7 @@ function BranchMenu({
                     stop(event);
                     onOpenChange(!open);
                 }}
-                className={cn(
-                    "pointer-events-auto inline-flex size-5 items-center justify-center rounded-sm text-dark-250 outline-none",
-                    "transition-[color,background-color,opacity] duration-100",
-                    "hover:bg-dark-600 hover:text-dark-50",
-                    "data-[popup-open]:bg-dark-600 data-[popup-open]:text-dark-50",
-                    "opacity-0 group-hover/row:opacity-100 group-data-[highlighted]/row:opacity-100 data-[popup-open]:opacity-100"
-                )}
+                className={rowMenuTriggerClassName}
             >
                 <DotsThreeIcon className="size-3.5" weight="bold" />
             </Menu.Trigger>
@@ -424,20 +386,26 @@ function BranchMenu({
             <Menu.Content
                 side="right"
                 align="start"
-                sideOffset={8}
+                sideOffset={12}
+                alignOffset={-5}
                 onPointerDown={stop}
                 onPointerUp={stop}
                 onMouseDown={stop}
                 onMouseUp={stop}
                 onClick={stop}
-                className="w-48 min-w-0"
+                className={sideMenuClassName}
             >
-                <Menu.Item disabled={!canChange} onClick={onNewBranch}>
+                <Menu.Item
+                    disabled={!canChange}
+                    onClick={onNewBranch}
+                    className={sideMenuItemClassName}
+                >
                     <PlusIcon className="size-3.5" />
                     New branch from here…
                 </Menu.Item>
                 <Menu.Item
                     onClick={() => void navigator.clipboard.writeText(branch.name).catch(() => {})}
+                    className={sideMenuItemClassName}
                 >
                     <CopyIcon className="size-3.5" />
                     Copy name
@@ -450,6 +418,7 @@ function BranchMenu({
                             // Git won't delete a branch another worktree has out.
                             disabled={!canChange || !!branch.worktree}
                             onClick={onDelete}
+                            className={sideMenuItemClassName}
                         >
                             <TrashIcon className="size-3.5" />
                             Delete…
