@@ -220,7 +220,11 @@ export function TopBar({ title, subagents = [], harness, className }: TopBarProp
 
             <div
                 data-tauri-drag-region
-                className="flex h-full min-w-0 flex-1 items-center gap-1 px-3"
+                className={cn(
+                    "flex h-full min-w-0 flex-1 items-center gap-1",
+                    // No room for the title while the right sidebar is maximized.
+                    layout.maximized ? "overflow-hidden" : "px-3"
+                )}
             >
                 {harness && (
                     <HarnessIcon

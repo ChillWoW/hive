@@ -1,5 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
+    ArrowsInSimpleIcon,
+    ArrowsOutSimpleIcon,
     ClockCounterClockwiseIcon,
     GitCommitIcon,
     GitDiffIcon,
@@ -11,6 +13,7 @@ import { SCOPE_LABELS, useDiffPrefs } from "@/diff/store";
 import { ShortcutKeys, useBinding, type ActionId } from "@/keybindings";
 import { cn } from "@/lib/cn";
 import { useDocsStore } from "@/editor";
+import { useLayoutStore, usePanelLayout } from "@/stores/useLayoutStore";
 import { FileIcon, iconButtonClassName, Menu, Tooltip } from "@/ui";
 import { closeTab } from "./actions";
 import { NEW_TABS } from "./kinds";
@@ -42,6 +45,8 @@ export function TabStrip() {
     const tabs = useRightbarStore((s) => s.tabs);
     const activeId = useRightbarStore((s) => s.activeId);
     const { activate, move } = useRightbarStore.getState();
+    const maximized = usePanelLayout().maximized;
+    const toggleRightMaximized = useLayoutStore((s) => s.toggleRightMaximized);
 
     const strip = useRef<HTMLDivElement>(null);
     const [fade, setFade] = useState({ left: false, right: false });
@@ -184,6 +189,30 @@ export function TabStrip() {
                     </Menu.Content>
                 </Menu>
             )}
+
+            <div data-tauri-drag-region className="h-full flex-1" />
+            <Tooltip>
+                <Tooltip.Trigger
+                    render={
+                        <button
+                            type="button"
+                            aria-label={maximized ? "Restore panel" : "Maximize panel"}
+                            aria-pressed={maximized}
+                            onClick={toggleRightMaximized}
+                            className={iconButtonClassName}
+                        >
+                            {maximized ? (
+                                <ArrowsInSimpleIcon className="size-3.5" />
+                            ) : (
+                                <ArrowsOutSimpleIcon className="size-3.5" />
+                            )}
+                        </button>
+                    }
+                />
+                <Tooltip.Content side="bottom">
+                    {maximized ? "Restore panel" : "Maximize panel"}
+                </Tooltip.Content>
+            </Tooltip>
         </div>
     );
 }

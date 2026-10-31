@@ -7,6 +7,7 @@ import { useHtmlCheckRuntime } from "@/htmlpage";
 import { useKeybindingsRuntime } from "@/keybindings";
 import { RightPanels, Sidebar, TopBar, WINDOW_CONTROLS_WIDTH } from "@/layout";
 import { isMac } from "@/lib/platform";
+import { usePanelLayout } from "@/stores/useLayoutStore";
 import { useNotificationsRuntime } from "@/notifications";
 import { CommandPalette, usePaletteRuntime } from "@/palette";
 import { SettingsModal, useSettingsRuntime } from "@/settings";
@@ -24,6 +25,8 @@ export function App() {
     useUsageRuntime();
     usePaletteRuntime();
     useHtmlCheckRuntime();
+    // A maximized right sidebar covers the conversation's column.
+    const maximized = usePanelLayout().maximized;
     const chat = useChat(useChatsStore((s) => s.activeChatId));
     const title = chat ? (chat.title ?? folderName(chat.cwd)) : undefined;
     // The subagent threads open in it, outermost first, after the chat's title.
@@ -51,7 +54,10 @@ export function App() {
         <PortalContainerProvider container={overlayLayer} chrome={chromeLayer}>
             <div className="relative flex h-full w-full overflow-hidden bg-dark-900 text-dark-50">
                 <Sidebar />
-                <main className="flex min-w-0 flex-1 flex-col overflow-hidden pt-9">
+                <main
+                    inert={maximized}
+                    className="flex min-w-0 flex-1 flex-col overflow-hidden pt-9"
+                >
                     <ChatView />
                 </main>
                 <RightPanels />

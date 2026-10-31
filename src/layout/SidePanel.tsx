@@ -9,6 +9,8 @@ type SidePanelProps = {
     /** The width a drag of the left edge asks for with the pointer at `x`. */
     widthAt: (x: number) => number;
     onResize: (width: number) => void;
+    /** False hides the drag edge (e.g. while maximized). */
+    resizable?: boolean;
     children?: ReactNode;
 };
 
@@ -22,6 +24,7 @@ export function SidePanel({
     width,
     widthAt,
     onResize,
+    resizable = true,
     children
 }: SidePanelProps) {
     const open = width > 0;
@@ -49,7 +52,7 @@ export function SidePanel({
             >
                 {children}
             </div>
-            {open && (
+            {open && resizable && (
                 <div
                     role="separator"
                     aria-orientation="vertical"

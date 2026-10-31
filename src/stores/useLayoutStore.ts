@@ -19,6 +19,8 @@ type LayoutState = {
     sidebarOpen: boolean;
     filePanelOpen: boolean;
     rightSidebarOpen: boolean;
+    /** The right sidebar takes the conversation's room too (the left sidebar stays). */
+    rightMaximized: boolean;
     /** When each column was last opened; the oldest hides first when the window is too narrow. */
     openedAt: Record<Column, number>;
     /** Preferred widths; what's shown can be less while the window is narrow. */
@@ -29,6 +31,8 @@ type LayoutState = {
     toggleSidebar: () => void;
     toggleFilePanel: () => void;
     toggleRightSidebar: () => void;
+    /** Maximizes the right sidebar (opening it), or restores it. */
+    toggleRightMaximized: () => void;
     /** Opens a column, or brings it back when it was hidden for room. */
     show: (column: Column) => void;
     setFilesWidth: (width: number) => void;
@@ -50,7 +54,10 @@ const MIN_WIDTH: Record<Column, number> = {
 
 const COLUMNS: Column[] = ["sidebar", "files", "right"];
 
-type FitInput = Pick<LayoutState, (typeof OPEN_KEY)[Column] | "openedAt">;
+type FitInput = Pick<
+    LayoutState,
+    (typeof OPEN_KEY)[Column] | "openedAt" | "rightMaximized"
+>;
 
 /**
  * Which open columns the window has room for: while the conversation and the
@@ -68,7 +75,9 @@ export function fitColumns(
     };
     for (;;) {
         const open = COLUMNS.filter((c) => visible[c]);
-        const minimum = open.reduce((sum, c) => sum + MIN_WIDTH[c], CHAT_MIN);
+        // A maximized right sidebar leaves the conversation no room.
+        const chat = state.rightMaximized && visible.right ? 0 : CHAT_MIN;
+        const minimum = open.reduce((sum, c) => sum + MIN_WIDTH[c], chat);
         if (minimum <= viewport || open.length === 0) return visible;
         const oldest = open.reduce((a, b) =>
             state.openedAt[b] < state.openedAt[a] ? b : a
@@ -85,6 +94,8 @@ export type PanelLayout = {
     /** How wide a drag may make each panel right now. */
     filesMax: number;
     rightMax: number;
+    /** The right sidebar is shown and fills the conversation's room. */
+    maximized: boolean;
 };
 
 /** Each visible column's width: its preference, as far as the conversation's minimum allows. */
@@ -93,6 +104,8 @@ export function panelLayout(
     state: FitInput & Pick<LayoutState, "filesWidth" | "rightWidth">
 ): PanelLayout {
     const visible = fitColumns(viewport, state);
+    const maximized = state.rightMaximized && visible.right;
+    const chat = maximized ? 0 : CHAT_MIN;
     const sidebar = visible.sidebar ? SIDEBAR_WIDTH : 0;
     const available = viewport - sidebar;
     const filesMax = visible.files
@@ -101,17 +114,17 @@ export function panelLayout(
               Math.min(
                   FILES_PANEL_MAX,
                   available -
-                      CHAT_MIN -
+                      chat -
                       (visible.right ? RIGHT_SIDEBAR_MIN : 0)
               )
           )
         : 0;
     const files = Math.min(state.filesWidth, filesMax);
     const rightMax = visible.right
-        ? Math.max(0, available - files - CHAT_MIN)
+        ? Math.max(0, available - files - chat)
         : 0;
-    const right = Math.min(state.rightWidth, rightMax);
-    return { visible, sidebar, files, right, filesMax, rightMax };
+    const right = maximized ? rightMax : Math.min(state.rightWidth, rightMax);
+    return { visible, sidebar, files, right, filesMax, rightMax, maximized };
 }
 
 const clamp = (value: number, min: number, max: number) =>
@@ -132,6 +145,7 @@ export const useLayoutStore = create<LayoutState>()(
                 const open = hidden || !state[key];
                 set({
                     [key]: open,
+                    ...(column === "right" && !open && { rightMaximized: false }),
                     ...(open && {
                         openedAt: { ...state.openedAt, [column]: Date.now() }
                     })
@@ -141,6 +155,7 @@ export const useLayoutStore = create<LayoutState>()(
                 sidebarOpen: true,
                 filePanelOpen: false,
                 rightSidebarOpen: false,
+                rightMaximized: false,
                 openedAt: { sidebar: 0, files: 0, right: 0 },
                 filesWidth: FILES_PANEL_DEFAULT,
                 rightWidth: RIGHT_SIDEBAR_DEFAULT,
@@ -148,6 +163,20 @@ export const useLayoutStore = create<LayoutState>()(
                 toggleSidebar: () => toggle("sidebar"),
                 toggleFilePanel: () => toggle("files"),
                 toggleRightSidebar: () => toggle("right"),
+                toggleRightMaximized: () => {
+                    const state = get();
+                    const maximized =
+                        state.rightMaximized &&
+                        fitColumns(window.innerWidth, state).right;
+                    set({
+                        rightMaximized: !maximized,
+                        ...(!maximized && {
+                            rightSidebarOpen: true,
+                            // The newest, so it's the last to hide for room.
+                            openedAt: { ...state.openedAt, right: Date.now() }
+                        })
+                    });
+                },
                 show: (column) => {
                     const state = get();
                     if (state[OPEN_KEY[column]] && fitColumns(window.innerWidth, state)[column]) return;
@@ -172,6 +201,7 @@ export const useLayoutStore = create<LayoutState>()(
             partialize: (s) => ({
                 filePanelOpen: s.filePanelOpen,
                 rightSidebarOpen: s.rightSidebarOpen,
+                rightMaximized: s.rightMaximized,
                 openedAt: s.openedAt,
                 filesWidth: s.filesWidth,
                 rightWidth: s.rightWidth
@@ -196,6 +226,7 @@ export function usePanelLayout(): PanelLayout {
             sidebarOpen: s.sidebarOpen,
             filePanelOpen: s.filePanelOpen,
             rightSidebarOpen: s.rightSidebarOpen,
+            rightMaximized: s.rightMaximized,
             openedAt: s.openedAt,
             filesWidth: s.filesWidth,
             rightWidth: s.rightWidth

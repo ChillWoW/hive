@@ -18,6 +18,7 @@ export function RightPanels() {
             <SidePanel
                 label="Right sidebar"
                 width={layout.right}
+                resizable={!layout.maximized}
                 widthAt={(x) => window.innerWidth - layout.files - x}
                 onResize={(width) =>
                     setRightWidth(Math.min(width, layout.rightMax))
