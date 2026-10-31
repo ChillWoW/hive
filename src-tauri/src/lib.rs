@@ -14,6 +14,7 @@ mod settings;
 mod terminals;
 mod updater;
 mod usage;
+mod watch;
 
 use std::sync::Arc;
 
@@ -114,6 +115,8 @@ pub fn run() {
       updater::update_check,
       updater::update_install,
       usage::usage_report,
+      watch::watch_folder,
+      watch::unwatch_folder,
     ])
     // A reload takes the page's channels (and so its terminals) with it.
     .on_page_load(|webview, payload| {
@@ -126,6 +129,9 @@ pub fn run() {
         }
         if let Some(terminals) = app.try_state::<terminals::Terminals>() {
           terminals.clear(webview.label());
+        }
+        if let Some(folders) = app.try_state::<watch::FolderWatches>() {
+          folders.clear(webview.label());
         }
       }
     })
@@ -194,6 +200,7 @@ pub fn run() {
       app.manage(engine::Watches::default());
       app.manage(providers::SignIns::default());
       app.manage(terminals::Terminals::default());
+      app.manage(watch::FolderWatches::default());
       app.manage(updater::Updates::default());
       Ok(())
     })

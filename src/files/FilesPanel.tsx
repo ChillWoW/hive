@@ -8,12 +8,13 @@ import { useChat, useChatsStore, workDir } from "@/chats";
 import { useComposerStore } from "@/composer/store";
 import { useFolderBusy } from "@/git/store";
 import { cn } from "@/lib/cn";
+import { useFolderWatch } from "@/lib/folderWatch";
 import { iconButtonClassName, Tooltip } from "@/ui";
 import { FileTree } from "./FileTree";
 import { useFilesPanelStore } from "./panel";
 import { SearchResults } from "./SearchResults";
 import { refreshFiles } from "./store";
-import { reloadTree } from "./tree";
+import { reloadDirs, reloadTree } from "./tree";
 
 /** The folder the open chat works in, or the new-chat view's folder. */
 function useActiveFolder() {
@@ -23,10 +24,17 @@ function useActiveFolder() {
 }
 
 /**
- * Re-lists `cwd`'s tree (and its search listing) when the window regains
- * focus or an agent's turn there ends: either may have changed files.
+ * Re-lists `cwd`'s tree (and its search listing) as entries appear, go or
+ * are renamed in its listed folders (a folder watch), and, in case the watch
+ * missed something, when the window regains focus or an agent's turn there ends.
  */
 function useRefreshOnChange(cwd: string | null | undefined, all: boolean) {
+    useFolderWatch(cwd, (change) => {
+        if (!cwd) return;
+        if (change.overflow || change.dirsOverflow) reloadTree(cwd, all, true);
+        else if (change.dirs.length > 0) reloadDirs(cwd, all, change.dirs);
+    });
+
     const busy = useFolderBusy(cwd);
     const wasBusy = useRef(busy);
 

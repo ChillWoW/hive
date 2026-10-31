@@ -3,6 +3,7 @@ export { fileObjectUrl, openFile } from "./api";
 export {
     blockClose,
     checkAllOnDisk,
+    checkDisk,
     currentState,
     dropDoc,
     isMarkdown,

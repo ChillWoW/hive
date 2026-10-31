@@ -84,6 +84,9 @@ fn command<S: AsRef<std::ffi::OsStr>>(cwd: &Path, args: &[S]) -> std::process::C
         // Messages in English (they're matched on), and never a prompt.
         .env("LC_ALL", "C")
         .env("GIT_TERMINAL_PROMPT", "0")
+        // Reads never rewrite the index: the folder watcher would see that
+        // as a change and read again, forever.
+        .env("GIT_OPTIONAL_LOCKS", "0")
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());

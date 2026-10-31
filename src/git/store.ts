@@ -1,14 +1,15 @@
 import { useEffect, useRef } from "react";
 import { create } from "zustand";
 import { useChatsStore, workDir } from "@/chats";
+import { touchesTree, useFolderWatch } from "@/lib/folderWatch";
 import type { GitRepo } from "@/proto";
 import { gitApi } from "./api";
 
 /**
  * Each folder's checkout (`GitRepo`, null outside one), shared by the branch
  * picker and the sidebar's chat cards. Read on demand and again when it may
- * have changed: the window regaining focus, an agent's turn ending, or one
- * of the actions here.
+ * have changed: the folder or its git dir changing (a folder watch), the
+ * window regaining focus, an agent's turn ending, or one of the actions here.
  */
 
 interface Entry {
@@ -24,10 +25,25 @@ interface GitState {
 export const useGitStore = create<GitState>()(() => ({ repos: {} }));
 
 const inFlight = new Map<string, Promise<void>>();
+const again = new Map<string, Promise<void>>();
 
-/** Reads `cwd`'s checkout again; one read at a time per folder. */
-function refresh(cwd: string): Promise<void> {
+/**
+ * Reads `cwd`'s checkout again; one read at a time per folder. With `fresh`,
+ * a read already running is followed by another (it may predate a change).
+ */
+function refresh(cwd: string, fresh = false): Promise<void> {
     let request = inFlight.get(cwd);
+    if (request && fresh) {
+        let next = again.get(cwd);
+        if (!next) {
+            next = request.then(() => {
+                again.delete(cwd);
+                return refresh(cwd);
+            });
+            again.set(cwd, next);
+        }
+        return next;
+    }
     if (!request) {
         request = gitApi
             .repo(cwd)
@@ -58,8 +74,8 @@ const MAX_AGE = 5_000;
 
 /**
  * `cwd`'s checkout: undefined until first read, null outside a checkout.
- * Re-read while mounted when stale, on window focus, and when an agent
- * working in that folder goes idle (it may have switched branches).
+ * Re-read while mounted when stale, when the folder changes on disk, on
+ * window focus, and when an agent working in that folder goes idle.
  */
 export function useGitRepo(cwd: string | null | undefined) {
     const entry = useGitStore((s) => (cwd ? s.repos[cwd] : undefined));
@@ -80,6 +96,11 @@ export function useGitRepo(cwd: string | null | undefined) {
         window.addEventListener("focus", onFocus);
         return () => window.removeEventListener("focus", onFocus);
     }, [cwd]);
+
+    // A branch switched, a commit made, a file changed (its uncommitted count).
+    useFolderWatch(cwd, (change) => {
+        if (cwd && touchesTree(change)) void refresh(cwd, true);
+    });
 
     return entry;
 }

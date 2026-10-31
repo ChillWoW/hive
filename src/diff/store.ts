@@ -4,6 +4,7 @@ import { persist } from "zustand/middleware";
 import { useChatsStore } from "@/chats";
 import { gitApi } from "@/git/api";
 import { errorText, useFolderBusy } from "@/git/store";
+import { touchesTree, useFolderWatch } from "@/lib/folderWatch";
 import type { GitDiff } from "@/proto";
 
 /** What the diff tab compares against, as the scope menu offers. */
@@ -70,10 +71,26 @@ const inFlight = new Map<string, Promise<void>>();
 const read = (source: DiffSource) =>
     "turnOf" in source ? gitApi.turnDiff(source.turnOf) : gitApi.diff(source.cwd, source.base);
 
-/** Reads a diff again; one read at a time per source. */
-export function refreshDiff(source: DiffSource): Promise<void> {
+const again = new Map<string, Promise<void>>();
+
+/**
+ * Reads a diff again; one read at a time per source. With `fresh`, a read
+ * already running is followed by another (it may predate a change).
+ */
+export function refreshDiff(source: DiffSource, fresh = false): Promise<void> {
     const key = keyOf(source);
     let request = inFlight.get(key);
+    if (request && fresh) {
+        let next = again.get(key);
+        if (!next) {
+            next = request.then(() => {
+                again.delete(key);
+                return refreshDiff(source);
+            });
+            again.set(key, next);
+        }
+        return next;
+    }
     if (!request) {
         request = read(source)
             .then(
@@ -109,14 +126,11 @@ export function refreshDiff(source: DiffSource): Promise<void> {
     return request;
 }
 
-/** How often a shown diff is read again: faster while an agent works there. */
-const IDLE_POLL = 5_000;
-const BUSY_POLL = 2_000;
-
 /**
- * `cwd`'s diff (against `base`'s merge base when given), read on mount, on
- * window focus, when an agent's turn there ends, and every few seconds while
- * the window has focus.
+ * `cwd`'s diff (against `base`'s merge base when given), read on mount, as
+ * the folder or its git dir changes on disk (a folder watch), and, in case
+ * the watch missed something, on window focus and when an agent's turn
+ * there starts or ends.
  */
 export function useCheckoutDiff(cwd: string | null, base: string | undefined, enabled = true) {
     const key = cwd ? keyOf({ cwd, base }) : null;
@@ -129,17 +143,12 @@ export function useCheckoutDiff(cwd: string | null, base: string | undefined, en
         const refresh = () => void refreshDiff({ cwd, base });
         refresh();
         window.addEventListener("focus", refresh);
-        const timer = window.setInterval(
-            () => {
-                if (document.hasFocus()) refresh();
-            },
-            busy ? BUSY_POLL : IDLE_POLL
-        );
-        return () => {
-            window.removeEventListener("focus", refresh);
-            window.clearInterval(timer);
-        };
+        return () => window.removeEventListener("focus", refresh);
     }, [cwd, base, busy, enabled]);
+
+    useFolderWatch(enabled ? cwd : null, (change) => {
+        if (cwd && touchesTree(change)) void refreshDiff({ cwd, base }, true);
+    });
 
     return entry;
 }
