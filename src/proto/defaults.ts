@@ -39,6 +39,7 @@ export const DEFAULT_SETTINGS: Settings = {
     "nextChat": "Ctrl+Tab",
     "goBack": "Alt+Left",
     "goForward": "Alt+Right",
+    "archiveChat": "Mod+Shift+A",
     "newTerminal": "Mod+J",
     "openDiff": "Mod+Shift+G",
     "openHistory": "Mod+Shift+H",

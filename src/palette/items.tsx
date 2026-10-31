@@ -132,8 +132,11 @@ const ACTION_ICONS: Partial<Record<ActionId, ReactNode>> = {
     openUsage: <ChartBarIcon />
 };
 
-/** Never listed: the palette itself, and what only works while typing a prompt. */
-const UNLISTED = new Set<ActionId>(["commandPalette"]);
+/**
+ * Never listed: the palette itself, and what only works while typing a
+ * prompt; archiving is among the open chat's own actions.
+ */
+const UNLISTED = new Set<ActionId>(["commandPalette", "archiveChat"]);
 
 const chatTitle = (chat: Chat) => chat.title ?? folderName(chat.cwd);
 
@@ -192,7 +195,11 @@ function chatActions(chat: Chat | undefined, session: Session | undefined): Pale
             id: "chat-archive",
             label: chat.archived ? "Unarchive chat" : "Archive chat",
             icon: chat.archived ? <TrayArrowUpIcon /> : <ArchiveIcon />,
-            run: () => void chats.setArchived(chat.id, !chat.archived)
+            shortcut: "archiveChat",
+            // As the shortcut does (on to the next chat), else just this one.
+            run: () => {
+                if (!runAction("archiveChat")) void chats.setArchived(chat.id, !chat.archived);
+            }
         },
         {
             id: "chat-copy-path",

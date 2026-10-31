@@ -191,6 +191,9 @@ pub struct KeyboardSettings {
     pub next_chat: String,
     pub go_back: String,
     pub go_forward: String,
+    /// Archives the open chat and moves on to the next one (unarchives an
+    /// archived one).
+    pub archive_chat: String,
     pub new_terminal: String,
     pub open_diff: String,
     pub open_history: String,
@@ -218,6 +221,7 @@ impl Default for KeyboardSettings {
             next_chat: "Ctrl+Tab".into(),
             go_back: "Alt+Left".into(),
             go_forward: "Alt+Right".into(),
+            archive_chat: "Mod+Shift+A".into(),
             new_terminal: "Mod+J".into(),
             open_diff: "Mod+Shift+G".into(),
             open_history: "Mod+Shift+H".into(),

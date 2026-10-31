@@ -87,6 +87,14 @@ export const ACTIONS: readonly Action[] = [
         repeats: true
     },
     {
+        id: "archiveChat",
+        category: "chats",
+        label: "Archive chat",
+        description: "The open chat, then on to the next one",
+        keywords: "archive unarchive chat hide done close tidy",
+        scope: "global"
+    },
+    {
         id: "toggleSidebar",
         category: "panels",
         label: "Toggle sidebar",

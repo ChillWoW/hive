@@ -83,6 +83,25 @@ export function ChatList() {
     useShortcut("nextChat", () => step(1));
     useShortcut("previousChat", () => step(-1));
 
+    // Archives the open chat and opens the one below it (else above, else the
+    // new-chat view), so a run of chats can be cleared key by key. An archived
+    // one is unarchived in place.
+    useShortcut("archiveChat", () => {
+        const activeId = useChatsStore.getState().activeChatId;
+        const chat = activeId && allChats.find((c) => c.id === activeId);
+        if (!chat) return false;
+        const warn = (error: unknown) => console.warn("[sidebar]", error);
+        if (chat.archived) {
+            chats.setArchived(chat.id, false).catch(warn);
+            return;
+        }
+        const order = [...pinned, ...projects.flatMap((p) => p.chats)];
+        const index = order.findIndex((c) => c.id === chat.id);
+        const next = index < 0 ? undefined : (order[index + 1] ?? order[index - 1]);
+        chats.select(next?.id ?? null);
+        chats.setArchived(chat.id, true).catch(warn);
+    });
+
     const row: Row = (chat) => (
         <ChatRow key={chat.id} chat={chat} onDelete={setDeleting} />
     );
