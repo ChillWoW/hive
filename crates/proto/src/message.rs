@@ -70,6 +70,15 @@ pub enum MessagePart {
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         #[ts(as = "Option<Vec<MessagePart>>", optional)]
         thread: Vec<MessagePart>,
+        /// Only on `ToolCall::Subagent` calls: epoch millis it was spawned
+        /// and its `Done` came, stamped by [`stamp_event`] (folding has no
+        /// clock), so how long it took outlives the run.
+        ///
+        /// [`stamp_event`]: crate::fold::stamp_event
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        started_at: Option<i64>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        ended_at: Option<i64>,
     },
     #[serde(rename_all = "camelCase")]
     Input {
@@ -179,6 +188,8 @@ mod tests {
             diff: None,
             subagent: None,
             thread: Vec::new(),
+            started_at: None,
+            ended_at: None,
         };
         assert_eq!(
             serde_json::to_value(&part).unwrap(),

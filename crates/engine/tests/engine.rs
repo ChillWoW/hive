@@ -7,7 +7,7 @@ use std::time::Duration;
 use hive_engine::{Engine, EngineConfig, EngineError, RESUME_PROMPT};
 use hive_harness::{Harness, MockHarness};
 use hive_proto::{
-    fold_event, AgentEvent, ChatConfig, ChatsUpdate, Command, CommandPayload, CommandStatus,
+    fold_event, stamp_event, AgentEvent, ChatConfig, ChatsUpdate, Command, CommandPayload, CommandStatus,
     DoneStatus, HarnessId, Message, MessagePart, MessageRole, MessageStatus, MessagesUpdate,
     SandboxLevel, SecretRequest, Session, SessionStatus, UserInputAnswer,
 };
@@ -149,12 +149,15 @@ impl View {
                     None => self.messages.push(message),
                 }
             }
-            MessagesUpdate::Event { message_id, event } => {
+            MessagesUpdate::Event {
+                message_id,
+                at,
+                event,
+            } => {
                 let message = self.messages.iter_mut().find(|m| m.id == message_id);
-                fold_event(
-                    &mut message.expect("event for an unknown message").parts,
-                    &event,
-                );
+                let parts = &mut message.expect("event for an unknown message").parts;
+                fold_event(parts, &event);
+                stamp_event(parts, &event, at);
             }
             MessagesUpdate::Command { command } => {
                 match self.commands.iter_mut().find(|c| c.id == command.id) {

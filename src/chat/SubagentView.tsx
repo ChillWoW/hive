@@ -125,30 +125,23 @@ function SubagentBar({
     const { state, elapsed } = useSubagent(spawn, streaming);
     const running = state === "running";
     if (spawn.call.kind !== "subagent") return null;
-    const { description, agent, model } = spawn.call;
-    const status = SUBAGENT_STATE[state].label + (elapsed !== null ? ` · ${formatElapsed(elapsed)}` : "");
+    const { description } = spawn.call;
 
     return (
         <div className="flex min-h-12 items-center gap-3 rounded-[22px] border border-dark-700 bg-dark-850 py-2 ps-3 pe-2 text-sm">
             <SubagentAvatar harness={harness} state={state} />
             <div className="flex min-w-0 flex-1 flex-col sm:flex-row sm:items-center sm:gap-3">
-                <span className="flex min-w-0 items-baseline gap-2">
-                    <span className="min-w-0 truncate font-medium text-dark-50">{description || "Subagent"}</span>
-                    {(agent || model) && (
-                        <span className="shrink-0 text-xs text-dark-250">
-                            {[agent, model].filter(Boolean).join(" · ")}
-                        </span>
-                    )}
-                </span>
+                <span className="min-w-0 truncate font-medium text-dark-50">{description || "Subagent"}</span>
                 <span
                     role="status"
                     className={cn(
                         "min-w-0 truncate text-xs text-dark-200 tabular-nums",
-                        state === "failed" && "text-danger",
-                        running && "shimmer"
+                        state === "failed" && "text-danger"
                     )}
                 >
-                    {status}
+                    {/* Only the label shimmers, on its own width, as tool labels do. */}
+                    <span className={cn(running && "shimmer")}>{SUBAGENT_STATE[state].label}</span>
+                    {elapsed !== null && ` · ${formatElapsed(elapsed)}`}
                 </span>
             </div>
             <span className="hidden shrink-0 text-xs text-dark-250 md:inline">Runs on its own</span>

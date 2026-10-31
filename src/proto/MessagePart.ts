@@ -28,4 +28,12 @@ subagent?: SubagentStatus,
  * folded from its `AgentEvent::Subagent` events (a nested spawn's in
  * that spawn's part).
  */
-thread?: Array<MessagePart>, } | { "kind": "input", id: string, requestId: string, questions: Array<UserInputQuestion>, resolved: boolean, } | { "kind": "error", id: string, message: string, } | { "kind": "wake", id: string, finished: Array<FinishedTask>, } | { "kind": "compaction", id: string, status: CompactionStatus, auto: boolean, beforeTokens?: number, afterTokens?: number, error?: string, };
+thread?: Array<MessagePart>, 
+/**
+ * Only on `ToolCall::Subagent` calls: epoch millis it was spawned
+ * and its `Done` came, stamped by [`stamp_event`] (folding has no
+ * clock), so how long it took outlives the run.
+ *
+ * [`stamp_event`]: crate::fold::stamp_event
+ */
+startedAt?: number, endedAt?: number, } | { "kind": "input", id: string, requestId: string, questions: Array<UserInputQuestion>, resolved: boolean, } | { "kind": "error", id: string, message: string, } | { "kind": "wake", id: string, finished: Array<FinishedTask>, } | { "kind": "compaction", id: string, status: CompactionStatus, auto: boolean, beforeTokens?: number, afterTokens?: number, error?: string, };

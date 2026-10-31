@@ -64,7 +64,7 @@ export function useLiveTask(id: string): BackgroundTask | undefined {
 export function useSubagent(part: SpawnPart, streaming: boolean) {
     const task = useLiveTask(part.id);
     const state = subagentState(part, streaming, !!task);
-    const elapsed = useSubagentElapsed(part.id, state === "running", task?.startedAt);
+    const elapsed = useSubagentElapsed(part, state === "running", task?.startedAt);
     return { state, elapsed };
 }
 
@@ -81,26 +81,31 @@ export const SUBAGENT_STATE: Record<SubagentPhase, { dot: string; label: string 
     stopped: { dot: "bg-dark-300", label: "Stopped" }
 };
 
-// When this window first saw each subagent running, and saw it end. Shared
-// by its row and its view; one that ran before a reload has no time.
-const started = new Map<string, number>();
-const ended = new Map<string, number>();
+// When this window saw a subagent start and end: a fallback for spawns
+// saved before they carried `startedAt`/`endedAt`.
+const seenStart = new Map<string, number>();
+const seenEnd = new Map<string, number>();
 
-/** How long a subagent ran (ticking while it runs), or null if its start isn't known. */
-export function useSubagentElapsed(id: string, running: boolean, startedAt?: number): number | null {
-    // The engine's own start time wins: it outlives a reload.
-    if (startedAt !== undefined) started.set(id, startedAt);
-    if (running && !started.has(id)) started.set(id, Date.now());
-    if (!running && started.has(id) && !ended.has(id)) ended.set(id, Date.now());
+/**
+ * How long a subagent ran, ticking while it runs: from its spawn's saved
+ * stamps, else its background task's start, else what this window saw;
+ * null when its start isn't known.
+ */
+export function useSubagentElapsed(part: SpawnPart, running: boolean, taskStartedAt?: number): number | null {
+    const id = part.id;
+    if (running && !seenStart.has(id)) seenStart.set(id, Date.now());
+    if (!running && seenStart.has(id) && !seenEnd.has(id)) seenEnd.set(id, Date.now());
     const [now, setNow] = useState(Date.now);
     useEffect(() => {
         if (!running) return;
         const tick = setInterval(() => setNow(Date.now()), 1000);
         return () => clearInterval(tick);
     }, [running]);
-    const start = started.get(id);
+    const start = part.startedAt ?? taskStartedAt ?? seenStart.get(id);
     if (start === undefined) return null;
-    return (running ? Math.max(now, start) : (ended.get(id) ?? now)) - start;
+    if (running) return Math.max(now, start) - start;
+    const end = part.endedAt ?? seenEnd.get(id);
+    return end === undefined ? null : Math.max(end, start) - start;
 }
 
 export function formatElapsed(ms: number): string {

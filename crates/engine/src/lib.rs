@@ -1394,9 +1394,10 @@ impl Engine {
                 .position(|t| has_spawn(&t.assistant.parts, parent_tool_id));
             if let (false, Some(i)) = (live, earlier) {
                 let turn = &mut st.earlier[i];
-                if let Err(e) = store.record(turn, &event) {
+                let at = store.record(turn, &event).unwrap_or_else(|e| {
                     log::warn!("chat {chat_id}: recording an event: {e}");
-                }
+                    now_ms()
+                });
                 let message_id = turn.assistant.id.clone();
                 if !has_running_spawn(&turn.assistant.parts) {
                     if let Err(e) = store.flush(turn) {
@@ -1404,7 +1405,14 @@ impl Engine {
                     }
                     st.earlier.remove(i);
                 }
-                publish(&mut st.watchers, MessagesUpdate::Event { message_id, event });
+                publish(
+                    &mut st.watchers,
+                    MessagesUpdate::Event {
+                        message_id,
+                        at,
+                        event,
+                    },
+                );
                 return;
             }
         }
@@ -1412,15 +1420,17 @@ impl Engine {
         let Some(turn) = &mut st.turn else {
             return;
         };
-        if let Err(e) = store.record(turn, &event) {
+        let at = store.record(turn, &event).unwrap_or_else(|e| {
             log::warn!("chat {chat_id}: recording an event: {e}");
-        }
+            now_ms()
+        });
         let message_id = turn.assistant.id.clone();
         let finished = matches!(event, AgentEvent::Done { .. }).then(|| turn.assistant.clone());
         publish(
             &mut st.watchers,
             MessagesUpdate::Event {
                 message_id,
+                at,
                 event: event.clone(),
             },
         );

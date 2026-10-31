@@ -13,7 +13,7 @@ import type {
     UserInputAnswer
 } from "@/proto";
 import { useSettingsStore } from "@/settings/store";
-import { foldEvent } from "@/transcript/fold";
+import { foldEvent, stampEvent } from "@/transcript/fold";
 import { chatsApi, type Unwatch } from "./api";
 import { setups } from "./setups";
 
@@ -691,7 +691,10 @@ function applyMessages(chatId: string, update: MessagesUpdate) {
 
             case "event": {
                 const m = t.messages.find((m) => m.id === update.messageId);
-                if (m) foldEvent(m.parts, update.event);
+                if (m) {
+                    foldEvent(m.parts, update.event);
+                    stampEvent(m.parts, update.event, update.at);
+                }
                 return;
             }
 

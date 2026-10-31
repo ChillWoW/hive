@@ -3,7 +3,7 @@
 
 use hive_harness::{Harness, MockHarness, Run};
 use hive_proto::{
-    fold_event, AgentEvent, ChatConfig, CommandPayload, CommandStatus, HarnessId, MessagePart,
+    fold_event, stamp_event, AgentEvent, ChatConfig, CommandPayload, CommandStatus, HarnessId, MessagePart,
     MessageRole, MessageStatus, RunRequest, SandboxLevel, ToolCall, UserInputAnswer,
 };
 use hive_store::{Store, Turn};
@@ -122,12 +122,13 @@ async fn two_mock_turns_persist_and_match_their_journal() {
         MessagePart::Text { text, .. } if text.contains("Going with \"Change the test\"")
     )));
 
-    // Each saved message is exactly its journal lines, folded.
+    // Each saved message is exactly its journal lines, folded and stamped.
     let lines = store.journal().read(&chat.id).unwrap();
     for message in [&messages[1], &messages[3]] {
         let mut parts = Vec::new();
         for line in lines.iter().filter(|l| l.message_id == message.id) {
             fold_event(&mut parts, &line.event);
+            stamp_event(&mut parts, &line.event, line.at);
         }
         assert_eq!(parts, message.parts);
     }

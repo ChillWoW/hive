@@ -19,7 +19,7 @@ use std::sync::{Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
 
 use hive_proto::{
-    fold_event, AgentEvent, Attachment, Chat, ChatConfig, Command, CommandPayload, CommandStatus, DoneStatus,
+    fold_event, stamp_event, AgentEvent, Attachment, Chat, ChatConfig, Command, CommandPayload, CommandStatus, DoneStatus,
     Message, MessagePart, MessageRole, MessageStatus,
 };
 use rusqlite::{params, Connection, OptionalExtension};
@@ -425,11 +425,12 @@ impl Store {
     /// Journals `event` and folds it into the turn's assistant message.
     /// Events after the turn's `Done` (a background subagent finishing)
     /// still fold in.
-    pub fn record(&self, turn: &mut Turn, event: &AgentEvent) -> Result<()> {
+    pub fn record(&self, turn: &mut Turn, event: &AgentEvent) -> Result<i64> {
         let now = now_ms();
         self.journal
             .append(&turn.chat_id, &turn.assistant.id, now, event)?;
         fold_event(&mut turn.assistant.parts, event);
+        stamp_event(&mut turn.assistant.parts, event, now);
         turn.dirty = true;
 
         match event {
@@ -465,7 +466,7 @@ impl Store {
         if !streaming || turn.last_saved.elapsed() >= SAVE_INTERVAL {
             self.flush(turn)?;
         }
-        Ok(())
+        Ok(now)
     }
 
     /// Saves the assistant message if it has unsaved changes.
@@ -518,6 +519,7 @@ impl Store {
                 message.parts.clear();
                 for line in &lines {
                     fold_event(&mut message.parts, &line.event);
+                    stamp_event(&mut message.parts, &line.event, line.at);
                 }
             }
             let ended = lines.last().map_or(message.created_at, |l| l.at);

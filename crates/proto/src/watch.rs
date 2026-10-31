@@ -24,10 +24,12 @@ pub enum MessagesUpdate {
     /// A message added or replaced whole: a turn's prompt and its empty
     /// reply when the turn starts, the reply again when it finishes.
     Message { message: Message },
-    /// Fold into message `message_id` (`foldEvent`).
+    /// Fold into message `message_id` (`foldEvent`, then `stampEvent`
+    /// with `at`, the epoch millis it was recorded).
     #[serde(rename_all = "camelCase")]
     Event {
         message_id: String,
+        at: i64,
         event: AgentEvent,
     },
     /// A command issued or settled.

@@ -61,6 +61,8 @@ pub fn fold_event(parts: &mut Vec<MessagePart>, event: &AgentEvent) {
                     subagent: matches!(call, ToolCall::Subagent { .. })
                         .then_some(SubagentStatus::Running),
                     thread: Vec::new(),
+                    started_at: None,
+                    ended_at: None,
                 });
             }
         }
@@ -254,6 +256,36 @@ fn find_tool<'a>(parts: &'a mut [MessagePart], id: &str) -> Option<&'a mut Messa
         .find(|p| matches!(p, MessagePart::Tool { id: pid, .. } if pid == id))
 }
 
+/// Stamps when a subagent was spawned and when it finished on its spawn
+/// part, `now` being when `event` came. Call it after [`fold_event`] with the
+/// same event; folding itself has no clock.
+pub fn stamp_event(parts: &mut [MessagePart], event: &AgentEvent, now: i64) {
+    match event {
+        AgentEvent::ToolCall {
+            id,
+            call: ToolCall::Subagent { .. },
+        } => {
+            if let Some(MessagePart::Tool { started_at, .. }) = find_spawn(parts, id) {
+                started_at.get_or_insert(now);
+            }
+        }
+        AgentEvent::Subagent {
+            parent_tool_id,
+            event,
+        } => match event.as_ref() {
+            AgentEvent::Done { .. } => {
+                if let Some(MessagePart::Tool { ended_at, .. }) = find_spawn(parts, parent_tool_id)
+                {
+                    ended_at.get_or_insert(now);
+                }
+            }
+            // A spawn inside a subagent's thread; spawns are looked for in threads.
+            inner => stamp_event(parts, inner, now),
+        },
+        _ => {}
+    }
+}
+
 /// Whether `parts` hold the subagent spawn `id`, nested ones included: where
 /// its [`AgentEvent::Subagent`] traffic folds.
 pub fn has_spawn(parts: &[MessagePart], id: &str) -> bool {
@@ -431,6 +463,53 @@ mod tests {
                 if matches!(&inner[..], [MessagePart::Text { text, .. }] if text == "deep")
         ));
         assert!(matches!(&thread[2], MessagePart::Text { text, .. } if text == "ed"));
+    }
+
+    #[test]
+    fn stamps_when_a_subagent_started_and_ended_nested_ones_too() {
+        let spawn = |id: &str| AgentEvent::ToolCall {
+            id: id.into(),
+            call: ToolCall::Subagent {
+                description: "d".into(),
+                model: None,
+                prompt: None,
+                agent: None,
+            },
+        };
+        let tagged = |parent: &str, event| AgentEvent::Subagent {
+            parent_tool_id: parent.into(),
+            event: Box::new(event),
+        };
+        let done = || AgentEvent::Done {
+            status: DoneStatus::Completed,
+            error: None,
+            session_id: None,
+        };
+        let mut parts = Vec::new();
+        for (at, event) in [
+            (10, spawn("a")),
+            (20, tagged("a", spawn("b"))),
+            (30, tagged("b", done())),
+            (40, tagged("a", done())),
+            (50, tagged("a", done())),
+        ] {
+            fold_event(&mut parts, &event);
+            stamp_event(&mut parts, &event, at);
+        }
+        let MessagePart::Tool {
+            started_at,
+            ended_at,
+            thread,
+            ..
+        } = &parts[0]
+        else {
+            panic!("spawn part");
+        };
+        assert_eq!((*started_at, *ended_at), (Some(10), Some(40)));
+        assert!(matches!(
+            &thread[0],
+            MessagePart::Tool { started_at: Some(20), ended_at: Some(30), .. }
+        ));
     }
 
     #[test]

@@ -182,6 +182,27 @@ function findTool(parts: MessagePart[], id: string) {
     return part?.kind === "tool" ? part : undefined;
 }
 
+/**
+ * Stamps when a subagent was spawned and when it finished on its spawn part,
+ * `at` being when the engine recorded `event` (the update's `at`). Call it
+ * after `foldEvent` with the same event. Mirrors `stamp_event` in
+ * `crates/proto/src/fold.rs`.
+ */
+export function stampEvent(parts: MessagePart[], event: AgentEvent, at: number) {
+    if (event.type === "toolCall" && event.call.kind === "subagent") {
+        const spawn = findSpawn(parts, event.id);
+        if (spawn) spawn.startedAt ??= at;
+    } else if (event.type === "subagent") {
+        if (event.event.type === "done") {
+            const spawn = findSpawn(parts, event.parentToolId);
+            if (spawn) spawn.endedAt ??= at;
+        } else {
+            // A spawn inside a subagent's thread; spawns are looked for in threads.
+            stampEvent(parts, event.event, at);
+        }
+    }
+}
+
 /** A subagent spawn by its call id, at this level or in a spawn's thread. */
 export function findSpawn(parts: MessagePart[], id: string): ToolPartOf | undefined {
     const here = findTool(parts, id);

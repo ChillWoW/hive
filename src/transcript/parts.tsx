@@ -4,12 +4,14 @@ import {
     CaretRightIcon,
     ChatCircleDotsIcon,
     RobotIcon,
+    TerminalWindowIcon,
     WarningCircleIcon
 } from "@phosphor-icons/react";
 import { useContext } from "react";
 import type { FinishedTask, HarnessId, MessagePart } from "@/proto";
-import { HarnessIcon } from "@/harnesses";
+import { HarnessIcon, useCatalog } from "@/harnesses";
 import { cn } from "@/lib/cn";
+import { Tooltip } from "@/ui";
 import { formatTokens } from "@/usage/format";
 import { OpenSubagent } from "./context";
 import {
@@ -55,8 +57,7 @@ export function SubagentAvatar({ harness, state }: { harness?: HarnessId; state:
             <span
                 className={cn(
                     "absolute -right-px -bottom-px size-2 rounded-full ring-2 ring-dark-900",
-                    SUBAGENT_STATE[state].dot,
-                    state === "running" && "animate-pulse"
+                    SUBAGENT_STATE[state].dot
                 )}
             />
         </span>
@@ -96,22 +97,15 @@ export function SubagentChip({
         <>
             <SubagentAvatar harness={harness} state={state} />
             <span className="min-w-0 flex-1">
-                <span className="flex items-baseline gap-2">
-                    <span className="min-w-0 truncate text-xs font-medium text-dark-50">{title}</span>
-                    {(call.agent || call.model) && (
-                        <span className="shrink-0 text-[11px] text-dark-250">
-                            {[call.agent, call.model].filter(Boolean).join(" · ")}
-                        </span>
-                    )}
-                </span>
+                <span className="block truncate text-xs font-medium text-dark-50">{title}</span>
                 <span
                     className={cn(
                         "block truncate text-[11px] leading-relaxed",
-                        failed ? "text-danger" : "text-dark-200",
-                        running && !detail && "shimmer"
+                        failed ? "text-danger" : "text-dark-200"
                     )}
                 >
-                    {detail ?? visual.label}
+                    {/* Shimmer on a span the text's width, as tool labels do. */}
+                    <span className={cn(running && !detail && "shimmer")}>{detail ?? visual.label}</span>
                 </span>
             </span>
             {detail !== null && state !== "done" && (
@@ -134,7 +128,7 @@ export function SubagentChip({
         </>
     );
     const className = "group/subagent flex w-full min-w-0 items-center gap-2.5 rounded-md px-2 py-1.5 text-left";
-    return open ? (
+    const row = open ? (
         <button
             type="button"
             aria-label={`Open ${title}`}
@@ -148,6 +142,107 @@ export function SubagentChip({
         </button>
     ) : (
         <div className={className}>{content}</div>
+    );
+    return (
+        <Tooltip disableHoverablePopup>
+            <Tooltip.Trigger delay={CARD_DWELL} closeOnClick render={row} />
+            <Tooltip.Content
+                side="top"
+                align="start"
+                sideOffset={6}
+                collisionPadding={12}
+                className="w-[300px] max-w-none p-3 font-normal"
+            >
+                <SubagentCard
+                    title={title}
+                    model={call.model}
+                    prompt={call.prompt}
+                    harness={harness}
+                    state={state}
+                    elapsed={elapsed}
+                />
+            </Tooltip.Content>
+        </Tooltip>
+    );
+}
+
+/** How long the pointer rests on a subagent row before its card shows, as the sidebar's. */
+const CARD_DWELL = 300;
+
+/**
+ * What a subagent row has no room for, in its hover card (as t3code's and
+ * the sidebar's chat card): the whole task, the model it runs on, how it
+ * stands and for how long, and the prompt it was given.
+ */
+function SubagentCard({
+    title,
+    model,
+    prompt,
+    harness,
+    state,
+    elapsed
+}: {
+    title: string;
+    model?: string;
+    prompt?: string;
+    harness?: HarnessId;
+    state: SubagentPhase;
+    elapsed: number | null;
+}) {
+    const catalog = useCatalog(harness);
+    // A model the spawn named, by its label when the catalog knows it; else the chat's.
+    const named = model
+        ? (catalog?.models.find((m) => m.id === model || m.label.toLowerCase().includes(model.toLowerCase()))
+              ?.label ?? model)
+        : null;
+    const visual = SUBAGENT_STATE[state];
+    return (
+        <div className="flex flex-col gap-2.5">
+            <p className="text-[13px] leading-snug font-medium break-words text-dark-50">{title}</p>
+            <div className="flex flex-col gap-1.5 border-t border-dark-600 pt-2.5 text-xs">
+                <div className="flex min-w-0 items-center gap-2">
+                    <span className="flex w-4 shrink-0 justify-center">
+                        {harness ? (
+                            <HarnessIcon harness={harness} className="size-3.5" />
+                        ) : (
+                            <RobotIcon className="size-3.5 text-dark-200" />
+                        )}
+                    </span>
+                    <span className="min-w-0 truncate text-dark-100">
+                        {named ?? (
+                            <>
+                                {catalog?.label ?? "Agent"}
+                                <span className="text-dark-250"> · chat's model</span>
+                            </>
+                        )}
+                    </span>
+                </div>
+                <div className="flex min-w-0 items-center gap-2">
+                    <span className="flex w-4 shrink-0 justify-center">
+                        <span className={cn("size-2 rounded-full", visual.dot)} />
+                    </span>
+                    <span
+                        className={cn(
+                            "min-w-0 flex-1 truncate",
+                            state === "failed" ? "text-danger" : "text-dark-100"
+                        )}
+                    >
+                        {visual.label}
+                    </span>
+                    {elapsed !== null && (
+                        <span className="shrink-0 text-dark-250 tabular-nums">{formatElapsed(elapsed)}</span>
+                    )}
+                </div>
+                {prompt && (
+                    <div className="flex min-w-0 items-center gap-2">
+                        <span className="flex w-4 shrink-0 justify-center">
+                            <TerminalWindowIcon className="size-3.5 text-dark-200" />
+                        </span>
+                        <span className="min-w-0 truncate text-dark-200">{prompt.replace(/\s+/g, " ").trim()}</span>
+                    </div>
+                )}
+            </div>
+        </div>
     );
 }
 
