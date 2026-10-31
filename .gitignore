@@ -25,3 +25,6 @@ dist-ssr
 
 # Cargo workspace
 /target
+
+# Playwright MCP output
+.playwright-mcp/
