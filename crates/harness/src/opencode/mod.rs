@@ -1,5 +1,5 @@
 //! OpenCode: spawns the installed `opencode` as `opencode serve` (2.x) and
-//! speaks its HTTP API, following its event bus, as zeron does.
+//! speaks its HTTP API, following its event bus.
 //!
 //! - A run is one server (a free loopback port, a per-run password) holding
 //!   one session: `POST /api/session` with the folder, model and permission

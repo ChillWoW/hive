@@ -1,7 +1,7 @@
 import type { GitHistoryCommit, GitHistoryRef } from "@/proto";
 
 /**
- * The history tab's lane graph, as zeron's `history.rs`: commits come
+ * The history tab's lane graph: commits come
  * children first (`git log --topo-order`); each active lane points at the
  * parent that will end it. A row's segments are drawn in that row's band:
  * lanes passing through, lanes ending in its node, and lanes leaving it.
@@ -187,7 +187,7 @@ export function collapseBranchRuns(
     return { commits: compactToVisible(commits, visible), hidden };
 }
 
-// Geometry (zeron's `GraphGeometry`).
+// Geometry.
 
 export const ROW_HEIGHT = 36;
 export const NODE_RADIUS = 3;

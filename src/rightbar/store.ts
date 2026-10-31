@@ -3,8 +3,8 @@ import { create } from "zustand";
 /**
  * What a tab shows: a file of a chat's folder in the editor, or a terminal
  * started in a folder (the home folder without one), or the diff or history
- * of the open chat's folder (they follow the open chat, as zeron's Diff and
- * History tabs do), or what one commit of a folder changed.
+ * of the open chat's folder (they follow the open chat), or what one
+ * commit of a folder changed.
  */
 export type TabContent =
     | { kind: "file"; cwd: string; path: string }
@@ -32,7 +32,7 @@ type RightbarState = {
 
 let nextId = 0;
 
-/** The right sidebar's tabs, as zeron's right pane keeps its surfaces. */
+/** The right sidebar's tabs. */
 export const useRightbarStore = create<RightbarState>()((set) => ({
     tabs: [],
     activeId: null,

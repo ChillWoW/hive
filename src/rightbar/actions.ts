@@ -25,7 +25,7 @@ export function activeFolder(): string | null {
 
 /**
  * Opens `path` of `cwd` in a tab (the one it's already in, if any) and shows
- * the right sidebar, as zeron opens a file from its tree; with `at`, the
+ * the right sidebar; with `at`, the
  * cursor goes to that line.
  */
 export function openFileTab(cwd: string, path: string, at?: LinePosition) {

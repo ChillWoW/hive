@@ -6,8 +6,8 @@ const busy = (status: string | undefined) => status === "working" || status === 
 
 /**
  * Looks at open files on disk again when they may have changed: the window
- * regaining focus, or an agent's turn ending in their folder. (Zeron watches
- * the folder; this catches the same changes at those moments.)
+ * regaining focus, or an agent's turn ending in their folder (there's no
+ * folder watcher; this catches changes at those moments).
  */
 export function useDiskChecks() {
     useEffect(() => {

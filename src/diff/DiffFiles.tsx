@@ -16,7 +16,7 @@ import { highlightFile, type Span } from "./highlight";
 import { fileNotices, splitPairs, type FileDiff, type Hunk, type PatchLine } from "./patch";
 
 /*
- * Zeron's Changes pane (`crates/ui/src/changes.rs`): a header per file
+ * The changes view: a header per file
  * (chevron, icon, path, +N −N, open), then its hunks line by line, unified
  * or split, on emerald / red washes with an accent bar.
  */
@@ -25,7 +25,7 @@ const LINE_HEIGHT = 20;
 const HEADER_HEIGHT = 32;
 const HUNK_HEIGHT = 26;
 
-/** Zeron's soft emerald and red (Tailwind's emerald-400, red-400). */
+/** Soft emerald and red (Tailwind's emerald-400, red-400). */
 const ROW: Record<PatchLine["kind"], { row: string; accent: string; marker: string; no: string }> =
     {
         add: {

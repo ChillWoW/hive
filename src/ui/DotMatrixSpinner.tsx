@@ -37,7 +37,7 @@ export const DOT_MATRIX_FULL = ALL_LIT;
 /**
  * A 3×3 grid of dots lighting in a new random pattern every `interval`:
  * something is happening, with no idea how long it will take. Holds still
- * under reduced motion. (Ported from Desktop/agent.)
+ * under reduced motion.
  */
 export function DotMatrixSpinner({
     interval = 260,

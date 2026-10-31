@@ -3,7 +3,7 @@ import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import { useShallow } from "zustand/react/shallow";
 
-// Widths in px, as in zeron (crates/ui/src/settings.rs).
+// Widths in px.
 export const SIDEBAR_WIDTH = 260;
 export const FILES_PANEL_MIN = 220;
 export const FILES_PANEL_MAX = 440;

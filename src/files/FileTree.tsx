@@ -15,7 +15,7 @@ import { DeleteEntryDialog, type DeleteTarget } from "./DeleteEntryDialog";
 import { useFilesPanelStore } from "./panel";
 import { dirKey, loadDir, nameOf, useTreeStore, type DirListing } from "./tree";
 
-// Zeron's tree metrics (crates/ui/src/files/tree.rs).
+// Tree metrics.
 const ROW_HEIGHT = 27;
 const INDENT = 14;
 const INSET = 8;
@@ -59,8 +59,8 @@ function buildRows(
 }
 
 /**
- * `cwd`'s files as a tree, folders listed as they're expanded (as in zeron).
- * A right-click opens zeron's tree menu: Add to chat, Copy path, Rename…
+ * `cwd`'s files as a tree, folders listed as they're expanded.
+ * A right-click opens the tree menu: Add to chat, Copy path, Rename…
  * (in place; also F2), Delete… (asks first; also the Delete key).
  */
 export function FileTree({ cwd, all }: { cwd: string; all: boolean }) {
@@ -179,7 +179,7 @@ export function FileTree({ cwd, all }: { cwd: string; all: boolean }) {
                                     selected={selected === row.entry.path}
                                     onClick={() => {
                                         select(row.entry.path);
-                                        // A folder opens or closes; a file opens in a tab, as in zeron.
+                                        // A folder opens or closes; a file opens in a tab.
                                         if (row.entry.dir) toggleExpanded(cwd, row.entry.path);
                                         else openFileTab(cwd, row.entry.path);
                                     }}
@@ -257,7 +257,7 @@ function stemEnd(name: string, dir: boolean) {
 }
 
 /**
- * The row's name in place, editable (zeron's tree rename): Enter renames,
+ * The row's name in place, editable: Enter renames,
  * Escape or leaving cancels; a refusal stays shown under the field.
  */
 function RenameField({

@@ -38,7 +38,7 @@ type State = { diff?: GitDiff | null; error?: string };
 
 /**
  * What one commit changed (against its first parent), opened from the
- * history tab, as zeron's commit-pinned Diff surface: its hash and subject in
+ * history tab: its hash and subject in
  * place of the scope menu, the same file sections as the diff tab.
  */
 export function CommitTab({ tab }: { tab: CommitTabData }) {

@@ -1,7 +1,7 @@
-//! Commit authors' GitHub profile pictures for the history tab, as zeron's
-//! `ResolveGitAvatars`. Git keeps only names and emails, so a page of the
-//! repository's commits from GitHub's API maps commits and emails to avatar
-//! URLs; each image is downloaded once into `<data dir>/cache/git-avatars`.
+//! Commit authors' GitHub profile pictures for the history tab. Git keeps
+//! only names and emails, so a page of the repository's commits from GitHub's
+//! API maps commits and emails to avatar URLs; each image is downloaded once
+//! into `<data dir>/cache/git-avatars`.
 //! Best effort: any failure just leaves the initial in place.
 
 use std::collections::{HashMap, HashSet};

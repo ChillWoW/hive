@@ -1,6 +1,5 @@
 /**
- * A unified git patch as files, hunks and lines (zeron's `parse_patch`,
- * `crates/ui/src/changes.rs`). Tolerant: unknown header lines are skipped, a
+ * A unified git patch as files, hunks and lines. Tolerant: unknown header lines are skipped, a
  * truncated hunk keeps what parsed.
  */
 
@@ -185,7 +184,7 @@ export function fileNotices(file: FileDiff): string[] {
 export type LinePair = [number | undefined, number | undefined];
 
 /**
- * Pairs a hunk's lines into split rows (zeron's `split_pairs`): context sits
+ * Pairs a hunk's lines into split rows: context sits
  * on both sides, and a run of deletions followed by additions lines up
  * index for index, the longer side's leftovers getting one-sided rows. A
  * `\ No newline` marker belongs to the side whose line it follows.

@@ -21,7 +21,7 @@ type AttachmentTileProps = {
 /**
  * One attached file: images as thumbnails, anything else as a `FileChip`.
  * In the composer it has a remove button and shows its upload; in the
- * transcript a click opens it. As in Desktop/agent.
+ * transcript a click opens it.
  */
 export function AttachmentTile({
     name,

@@ -1,6 +1,6 @@
-//! A checkout's commit history for the history tab (zeron's `Repos::history`
-//! and friends): pages in topological order over every branch, remote branch
-//! and tag, a search through all of it, Fetch all, and one commit's patch.
+//! A checkout's commit history for the history tab: pages in topological
+//! order over every branch, remote branch and tag, a search through all of
+//! it, Fetch all, and one commit's patch.
 
 use std::collections::{HashMap, HashSet};
 use std::path::Path;

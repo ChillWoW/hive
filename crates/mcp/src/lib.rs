@@ -1,6 +1,6 @@
 //! hive-mcp — Hive's own MCP server, through which agents reach Hive.
 //!
-//! Two halves, as in zeron:
+//! Two halves:
 //!
 //! - [`Host`], inside the app: a loopback TCP listener that runs [`Tools`]
 //!   (the catalog and the code behind each tool, with the app's state at

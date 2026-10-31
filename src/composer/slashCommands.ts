@@ -1,7 +1,7 @@
 import type { SlashCommand } from "@/proto";
 import { fuzzyScore } from "@/lib/fuzzy";
 
-/** Commands Hive runs itself, never sent to the agent (as in t3code). */
+/** Commands Hive runs itself, never sent to the agent. */
 export type AppCommandId = "model" | "plan" | "default" | "usage-limits";
 
 export type AppCommand = { id: AppCommandId; description: string };

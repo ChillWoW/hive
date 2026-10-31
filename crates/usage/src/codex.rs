@@ -3,8 +3,7 @@
 //! last `turn_context`'s is carried forward (and the service tier from
 //! `thread_settings_applied`). Each event's `last_token_usage` is one request,
 //! checked against the running `total_token_usage` to drop re-emits; a forked
-//! session's copied history (a burst right after its meta) is skipped. As in
-//! t3code.
+//! session's copied history (a burst right after its meta) is skipped.
 
 use std::path::PathBuf;
 

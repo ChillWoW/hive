@@ -1,8 +1,8 @@
-//! A chat folder's files for the right sidebar's editor, as zeron reads and
-//! saves them: text comes back with `\n` line endings and is written back with
-//! the file's own (and its byte order mark); a save names the hash of what it
-//! was read from and is refused when the file changed since; the write goes to
-//! a temp file that replaces the original. Links are never followed.
+//! A chat folder's files for the right sidebar's editor: text comes back with
+//! `\n` line endings and is written back with the file's own (and its byte
+//! order mark); a save names the hash of what it was read from and is refused
+//! when the file changed since; the write goes to a temp file that replaces
+//! the original. Links are never followed.
 
 use std::io::Write;
 use std::path::{Component, Path, PathBuf};
@@ -13,7 +13,7 @@ use tauri::ipc::Response;
 use tauri::AppHandle;
 use tauri_plugin_opener::OpenerExt;
 
-/// Past this a file is shown but not editable (zeron's limits).
+/// Past this a file is shown but not editable.
 const MAX_EDITABLE: u64 = 1024 * 1024;
 /// Past this a file's text isn't read at all.
 const MAX_PREVIEW: u64 = 8 * 1024 * 1024;

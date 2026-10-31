@@ -1,6 +1,6 @@
 //! Codex's CLI as a provider: its version (`codex --version`), its account
 //! and plan usage (`account/read`, `account/rateLimits/read` on an
-//! app-server), installing it (OpenAI's install script, as zeron runs it),
+//! app-server), installing it (OpenAI's install script),
 //! updating it (`codex update`), and signing in and out.
 //!
 //! Sign-in is ChatGPT's browser flow through the app-server

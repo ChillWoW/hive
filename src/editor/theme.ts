@@ -1,6 +1,7 @@
 import { HighlightStyle, syntaxHighlighting, type TagStyle } from "@codemirror/language";
 import { EditorView } from "@codemirror/view";
 import { tags as t } from "@lezer/highlight";
+import { DARK } from "@/lib/palette";
 
 /**
  * The editor's look: the app's dark surfaces, and syntax colours from
@@ -30,11 +31,11 @@ const chrome = EditorView.theme(
         ".cm-activeLine": { backgroundColor: "rgba(255, 255, 255, 0.03)" },
         ".cm-gutters": {
             backgroundColor: "transparent",
-            color: "#5a5a5a",
+            color: DARK[300],
             border: "none"
         },
         ".cm-lineNumbers .cm-gutterElement": { padding: "0 4px 0 12px", minWidth: "32px" },
-        ".cm-activeLineGutter": { backgroundColor: "transparent", color: "#b8b8b8" },
+        ".cm-activeLineGutter": { backgroundColor: "transparent", color: DARK[100] },
         ".cm-selectionMatch": { backgroundColor: "rgba(255, 255, 255, 0.08)" },
         "&.cm-focused .cm-matchingBracket": {
             backgroundColor: "rgba(255, 255, 255, 0.1)",
@@ -43,37 +44,37 @@ const chrome = EditorView.theme(
         ".cm-searchMatch": { backgroundColor: "rgba(187, 128, 9, 0.35)" },
         ".cm-searchMatch.cm-searchMatch-selected": { backgroundColor: "rgba(187, 128, 9, 0.6)" },
         ".cm-foldPlaceholder": {
-            backgroundColor: "#2e2e2e",
+            backgroundColor: DARK[600],
             border: "none",
-            color: "#b8b8b8"
+            color: DARK[100]
         },
         ".cm-tooltip": {
-            backgroundColor: "#1f1f1f",
-            border: "1px solid #2e2e2e",
+            backgroundColor: DARK[800],
+            border: `1px solid ${DARK[600]}`,
             borderRadius: "6px"
         },
         ".cm-tooltip-autocomplete > ul > li[aria-selected]": {
-            backgroundColor: "#2e2e2e",
+            backgroundColor: DARK[600],
             color: "#e6edf3"
         },
-        ".cm-panels": { backgroundColor: "#1a1a1a", color: "#c9c9c9" },
-        ".cm-panels.cm-panels-top": { borderBottom: "1px solid #2e2e2e" },
-        ".cm-panels.cm-panels-bottom": { borderTop: "1px solid #2e2e2e" },
+        ".cm-panels": { backgroundColor: DARK[850], color: DARK[50] },
+        ".cm-panels.cm-panels-top": { borderBottom: `1px solid ${DARK[600]}` },
+        ".cm-panels.cm-panels-bottom": { borderTop: `1px solid ${DARK[600]}` },
         ".cm-panel.cm-search": { padding: "6px 8px", fontSize: "12px" },
         ".cm-panel.cm-search input, .cm-panel.cm-search button": {
             fontSize: "12px",
             borderRadius: "4px"
         },
         ".cm-textfield": {
-            backgroundColor: "#242424",
-            border: "1px solid #3b3b3b",
-            color: "#c9c9c9"
+            backgroundColor: DARK[700],
+            border: `1px solid ${DARK[500]}`,
+            color: DARK[50]
         },
         ".cm-button": {
             backgroundImage: "none",
-            backgroundColor: "#242424",
-            border: "1px solid #3b3b3b",
-            color: "#c9c9c9"
+            backgroundColor: DARK[700],
+            border: `1px solid ${DARK[500]}`,
+            color: DARK[50]
         }
     },
     { dark: true }

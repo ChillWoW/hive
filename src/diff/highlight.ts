@@ -86,8 +86,7 @@ async function run(path: string, lines: string[]): Promise<Span[][] | null> {
 
 /**
  * Every line's spans in `file`, by line: the old side (context and deletions)
- * and the new side (context and additions) each read as one document, as
- * zeron highlights a diff. Null when the language is unknown or it's too big.
+ * and the new side (context and additions) each read as one document. Null when the language is unknown or it's too big.
  */
 export async function highlightFile(file: FileDiff): Promise<Map<PatchLine, Span[]> | null> {
     if (file.binary || file.lineCount === 0 || file.lineCount > MAX_LINES) return null;

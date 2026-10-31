@@ -1,7 +1,6 @@
 //! hive-usage — the Usage panel's data: tokens and estimated cost from every
 //! coding-agent CLI's own history on this machine (Claude Code's and Codex's
 //! transcripts, OpenCode's database), so work done outside Hive counts too.
-//! Modelled on t3code's usage page.
 //!
 //! What's been read is cached as `usage/scan.json` in the data dir: files
 //! that didn't change aren't read again, grown ones are read on from where

@@ -69,7 +69,7 @@ function browserReport(query: UsageQuery): UsageReport {
         ],
         projects: [
             ["~/dev/hive", 0.46],
-            ["~/dev/zeron", 0.31],
+            ["~/dev/atlas", 0.31],
             ["~/Desktop/pixelwrench", 0.15],
             ["~/dev/dotfiles", 0.08]
         ].map(([path, share]) => ({

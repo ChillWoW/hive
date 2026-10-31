@@ -1,7 +1,6 @@
-//! Working-tree snapshots for the diff tab's "Latest turn" scope (zeron's
-//! `diff_sync/turn_snapshot.rs`): when a prompt starts a turn the engine
-//! snapshots the chat's checkout, and the turn's changes are that snapshot
-//! against a fresh one.
+//! Working-tree snapshots for the diff tab's "Latest turn" scope: when a
+//! prompt starts a turn the engine snapshots the chat's checkout, and the
+//! turn's changes are that snapshot against a fresh one.
 //!
 //! A snapshot is `git add -A` into a throwaway index, then `git write-tree`.
 //! Both trees carry untracked (unignored) files, so a file that was already

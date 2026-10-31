@@ -23,9 +23,8 @@ function agoLabel(at: number, now: number) {
 }
 
 /**
- * What a sidebar row has no room for, shown in its hover card (as in
- * zeron): the whole title and its age, then where it runs, on what, and
- * what it's doing.
+ * What a sidebar row has no room for, shown in its hover card: the whole
+ * title and its age, then where it runs, on what, and what it's doing.
  */
 export function ChatCard({
     chat,

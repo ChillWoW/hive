@@ -172,7 +172,7 @@ export function loadOlder(cwd: string) {
     );
 }
 
-/** As zeron: the loaded rows filter at once, the whole history's matches follow shortly. */
+/** The loaded rows filter at once, the whole history's matches follow shortly. */
 const SEARCH_DEBOUNCE = 70;
 
 export function setSearchQuery(cwd: string, value: string) {

@@ -53,7 +53,7 @@ const READ_ONLY: Record<ReadOnlyReason, string> = {
     symlink: "A link; Hive doesn't follow links."
 };
 
-/** A file in the right sidebar: zeron's toolbar over its editor or preview. */
+/** A file in the right sidebar: a toolbar over its editor or preview. */
 export function FileTab({ tab }: { tab: Extract<RightTab, { kind: "file" }> }) {
     const doc = useDocsStore((s) => s.docs[tab.id]);
     const image = imageType(tab.path);
@@ -165,7 +165,7 @@ function Toolbar({
     );
 }
 
-/** Zeron's status words: only when something's wrong. */
+/** Status words: only when something's wrong. */
 function StatusLabel({ id, doc }: { id: string; doc: Doc }) {
     const status = doc.status;
     if (!status) return null;
@@ -294,7 +294,7 @@ function OpenElsewhere({ cwd, path }: { cwd: string; path: string }) {
     );
 }
 
-/** The rendered Markdown of the tab's text, as zeron shows `.md` files. */
+/** The rendered Markdown of the tab's text. */
 function MarkdownPreview({ id, version }: { id: string; version: number }) {
     // The editor isn't on screen meanwhile, so its text only changes from
     // disk, which bumps `version` and renders this again.

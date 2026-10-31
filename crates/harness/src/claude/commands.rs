@@ -1,4 +1,4 @@
-//! The CLI's commands, split into commands and skills, as in zeron: `/name`
+//! The CLI's commands, split into commands and skills: `/name`
 //! runs a command at the start of a prompt, `$name` names a skill anywhere.
 //!
 //! The `initialize` response lists every command (skills included) but

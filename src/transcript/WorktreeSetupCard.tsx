@@ -185,8 +185,8 @@ function Details({ worktree }: { worktree: Worktree }) {
 }
 
 /**
- * A new chat's worktree being made, under its first prompt (as t3code's
- * worktree setup card, drawn like a tool group): a shimmering "Setting up
+ * A new chat's worktree being made, under its first prompt (drawn
+ * like a tool group): a shimmering "Setting up
  * worktree" with a rail of steps — naming the branch, checking it out, the
  * agent starting — each with its time, open while it runs. Once the agent
  * answers it folds to "Worktree ready" and its branch; opened, the steps,

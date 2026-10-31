@@ -1,4 +1,4 @@
-//! A checkout's changes as one unified patch (zeron's `capture_diff_against`):
+//! A checkout's changes as one unified patch:
 //! tracked changes from `git diff`, then each untracked file as a new one.
 
 use std::path::Path;

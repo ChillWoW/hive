@@ -13,10 +13,10 @@ export type CompactAction = { run: () => void; disabled?: string };
 
 /**
  * How full the chat's context window is, as a ring and percent under the
- * composer (as in zeron): muted, warning from 75%, danger from 90%; the
+ * composer: muted, warning from 75%, danger from 90%; the
  * token counts in its tooltip. Nothing until the harness reports a window.
  * With `compact` (the harness has `/compact`) it opens a card instead, with
- * the counts and a Compact context button, as in t3code.
+ * the counts and a Compact context button.
  */
 export function ContextRing({
     usage,

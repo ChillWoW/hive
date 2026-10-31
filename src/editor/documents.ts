@@ -28,7 +28,7 @@ import type { FileText } from "@/proto";
 import { readFile, writeFile } from "./api";
 import { editorTheme } from "./theme";
 
-/** What's wrong with an open file now, as zeron's editor reports it. */
+/** What's wrong with an open file now. */
 export type DocStatus =
     | { kind: "saveFailed"; message: string }
     /** A save found the file changed since it was read. */
@@ -50,7 +50,7 @@ export type Doc = {
     status: DocStatus | null;
     /** Its tab was asked to close, but the save before it failed. */
     closeBlocked: boolean;
-    /** Markdown shows rendered, as in zeron, until switched to its code. */
+    /** Markdown shows rendered until switched to its code. */
     preview: boolean;
     /** Bumped when the text is replaced from disk, so previews re-read it. */
     version: number;
@@ -395,8 +395,8 @@ export async function overwrite(id: string) {
 }
 
 /**
- * Looks at the tab `id`'s file on disk again, as zeron's watcher would: a
- * clean doc takes the new text quietly, a dirty one is marked changed.
+ * Looks at the tab `id`'s file on disk again, as a watcher would: a clean
+ * doc takes the new text quietly, a dirty one is marked changed.
  */
 export async function checkDisk(id: string) {
     const doc = getDoc(id);

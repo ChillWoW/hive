@@ -6,7 +6,7 @@ import { gitApi } from "@/git/api";
 import { errorText, useFolderBusy } from "@/git/store";
 import type { GitDiff } from "@/proto";
 
-/** What the diff tab compares against, as zeron's scope menu offers. */
+/** What the diff tab compares against, as the scope menu offers. */
 export type DiffScope = "workingTree" | "branch" | "turn";
 
 export const SCOPE_LABELS: Record<DiffScope, string> = {
@@ -114,9 +114,9 @@ const IDLE_POLL = 5_000;
 const BUSY_POLL = 2_000;
 
 /**
- * `cwd`'s diff (against `base`'s merge base when given). Zeron watches the
- * checkout; this reads it on mount, on window focus, when an agent's turn
- * there ends, and every few seconds while the window has focus.
+ * `cwd`'s diff (against `base`'s merge base when given), read on mount, on
+ * window focus, when an agent's turn there ends, and every few seconds while
+ * the window has focus.
  */
 export function useCheckoutDiff(cwd: string | null, base: string | undefined, enabled = true) {
     const key = cwd ? keyOf({ cwd, base }) : null;
@@ -147,8 +147,7 @@ export function useCheckoutDiff(cwd: string | null, base: string | undefined, en
 /**
  * What `chatId`'s latest prompted turn changed in `cwd`'s checkout. A turn
  * read snapshots the whole checkout, so rather than polling it this follows
- * the cheap working-tree read (as zeron refetches when the tree's checksum
- * moves): read again when that changes, when the chat starts or ends a turn,
+ * the cheap working-tree read: read again when that changes, when the chat starts or ends a turn,
  * and on window focus.
  */
 export function useTurnDiff(cwd: string | null, chatId: string | null, enabled = true) {

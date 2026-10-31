@@ -22,7 +22,7 @@ import { openPatchFile, useActiveFolder } from "./folders";
 import { ToolButton } from "./ToolButton";
 
 /**
- * The diff tab, as zeron's Diff surface: the open chat's checkout against
+ * The diff tab: the open chat's checkout against
  * HEAD (untracked files included), a branch's changes against another, or
  * what the chat's latest turn changed; unified or split, per-file folding,
  * read again while it's shown.
@@ -242,7 +242,7 @@ function ScopeMenu({ scope, onChange }: { scope: DiffScope; onChange: (scope: Di
     );
 }
 
-/** `{branch} → {base ⌄}`: what the branch's changes are compared with, as in zeron. */
+/** `{branch} → {base ⌄}`: what the branch's changes are compared with. */
 function BaseStrip({
     repo,
     branch,

@@ -18,7 +18,7 @@ const STALE_MS = 10 * 60 * 1000;
 type Update = { catalog: HarnessCatalog; entry: ProviderEntry; latest: string };
 
 /**
- * The new-chat view's "2 agent updates" pill, as in zeron: the enabled
+ * The new-chat view's "2 agent updates" pill: the enabled
  * agents whose CLI has a newer release. Click opens it in place into a card
  * with an Update button per agent; hidden while there's nothing to update.
  */

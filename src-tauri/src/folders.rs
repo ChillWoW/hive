@@ -1,5 +1,4 @@
 //! A project folder's own artwork (favicon, app icon) for the folder picker.
-//! Modelled on zeron's project icons.
 
 use std::path::Path;
 

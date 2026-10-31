@@ -1,6 +1,5 @@
 //! `/goal` and `/feedback`: Codex commands Hive runs over app-server RPCs
-//! (`thread/goal/*`, `feedback/upload`) rather than as a model turn, as
-//! t3code does.
+//! (`thread/goal/*`, `feedback/upload`) rather than as a model turn.
 
 use hive_proto::{Goal, GoalStatus};
 use serde_json::Value;

@@ -3,8 +3,8 @@ import { immer } from "zustand/middleware/immer";
 import type { Message, Worktree, WorktreeStep } from "@/proto";
 
 /**
- * How a new chat's worktree is coming along, as t3code's worktree setup
- * card shows it: naming the branch (semantic naming only), checking it out,
+ * How a new chat's worktree is coming along, as its setup card shows it:
+ * naming the branch (semantic naming only), checking it out,
  * then the agent starting on the first prompt. Kept in memory per prompt
  * (its message id), so it outlives neither a reload nor a restart; a chat
  * without one shows only its worktree.

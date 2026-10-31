@@ -2,6 +2,7 @@ import { useEffect, useMemo } from "react";
 import { ArrowClockwiseIcon, InfoIcon, XIcon } from "@phosphor-icons/react";
 import { HarnessIcon } from "@/harnesses";
 import { cn } from "@/lib/cn";
+import { DARK } from "@/lib/palette";
 import type { UsageReport } from "@/proto";
 import { DotMatrixSpinner, iconButtonClassName, Modal, SegmentedControl, Tooltip } from "@/ui";
 import { Breakdown } from "./Breakdown";
@@ -25,13 +26,12 @@ const TYPE_COLOR = {
     cacheRead: "#c98500",
     cacheWrite: "#d55181",
     output: "#008300",
-    other: "#696969"
+    other: DARK[300]
 };
 
 /**
  * Tokens and estimated cost across every agent CLI on this machine, read
- * from their own history (so work outside Hive counts too), as in t3code's
- * usage page. Opened from the sidebar, the usage ring's card, or Mod+U.
+ * from their own history (so work outside Hive counts too). Opened from the sidebar, the usage ring's card, or Mod+U.
  */
 export function UsageModal() {
     const isOpen = useUsageStore((s) => s.isOpen);

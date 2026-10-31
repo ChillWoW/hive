@@ -52,7 +52,7 @@ export function SubagentAvatar({ harness, state }: { harness?: HarnessId; state:
 }
 
 /**
- * A spawned subagent, as t3code draws one: a round avatar (the harness's
+ * A spawned subagent: a round avatar (the harness's
  * mark, a status dot on its corner), the task over what it last said, its
  * state or the first line of its result, and how long it ran. A row of its
  * own rather than a line in a tool group, so a running one is visible without
@@ -157,8 +157,8 @@ export function SubagentChip({
 const CARD_DWELL = 300;
 
 /**
- * What a subagent row has no room for, in its hover card (as t3code's and
- * the sidebar's chat card): the whole task, the model it runs on, how it
+ * What a subagent row has no room for, in its hover card (like the
+ * sidebar's chat card): the whole task, the model it runs on, how it
  * stands and for how long, and the prompt it was given.
  */
 function SubagentCard({
@@ -298,7 +298,7 @@ function compactionLabel(part: Part<"compaction">, live: boolean): string {
 
 /**
  * A context compaction (`/compact`, or the agent's own): a divider across
- * the transcript, as in t3code — shimmering while it runs, then where it
+ * the transcript — shimmering while it runs, then where it
  * ended with the context's size before and after, or why it failed.
  */
 export function CompactionRow({ part, streaming }: { part: Part<"compaction">; streaming: boolean }) {

@@ -51,7 +51,7 @@ export type SlashMenuState = {
 };
 
 /**
- * Completion for `/command` and `$skill`, as in t3code. `/` at a word's
+ * Completion for `/command` and `$skill`. `/` at a word's
  * start lists Hive's own commands (`app`), the agent's (only at the start
  * of the prompt) and its skills, ranked against name and description; `$`
  * lists the skills. Arrows move, Tab or Enter completes to `/name ` or

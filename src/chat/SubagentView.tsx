@@ -18,7 +18,7 @@ import {
 import { Button } from "@/ui";
 
 /**
- * A subagent's own thread in the main pane, as t3code opens one: the task
+ * A subagent's own thread in the main pane: the task
  * it was given as the prompt, then everything it did and said, live while it
  * runs (a background agent's past its turn). Its bar takes the composer's
  * place (it can't be written to): who it is, how it stands, "Runs on its

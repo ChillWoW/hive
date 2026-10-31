@@ -69,7 +69,7 @@ export function FilesPanel() {
     );
 }
 
-/** Search field and the hidden-files eye, in a band like zeron's explorer header. */
+/** Search field and the hidden-files eye, in the explorer's header band. */
 function FilesHeader() {
     const query = useFilesPanelStore((s) => s.query);
     const setQuery = useFilesPanelStore((s) => s.setQuery);

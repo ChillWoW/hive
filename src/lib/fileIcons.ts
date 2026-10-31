@@ -13,7 +13,7 @@ import {
  * File and folder icons from `material-icon-theme`, resolved the way VS Code
  * resolves them from the theme's manifest: an exact file (or folder) name
  * first, then the longest matching extension — `d.ts` before `ts` — and
- * otherwise the generic icon. As in Desktop/agent.
+ * otherwise the generic icon.
  *
  * Every SVG is emitted as its own asset and only its URL is bundled, so an
  * icon costs a request the first time it is drawn and nothing before. The

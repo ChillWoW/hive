@@ -1,5 +1,5 @@
 //! Per-token prices from LiteLLM's public table
-//! (`model_prices_and_context_window.json`, as t3code uses), kept as
+//! (`model_prices_and_context_window.json`), kept as
 //! `usage/prices.json` in the data dir and fetched again once a day. A model
 //! it doesn't know stays unpriced (counted, never charged $0).
 

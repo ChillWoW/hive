@@ -19,8 +19,7 @@ import { closeTab } from "./actions";
 import { NEW_TABS } from "./kinds";
 import { useRightbarStore, type RightTab } from "./store";
 
-// Zeron's chip metrics (crates/ui/src/surface_chrome.rs): fixed width, so
-// drag reordering works in whole slots.
+// Chip metrics: fixed width, so drag reordering works in whole slots.
 const CHIP_WIDTH = 112;
 const GAP = 4;
 const SLOT = CHIP_WIDTH + GAP;
@@ -37,7 +36,7 @@ function slideOffset(index: number, { from, over }: Drag) {
 }
 
 /**
- * The right sidebar's tabs, as in zeron: one chip per tab (icon, the ✕ in its
+ * The right sidebar's tabs: one chip per tab (icon, the ✕ in its
  * place on hover, title), the strip scrolling sideways with faded edges, drag to reorder
  * (the others slide aside), middle-click to close, then "+".
  */
@@ -246,7 +245,7 @@ function TabChip({
 }) {
     // Unsaved changes: a dot after the title.
     const dirty = useDocsStore((s) => !!s.docs[tab.id]?.dirty);
-    // The diff tab is titled with what it compares, as zeron's is.
+    // The diff tab is titled with what it compares.
     const scope = useDiffPrefs((s) => s.scope);
     const title = tab.kind === "diff" ? SCOPE_LABELS[scope] : tab.title;
     return (
@@ -317,7 +316,7 @@ function TabChip({
                     </Tooltip.Content>
                 </Tooltip>
             </span>
-            {/* The file's path (a terminal's title and folder) on hover, as zeron shows a tab's detail. */}
+            {/* The file's path (a terminal's title and folder) on hover. */}
             <Tooltip disabled={dragging}>
                 <Tooltip.Trigger
                     delay={350}

@@ -37,8 +37,8 @@ const buttonClassName = cn(
 );
 
 /**
- * The goal the agent keeps working toward (Codex's `/goal`), as t3code
- * shows it: above the composer, its state ("Pursuing goal" while a turn
+ * The goal the agent keeps working toward (Codex's `/goal`): above the
+ * composer, its state ("Pursuing goal" while a turn
  * runs), the objective and what it has used so far. Resume (when it
  * stopped short) and Clear send `/goal resume` and `/goal clear`.
  */

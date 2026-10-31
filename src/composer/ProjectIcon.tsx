@@ -31,7 +31,7 @@ function loadIcon(path: string): Promise<string | null> {
 }
 
 /**
- * Monogram tones, as in zeron: a stable pick per folder, explicit colours
+ * Monogram tones: a stable pick per folder, explicit colours
  * that don't follow the theme.
  */
 const TONES = [

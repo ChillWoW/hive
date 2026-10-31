@@ -1,5 +1,5 @@
 //! Codex: spawns the installed `codex` CLI as `codex app-server` and speaks
-//! its JSON-RPC protocol over stdin/stdout, as zeron does.
+//! its JSON-RPC protocol over stdin/stdout.
 //!
 //! - A run is one app-server holding one thread: `thread/start` (or
 //!   `thread/resume` with the chat's thread id; a thread that can't be

@@ -46,8 +46,7 @@ export const containsPath = (ancestor: string, path: string) =>
     path === ancestor || path.startsWith(`${ancestor}/`);
 
 /**
- * Renames `path` under `cwd` to `name` in the same folder (zeron's tree
- * rename); the new path. Refused when `name` is taken or isn't one name.
+ * Renames `path` under `cwd` to `name` in the same folder; the new path. Refused when `name` is taken or isn't one name.
  */
 export function renameEntry(cwd: string, path: string, name: string): Promise<string> {
     if (isTauri) return invoke<string>("rename_entry", { cwd, path, name });

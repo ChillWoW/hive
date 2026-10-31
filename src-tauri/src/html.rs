@@ -1,8 +1,8 @@
-//! HTML pages agents show in the chat, as t3code's `html_preview` /
-//! `html_render`: `preview_html` loads a page in a hidden frame of the
-//! window (`src/htmlpage`) and reports what happened (height, console,
-//! errors, text); `render_html` saves it as an attachment, which the
-//! transcript shows where the call is, in a sandboxed frame whose scripts run.
+//! HTML pages agents show in the chat: `preview_html` loads a page in a
+//! hidden frame of the window (`src/htmlpage`) and reports what happened
+//! (height, console, errors, text); `render_html` saves it as an attachment,
+//! which the transcript shows where the call is, in a sandboxed frame whose
+//! scripts run.
 //!
 //! Both get the page prepared here: Hive's theme as CSS variables, local
 //! images (absolute paths) inlined as data URLs, viewport heights refused

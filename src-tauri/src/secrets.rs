@@ -1,4 +1,4 @@
-//! Secrets an agent asks the user for, as in t3code: Hive's `request_secret`
+//! Secrets an agent asks the user for: Hive's `request_secret`
 //! tool puts up a card ([`Engine::open_secret_request`]) and waits. What the
 //! user types comes straight here from the card (`answer_secret_request`)
 //! and goes into a private file, never into the chat, its journal or the

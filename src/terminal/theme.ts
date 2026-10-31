@@ -1,4 +1,5 @@
 import type { ITerminalOptions } from "@xterm/xterm";
+import { DARK } from "@/lib/palette";
 
 /**
  * The terminal's look: the right sidebar's surface (`dark-850`), the editor's
@@ -14,10 +15,10 @@ export const TERMINAL_OPTIONS: ITerminalOptions = {
     scrollback: 5000,
     allowProposedApi: true,
     theme: {
-        background: "#1a1a1a",
+        background: DARK[850],
         foreground: "#e6edf3",
         cursor: "#e6edf3",
-        cursorAccent: "#1a1a1a",
+        cursorAccent: DARK[850],
         selectionBackground: "rgba(56, 139, 253, 0.35)",
         scrollbarSliderBackground: "rgba(255, 255, 255, 0.1)",
         scrollbarSliderHoverBackground: "rgba(255, 255, 255, 0.18)",

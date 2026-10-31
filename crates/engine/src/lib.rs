@@ -1214,8 +1214,8 @@ impl Engine {
     }
 
     /// Snapshots the chat's checkout in the background as a prompt starts a
-    /// turn: the base of its "Latest turn" diff ([`Engine::turn_diff`]), as
-    /// in zeron. Best-effort, and racing the agent's first edits.
+    /// turn: the base of its "Latest turn" diff ([`Engine::turn_diff`]).
+    /// Best-effort, and racing the agent's first edits.
     fn snapshot_turn(&self, chat: &Chat) {
         let (tx, rx) = watch::channel(TurnBase::Pending);
         lock(&self.inner.turn_bases).insert(chat.id.clone(), rx);

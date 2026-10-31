@@ -40,8 +40,8 @@ const percent = (fraction: number) => `${Math.round(fraction * 100)}%`;
 const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 /**
- * How much of the plan's rate limits the harness's account has used, as in
- * zeron: a ring of the most-used window beside the context ring (blue, so
+ * How much of the plan's rate limits the harness's account has used: a
+ * ring of the most-used window beside the context ring (blue, so
  * the two read apart; warning from 80%, danger from 95%). Click opens the
  * account with a meter per window. Hidden when the harness reports none;
  * a check that failed before any reading shows as "—", its card saying why.

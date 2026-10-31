@@ -9,7 +9,7 @@ const folder = (y: number) =>
 
 /**
  * A file tree in Phosphor's style (256 grid, 16 stroke): a rail on the left
- * branching to two folders, as in zeron's titlebar files toggle. `fill`
+ * branching to two folders, as in the titlebar's files toggle. `fill`
  * fills the folders, like Phosphor's fill weight.
  */
 export function FolderTreeIcon({

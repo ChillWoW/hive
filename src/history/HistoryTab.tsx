@@ -14,6 +14,7 @@ import {
 } from "@phosphor-icons/react";
 import { useFolderBusy, useGitRepo } from "@/git/store";
 import { cn } from "@/lib/cn";
+import { DARK } from "@/lib/palette";
 import type { GitHistoryCommit, GitHistoryRef } from "@/proto";
 import { openCommitTab } from "@/rightbar/actions";
 import { useActiveFolder } from "@/rightbar/folders";
@@ -55,7 +56,7 @@ import {
 } from "./store";
 
 /**
- * The history tab, as zeron's History surface: the open chat's checkout's
+ * The history tab: the open chat's checkout's
  * commits over every branch, remote branch and tag, children first, with a
  * lane graph; paged, searchable through the whole history, branches
  * foldable, or just their tips. A row opens its commit in a tab.
@@ -66,7 +67,7 @@ export function HistoryTab() {
     return <HistoryPane key={folder ?? ""} folder={folder} />;
 }
 
-// Colours: zeron's graph palette at 72% saturation.
+// Colours: the graph palette at 72% saturation.
 
 function desaturate(hex: string, amount = 0.72) {
     const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255) as [
@@ -90,11 +91,11 @@ function desaturate(hex: string, amount = 0.72) {
 
 const BLUE = "#6fb3f2";
 const VIOLET = "#b39cf0";
-const PALETTE = [BLUE, VIOLET, "#a5e075", "#f0a45d", "#ff616e", "#828282"].map((c) => desaturate(c));
+const PALETTE = [BLUE, VIOLET, "#a5e075", "#f0a45d", "#ff616e", DARK[200]].map((c) => desaturate(c));
 /** The side panels' background (`dark-850`), which dimmed paths fade into. */
-const PANEL_BG = "#1a1a1a";
+const PANEL_BG = DARK[850];
 const colorOf = (id: number) => PALETTE[id % PALETTE.length]!;
-/** Opaque, so overlapping row seams don't stack into dots (as zeron mixes them). */
+/** Opaque, so overlapping row seams don't stack into dots. */
 const dimmed = (color: string) => `color-mix(in srgb, ${color} 24%, ${PANEL_BG})`;
 
 const STROKE = 1.5;
@@ -367,7 +368,7 @@ function HistoryPane({ folder }: { folder: string | null }) {
                 tipsOnly={tipsOnly}
                 onTipsOnly={() => {
                     setTipsOnly((t) => !t);
-                    // Leaving the tips view shows every branch unfolded, as zeron does.
+                    // Leaving the tips view shows every branch unfolded.
                     setFolded(new Set());
                     toTop();
                 }}
@@ -744,7 +745,7 @@ function GraphCell({
     const radius = NODE_RADIUS;
     const color = paint(row.color);
 
-    // The compact rail: each row's half-lines in its node's colour, as zeron joins row centres.
+    // The compact rail: each row's half-lines in its node's colour, joining row centres.
     const lines: { d: string; color: number }[] = geometry.compact
         ? [
               ...(previousColor !== undefined

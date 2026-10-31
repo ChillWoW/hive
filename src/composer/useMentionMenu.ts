@@ -11,7 +11,7 @@ const BOUNDARY = /[\s([{]/;
 type Token = { start: number; end: number; query: string };
 
 /**
- * The `@` word around the caret, as in zeron: the `@` must start a word or
+ * The `@` word around the caret: the `@` must start a word or
  * follow an opening bracket, so `name@example.com` isn't one. The token runs
  * on past the caret to the next space, all of it replaced on a pick.
  */
@@ -44,7 +44,7 @@ export type MentionMenuState = {
 };
 
 /**
- * `@` completion of the chat folder's files and folders, as in zeron: `@`
+ * `@` completion of the chat folder's files and folders: `@`
  * and part of a path or name lists the best matches (the shallowest entries
  * before anything is typed). Arrows move, Tab or Enter picks, Escape closes
  * it until the text changes. A file completes to `@path `; a folder to

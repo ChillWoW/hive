@@ -1,6 +1,6 @@
 //! How much of the subscription's rate limits the CLI's login has used, as
 //! Claude's `/usage` shows it: `GET /api/oauth/usage` with the CLI's own
-//! OAuth token (as zeron does). The token is only read, never refreshed:
+//! OAuth token. The token is only read, never refreshed:
 //! the CLI holds the single-use refresh token and renews it as it runs.
 
 use std::sync::OnceLock;

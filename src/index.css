@@ -5,19 +5,21 @@
 @source "../node_modules/streamdown/dist/*.js";
 
 @theme {
-    --color-dark-50: #c9c9c9;
-    --color-dark-100: #b8b8b8;
-    --color-dark-200: #828282;
-    --color-dark-250: #767676;
-    --color-dark-300: #696969;
-    --color-dark-400: #424242;
-    --color-dark-500: #3b3b3b;
-    --color-dark-600: #2e2e2e;
-    --color-dark-700: #242424;
-    --color-dark-800: #1f1f1f;
-    --color-dark-850: #1a1a1a;
-    --color-dark-900: #141414;
-    --color-dark-950: #0d0d0d;
+    /* Slate: OKLCH hue 265, a whisper of chroma, even lightness steps.
+       Mirrored as hex in `src/lib/palette.ts`; change both together. */
+    --color-dark-50: #e4e4e6;
+    --color-dark-100: #c3c4c6;
+    --color-dark-200: #8e8f92;
+    --color-dark-250: #7c7d80;
+    --color-dark-300: #6a6c6f;
+    --color-dark-400: #4c4d50;
+    --color-dark-500: #3a3c3f;
+    --color-dark-600: #2d2e30;
+    --color-dark-700: #242527;
+    --color-dark-800: #1e1f20;
+    --color-dark-850: #19191b;
+    --color-dark-900: #141517;
+    --color-dark-950: #0e0e10;
 
     --color-primary-50: #ffffff;
     --color-primary-100: #f9fafb;
@@ -203,7 +205,7 @@
     border-radius: 0.25rem;
 }
 
-/* Code blocks as zeron draws them: one rounded frame (faint fill, hairline
+/* Code blocks: one rounded frame (faint fill, hairline
    border), a 28px header with the language and the copy button, then the
    code at 12.5/18 — no inner panel, no line numbers. */
 .markdown [data-streamdown="code-block"] {
@@ -356,7 +358,7 @@
     padding: 0.25rem 0;
 }
 
-/* Tables as zeron draws them: frameless, a hairline under the header and
+/* Tables: frameless, a hairline under the header and
    between rows the only rules, 12px cells, a bold header; wide ones scroll. */
 .markdown [data-streamdown="table-wrapper"] {
     gap: 0;
@@ -432,9 +434,9 @@ body {
 
 :root {
     --scrollbar-size: 8px;
-    --scrollbar-track: #141414;
-    --scrollbar-thumb: #424242;
-    --scrollbar-thumb-hover: #696969;
+    --scrollbar-track: var(--color-dark-900);
+    --scrollbar-thumb: var(--color-dark-400);
+    --scrollbar-thumb-hover: var(--color-dark-300);
 }
 
 ::-webkit-scrollbar {

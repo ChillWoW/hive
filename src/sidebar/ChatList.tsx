@@ -122,7 +122,7 @@ export function ChatList() {
 
     return (
         // Once a row's card has shown, the next row's follows at once until
-        // the pointer rests off the list for a moment (as in zeron).
+        // the pointer rests off the list for a moment.
         <Tooltip.Provider delay={CARD_DWELL} timeout={400}>
             <div className="flex flex-col gap-3">
                 {looseDrafts.length > 0 && (

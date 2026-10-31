@@ -252,7 +252,7 @@ const EFFORTS: [ReasoningLevel; 5] = [
 ];
 
 /// The model option for Claude's fast mode (its `fastMode` setting), offered
-/// on Opus as in zeron.
+/// on Opus.
 const FAST_MODE: &str = "fastMode";
 
 fn fast_mode_option() -> ModelOption {
@@ -306,8 +306,8 @@ impl Harness for ClaudeHarness {
         HarnessId::ClaudeCode
     }
 
-    /// Claude's models by their full ids, as zeron's curated catalog lists
-    /// them: the current default first, then newest to oldest per family.
+    /// Claude's models by their full ids, curated: the current default first,
+    /// then newest to oldest per family.
     fn catalog(&self) -> HarnessCatalog {
         HarnessCatalog {
             id: HarnessId::ClaudeCode,

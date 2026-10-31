@@ -10,7 +10,7 @@ import { nameOf, reloadTree } from "./tree";
 
 /**
  * `relative` under `root` as a full path in the root's own form: a Windows
- * root gets `\`s (zeron's `absolute_workspace_path`).
+ * root gets `\`s.
  */
 export function absolutePath(root: string, relative: string): string {
     const windows = root.startsWith("\\\\") || /^[a-z]:[\\/]/i.test(root);
@@ -47,7 +47,7 @@ function relist(cwd: string) {
 }
 
 /**
- * Renames `path` of `cwd` to `name` (zeron's tree rename): expanded folders,
+ * Renames `path` of `cwd` to `name`: expanded folders,
  * the selection and open file tabs under it follow; the new path.
  */
 export async function renameTreeEntry(cwd: string, path: string, name: string) {
@@ -73,7 +73,7 @@ export async function renameTreeEntry(cwd: string, path: string, name: string) {
 
 /**
  * Deletes `path` of `cwd` for good. Open tabs of what went keep their text,
- * marked deleted on disk, so nothing unsaved is lost (as in zeron).
+ * marked deleted on disk, so nothing unsaved is lost.
  */
 export async function deleteTreeEntry(cwd: string, path: string) {
     await deleteEntry(cwd, path);

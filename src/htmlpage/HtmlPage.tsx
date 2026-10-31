@@ -63,7 +63,7 @@ function usePageDocument(page: PageRef) {
 /**
  * A page from Hive's `render_html` tool, inline in the transcript where the
  * call was: a sandboxed frame (scripts run, nothing reaches Hive) that grows
- * to the page's height, as t3code's. On hover: its title, Reload, Open in
+ * to the page's height. On hover: its title, Reload, Open in
  * browser (the saved copy) and Full screen. Links open in the system browser,
  * only after a click inside the frame.
  */

@@ -5,7 +5,7 @@ import { nameOf } from "./tree";
 
 export type DeleteTarget = { cwd: string; path: string; dir: boolean };
 
-/** Asks before deleting a file or folder for good (zeron's tree delete). Closed while null. */
+/** Asks before deleting a file or folder for good. Closed while null. */
 export function DeleteEntryDialog({
     target,
     onClose
@@ -56,7 +56,7 @@ export function DeleteEntryDialog({
             </p>
             {error && <p className="mt-2 text-xs text-danger">{error}</p>}
             <div className="mt-4 flex justify-end gap-2">
-                {/* Cancel has focus, as in zeron: Delete then Enter mustn't erase a folder. */}
+                {/* Cancel has focus: Delete then Enter mustn't erase a folder. */}
                 <Modal.Close render={<Button size="sm" variant="ghost" autoFocus />}>
                     Cancel
                 </Modal.Close>

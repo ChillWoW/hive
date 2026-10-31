@@ -1,4 +1,4 @@
-//! A chat folder's files, as in zeron: every file and folder that
+//! A chat folder's files: every file and folder that
 //! `.gitignore` (and `.ignore`) doesn't hide, dotfiles included, `.git`
 //! never; `all` lists the ignored ones too. `list_files` walks the whole
 //! folder (the composer's `@` menu, the file panel's search), `list_directory`
@@ -149,7 +149,7 @@ fn entry(root: &Path, path: &str) -> Result<PathBuf, String> {
     Ok(target)
 }
 
-/// A new name for an entry: one plain file name (zeron's `renamed_path`).
+/// A new name for an entry: one plain file name.
 fn check_name(name: &str) -> Result<(), String> {
     if name.is_empty()
         || name == "."

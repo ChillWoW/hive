@@ -185,7 +185,7 @@ export function Markdown({
                 caret="block"
                 // Links already leave for the system browser.
                 linkSafety={{ enabled: false }}
-                // As zeron: code gets a copy button only, no line numbers;
+                // Code gets a copy button only, no line numbers;
                 // tables no toolbar (see the `.markdown` rules).
                 controls={CONTROLS}
                 mermaid={MERMAID}

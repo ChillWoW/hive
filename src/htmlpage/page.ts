@@ -1,6 +1,6 @@
 /**
- * Pages agents show with Hive's `render_html` tool (`src-tauri/src/html.rs`,
- * as t3code's `html_render`). A page runs in an iframe from `srcdoc` with
+ * Pages agents show with Hive's `render_html` tool (`src-tauri/src/html.rs`).
+ * A page runs in an iframe from `srcdoc` with
  * `sandbox="allow-scripts allow-forms"` and never `allow-same-origin`: its
  * origin is opaque, so its scripts run but can't reach Hive, its IPC or its
  * storage. What the host needs from it comes over `postMessage` from the

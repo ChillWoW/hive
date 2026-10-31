@@ -6,8 +6,7 @@ import { listDirectory } from "./api";
 export type DirListing = { entries?: DirectoryEntry[]; error?: string };
 
 /**
- * Each listed folder of the file panel's tree, as zeron loads it: one folder
- * at a time, when it's first shown expanded. Keyed by `dirKey`.
+ * Each listed folder of the file panel's tree, loaded one folder at a time, when it's first shown expanded. Keyed by `dirKey`.
  */
 export const useTreeStore = create<{ dirs: Record<string, DirListing> }>()(() => ({
     dirs: {}
