@@ -1186,16 +1186,32 @@ async fn the_latest_turn_diffs_against_the_checkout_as_it_started() {
 
     // Changed before the turn: not the turn's.
     std::fs::write(p.join("a.txt"), "one\nbefore\n").unwrap();
+    assert!(engine.revert_turn(&chat.id, None).await.is_err(), "no turn to undo");
     let mut updates = watch_messages(&engine, &chat.id);
     engine.queue_command(&chat.id, send("hello")).unwrap();
-    until(&mut updates, is_input).await;
+    let seen = until(&mut updates, is_input).await;
     let clean = engine.turn_diff(&chat.id).await.unwrap().unwrap();
     assert!(clean.patch.is_empty(), "{}", clean.patch);
 
     std::fs::write(p.join("a.txt"), "one\nbefore\nduring\n").unwrap();
+    std::fs::write(p.join("new.txt"), "new\n").unwrap();
     let diff = engine.turn_diff(&chat.id).await.unwrap().unwrap();
     assert!(diff.patch.contains("+during"), "{}", diff.patch);
     assert!(!diff.patch.contains("+before"), "{}", diff.patch);
+
+    // Undo: refused mid-turn, then puts the checkout back as the turn found it.
+    assert!(matches!(
+        engine.revert_turn(&chat.id, None).await,
+        Err(hive_engine::EngineError::Busy)
+    ));
+    engine.queue_command(&chat.id, answer(request_id(&seen))).unwrap();
+    until(&mut updates, is_done).await;
+    let reverted = engine.revert_turn(&chat.id, None).await.unwrap();
+    assert_eq!(reverted, ["a.txt", "new.txt"]);
+    assert_eq!(std::fs::read_to_string(p.join("a.txt")).unwrap(), "one\nbefore\n");
+    assert!(!p.join("new.txt").exists());
+    let after = engine.turn_diff(&chat.id).await.unwrap().unwrap();
+    assert!(after.patch.is_empty(), "{}", after.patch);
 
     engine.delete_chat(&chat.id).unwrap();
     assert!(engine.turn_diff(&chat.id).await.is_err(), "the chat is gone");

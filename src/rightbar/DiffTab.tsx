@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState, type ReactNode } from "react";
 import {
+    ArrowCounterClockwiseIcon,
     ArrowRightIcon,
     ArrowsInLineVerticalIcon,
     ArrowsOutLineVerticalIcon,
@@ -12,6 +13,7 @@ import { useChatsStore } from "@/chats";
 import { CommentingProvider, useCommenting } from "@/diff/comments";
 import { FileSection } from "@/diff/DiffFiles";
 import { parsePatchReusing, totals, type FileDiff } from "@/diff/patch";
+import { RevertTurnDialog, type RevertRequest } from "@/diff/RevertTurnDialog";
 import { SCOPE_LABELS, useCheckoutDiff, useDiffPrefs, useTurnDiff, type DiffScope } from "@/diff/store";
 import { useGitRepo } from "@/git";
 import { cn } from "@/lib/cn";
@@ -88,6 +90,21 @@ function DiffPane({ folder }: { folder: string | null }) {
 
     const root = diff?.root;
     const commenting = useCommenting(chatId, folder, root);
+
+    // Undoing the turn: never while it's still running.
+    const [revert, setRevert] = useState<RevertRequest | null>(null);
+    const chatBusy = useChatsStore((s) => {
+        const status = chatId ? s.sessions[chatId]?.status : undefined;
+        return status === "working" || status === "awaitingInput";
+    });
+    const canRevert = turnScope && !!chatId && !!folder && !chatBusy && !diff?.truncated;
+    const revertFiles = useCallback(
+        (picked: FileDiff[], whole: boolean) => {
+            if (chatId && folder) setRevert({ chatId, cwd: folder, files: picked, whole });
+        },
+        [chatId, folder]
+    );
+    const revertFile = useCallback((file: FileDiff) => revertFiles([file], false), [revertFiles]);
     const open = useCallback(
         (path: string) => {
             if (root && folder) openPatchFile(folder, root, path);
@@ -150,6 +167,33 @@ function DiffPane({ folder }: { folder: string | null }) {
                             </Tooltip.Content>
                         </Tooltip>
                     )}
+                    {turnScope && (
+                        <Tooltip>
+                            <Tooltip.Trigger
+                                render={
+                                    <button
+                                        type="button"
+                                        disabled={!canRevert}
+                                        onClick={() => revertFiles(files, true)}
+                                        className={cn(
+                                            "flex h-6 shrink-0 items-center gap-1.5 rounded-md px-2 text-[11.5px] text-dark-100",
+                                            "transition-colors hover:bg-white/10 hover:text-dark-50 disabled:pointer-events-none disabled:opacity-50"
+                                        )}
+                                    >
+                                        <ArrowCounterClockwiseIcon className="size-3.5" />
+                                        Undo turn
+                                    </button>
+                                }
+                            />
+                            <Tooltip.Content side="bottom">
+                                {chatBusy
+                                    ? "Wait for the turn to finish"
+                                    : diff.truncated
+                                      ? "Too large to undo from here"
+                                      : "Put every file back as the turn found it"}
+                            </Tooltip.Content>
+                        </Tooltip>
+                    )}
                 </div>
                 <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
                     <MaybeCommenting value={commenting}>
@@ -163,6 +207,7 @@ function DiffPane({ folder }: { folder: string | null }) {
                                 wrap={wrap}
                                 onToggle={toggle}
                                 onOpen={file.status === "deleted" ? undefined : open}
+                                onRevert={canRevert ? revertFile : undefined}
                             />
                         ))}
                     </MaybeCommenting>
@@ -214,6 +259,7 @@ function DiffPane({ folder }: { folder: string | null }) {
                 </div>
             )}
             {content}
+            <RevertTurnDialog request={revert} onClose={() => setRevert(null)} />
         </div>
     );
 }

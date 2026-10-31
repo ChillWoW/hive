@@ -7,6 +7,7 @@ import { Markdown } from "./Markdown";
 import { CompactionRow, ErrorChip, InputRow, SubagentChip, WakeRow } from "./parts";
 import { HtmlPage } from "@/htmlpage";
 import { ToolGroup } from "./ToolGroup";
+import { TurnChanges } from "./TurnChanges";
 import { pageOf, pushCall, type GroupItem, type ToolPart } from "./tools";
 
 /**
@@ -143,13 +144,16 @@ function CopyButton({ text }: { text: string }) {
 export function AssistantMessage({
     message,
     waiting = false,
-    harness
+    harness,
+    turnOf
 }: {
     message: Message;
     /** The turn is held on a question for the user. */
     waiting?: boolean;
     /** The chat's harness, for its subagents' avatars. */
     harness?: HarnessId;
+    /** Set on the chat's latest reply: its turn's changes, with Undo. */
+    turnOf?: string;
 }) {
     const streaming = message.status === "streaming";
     const parts = message.parts;
@@ -220,6 +224,7 @@ export function AssistantMessage({
                         <span className="tabular-nums">{formatDuration(message.durationMs)}</span>
                     )}
                     {message.status === "aborted" && <span>Stopped</span>}
+                    {turnOf && <TurnChanges chatId={turnOf} messageId={message.id} />}
                 </div>
             )}
         </div>

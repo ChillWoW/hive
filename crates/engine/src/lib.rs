@@ -123,6 +123,10 @@ pub enum EngineError {
     Task(String),
     #[error("Asking for a secret needs a turn in progress.")]
     NoTurn,
+    #[error("Wait for the turn to finish first.")]
+    Busy,
+    #[error("No turn recorded since Hive started.")]
+    NoTurnSnapshot,
     #[error(transparent)]
     Git(#[from] hive_git::GitError),
 }
@@ -1239,21 +1243,45 @@ impl Engine {
     /// the snapshot taken as it started against the checkout now. None
     /// before a turn since launch, or outside a checkout.
     pub async fn turn_diff(&self, chat_id: &str) -> Result<Option<hive_proto::GitDiff>> {
+        let Some(turn) = self.turn_base(chat_id).await? else {
+            return Ok(None);
+        };
+        Ok(Some(hive_git::turn_diff(&turn).await?))
+    }
+
+    /// Undoes what the chat's latest prompted turn changed in its checkout
+    /// (every file, or only `paths`, relative to the checkout's root): files
+    /// go back to how the turn found them. Refused while a turn runs. Returns
+    /// the paths put back.
+    pub async fn revert_turn(&self, chat_id: &str, paths: Option<Vec<String>>) -> Result<Vec<String>> {
+        {
+            let runtime = self.runtime_for(chat_id);
+            let st = lock(&runtime.state);
+            if st.in_flight() {
+                return Err(EngineError::Busy);
+            }
+        }
+        let Some(turn) = self.turn_base(chat_id).await? else {
+            return Err(EngineError::NoTurnSnapshot);
+        };
+        Ok(hive_git::revert_turn(&turn, paths.as_deref()).await?)
+    }
+
+    /// The snapshot the chat's latest prompted turn started from, once it's
+    /// taken. None before a turn since launch, or outside a checkout.
+    async fn turn_base(&self, chat_id: &str) -> Result<Option<hive_git::TreeSnapshot>> {
         self.chat(chat_id)?;
         let Some(mut base) = lock(&self.inner.turn_bases).get(chat_id).cloned() else {
             return Ok(None);
         };
-        let turn = {
-            let Ok(ready) = base.wait_for(|b| !matches!(b, TurnBase::Pending)).await else {
-                return Ok(None);
-            };
-            match &*ready {
-                TurnBase::Ready(Some(snapshot)) => snapshot.clone(),
-                TurnBase::Ready(None) | TurnBase::Pending => return Ok(None),
-                TurnBase::Failed(e) => return Err(hive_git::GitError::Failed(e.clone()).into()),
-            }
+        let Ok(ready) = base.wait_for(|b| !matches!(b, TurnBase::Pending)).await else {
+            return Ok(None);
         };
-        Ok(Some(hive_git::turn_diff(&turn).await?))
+        match &*ready {
+            TurnBase::Ready(snapshot) => Ok(snapshot.clone()),
+            TurnBase::Pending => Ok(None),
+            TurnBase::Failed(e) => Err(hive_git::GitError::Failed(e.clone()).into()),
+        }
     }
 
     /// Opens a reply with no prompt: the agent started a turn on its own.

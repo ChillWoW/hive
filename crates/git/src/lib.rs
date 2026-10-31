@@ -19,7 +19,7 @@ pub use history::{
     commit_diff, fetch_all, github_remote, history, history_matches, search_history,
     HISTORY_DEFAULT_LIMIT, HISTORY_MAX_LIMIT,
 };
-pub use turn::{snapshot_tree, sweep_turn_snapshots, turn_diff, TreeSnapshot};
+pub use turn::{revert_turn, snapshot_tree, sweep_turn_snapshots, turn_diff, TreeSnapshot};
 
 #[derive(Debug, thiserror::Error)]
 pub enum GitError {

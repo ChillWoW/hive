@@ -291,6 +291,114 @@ pub async fn turn_diff(turn: &TreeSnapshot) -> Result<GitDiff, GitError> {
     })
 }
 
+/// Puts the checkout's files back as they were when `turn` was taken: every
+/// path the turn changed, or only those in `only` (git's spelling, from the
+/// root; give both sides of a rename). A file the turn added is deleted, with
+/// folders it leaves empty; any other is written back from the snapshot. The
+/// index and HEAD are left alone, as are paths the snapshot left out.
+/// Returns the paths put back.
+pub async fn revert_turn(turn: &TreeSnapshot, only: Option<&[String]>) -> Result<Vec<String>, GitError> {
+    let root = Path::new(&turn.root);
+    let current = snapshot_onto(&turn.store.parent, turn.root.clone(), Some(turn)).await?;
+    let mut cmd = command(
+        root,
+        &[
+            "-c",
+            "core.quotePath=false",
+            "diff",
+            "--no-ext-diff",
+            "--no-renames",
+            "--name-status",
+            "-z",
+            turn.tree(),
+            current.tree(),
+            "--",
+        ],
+    );
+    current.apply_to(&mut cmd);
+    let (bytes, truncated) = capped_command(cmd, MAX_LISTING_BYTES).await?;
+    if truncated {
+        return Err(GitError::Failed("Too many changes to undo.".into()));
+    }
+    let wanted: Option<HashSet<&str>> = only.map(|p| p.iter().map(String::as_str).collect());
+    let (mut added, mut restored) = (Vec::new(), Vec::new());
+    let fields = split_nul(&bytes);
+    for pair in fields.chunks_exact(2) {
+        let path = String::from_utf8_lossy(&pair[1]).into_owned();
+        if wanted.as_ref().is_some_and(|w| !w.contains(path.as_str())) {
+            continue;
+        }
+        if pair[0].first() == Some(&b'A') {
+            added.push(path);
+        } else {
+            restored.push(path);
+        }
+    }
+
+    // Deletions first: a file the turn turned into a folder needs the
+    // folder gone before it can come back.
+    let delete_root = root.to_path_buf();
+    let deleted = added.clone();
+    tokio::task::spawn_blocking(move || remove_added(&delete_root, &deleted))
+        .await
+        .map_err(|e| GitError::Failed(format!("Undoing the turn: {e}")))??;
+
+    if !restored.is_empty() {
+        let index = current.store.dir.join("revert-index");
+        snapshot_git(root, &current.store, &index, &["read-tree", turn.tree()], None)
+            .await?
+            .checked()?;
+        let mut paths = Vec::new();
+        for path in &restored {
+            paths.extend_from_slice(path.as_bytes());
+            paths.push(0);
+        }
+        let written = snapshot_git(
+            root,
+            &current.store,
+            &index,
+            &["checkout-index", "--force", "-z", "--stdin"],
+            Some(paths),
+        )
+        .await;
+        let _ = tokio::fs::remove_file(&index).await;
+        written?.checked()?;
+    }
+    added.extend(restored);
+    added.sort();
+    Ok(added)
+}
+
+/// Deletes the files a turn added under `root`, then the folders that left
+/// empty (never `root` itself). A file already gone is fine.
+fn remove_added(root: &Path, paths: &[String]) -> Result<(), GitError> {
+    let mut parents = HashSet::new();
+    for path in paths {
+        let full = root.join(path);
+        match std::fs::symlink_metadata(&full) {
+            Ok(meta) if meta.is_dir() => continue,
+            Ok(_) => {}
+            Err(_) => continue,
+        }
+        if let Err(e) = std::fs::remove_file(&full) {
+            return Err(GitError::Failed(format!("Couldn't delete {path}: {e}")));
+        }
+        let mut dir = Path::new(path).parent();
+        while let Some(d) = dir.filter(|d| !d.as_os_str().is_empty()) {
+            parents.insert(d.to_path_buf());
+            dir = d.parent();
+        }
+    }
+    // Deepest first, so a parent is empty once its children went.
+    let mut parents: Vec<PathBuf> = parents.into_iter().collect();
+    parents.sort_by_key(|p| std::cmp::Reverse(p.components().count()));
+    for dir in parents {
+        // Fails on a folder with anything left in it: kept.
+        let _ = std::fs::remove_dir(root.join(dir));
+    }
+    Ok(())
+}
+
 /// A snapshot in a new store under `parent`, layered on `base` when given.
 async fn snapshot_onto(
     parent: &Path,
@@ -762,6 +870,37 @@ mod tests {
         let turn = snapshot_tree(&repo, &tmp.path().join("stores")).await.unwrap().unwrap();
         let diff = turn_diff(&turn).await.unwrap();
         assert!(diff.patch.is_empty() && !diff.truncated, "{}", diff.patch);
+    }
+
+    #[tokio::test]
+    async fn reverting_puts_the_checkout_back_as_the_turn_found_it() {
+        let Some(tmp) = fixture().await else { return };
+        let repo = tmp.path().join("repo");
+        std::fs::write(repo.join("a.txt"), "one\ntwo\nbefore\n").unwrap();
+        std::fs::write(repo.join("b.txt"), "b\n").unwrap();
+        let turn = snapshot_tree(&repo, &tmp.path().join("stores")).await.unwrap().unwrap();
+
+        std::fs::write(repo.join("a.txt"), "changed\n").unwrap();
+        std::fs::remove_file(repo.join("b.txt")).unwrap();
+        std::fs::create_dir_all(repo.join("src/deep")).unwrap();
+        std::fs::write(repo.join("src/deep/new.txt"), "new\n").unwrap();
+        std::fs::write(repo.join("kept.txt"), "kept\n").unwrap();
+
+        // One file only.
+        let one = revert_turn(&turn, Some(&["a.txt".to_owned()])).await.unwrap();
+        assert_eq!(one, ["a.txt"]);
+        assert_eq!(std::fs::read_to_string(repo.join("a.txt")).unwrap(), "one\ntwo\nbefore\n");
+        assert!(!repo.join("b.txt").exists());
+
+        // The rest.
+        let rest = revert_turn(&turn, None).await.unwrap();
+        assert_eq!(rest, ["b.txt", "kept.txt", "src/deep/new.txt"]);
+        assert_eq!(std::fs::read_to_string(repo.join("b.txt")).unwrap(), "b\n");
+        assert!(!repo.join("src").exists(), "emptied folders go");
+        assert!(!repo.join("kept.txt").exists());
+        assert!(turn_diff(&turn).await.unwrap().patch.is_empty());
+        // The real index is untouched.
+        assert!(git(&repo, &["diff", "--cached", "--quiet"]).await.unwrap().ok());
     }
 
     #[tokio::test]

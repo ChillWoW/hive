@@ -52,6 +52,20 @@ pub async fn git_turn_diff(
     engine.turn_diff(&chat_id).await.map_err(|e| e.to_string())
 }
 
+/// Puts back what a chat's latest prompted turn changed: every file, or only
+/// `paths` (relative to the checkout's root). Returns the paths put back.
+#[tauri::command]
+pub async fn git_revert_turn(
+    engine: tauri::State<'_, hive_engine::Engine>,
+    chat_id: String,
+    paths: Option<Vec<String>>,
+) -> Result<Vec<String>, String> {
+    engine
+        .revert_turn(&chat_id, paths)
+        .await
+        .map_err(|e| e.to_string())
+}
+
 /// `limit` commits of the checkout's history from `cursor` on (every branch,
 /// remote branch and tag, children first); null outside a checkout.
 #[tauri::command]

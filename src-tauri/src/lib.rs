@@ -84,6 +84,7 @@ pub fn run() {
       git::git_delete_branch,
       git::git_diff,
       git::git_turn_diff,
+      git::git_revert_turn,
       git::git_history,
       git::git_search_history,
       git::git_fetch_all,

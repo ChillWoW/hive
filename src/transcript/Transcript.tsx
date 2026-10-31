@@ -26,6 +26,8 @@ type TranscriptProps = {
     agent?: string;
     /** The chat's harness, for its subagents' avatars. */
     harness?: HarnessId;
+    /** The chat shown: its latest reply gets the turn's changes and Undo. Unset for a subagent's thread. */
+    chatId?: string;
     /** Opens a subagent row's thread; unset, rows aren't clickable. */
     onOpenSubagent?: (id: string) => void;
     /** Under the messages, inside the scroller (the composer's spacer). */
@@ -90,6 +92,7 @@ export function Transcript({
     worktree,
     agent,
     harness,
+    chatId,
     onOpenSubagent,
     className
 }: TranscriptProps) {
@@ -192,6 +195,7 @@ export function Transcript({
                                     message={message}
                                     waiting={waiting && message === lastMessage}
                                     harness={harness}
+                                    turnOf={message === lastMessage ? chatId : undefined}
                                 />
                             )
                         )}

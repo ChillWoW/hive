@@ -145,6 +145,23 @@ export function useCheckoutDiff(cwd: string | null, base: string | undefined, en
 }
 
 /**
+ * `chatId`'s latest turn diff for a finished reply's summary: read when
+ * `version` changes (a new reply) and on window focus, never polled.
+ */
+export function useTurnSummary(chatId: string | undefined, version: string) {
+    const key = chatId ? keyOf({ turnOf: chatId }) : null;
+    const entry = useDiffStore((s) => (key ? s.entries[key] : undefined));
+    useEffect(() => {
+        if (!chatId) return;
+        const refresh = () => void refreshDiff({ turnOf: chatId });
+        refresh();
+        window.addEventListener("focus", refresh);
+        return () => window.removeEventListener("focus", refresh);
+    }, [chatId, version]);
+    return entry;
+}
+
+/**
  * What `chatId`'s latest prompted turn changed in `cwd`'s checkout. A turn
  * read snapshots the whole checkout, so rather than polling it this follows
  * the cheap working-tree read: read again when that changes, when the chat starts or ends a turn,

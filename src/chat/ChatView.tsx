@@ -323,6 +323,7 @@ export function ChatView() {
                         worktree={chat?.worktree}
                         agent={catalog?.label}
                         harness={chat?.config.harness}
+                        chatId={chat?.id}
                         onOpenSubagent={chat ? (id) => openSubagent(chat.id, id) : undefined}
                     />
                 )}

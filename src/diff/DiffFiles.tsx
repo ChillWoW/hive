@@ -1,5 +1,10 @@
 import { Fragment, memo, useEffect, useState, type CSSProperties, type ReactNode } from "react";
-import { ArrowSquareOutIcon, CaretRightIcon, PlusIcon } from "@phosphor-icons/react";
+import {
+    ArrowCounterClockwiseIcon,
+    ArrowSquareOutIcon,
+    CaretRightIcon,
+    PlusIcon
+} from "@phosphor-icons/react";
 import { cn } from "@/lib/cn";
 import { lineRef, refKey } from "@/review/comments";
 import { FileIcon, iconButtonClassName, Tooltip } from "@/ui";
@@ -57,6 +62,8 @@ export type FileSectionProps = {
     onToggle: (path: string, folded: boolean) => void;
     /** Missing for a file that's gone (deleted). */
     onOpen?: (path: string) => void;
+    /** Undoes the file's changes (the latest turn's diff only). */
+    onRevert?: (file: FileDiff) => void;
 };
 
 /** A file's header and, unfolded, its body; off-screen ones skip layout. */
@@ -67,7 +74,8 @@ export const FileSection = memo(function FileSection({
     split,
     wrap,
     onToggle,
-    onOpen
+    onOpen,
+    onRevert
 }: FileSectionProps) {
     const notices = fileNotices(file);
     const estimate =
@@ -78,7 +86,13 @@ export const FileSection = memo(function FileSection({
             style={{ contentVisibility: "auto", containIntrinsicSize: `auto ${estimate}px` }}
             className={cn(!first && "border-t border-white/[0.04]")}
         >
-            <FileHeader file={file} folded={folded} onToggle={onToggle} onOpen={onOpen} />
+            <FileHeader
+                file={file}
+                folded={folded}
+                onToggle={onToggle}
+                onOpen={onOpen}
+                onRevert={onRevert}
+            />
             {!folded && (
                 <div className="pb-2">
                     {notices.map((notice) => (
@@ -100,12 +114,14 @@ function FileHeader({
     file,
     folded,
     onToggle,
-    onOpen
+    onOpen,
+    onRevert
 }: {
     file: FileDiff;
     folded: boolean;
     onToggle: (path: string, folded: boolean) => void;
     onOpen?: (path: string) => void;
+    onRevert?: (file: FileDiff) => void;
 }) {
     const slash = file.path.lastIndexOf("/");
     const dir = file.path.slice(0, slash + 1);
@@ -153,6 +169,27 @@ function FileHeader({
                 <span className="shrink-0 text-[11px] tabular-nums text-[#f87171]">
                     −{file.deletions}
                 </span>
+            )}
+            {onRevert && (
+                <Tooltip>
+                    <Tooltip.Trigger
+                        render={
+                            <button
+                                type="button"
+                                aria-label="Undo this file's changes"
+                                onClick={(event) => {
+                                    event.stopPropagation();
+                                    onRevert(file);
+                                }}
+                                onKeyDown={(event) => event.stopPropagation()}
+                                className={iconButtonClassName}
+                            >
+                                <ArrowCounterClockwiseIcon className="size-3.5" />
+                            </button>
+                        }
+                    />
+                    <Tooltip.Content side="bottom">Undo this file's changes</Tooltip.Content>
+                </Tooltip>
             )}
             {onOpen && (
                 <Tooltip>

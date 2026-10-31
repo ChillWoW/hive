@@ -112,6 +112,14 @@ export const gitApi = {
                   patch: FAKE_PATCH.slice(FAKE_PATCH.indexOf("diff --git a/notes.md")),
                   truncated: false
               }),
+    /**
+     * Puts back what a chat's latest turn changed: every file, or only `paths`
+     * (relative to the checkout's root). Resolves to the paths put back.
+     */
+    revertTurn: (chatId: string, paths?: string[]): Promise<string[]> =>
+        isTauri
+            ? invoke("git_revert_turn", { chatId, paths: paths ?? null })
+            : Promise.resolve(paths ?? ["notes.md"]),
     switchBranch: (cwd: string, name: string): Promise<void> =>
         isTauri
             ? invoke("git_switch_branch", { cwd, name })
