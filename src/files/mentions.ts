@@ -15,7 +15,7 @@ export function fileMention(path: string): string {
  * closing quote, or to the next space less any punctuation closing the
  * sentence around it (`see @src/app.ts.`). `name@example.com` isn't one.
  */
-const MENTION = /(?<![^\s([{])@(?:"([^"\n]+)"|([^\s"@]+?))(?=[.,;:!?)\]}]*(?:\s|$))/g;
+export const MENTION =/(?<![^\s([{])@(?:"([^"\n]+)"|([^\s"@]+?))(?=[.,;:!?)\]}]*(?:\s|$))/g;
 
 export type MentionPiece = { text: string } | { path: string };
 

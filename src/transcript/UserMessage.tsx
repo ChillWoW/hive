@@ -7,10 +7,11 @@ import {
 } from "@phosphor-icons/react";
 import { AttachmentTile, openAttachment, useAttachmentUrl } from "@/attachments";
 import type { TranscriptMessage } from "@/chats";
-import { FileTag, splitMentions } from "@/files";
+import { TagChip } from "@/composer/TagChip";
+import { findTags, tagPieces } from "@/composer/tags";
 import { cn } from "@/lib/cn";
 import type { Attachment } from "@/proto";
-import { splitDiffComments } from "@/review/comments";
+import { sentCommentRef, splitDiffComments } from "@/review/comments";
 import { SentComments } from "@/review/SentComments";
 
 /** A file the user sent; a click opens it in its default app. */
@@ -121,13 +122,25 @@ export function UserMessage({
                     )}
                 >
                     <Collapsible>
-                        {splitMentions(text).map((piece, i) =>
-                            "path" in piece ? (
-                                <FileTag key={i} path={piece.path} />
-                            ) : (
-                                <Fragment key={i}>{piece.text}</Fragment>
-                            )
-                        )}
+                        {tagPieces(text, findTags(text, { sent: true })).map((piece, i) => {
+                            if (!("tag" in piece)) return <Fragment key={i}>{piece.text}</Fragment>;
+                            const { tag } = piece;
+                            if (tag.kind !== "comment") return <TagChip key={i} tag={tag} />;
+                            const comment = sentCommentRef(Number(tag.ref), comments);
+                            // A `[comment N]` the prompt carries no comment for is just text.
+                            if (!comment) return <Fragment key={i}>{piece.raw}</Fragment>;
+                            return (
+                                <TagChip
+                                    key={i}
+                                    tag={tag}
+                                    comment={{
+                                        path: comment.file,
+                                        lines: comment.lines,
+                                        body: comment.body
+                                    }}
+                                />
+                            );
+                        })}
                     </Collapsible>
                 </div>
             )}

@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
     ArrowBendDownRightIcon,
     ArrowUpIcon,
@@ -6,7 +6,6 @@ import {
     QueueIcon,
     StopIcon
 } from "@phosphor-icons/react";
-import TextareaAutosize from "react-textarea-autosize";
 import type { Attachment, ChatConfig, SlashCommand } from "@/proto";
 import { AttachmentTile, useAttachmentUrl } from "@/attachments";
 import { COMPOSER_SCOPE, useShortcut } from "@/keybindings/runtime";
@@ -24,8 +23,15 @@ import { SlashMenu } from "./SlashMenu";
 import { appCommands, type AppCommandId, standaloneAppCommand } from "./slashCommands";
 import { useMentionMenu } from "./useMentionMenu";
 import { useSlashMenu } from "./useSlashMenu";
-import { withDiffComments } from "@/review/comments";
-import { CommentChips } from "@/review/CommentChips";
+import {
+    commentTokens,
+    linesLabel,
+    withDiffComments,
+    withoutCommentTokens
+} from "@/review/comments";
+import { PromptField, type PromptFieldHandle } from "./PromptField";
+import { TagFace, type TagComment } from "./TagChip";
+import { tagPieces, type FoundTag } from "./tags";
 import {
     composer,
     useComposerStore,
@@ -34,9 +40,6 @@ import {
     useDraftComments
 } from "./store";
 import { usePromptHistory } from "./history";
-
-/** Past this the field scrolls. */
-const MAX_ROWS = 12;
 
 /** How long the box takes to reflow between its one-row and two-row shapes. */
 const MORPH_MS = 200;
@@ -121,7 +124,7 @@ export function Composer({
     const removeComment = useComposerStore((s) => s.removeComment);
     const takeComments = useComposerStore((s) => s.takeComments);
     const focusToken = useComposerStore((s) => s.focusToken);
-    const textareaRef = useRef<HTMLTextAreaElement>(null);
+    const fieldRef = useRef<PromptFieldHandle>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [dragging, setDragging] = useState(false);
     /**
@@ -151,6 +154,20 @@ export function Composer({
     const [, setWidth] = useState(0);
     const [focused, setFocused] = useState(false);
     const [caret, setCaret] = useState(0);
+    const [tags, setTags] = useState<FoundTag[]>([]);
+    /** The caret sits at a tag's end, where the menus would read it as typed text. */
+    const onTag = tags.some((t) => caret > t.from && caret <= t.to);
+    /** What each comment's tag shows. */
+    const commentFaces = useMemo(
+        () =>
+            new Map<string, TagComment>(
+                comments.map((c) => [
+                    c.id,
+                    { path: c.path, lines: linesLabel(c.start, c.end), body: c.body }
+                ])
+            ),
+        [comments]
+    );
     const rememberPrompt = usePromptHistory((s) => s.remember);
     /** The history entry ↑/↓ last put in the field, while browsing it. */
     const recallRef = useRef<{ index: number; text: string } | null>(null);
@@ -158,14 +175,26 @@ export function Composer({
         recallRef.current = null;
     }, [chatId]);
 
-    /** Sets the field's text from a menu, with the caret at `at`. */
+    /** Sets the field's text from a menu, the caret at `at` (a name ending there is still being typed). */
     const complete = (text: string, at: number) => {
+        fieldRef.current?.setText(text, { caret: at, open: at });
         setDraft(text);
         setCaret(at);
-        requestAnimationFrame(() => {
-            textareaRef.current?.setSelectionRange(at, at);
-        });
     };
+
+    /** Puts a whole prompt in the field (one from history), the caret at its end. */
+    const fill = (text: string) => {
+        fieldRef.current?.setText(text, { caret: text.length });
+        setDraft(text);
+        setCaret(text.length);
+    };
+
+    // A comment's tag undone back in after the comment was deleted.
+    useEffect(() => {
+        const known = new Set(comments.map((c) => c.id));
+        if (commentTokens(draft).every((t) => known.has(t.id))) return;
+        composer.setDraft(chatId, withoutCommentTokens(draft, (id) => !known.has(id)));
+    }, [draft, comments, chatId]);
 
     const [modelOpen, setModelOpen] = useState(false);
     const planOffered = !!useCatalog(config.harness)?.capabilities.plan;
@@ -198,7 +227,7 @@ export function Composer({
         app,
         started: chatId !== null,
         attached: attachments.length > 0 || comments.length > 0,
-        enabled: focused,
+        enabled: focused && !onTag,
         complete,
         onApp: runApp
     });
@@ -209,13 +238,13 @@ export function Composer({
         draft,
         caret,
         entries: files,
-        enabled: focused && !!cwd,
+        enabled: focused && !!cwd && !onTag,
         complete
     });
 
     // Runs on mount too, so a fresh chat view starts with the caret here.
     useEffect(() => {
-        textareaRef.current?.focus();
+        fieldRef.current?.focus();
     }, [focusToken, chatId]);
 
     // The window has `dragDropEnabled: false`, so the webview handles drops
@@ -233,10 +262,8 @@ export function Composer({
     }, []);
 
     useShortcut("focusComposer", () => {
-        const el = textareaRef.current;
-        if (!el) return false;
-        el.focus();
-        el.setSelectionRange(el.value.length, el.value.length);
+        if (!fieldRef.current?.view) return false;
+        fieldRef.current.focus("end");
     });
     const sendWith = useSettingsStore((s) => s.settings.keyboard.sendWith);
 
@@ -246,16 +273,16 @@ export function Composer({
     // which also keeps the shapes from flipping back and forth at the edge.
     const measure = () => {
         const deck = deckRef.current;
-        const textarea = textareaRef.current;
+        const field = fieldRef.current?.dom;
         const span = measureRef.current;
         const controls = controlsRef.current;
-        if (!deck || !textarea || !span || !controls) return;
+        if (!deck || !field || !span || !controls) return;
 
         // Fractional widths: rounded `clientWidth`s can say the text fits
         // while it is already wrapping by a fraction of a pixel.
         const deckWidth = deck.getBoundingClientRect().width;
         if (!tall) {
-            chromeRef.current = deckWidth - textarea.getBoundingClientRect().width;
+            chromeRef.current = deckWidth - field.getBoundingClientRect().width;
             // The pickers spilling out of their column, or a picker's label
             // spilling out of its button once the model name has truncated
             // away. Buttons only: the model picker also renders a hidden
@@ -270,7 +297,7 @@ export function Composer({
                 crampedAtRef.current = Math.max(crampedAtRef.current, deckWidth);
             }
         }
-        const style = getComputedStyle(textarea);
+        const style = getComputedStyle(field);
         const padding = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
         const room = deckWidth - chromeRef.current - padding;
         const next =
@@ -290,12 +317,12 @@ export function Composer({
     // growing or shrinking top edge.
     useLayoutEffect(() => {
         const deck = deckRef.current;
-        const textarea = textareaRef.current;
-        if (!deck || !textarea) return;
+        const field = fieldRef.current?.dom;
+        if (!deck || !field) return;
         const slot = {
             tall,
-            x: textarea.offsetLeft + parseFloat(getComputedStyle(textarea).paddingLeft),
-            y: textarea.offsetTop - deck.offsetHeight
+            x: field.offsetLeft + parseFloat(getComputedStyle(field).paddingLeft),
+            y: field.offsetTop - deck.offsetHeight
         };
         const previous = slotRef.current;
         slotRef.current = slot;
@@ -303,7 +330,7 @@ export function Composer({
         if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
         const dx = previous.x - slot.x;
         const dy = previous.y - slot.y;
-        textarea.animate(
+        field.animate(
             [{ transform: `translate(${dx}px, ${dy}px)` }, { transform: "none" }],
             { duration: MORPH_MS, easing: MORPH_EASING }
         );
@@ -366,7 +393,7 @@ export function Composer({
                   ])
                 : null;
         if (standalone) {
-            setDraft("");
+            fill("");
             rememberPrompt(prompt);
             recallRef.current = null;
             runApp(standalone);
@@ -374,10 +401,12 @@ export function Composer({
         }
         const files = attachments.flatMap((a) => (a.attachment ? [a.attachment] : []));
         if (onSend(withDiffComments(prompt, comments), files) !== false) {
-            setDraft("");
+            fill("");
             takeAttachments(chatId);
             takeComments(chatId);
-            if (prompt) rememberPrompt(prompt);
+            // History keeps the words; the comments went with this prompt.
+            const words = withoutCommentTokens(prompt).trim();
+            if (words) rememberPrompt(words);
             recallRef.current = null;
         }
     };
@@ -388,12 +417,14 @@ export function Composer({
      * recalled text is left as it is. In a multi-line one the caret first
      * moves line by line, as usual, until it's on the first (↑) or last (↓).
      */
-    const recall = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    const recall = (event: KeyboardEvent) => {
         if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return false;
         if (event.shiftKey || event.altKey || event.ctrlKey || event.metaKey) return false;
-        if (event.nativeEvent.isComposing) return false;
-        const el = event.currentTarget;
-        if (el.selectionStart !== el.selectionEnd) return false;
+        if (event.isComposing) return false;
+        const view = fieldRef.current?.view;
+        if (!view) return false;
+        const { from: selectionStart, to: selectionEnd } = view.state.selection.main;
+        if (selectionStart !== selectionEnd) return false;
         const current = recallRef.current;
         const browsing = current !== null && draft === current.text;
         if (!browsing && (draft !== "" || attachments.length > 0 || comments.length > 0)) {
@@ -403,41 +434,42 @@ export function Composer({
         const entries = usePromptHistory.getState().entries;
 
         if (event.key === "ArrowUp") {
-            if (draft.lastIndexOf("\n", el.selectionStart - 1) !== -1) return false;
+            if (draft.lastIndexOf("\n", selectionStart - 1) !== -1) return false;
             const next = index + 1;
             if (next >= entries.length) return browsing;
             recallRef.current = { index: next, text: entries[next] };
-            complete(entries[next], entries[next].length);
+            fill(entries[next]);
             return true;
         }
         if (!browsing) return false;
-        if (draft.indexOf("\n", el.selectionEnd) !== -1) return false;
+        if (draft.indexOf("\n", selectionEnd) !== -1) return false;
         const next = index - 1;
         const text = next < 0 ? "" : entries[next];
         recallRef.current = next < 0 ? null : { index: next, text };
-        complete(text, text.length);
+        fill(text);
         return true;
     };
 
     const attach = (files: File[]) => {
         if (files.length === 0) return;
         addFiles(chatId, files);
-        textareaRef.current?.focus();
+        fieldRef.current?.focus();
     };
 
     // Only a paste that carries files is taken over; text pastes as usual.
-    const onPaste = (event: React.ClipboardEvent<HTMLTextAreaElement>) => {
-        if (!canAttach) return;
+    const onPaste = (event: ClipboardEvent) => {
+        if (!canAttach || !event.clipboardData) return false;
         const files = Array.from(event.clipboardData.files);
-        if (files.length === 0) return;
+        if (files.length === 0) return false;
         event.preventDefault();
         attach(files);
+        return true;
     };
 
     // Only a drag carrying files is a drop target; dragged text passes
     // through to the field.
-    const carriesFiles = (event: React.DragEvent) =>
-        canAttach && event.dataTransfer.types.includes("Files");
+    const carriesFiles = (event: { dataTransfer: DataTransfer | null }) =>
+        canAttach && !!event.dataTransfer?.types.includes("Files");
 
     const onDragEnter = (event: React.DragEvent<HTMLFormElement>) => {
         if (!carriesFiles(event)) return;
@@ -466,20 +498,22 @@ export function Composer({
         attach(Array.from(event.dataTransfer.files));
     };
 
-    const onKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    /** The field's keys, before its own; true when one was taken. */
+    const onKeyDown = (event: KeyboardEvent) => {
         if (mention.onKeyDown(event) || slash.onKeyDown(event) || recall(event)) {
             event.preventDefault();
-            return;
+            return true;
         }
-        if (event.key !== "Enter" || event.shiftKey) return;
+        if (event.key !== "Enter" || event.shiftKey) return false;
         // With Mod+Enter sending, a bare Enter is a new line.
         const mod = isMac ? event.metaKey : event.ctrlKey;
-        if (sendWith === "mod-enter" && !mod) return;
+        if (sendWith === "mod-enter" && !mod) return false;
         // Enter mid-composition is the IME accepting a candidate.
-        if (event.nativeEvent.isComposing) return;
+        if (event.isComposing) return false;
         event.preventDefault();
         // Enter never stops a turn; that takes the button or Escape.
         if (content) submit();
+        return true;
     };
 
     const { label, icon: ModeIcon } = MODES[mode];
@@ -533,9 +567,6 @@ export function Composer({
                 menu={mention}
                 className="absolute inset-x-0 bottom-full z-20 mb-2"
             />
-            {comments.length > 0 && (
-                <CommentChips comments={comments} onRemove={(id) => removeComment(chatId, id)} />
-            )}
             {attachments.length > 0 && (
                 <div className="flex flex-wrap items-end gap-2 px-1 pt-1">
                     {attachments.map((a) =>
@@ -590,7 +621,21 @@ export function Composer({
                         aria-hidden="true"
                         className="invisible absolute text-sm leading-6 whitespace-pre"
                     >
-                        {draft}
+                        {tagPieces(draft, tags).map((piece, i) =>
+                            "tag" in piece ? (
+                                <TagFace
+                                    key={i}
+                                    tag={piece.tag}
+                                    comment={
+                                        piece.tag.kind === "comment"
+                                            ? commentFaces.get(piece.tag.ref)
+                                            : undefined
+                                    }
+                                />
+                            ) : (
+                                piece.text
+                            )
+                        )}
                     </span>
 
                     {canAttach && (
@@ -625,32 +670,22 @@ export function Composer({
                             event.target.value = "";
                         }}
                     />
-                    <TextareaAutosize
-                        ref={textareaRef}
+                    <PromptField
+                        ref={fieldRef}
                         value={draft}
-                        onChange={(event) => {
-                            setDraft(event.target.value);
-                            setCaret(event.target.selectionStart);
-                        }}
-                        onSelect={(event) =>
-                            setCaret(event.currentTarget.selectionStart)
-                        }
-                        onFocus={() => setFocused(true)}
-                        onBlur={() => setFocused(false)}
+                        resetKey={chatId ?? "new"}
+                        placeholder={placeholder}
+                        comments={commentFaces}
+                        onChange={setDraft}
+                        onCaret={setCaret}
+                        onFocusChange={setFocused}
+                        onTags={setTags}
+                        onCommentsRemoved={(ids) => ids.forEach((id) => removeComment(chatId, id))}
                         onKeyDown={onKeyDown}
                         onPaste={onPaste}
-                        // Autosize only re-measures when it re-renders; without
-                        // this it keeps the one-row shape's height after the
-                        // field widens.
-                        data-tall={tall || undefined}
-                        placeholder={placeholder}
-                        aria-label="Message"
-                        minRows={1}
-                        maxRows={MAX_ROWS}
-                        rows={1}
+                        carriesFiles={carriesFiles}
                         className={cn(
-                            "row-start-1 block w-full resize-none bg-transparent py-1",
-                            "text-sm leading-6 text-dark-50 placeholder:text-dark-250",
+                            "row-start-1 block w-full min-w-0 text-sm leading-6 text-dark-50",
                             canAttach
                                 ? "col-start-2 pr-2.5 pl-1 group-data-tall/deck:col-span-3 group-data-tall/deck:col-start-1 group-data-tall/deck:px-2.5"
                                 : "col-start-1 px-2.5 group-data-tall/deck:col-span-2"

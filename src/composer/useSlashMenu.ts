@@ -47,7 +47,7 @@ export type SlashMenuState = {
     setIndex: (index: number) => void;
     pick: (item: SlashItem) => void;
     /** Handles the menu's keys; true when it took the event. */
-    onKeyDown: (event: React.KeyboardEvent) => boolean;
+    onKeyDown: (event: KeyboardEvent) => boolean;
 };
 
 /**
@@ -130,7 +130,7 @@ export function useSlashMenu({
         complete(before + after, before.length + (gap ? 0 : 1));
     };
 
-    const onKeyDown = (event: React.KeyboardEvent) => {
+    const onKeyDown = (event: KeyboardEvent) => {
         if (!open) return false;
         if (event.key === "Escape") {
             setDismissed(draft);

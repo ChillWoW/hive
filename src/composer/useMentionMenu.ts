@@ -40,7 +40,7 @@ export type MentionMenuState = {
     setIndex: (index: number) => void;
     pick: (entry: WorkspaceEntry) => void;
     /** Handles the menu's keys; true when it took the event. */
-    onKeyDown: (event: React.KeyboardEvent) => boolean;
+    onKeyDown: (event: KeyboardEvent) => boolean;
 };
 
 /**
@@ -97,7 +97,7 @@ export function useMentionMenu({
         complete(before + after, before.length + (gap ? 0 : 1));
     };
 
-    const onKeyDown = (event: React.KeyboardEvent) => {
+    const onKeyDown = (event: KeyboardEvent) => {
         if (!open) return false;
         if (event.key === "Escape") {
             setDismissed(draft);
@@ -113,7 +113,7 @@ export function useMentionMenu({
                 return true;
             case "Tab":
             case "Enter": {
-                if (event.shiftKey || event.nativeEvent.isComposing) return false;
+                if (event.shiftKey || event.isComposing) return false;
                 const entry = matches[Math.min(index, matches.length - 1)];
                 if (!entry) return false;
                 pick(entry);

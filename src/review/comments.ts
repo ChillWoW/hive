@@ -104,21 +104,76 @@ export function promptPath(folder: string, root: string, path: string): string {
     return `${r}/${path}`;
 }
 
+/*
+ * In a draft each comment sits in the text where it's referred to, as a
+ * token (`commentToken`) the composer draws as a tag. Sent, the token reads
+ * `[comment N]` and the comment in the block carries `n="N"`.
+ */
+const TOKEN = /([\w-]+)/g;
+
+/** A comment's place in a draft's text. */
+export const commentToken = (id: string) => `${id}`;
+
+/** The comment tokens in a draft's text, in order. */
+export function commentTokens(text: string): { id: string; from: number; to: number }[] {
+    return [...text.matchAll(TOKEN)].map((m) => ({
+        id: m[1]!,
+        from: m.index,
+        to: m.index + m[0].length
+    }));
+}
+
+/** The draft with `id`'s token appended (as is when it already has it). */
+export function withCommentToken(draft: string, id: string): string {
+    if (draft.includes(commentToken(id))) return draft;
+    const gap = draft === "" || /\s$/.test(draft) ? "" : " ";
+    return `${draft}${gap}${commentToken(id)} `;
+}
+
+/** The draft without the tokens `drop` picks (all by default), each with a space beside it. */
+export function withoutCommentTokens(
+    draft: string,
+    drop: (id: string) => boolean = () => true
+): string {
+    return draft.replace(/( ?)([\w-]+)( ?)/g, (all, before: string, id: string, after: string) =>
+        drop(id) ? (before && after ? " " : "") : all
+    );
+}
+
+const sentRef = (n: number) => `[comment ${n}]`;
+const SENT_REF = /\[comment (\d+)\]/g;
+
 const OPEN = "<diff_comments>";
 const CLOSE = "</diff_comments>";
 const INTRO =
-    "Review comments on lines of the diff (paths relative to the working directory; line numbers are the file's current ones unless marked old):";
+    "Review comments on lines of the diff (paths relative to the working directory; line numbers are the file's current ones unless marked old; `[comment N]` in the message refers to comment N):";
 
 const attr = (s: string) => s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/\n/g, " ");
 const unattr = (s: string) => s.replace(/&quot;/g, '"').replace(/&amp;/g, "&");
 
-/** The prompt with the comments appended (the prompt alone when there are none). */
-export function withDiffComments(prompt: string, comments: DiffComment[]): string {
+/**
+ * A draft's text as sent: its comment tokens become `[comment N]`, numbered
+ * in the order they appear, and the comments are appended as a block (the
+ * text alone when there are none).
+ */
+export function withDiffComments(draft: string, comments: DiffComment[]): string {
+    const order = new Map<string, number>();
+    for (const { id } of commentTokens(draft)) {
+        if (!order.has(id) && comments.some((c) => c.id === id)) order.set(id, order.size + 1);
+    }
+    for (const c of comments) if (!order.has(c.id)) order.set(c.id, order.size + 1);
+    const prompt = draft
+        .replace(TOKEN, (_, id: string) => {
+            const n = order.get(id);
+            return n === undefined ? "" : sentRef(n);
+        })
+        .trim();
     if (comments.length === 0) return prompt;
-    const blocks = comments.map((c) => {
+    const sorted = [...comments].sort((a, b) => order.get(a.id)! - order.get(b.id)!);
+    const blocks = sorted.map((c) => {
         const file = promptPath(c.folder, c.root, c.path);
         return [
-            `<comment file="${attr(file)}" lines="${linesLabel(c.start, c.end)}">`,
+            `<comment n="${order.get(c.id)}" file="${attr(file)}" lines="${linesLabel(c.start, c.end)}">`,
             "```diff",
             c.code,
             "```",
@@ -130,11 +185,17 @@ export function withDiffComments(prompt: string, comments: DiffComment[]): strin
     return prompt ? `${prompt}\n\n${block}` : block;
 }
 
-/** A comment as read back from a sent prompt. */
-export type SentDiffComment = { file: string; lines: string; code: string; body: string };
+/** A comment as read back from a sent prompt; the text refers to it as `[comment n]`. */
+export type SentDiffComment = {
+    n?: number;
+    file: string;
+    lines: string;
+    code: string;
+    body: string;
+};
 
 const COMMENT =
-    /<comment file="([^"]*)" lines="([^"]*)">\n```diff\n([\s\S]*?)\n```\n([\s\S]*?)\n<\/comment>/g;
+    /<comment (?:n="(\d+)" )?file="([^"]*)" lines="([^"]*)">\n```diff\n([\s\S]*?)\n```\n([\s\S]*?)\n<\/comment>/g;
 
 /** A prompt's own text and the comments it carries (none for a plain prompt). */
 export function splitDiffComments(text: string): { prompt: string; comments: SentDiffComment[] } {
@@ -144,13 +205,41 @@ export function splitDiffComments(text: string): { prompt: string; comments: Sen
         return { prompt: text, comments: [] };
     }
     const comments = [...text.slice(at, end).matchAll(COMMENT)].map((m) => ({
-        file: unattr(m[1]!),
-        lines: m[2]!,
-        code: m[3]!,
-        body: m[4]!
+        n: m[1] ? Number(m[1]) : undefined,
+        file: unattr(m[2]!),
+        lines: m[3]!,
+        code: m[4]!,
+        body: m[5]!
     }));
     if (comments.length === 0) return { prompt: text, comments: [] };
     return { prompt: text.slice(0, at).trimEnd(), comments };
+}
+
+/** The comment a sent `[comment N]` refers to, when the prompt carries it. */
+export function sentCommentRef(
+    n: number,
+    comments: SentDiffComment[]
+): SentDiffComment | undefined {
+    return comments.find((c) => c.n === n);
+}
+
+/**
+ * A sent prompt as a draft again (a queued prompt taken back to edit): its
+ * comments restored, each `[comment N]` their token again, the rest at the end.
+ */
+export function restoreDraft(text: string): { text: string; comments: DiffComment[] } {
+    const split = splitDiffComments(text);
+    const comments = restoredComments(split.comments);
+    const byN = new Map<number, DiffComment>();
+    split.comments.forEach((c, i) => {
+        if (c.n !== undefined) byN.set(c.n, comments[i]!);
+    });
+    let draft = split.prompt.replace(SENT_REF, (all, n: string) => {
+        const c = byN.get(Number(n));
+        return c ? commentToken(c.id) : all;
+    });
+    for (const c of comments) draft = withCommentToken(draft, c.id);
+    return { text: draft, comments };
 }
 
 /** `linesLabel` read back. */
@@ -179,20 +268,21 @@ function parseLines(label: string): [LineRef, LineRef] | null {
  * and don't show in the diff.
  */
 export function restoredComments(sent: SentDiffComment[]): DiffComment[] {
-    return sent.flatMap((c) => {
-        const lines = parseLines(c.lines);
-        if (!lines) return [];
-        return [
-            {
-                id: crypto.randomUUID(),
-                root: "",
-                folder: "",
-                path: c.file,
-                start: lines[0],
-                end: lines[1],
-                code: c.code,
-                body: c.body
-            }
+    // One per sent comment, in order (`restoreDraft` pairs them up).
+    return sent.map((c) => {
+        const [start, end] = parseLines(c.lines) ?? [
+            { side: "new", no: 0 },
+            { side: "new", no: 0 }
         ];
+        return {
+            id: crypto.randomUUID(),
+            root: "",
+            folder: "",
+            path: c.file,
+            start,
+            end,
+            code: c.code,
+            body: c.body
+        };
     });
 }

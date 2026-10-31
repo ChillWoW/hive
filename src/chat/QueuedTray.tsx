@@ -12,7 +12,7 @@ import { chats, type TranscriptMessage } from "@/chats";
 import { composer } from "@/composer";
 import { cn } from "@/lib/cn";
 import { trayClassName } from "./tray";
-import { restoredComments, splitDiffComments } from "@/review/comments";
+import { restoreDraft, splitDiffComments } from "@/review/comments";
 import { iconButtonClassName, Tooltip } from "@/ui";
 
 /** Every row is one line tall, so a drag can count rows by distance. */
@@ -70,10 +70,10 @@ export function QueuedTray({
         const withdrawn = await chats.cancelQueued(message.id).catch(() => false);
         if (!withdrawn) return;
         const draft = composer.draft(chatId).trim();
-        const { prompt: text, comments } = splitDiffComments(promptText(message));
+        const { text, comments } = restoreDraft(promptText(message));
         composer.setDraft(chatId, draft && text ? `${draft}\n\n${text}` : draft || text);
         composer.restoreAttachments(chatId, message.attachments ?? []);
-        composer.restoreComments(chatId, restoredComments(comments));
+        composer.restoreComments(chatId, comments);
         composer.focus();
     };
 

@@ -3,7 +3,11 @@ import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import type { Attachment, ChatConfig } from "@/proto";
 import { isImage, primeAttachmentUrl, saveAttachment } from "@/attachments";
-import type { DiffComment } from "@/review/comments";
+import {
+    type DiffComment,
+    withCommentToken,
+    withoutCommentTokens
+} from "@/review/comments";
 
 /** New-chat drafts are keyed `new:<uuid>`; chat ids are UUIDs, so they can't collide. */
 const NEW_PREFIX = "new:";
@@ -220,10 +224,15 @@ export const useComposerStore = create<ComposerState>()(
                 const key = keyOf(chatId);
                 set((s) => {
                     const list = s.comments[key] ?? [];
-                    const next = list.some((c) => c.id === comment.id)
+                    const known = list.some((c) => c.id === comment.id);
+                    const next = known
                         ? list.map((c) => (c.id === comment.id ? comment : c))
                         : [...list, comment];
-                    return { comments: { ...s.comments, [key]: next } };
+                    // A new one goes into the text as a tag, at the end.
+                    const drafts = known
+                        ? s.drafts
+                        : { ...s.drafts, [key]: withCommentToken(s.drafts[key] ?? "", comment.id) };
+                    return { comments: { ...s.comments, [key]: next }, drafts };
                 });
             },
             removeComment: (chatId, id) => {
@@ -231,14 +240,26 @@ export const useComposerStore = create<ComposerState>()(
                 set((s) => {
                     const rest = (s.comments[key] ?? []).filter((c) => c.id !== id);
                     const { [key]: _, ...others } = s.comments;
-                    return { comments: rest.length ? { ...others, [key]: rest } : others };
+                    const { [key]: draft = "", ...otherDrafts } = s.drafts;
+                    const text = withoutCommentTokens(draft, (other) => other === id);
+                    return {
+                        comments: rest.length ? { ...others, [key]: rest } : others,
+                        drafts: text.trim() ? { ...otherDrafts, [key]: text } : otherDrafts
+                    };
                 });
             },
             restoreComments: (chatId, restored) => {
                 if (restored.length === 0) return;
                 const key = keyOf(chatId);
                 set((s) => ({
-                    comments: { ...s.comments, [key]: [...(s.comments[key] ?? []), ...restored] }
+                    comments: { ...s.comments, [key]: [...(s.comments[key] ?? []), ...restored] },
+                    drafts: {
+                        ...s.drafts,
+                        [key]: restored.reduce(
+                            (text, c) => withCommentToken(text, c.id),
+                            s.drafts[key] ?? ""
+                        )
+                    }
                 }));
             },
             takeComments: (chatId) => {
@@ -365,13 +386,28 @@ export const useComposerStore = create<ComposerState>()(
                 const favorites = Array.isArray(persisted?.favorites)
                     ? persisted.favorites
                     : current.favorites;
+                const drafts = isRecord(persisted?.drafts) ? persisted.drafts : current.drafts;
+                const comments = isRecord(persisted?.comments)
+                    ? persisted.comments
+                    : current.comments;
                 const restored = {
                     favorites,
-                    drafts: isRecord(persisted?.drafts) ? persisted.drafts : current.drafts,
+                    // Comments saved before they sat in the text go at its end.
+                    drafts: Object.entries(comments).reduce(
+                        (all, [key, list]) => {
+                            if (!Array.isArray(list) || list.length === 0) return all;
+                            const text = list.reduce(
+                                (draft, c) => withCommentToken(draft, c.id),
+                                all[key] ?? ""
+                            );
+                            return { ...all, [key]: text };
+                        },
+                        drafts
+                    ),
                     attachments: isRecord(persisted?.attachments)
                         ? persisted.attachments
                         : current.attachments,
-                    comments: isRecord(persisted?.comments) ? persisted.comments : current.comments,
+                    comments,
                     newDraftId:
                         typeof persisted?.newDraftId === "string"
                             ? persisted.newDraftId
