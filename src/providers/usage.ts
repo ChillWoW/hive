@@ -115,6 +115,35 @@ export function mostUsed(windows: UsageWindow[]): number | undefined {
     return Math.max(...windows.map((w) => Math.min(Math.max(w.used, 0), 1)));
 }
 
+export type UsageLimitWarning = {
+    window: UsageWindow;
+    /** Share used, clamped to 0–1. */
+    used: number;
+    /** `reached` at 100%, else the window's `usageLevel`. */
+    level: Exclude<UsageLevel, "normal"> | "reached";
+};
+
+/**
+ * The window to warn about: the most-used one at 80% or more whose reset
+ * hasn't passed (a stale reading of a window that already started over says
+ * nothing). Undefined while every window has room.
+ */
+export function limitWarning(
+    windows: UsageWindow[],
+    now = Date.now()
+): UsageLimitWarning | undefined {
+    let worst: UsageLimitWarning | undefined;
+    for (const window of windows) {
+        const resetsAt = window.resetsAt ? Date.parse(window.resetsAt) : Number.NaN;
+        if (Number.isFinite(resetsAt) && resetsAt <= now) continue;
+        const used = Math.min(Math.max(window.used, 0), 1);
+        const level = used >= 1 ? "reached" : usageLevel(used);
+        if (level === "normal" || (worst && worst.used >= used)) continue;
+        worst = { window, used, level };
+    }
+    return worst;
+}
+
 export type UsageLevel = "normal" | "warn" | "critical";
 
 export function usageLevel(fraction: number): UsageLevel {

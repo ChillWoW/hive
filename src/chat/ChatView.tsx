@@ -32,6 +32,8 @@ import { GoalTray } from "./GoalTray";
 import { QueuedTray } from "./QueuedTray";
 import { SecretRequestCard } from "./SecretRequestCard";
 import { SubagentView } from "./SubagentView";
+import { trayStackClassName } from "./tray";
+import { UsageLimitTray } from "./UsageLimitTray";
 import { UsageRing } from "./UsageRing";
 
 type InputPart = Extract<MessagePart, { kind: "input" }>;
@@ -166,26 +168,29 @@ export function ChatView() {
     const bottom = (
         <div className="shrink-0 px-6 pb-3">
             <div className="mx-auto w-full max-w-3xl">
-                {chat && session?.goal && !input && !secret && (
-                    <GoalTray
-                        goal={session.goal}
-                        working={busy}
-                        onCommand={(arg) => {
-                            if (arg === "resume" || !busy) {
-                                sendTo(`/goal ${arg}`);
-                                return;
-                            }
-                            // Stopping pauses the goal; it's cleared once
-                            // the turn has ended, rather than after Codex
-                            // takes another turn toward it.
-                            setClearGoal(true);
-                            void chats.interrupt(chat.id).catch(() => {});
-                        }}
-                    />
-                )}
-                {chatId && queued.length > 0 && (
-                    <QueuedTray chatId={chatId} messages={queued} running={busy} />
-                )}
+                <div className={trayStackClassName}>
+                    {!input && !secret && <UsageLimitTray harness={config.harness} />}
+                    {chat && session?.goal && !input && !secret && (
+                        <GoalTray
+                            goal={session.goal}
+                            working={busy}
+                            onCommand={(arg) => {
+                                if (arg === "resume" || !busy) {
+                                    sendTo(`/goal ${arg}`);
+                                    return;
+                                }
+                                // Stopping pauses the goal; it's cleared once
+                                // the turn has ended, rather than after Codex
+                                // takes another turn toward it.
+                                setClearGoal(true);
+                                void chats.interrupt(chat.id).catch(() => {});
+                            }}
+                        />
+                    )}
+                    {chatId && queued.length > 0 && (
+                        <QueuedTray chatId={chatId} messages={queued} running={busy} />
+                    )}
+                </div>
                 {/* The box grows into the wizard and back rather than jumping. */}
                 <MorphHeight
                     swapKey={

@@ -11,10 +11,12 @@ export {
 } from "./store";
 export {
     formatReset,
+    limitWarning,
     mostUsed,
     refreshUsage,
     usageLevel,
     useProviderUsage,
     type UsageEntry,
-    type UsageLevel
+    type UsageLevel,
+    type UsageLimitWarning
 } from "./usage";

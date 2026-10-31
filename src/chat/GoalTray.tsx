@@ -1,6 +1,7 @@
 import { PlayIcon, TargetIcon, XIcon } from "@phosphor-icons/react";
 import type { Goal, GoalStatus } from "@/proto";
 import { cn } from "@/lib/cn";
+import { trayClassName } from "./tray";
 import { formatTokens } from "@/usage/format";
 
 const TITLE: Record<GoalStatus, string> = {
@@ -57,12 +58,7 @@ export function GoalTray({
     const spent = usage(goal);
     const resumable = goal.status !== "active" && goal.status !== "complete" && !working;
     return (
-        <div
-            className={cn(
-                "mx-4 rounded-t-2xl border border-b-0 border-dark-700 bg-dark-900 px-1 pt-1 pb-1.5",
-                "transition-[opacity,translate] duration-200 ease-out starting:translate-y-2 starting:opacity-0"
-            )}
-        >
+        <div className={trayClassName}>
             <div className="flex h-6 min-w-0 items-center gap-1.5 px-2.5 text-xs">
                 <TargetIcon
                     className={cn(
@@ -78,7 +74,7 @@ export function GoalTray({
                 >
                     {title}
                 </span>
-                {spent && <span className="shrink-0 text-dark-250 tabular-nums">· {spent}</span>}
+                {spent && <span className="min-w-0 truncate text-dark-250 tabular-nums">· {spent}</span>}
                 <span className="ml-auto flex shrink-0 items-center gap-0.5 -mr-1.5">
                     {resumable && (
                         <button type="button" onClick={() => onCommand("resume")} className={buttonClassName}>

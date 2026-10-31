@@ -11,6 +11,7 @@ import {
 import { chats, type TranscriptMessage } from "@/chats";
 import { composer } from "@/composer";
 import { cn } from "@/lib/cn";
+import { trayClassName } from "./tray";
 import { restoredComments, splitDiffComments } from "@/review/comments";
 import { iconButtonClassName, Tooltip } from "@/ui";
 
@@ -77,12 +78,7 @@ export function QueuedTray({
     };
 
     return (
-        <div
-            className={cn(
-                "mx-4 rounded-t-2xl border border-b-0 border-dark-700 bg-dark-900 px-1 pt-1 pb-1.5",
-                "transition-[opacity,translate] duration-200 ease-out starting:translate-y-2 starting:opacity-0"
-            )}
-        >
+        <div className={trayClassName}>
             <div className="flex h-6 items-center gap-1.5 px-2.5 text-xs">
                 <span className="font-medium text-dark-200">Queued</span>
                 {!running && <span className="text-dark-250">· paused after stop</span>}
