@@ -136,7 +136,7 @@ function Item({ item, last, streaming }: { item: GroupItem; last: boolean; strea
     const failed = item.kind === "call" && item.part.isError;
     const running = item.kind === "call" && isRunning(item.part, streaming);
     const { label, detail } = call
-        ? chipContent(call, cwd)
+        ? chipContent(call, cwd, item.kind === "call" ? item.part.output : undefined)
         : { label: "Thought process", detail: "" };
     const path = call && pathOf(call);
     const body =

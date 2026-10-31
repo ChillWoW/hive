@@ -9,6 +9,8 @@ import {
     MagnifyingGlassIcon,
     PencilSimpleIcon,
     PuzzlePieceIcon,
+    StopIcon,
+    TerminalIcon,
     TerminalWindowIcon,
     ToolboxIcon
 } from "@phosphor-icons/react";
@@ -166,10 +168,44 @@ export function skillOf(call: ToolCall): { name: string; args: string } | undefi
     };
 }
 
+/** Claude's background-task tools (and their older Bash-only names) by what they do. */
+const TASK_TOOLS: Record<string, { label: string; icon: ToolIcon }> = {
+    TaskStop: { label: "Stop task", icon: StopIcon },
+    KillShell: { label: "Stop task", icon: StopIcon },
+    TaskOutput: { label: "Task output", icon: TerminalIcon },
+    BashOutput: { label: "Task output", icon: TerminalIcon }
+};
+
+function taskTool(call: ToolCall) {
+    return call.kind === "unknown" ? TASK_TOOLS[call.name] : undefined;
+}
+
+/**
+ * What a task tool acted on: the command its result names (`TaskStop`
+ * answers `{ message, task_id, command }`), else the task id it was given.
+ */
+function taskDetail(call: ToolCall, output: string | undefined): string {
+    const input = call.kind === "unknown" ? call.input : undefined;
+    const id =
+        stringField(input, "task_id") ?? stringField(input, "shell_id") ?? stringField(input, "bash_id") ?? "";
+    if (output?.trimStart().startsWith("{")) {
+        try {
+            const parsed: unknown = JSON.parse(output);
+            const command = (parsed as { command?: unknown } | null)?.command;
+            if (typeof command === "string" && command.trim()) return command;
+        } catch {
+            // Not the JSON shape; the id will do.
+        }
+    }
+    return id;
+}
+
 export function iconOf(call: ToolCall): ToolIcon {
     if (isHiveTool(call)) return HiveMark;
     if (toolSearch(call)) return ToolboxIcon;
     if (skillOf(call)) return BookOpenIcon;
+    const task = taskTool(call);
+    if (task) return task.icon;
     switch (call.kind) {
         case "exec":
             return TerminalWindowIcon;
@@ -201,10 +237,14 @@ function singleLine(text: string) {
     return text.split(/\s+/).filter(Boolean).join(" ");
 }
 
-/** A call's label and one-line detail: "Run  cargo test", "Edit  lib.rs". */
+/**
+ * A call's label and one-line detail: "Run  cargo test", "Edit  lib.rs".
+ * `output` is the call's result, for tools whose detail is only known then.
+ */
 export function chipContent(
     call: ToolCall,
-    cwd?: string
+    cwd?: string,
+    output?: string
 ): { label: string; detail: string } {
     const chip = (label: string, detail: string) => ({ label, detail: singleLine(detail) });
     if (call.kind === "mcp" && isHiveTool(call)) {
@@ -219,6 +259,8 @@ export function chipContent(
     }
     const skill = skillOf(call);
     if (skill) return chip("Skill", skill.name);
+    const task = taskTool(call);
+    if (task) return chip(task.label, taskDetail(call, output));
     switch (call.kind) {
         case "exec":
             return chip("Run", call.command);
