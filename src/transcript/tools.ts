@@ -1,6 +1,5 @@
 import {
     BookOpenIcon,
-    BrainIcon,
     FileIcon,
     FilePlusIcon,
     FolderOpenIcon,
@@ -19,6 +18,7 @@ import type { MessagePart, ToolCall } from "@/proto";
 import type { JsonValue } from "@/proto/serde_json/JsonValue";
 import type { PageRef } from "@/htmlpage";
 import { HiveMark } from "@/ui";
+import { ThoughtIcon } from "./ThoughtIcon";
 
 export type ToolPart = Extract<MessagePart, { kind: "tool" }>;
 export type ReasoningPart = Extract<MessagePart, { kind: "reasoning" }>;
@@ -230,7 +230,28 @@ export function iconOf(call: ToolCall): ToolIcon {
     }
 }
 
-export const THOUGHT_ICON = BrainIcon;
+export const THOUGHT_ICON: ToolIcon = ThoughtIcon;
+
+/**
+ * A thought's one-line preview for its row: a `**Heading**`
+ * line (Codex's summaries open each section with one) — the latest while
+ * it's live, so the row follows along, else the first — otherwise the first
+ * sentence; Markdown flattened to plain text.
+ */
+export function thoughtPreview(markdown: string, live: boolean): string {
+    const headings = [...markdown.matchAll(/^[ \t]*\*\*([^*\r\n]+)\*\*[ \t]*\r?$/gm)].map((m) => m[1]);
+    const heading = live ? headings.at(-1) : headings[0];
+    const text = singleLine(
+        (heading ?? markdown)
+            .replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1")
+            .replace(/^[ \t]*(?:#{1,6}|[-*+>]|\d+\.)[ \t]+/gm, "")
+            .replace(/`+|\*\*|~~/g, "")
+            .replace(/(^|[^\w*])[*_]([^*_\n]+)[*_](?![\w*])/g, "$1$2")
+    );
+    if (heading !== undefined) return text;
+    const end = /[.?!:]["'”’)]?(?=\s)/.exec(text);
+    return end ? text.slice(0, end.index + end[0].length) : text;
+}
 
 /** Whitespace runs folded to single spaces, for one-line slots. */
 function singleLine(text: string) {

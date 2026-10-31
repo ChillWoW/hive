@@ -24,6 +24,7 @@ import {
     skillOf,
     summarize,
     THOUGHT_ICON,
+    thoughtPreview,
     type GroupItem,
     type ToolIcon,
     type ToolPart
@@ -135,9 +136,10 @@ function Item({ item, last, streaming }: { item: GroupItem; last: boolean; strea
     const call = item.kind === "call" ? item.part.call : undefined;
     const failed = item.kind === "call" && item.part.isError;
     const running = item.kind === "call" && isRunning(item.part, streaming);
-    const { label, detail } = call
-        ? chipContent(call, cwd, item.kind === "call" ? item.part.output : undefined)
-        : { label: "Thought process", detail: "" };
+    const { label, detail } =
+        item.kind === "call"
+            ? chipContent(item.part.call, cwd, item.part.output)
+            : { label: item.live ? "Thinking" : "Thought", detail: thoughtPreview(item.part.text, item.live) };
     const path = call && pathOf(call);
     const body =
         item.kind === "thought" ? (
