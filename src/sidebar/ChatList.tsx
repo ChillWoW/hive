@@ -106,6 +106,58 @@ export function ChatList() {
         <ChatRow key={chat.id} chat={chat} onDelete={setDeleting} />
     );
 
+    const query = useSidebarStore((s) => s.query);
+    const shown = useMemo(
+        () => filterGroups(query, { pinned, projects, archived }),
+        [query, pinned, projects, archived]
+    );
+
+    if (shown) {
+        const empty =
+            !shown.pinned.length && !shown.projects.length && !shown.archived.length;
+        return (
+            <Tooltip.Provider delay={CARD_DWELL} timeout={400}>
+                {empty ? (
+                    <p className="px-2 py-6 text-center text-xs text-dark-250">
+                        No chats match “{query.trim()}”.
+                    </p>
+                ) : (
+                    <div className="flex flex-col gap-3">
+                        {shown.pinned.length > 0 && (
+                            <Section sectionKey={PINNED} label="Pinned" forceOpen>
+                                {shown.pinned.map(row)}
+                            </Section>
+                        )}
+                        <div className="flex flex-col gap-1">
+                            {shown.projects.map((project) => (
+                                <Project
+                                    key={project.path}
+                                    project={project}
+                                    row={row}
+                                    forceOpen
+                                />
+                            ))}
+                            {shown.archived.length > 0 && (
+                                <Group
+                                    foldKey={ARCHIVED}
+                                    icon={
+                                        <ArchiveIcon className="size-4 shrink-0 text-dark-250" />
+                                    }
+                                    name="Archived"
+                                    list={shown.archived}
+                                    count={shown.archived.length}
+                                    row={row}
+                                    forceOpen
+                                />
+                            )}
+                        </div>
+                    </div>
+                )}
+                <DeleteChatDialog chat={deleting} onClose={() => setDeleting(null)} />
+            </Tooltip.Provider>
+        );
+    }
+
     if (
         loaded &&
         !pinned.length &&
@@ -168,23 +220,55 @@ export function ChatList() {
     );
 }
 
-function useFold(key: string) {
+type Groups = { pinned: Chat[]; projects: ProjectGroup[]; archived: Chat[] };
+
+/**
+ * What a search shows (null while the query is blank): chats whose title,
+ * folder name or branch has every word of it; a project whose name has them
+ * keeps all its chats. Groups left empty drop out.
+ */
+function filterGroups(query: string, groups: Groups): Groups | null {
+    const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    if (!words.length) return null;
+    const matches = (text: string) => {
+        const lower = text.toLowerCase();
+        return words.every((word) => lower.includes(word));
+    };
+    const chatMatches = (chat: Chat) =>
+        matches(
+            [chat.title ?? "", folderName(chat.cwd), chat.worktree?.branch ?? ""].join(" ")
+        );
+    return {
+        pinned: groups.pinned.filter(chatMatches),
+        projects: groups.projects.flatMap((project) => {
+            if (matches(folderName(project.path))) return [project];
+            const list = project.chats.filter(chatMatches);
+            return list.length ? [{ ...project, chats: list }] : [];
+        }),
+        archived: groups.archived.filter(chatMatches)
+    };
+}
+
+/** `forceOpen` (search results) shows it unfolded without touching the saved fold. */
+function useFold(key: string, forceOpen = false) {
     const collapsed = useSidebarStore((s) => isCollapsed(s.collapsed, key));
     const toggle = useSidebarStore((s) => s.toggle);
-    return [collapsed, () => toggle(key)] as const;
+    return [collapsed && !forceOpen, () => toggle(key)] as const;
 }
 
 /** A muted, foldable label over a flat list of chats. */
 function Section({
     sectionKey,
     label,
+    forceOpen,
     children
 }: {
     sectionKey: string;
     label: string;
+    forceOpen?: boolean;
     children: ReactNode;
 }) {
-    const [collapsed, toggle] = useFold(sectionKey);
+    const [collapsed, toggle] = useFold(sectionKey, forceOpen);
     return (
         <section>
             <button
@@ -221,12 +305,14 @@ function Caret({ open, className }: { open: boolean; className?: string }) {
 function Project({
     project,
     drafts,
-    row
+    row,
+    forceOpen
 }: {
     project: ProjectGroup;
     /** New-chat drafts in this folder. */
     drafts?: NewChatDraft[];
     row: Row;
+    forceOpen?: boolean;
 }) {
     const { path } = project;
     // The new-chat view is open on this project.
@@ -248,6 +334,7 @@ function Project({
             list={project.chats}
             drafts={drafts}
             row={row}
+            forceOpen={forceOpen}
             action={
                 <button
                     type="button"
@@ -280,7 +367,8 @@ function Group({
     drafts = [],
     row,
     count,
-    action
+    action,
+    forceOpen = false
 }: {
     foldKey: string;
     icon: ReactNode;
@@ -292,12 +380,15 @@ function Group({
     /** Shown after the name, muted. */
     count?: number;
     action?: ReactNode;
+    /** Search results: unfolded, every chat listed. */
+    forceOpen?: boolean;
 }) {
-    const [collapsed, toggle] = useFold(foldKey);
+    const [collapsed, toggle] = useFold(foldKey, forceOpen);
     const [expanded, setExpanded] = useState(false);
     const activeIndex = useChatsStore((s) => list.findIndex((c) => c.id === s.activeChatId));
 
-    const shown = expanded ? list.length : Math.max(GROUP_LIMIT, activeIndex + 1);
+    const shown =
+        expanded || forceOpen ? list.length : Math.max(GROUP_LIMIT, activeIndex + 1);
     const hidden = list.length - shown;
 
     return (
