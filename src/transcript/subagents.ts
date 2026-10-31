@@ -74,6 +74,21 @@ export function spawnResult(part: SpawnPart): string | undefined {
     return output && !/^async agent launched/i.test(output) ? output : undefined;
 }
 
+/** A line as plain text: markdown links, emphasis and list markers dropped. */
+export function plainLine(line: string): string {
+    return line
+        .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+        .replace(/[`*_#>]/g, "")
+        .replace(/^\s*[-+]\s+/, "")
+        .trim();
+}
+
+/** What a running subagent last said: the last line of its latest text. */
+export function progressLine(thread: MessagePart[] | undefined): string | null {
+    const text = thread?.findLast((p) => p.kind === "text");
+    return text?.kind === "text" ? (text.text.split("\n").map(plainLine).findLast(Boolean) ?? null) : null;
+}
+
 export const SUBAGENT_STATE: Record<SubagentPhase, { dot: string; label: string }> = {
     running: { dot: "bg-info", label: "Running" },
     done: { dot: "bg-success", label: "Completed" },

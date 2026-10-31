@@ -16,6 +16,8 @@ import { formatTokens } from "@/usage/format";
 import { OpenSubagent } from "./context";
 import {
     formatElapsed,
+    plainLine,
+    progressLine,
     spawnResult,
     SUBAGENT_STATE,
     useSubagent,
@@ -25,24 +27,9 @@ import type { ToolPart } from "./tools";
 
 type Part<K extends MessagePart["kind"]> = Extract<MessagePart, { kind: K }>;
 
-/** A line as plain text: markdown links, emphasis and list markers dropped. */
-function plainLine(line: string): string {
-    return line
-        .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
-        .replace(/[`*_#>]/g, "")
-        .replace(/^\s*[-+]\s+/, "")
-        .trim();
-}
-
 /** The first line of a subagent's result, as plain text. */
 function resultLine(output: string | undefined): string | null {
     return output?.split("\n").map(plainLine).find(Boolean) ?? null;
-}
-
-/** What a running subagent last said: the last line of its latest text. */
-function progressLine(thread: MessagePart[] | undefined): string | null {
-    const text = thread?.findLast((p) => p.kind === "text");
-    return text?.kind === "text" ? (text.text.split("\n").map(plainLine).findLast(Boolean) ?? null) : null;
 }
 
 /** A subagent's round avatar: the harness's mark, its state as a dot on the corner. */

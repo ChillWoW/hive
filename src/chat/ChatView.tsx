@@ -275,6 +275,7 @@ export function ChatView() {
                         {chat && (
                             <BackgroundTasks
                                 chatId={chat.id}
+                                harness={chat.config.harness}
                                 tasks={session?.background}
                                 messages={shown}
                             />
