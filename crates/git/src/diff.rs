@@ -14,6 +14,42 @@ pub const MAX_PATCH_BYTES: usize = 3 * 1024 * 1024;
 /// What git diffs against before the first commit.
 pub(crate) const EMPTY_TREE: &str = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
 
+/// Past this a file's HEAD text isn't read (the editor's own limit).
+const MAX_HEAD_TEXT: usize = 8 * 1024 * 1024;
+
+/// What the editor's gutter compares `path` (relative to `cwd`) with: its
+/// text at HEAD, with `\n` line endings and no BOM; `""` for a file git would
+/// add (untracked or only staged, not ignored); `None` outside a checkout,
+/// for an ignored file, or one that isn't text.
+pub async fn head_text(cwd: &Path, path: &str) -> Result<Option<String>, GitError> {
+    if !cwd.is_dir() || path.is_empty() || path.starts_with('-') {
+        return Ok(None);
+    }
+    let inside = git(cwd, &["rev-parse", "--is-inside-work-tree"]).await?;
+    if !inside.ok() || inside.stdout.trim() != "true" {
+        return Ok(None);
+    }
+    // `./` makes the path relative to `cwd`, not the checkout's root.
+    let spec = format!("HEAD:./{path}");
+    let mut cmd = Command::from(command(cwd, &["cat-file", "blob", &spec]));
+    cmd.kill_on_drop(true);
+    let out = cmd.output().await.map_err(|e| GitError::Failed(e.to_string()))?;
+    if out.status.success() {
+        let bytes = out.stdout;
+        if bytes.len() > MAX_HEAD_TEXT || bytes.contains(&0) {
+            return Ok(None);
+        }
+        let Ok(text) = String::from_utf8(bytes) else {
+            return Ok(None);
+        };
+        let text = text.strip_prefix('\u{feff}').unwrap_or(&text);
+        return Ok(Some(text.replace("\r\n", "\n")));
+    }
+    // Not at HEAD: new, unless ignored (exit 0 = ignored, 1 = not).
+    let ignored = git(cwd, &["check-ignore", "-q", "--", path]).await?;
+    Ok((ignored.code == Some(1)).then(String::new))
+}
+
 /// `cwd`'s checkout against HEAD, or with `base` against `merge-base(base,
 /// HEAD)`; `None` outside a checkout. Paths are relative to its root.
 pub async fn diff(cwd: &Path, base: Option<&str>) -> Result<Option<GitDiff>, GitError> {

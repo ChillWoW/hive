@@ -25,7 +25,8 @@ import {
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import type { FileText } from "@/proto";
-import { readFile, writeFile } from "./api";
+import { headText, readFile, writeFile } from "./api";
+import { gitGutter, setGitBase } from "./gitGutter";
 import { editorTheme } from "./theme";
 
 /** What's wrong with an open file now. */
@@ -93,6 +94,8 @@ const saved = new Map<string, Text>();
 const pendingReveal = new Map<string, LinePosition>();
 /** Docs whose cursor should be scrolled into view when their editor is next shown. */
 const scrollOnAttach = new Set<string>();
+/** Each doc's last HEAD text handed to its gutter (null: not tracked). */
+const gitBases = new Map<string, string | null>();
 
 /** A 1-based line and, optionally, column. */
 export type LinePosition = { line: number; column?: number };
@@ -142,6 +145,7 @@ const editableExtension = (editable: boolean) => [
 function extensions(id: string, file: FileText): Extension[] {
     return [
         lineNumbers(),
+        gitGutter(),
         highlightActiveLineGutter(),
         highlightSpecialChars(),
         history(),
@@ -178,6 +182,22 @@ function extensions(id: string, file: FileText): Extension[] {
     ];
 }
 
+/** Reads the doc's file at HEAD again for its gutter's change markers. */
+async function refreshGitBase(id: string) {
+    const doc = getDoc(id);
+    if (!doc) return;
+    let text: string | null = null;
+    try {
+        text = await headText(doc.cwd, doc.path);
+    } catch {
+        // Not shown: no git, or the file went.
+    }
+    if (getDoc(id)?.path !== doc.path || !currentState(id)) return;
+    if (gitBases.has(id) && gitBases.get(id) === text) return;
+    gitBases.set(id, text);
+    dispatchTo(id, { effects: setGitBase.of(text === null ? null : text.split("\n")) });
+}
+
 async function loadLanguage(id: string, path: string) {
     const name = path.slice(path.lastIndexOf("/") + 1);
     const description = LanguageDescription.matchFilename(languages, name);
@@ -191,7 +211,10 @@ export function moveDoc(id: string, path: string) {
     const doc = getDoc(id);
     if (!doc || doc.path === path) return;
     setDoc(id, { path });
-    if (currentState(id)) void loadLanguage(id, path);
+    if (currentState(id)) {
+        void loadLanguage(id, path);
+        void refreshGitBase(id);
+    }
 }
 
 /** Reads `path` for the tab `id`, once. */
@@ -221,6 +244,7 @@ export async function openDoc(id: string, cwd: string, path: string) {
             states.set(id, state);
             saved.set(id, state.doc);
             void loadLanguage(id, path);
+            void refreshGitBase(id);
         }
         setDoc(id, { phase: "ready", file });
         const at = pendingReveal.get(id);
@@ -239,6 +263,7 @@ export function dropDoc(id: string) {
     saved.delete(id);
     pendingReveal.delete(id);
     scrollOnAttach.delete(id);
+    gitBases.delete(id);
     useDocsStore.setState((s) => {
         const { [id]: _, ...docs } = s.docs;
         return { docs };
@@ -401,6 +426,8 @@ export async function overwrite(id: string) {
 export async function checkDisk(id: string) {
     const doc = getDoc(id);
     if (!doc?.file || doc.phase !== "ready" || doc.saving) return;
+    // HEAD may have moved (a commit, a branch switch) even when the file didn't.
+    void refreshGitBase(id);
     let file: FileText;
     try {
         file = await readFile(doc.cwd, doc.path);
@@ -427,6 +454,8 @@ export async function checkDisk(id: string) {
         states.set(id, state);
         saved.set(id, state.doc);
         void loadLanguage(id, now.path);
+        gitBases.delete(id);
+        void refreshGitBase(id);
     }
     applyFromDisk(id, file);
 }

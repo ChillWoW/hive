@@ -95,6 +95,22 @@ pub async fn git_fetch_all(cwd: String) -> Result<(), String> {
         .map_err(|e| e.to_string())
 }
 
+/// The editor's gutter base for `path` (relative to `cwd`): its text at HEAD,
+/// `""` for a new file, null when git doesn't track it (or it isn't text).
+#[tauri::command]
+pub async fn git_head_text(cwd: String, path: String) -> Result<Option<String>, String> {
+    use std::path::Component;
+    if !Path::new(&path)
+        .components()
+        .all(|part| matches!(part, Component::Normal(_)))
+    {
+        return Err(format!("{path} is not inside the folder"));
+    }
+    hive_git::head_text(Path::new(&cwd), &path)
+        .await
+        .map_err(|e| e.to_string())
+}
+
 /// What one commit changed, against its first parent.
 #[tauri::command]
 pub async fn git_commit_diff(cwd: String, sha: String) -> Result<Option<GitDiff>, String> {

@@ -23,6 +23,15 @@ export function readFile(cwd: string, path: string): Promise<FileText> {
     });
 }
 
+/**
+ * `path`'s text at HEAD for the gutter's change markers: `""` for a new file,
+ * null when git doesn't track it. A made-up older version under `bun run dev`.
+ */
+export function headText(cwd: string, path: string): Promise<string | null> {
+    if (isTauri) return invoke<string | null>("git_head_text", { cwd, path });
+    return Promise.resolve(`// ${path}\n// An older line.\n`);
+}
+
 /** A file's bytes as an object URL (an image preview). */
 export async function fileObjectUrl(cwd: string, path: string, mimeType: string) {
     if (!isTauri) throw new Error("No backend under plain `bun run dev`.");

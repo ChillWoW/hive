@@ -88,6 +88,7 @@ pub fn run() {
       git::git_search_history,
       git::git_fetch_all,
       git::git_commit_diff,
+      git::git_head_text,
       avatars::git_avatars,
       providers::provider_status,
       providers::provider_usage,

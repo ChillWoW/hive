@@ -14,7 +14,7 @@ use tokio::process::Command;
 mod diff;
 mod history;
 mod turn;
-pub use diff::{diff, MAX_PATCH_BYTES};
+pub use diff::{diff, head_text, MAX_PATCH_BYTES};
 pub use history::{
     commit_diff, fetch_all, github_remote, history, history_matches, search_history,
     HISTORY_DEFAULT_LIMIT, HISTORY_MAX_LIMIT,
@@ -585,6 +585,27 @@ mod tests {
         assert!(d.patch.contains("diff --git a/a.txt b/a.txt"));
         assert!(d.patch.contains("new dir/n.txt"));
         assert!(diff(path, Some("nope")).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn reads_a_files_head_text() {
+        let Some(dir) = fixture().await else { return };
+        let path = dir.path();
+        std::fs::create_dir(path.join("sub")).unwrap();
+        std::fs::write(path.join("sub/c.txt"), "one\r\ntwo\r\n").unwrap();
+        std::fs::write(path.join(".gitignore"), "*.log\n").unwrap();
+        git(path, &["add", "."]).await.unwrap();
+        git(path, &["commit", "-q", "-m", "more"]).await.unwrap();
+        std::fs::write(path.join("a.txt"), "changed").unwrap();
+        std::fs::write(path.join("new.txt"), "n").unwrap();
+        std::fs::write(path.join("x.log"), "l").unwrap();
+
+        assert_eq!(head_text(path, "a.txt").await.unwrap().as_deref(), Some("a"));
+        // Relative to the folder asked about, CRLF read as LF.
+        let sub = path.join("sub");
+        assert_eq!(head_text(&sub, "c.txt").await.unwrap().as_deref(), Some("one\ntwo\n"));
+        assert_eq!(head_text(path, "new.txt").await.unwrap().as_deref(), Some(""));
+        assert_eq!(head_text(path, "x.log").await.unwrap(), None);
     }
 
     #[tokio::test]
