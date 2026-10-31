@@ -1,6 +1,5 @@
 import { ArrowUpLeftIcon } from "@phosphor-icons/react";
-import { type TranscriptMessage } from "@/chats";
-import { useShortcut } from "@/keybindings";
+import { type TranscriptMessage, useChatsStore } from "@/chats";
 import { cn } from "@/lib/cn";
 import type { BackgroundTask, HarnessId } from "@/proto";
 import {
@@ -12,8 +11,8 @@ import {
     SubagentAvatar,
     subagentState,
     Transcript,
+    subagentName,
     useSubagent,
-    useSubagentStore,
     type SpawnPart
 } from "@/transcript";
 import { Button } from "@/ui";
@@ -23,7 +22,8 @@ import { Button } from "@/ui";
  * it was given as the prompt, then everything it did and said, live while it
  * runs (a background agent's past its turn). Its bar takes the composer's
  * place (it can't be written to): who it is, how it stands, "Runs on its
- * own", and Open parent (also the back shortcut) to step back up.
+ * own", and Open parent to step back up (Back returns too: subagents are
+ * places in the chats store's history).
  */
 export function SubagentView({
     chatId,
@@ -42,9 +42,8 @@ export function SubagentView({
     cwd?: string;
     harness?: HarnessId;
 }) {
-    const openSubagent = useSubagentStore((s) => s.openSubagent);
-    const openParent = useSubagentStore((s) => s.openParent);
-    useShortcut("goBack", openParent);
+    const openSubagent = useChatsStore((s) => s.openSubagent);
+    const openParent = useChatsStore((s) => s.openParent);
 
     const found = findSpawnIn(messages, id);
     if (!found) return <Gone onBack={openParent} />;
@@ -125,13 +124,12 @@ function SubagentBar({
     const { state, elapsed } = useSubagent(spawn, streaming);
     const running = state === "running";
     if (spawn.call.kind !== "subagent") return null;
-    const { description } = spawn.call;
 
     return (
         <div className="flex min-h-12 items-center gap-3 rounded-[22px] border border-dark-700 bg-dark-850 py-2 ps-3 pe-2 text-sm">
             <SubagentAvatar harness={harness} state={state} />
             <div className="flex min-w-0 flex-1 flex-col sm:flex-row sm:items-center sm:gap-3">
-                <span className="min-w-0 truncate font-medium text-dark-50">{description || "Subagent"}</span>
+                <span className="min-w-0 truncate font-medium text-dark-50">{subagentName(spawn)}</span>
                 <span
                     role="status"
                     className={cn(

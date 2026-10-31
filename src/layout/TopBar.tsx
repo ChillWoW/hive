@@ -33,6 +33,8 @@ import {
 
 type TopBarProps = {
     title?: string;
+    /** The subagent threads open in the chat, outermost first: `title / a / b`. */
+    subagents?: string[];
     /** The open chat's harness, marked before the title. */
     harness?: HarnessId;
     className?: string;
@@ -60,7 +62,7 @@ function useMouseNavigation() {
     }, []);
 }
 
-export function TopBar({ title, harness, className }: TopBarProps) {
+export function TopBar({ title, subagents = [], harness, className }: TopBarProps) {
     const { fullscreen } = useWindowState();
     const insetForTrafficLights = isMac && !fullscreen;
 
@@ -227,10 +229,29 @@ export function TopBar({ title, harness, className }: TopBarProps) {
                     />
                 )}
                 {title && (
-                    <span className="truncate text-[13px] text-dark-50">
+                    <span
+                        className={cn(
+                            "truncate text-[13px]",
+                            subagents.length > 0 ? "max-w-[40%] shrink text-dark-200" : "text-dark-50"
+                        )}
+                    >
                         {title}
                     </span>
                 )}
+                {title &&
+                    subagents.map((name, i) => (
+                        <span key={i} className="flex min-w-0 items-center gap-1 text-[13px]">
+                            <span className="shrink-0 text-dark-300">/</span>
+                            <span
+                                className={cn(
+                                    "truncate",
+                                    i === subagents.length - 1 ? "text-dark-50" : "text-dark-200"
+                                )}
+                            >
+                                {name}
+                            </span>
+                        </span>
+                    ))}
                 {/* Spacer: an empty strip you can grab to drag the window. */}
                 <div data-tauri-drag-region className="h-full flex-1" />
             </div>

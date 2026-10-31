@@ -23,7 +23,7 @@ import {
 import { BranchPicker, useGitRepo, WorkspaceChip, WorkspacePicker } from "@/git";
 import { useShortcut } from "@/keybindings";
 import type { Attachment, BackgroundTask, ChatConfig, MessagePart } from "@/proto";
-import { LiveTasks, Transcript, useSubagentStore } from "@/transcript";
+import { LiveTasks, Transcript } from "@/transcript";
 import { MorphHeight } from "@/ui";
 import { AgentUpdates } from "./AgentUpdates";
 import { BackgroundTasks } from "./BackgroundTasks";
@@ -59,15 +59,8 @@ export function ChatView() {
     const newChat = useComposerStore((s) => s.newChat);
     const setNewChat = useComposerStore((s) => s.setNewChat);
     const [needFolder, setNeedFolder] = useState(false);
-    const subagent = useSubagentStore((s) =>
-        s.open && s.open.chatId === chatId ? s.open.path.at(-1) : undefined
-    );
-    const openSubagent = useSubagentStore((s) => s.openSubagent);
-    // A subagent's thread belongs to the chat it was opened in.
-    useEffect(() => {
-        const { open, close } = useSubagentStore.getState();
-        if (open && open.chatId !== chatId) close();
-    }, [chatId]);
+    const subagent = useChatsStore((s) => s.subagent.at(-1));
+    const openSubagent = useChatsStore((s) => s.openSubagent);
     // A new chat gets a worktree only in a checkout with a commit to start from.
     const newRepo = useGitRepo(chat ? null : newChat.cwd)?.repo;
     const worktreeMode = !chat && newChat.workspace === "worktree" && !!newRepo?.commit;

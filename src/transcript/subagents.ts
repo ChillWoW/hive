@@ -1,36 +1,9 @@
 import { useContext, useEffect, useState } from "react";
-import { create } from "zustand";
 import type { BackgroundTask, Message, MessagePart } from "@/proto";
 import { LiveTasks } from "./context";
 import { findSpawn } from "./fold";
 
 export type SpawnPart = Extract<MessagePart, { kind: "tool" }>;
-
-type SubagentState = {
-    /** The subagent shown in the main pane: its chat, then the spawn ids from the outermost in. */
-    open: { chatId: string; path: string[] } | null;
-    /** Shows a spawn's thread; one opened inside another's thread goes a level deeper. */
-    openSubagent: (chatId: string, id: string) => void;
-    /** Back up a level: to the parent subagent, else the chat. */
-    openParent: () => void;
-    close: () => void;
-};
-
-export const useSubagentStore = create<SubagentState>((set) => ({
-    open: null,
-    openSubagent: (chatId, id) =>
-        set(({ open }) => ({
-            open: {
-                chatId,
-                path: open?.chatId === chatId && !open.path.includes(id) ? [...open.path, id] : [id]
-            }
-        })),
-    openParent: () =>
-        set(({ open }) => ({
-            open: open && open.path.length > 1 ? { ...open, path: open.path.slice(0, -1) } : null
-        })),
-    close: () => set({ open: null })
-}));
 
 /** A spawn part anywhere in a chat's messages (nested ones included). */
 export function findSpawnIn(messages: Message[], id: string): { spawn: SpawnPart; message: Message } | null {
@@ -66,6 +39,11 @@ export function useSubagent(part: SpawnPart, streaming: boolean) {
     const state = subagentState(part, streaming, !!task);
     const elapsed = useSubagentElapsed(part, state === "running", task?.startedAt);
     return { state, elapsed };
+}
+
+/** What a subagent is called: its task's description, else its agent type. */
+export function subagentName(part: SpawnPart): string {
+    return (part.call.kind === "subagent" && (part.call.description || part.call.agent)) || "Subagent";
 }
 
 /** What a spawn call returned, unless it was only Claude's note that a background agent started. */

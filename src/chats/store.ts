@@ -70,13 +70,24 @@ type ChatsState = {
     outbox: Outgoing[];
 
     /**
-     * Where Back and Forward go, nearest last, as in a browser; null is the
-     * new-chat view. `select` pushes the chat it leaves onto `back`.
+     * The subagent thread shown in the active chat: spawn ids from the
+     * outermost in, a nested one deeper; empty is the chat itself.
      */
-    back: (string | null)[];
-    forward: (string | null)[];
+    subagent: string[];
 
+    /**
+     * Where Back and Forward go, nearest last, as in a browser. `select` and
+     * the subagent moves push the place they leave onto `back`.
+     */
+    back: Place[];
+    forward: Place[];
+
+    /** Opens a chat (null: the new-chat view); the open one stays as it is. */
     select: (chatId: string | null) => void;
+    /** Shows a spawn's thread; one opened inside another's goes a level deeper. */
+    openSubagent: (chatId: string, id: string) => void;
+    /** Up a level: to the parent subagent, else the chat. */
+    openParent: () => void;
     goBack: () => void;
     goForward: () => void;
     /** Shows the prompt now; creates the chat first for a new-chat target. */
@@ -113,6 +124,21 @@ type ChatsState = {
 
 type Draft = ChatsState;
 
+/** A stop in Back/Forward history: a chat (null: the new-chat view) and the subagent shown in it. */
+export type Place = { chatId: string | null; subagent: string[] };
+
+function samePlace(a: Place, b: Place) {
+    return (
+        a.chatId === b.chatId &&
+        a.subagent.length === b.subagent.length &&
+        a.subagent.every((id, i) => id === b.subagent[i])
+    );
+}
+
+function here(s: Draft): Place {
+    return { chatId: s.activeChatId, subagent: [...s.subagent] };
+}
+
 const NOT_SENT = "This message wasn't sent.";
 
 /** When the chat last had activity: its latest turn, else its creation. */
@@ -137,47 +163,50 @@ function dropChat(s: Draft, chatId: string) {
     delete s.sessions[chatId];
     delete s.transcripts[chatId];
     s.outbox = s.outbox.filter((o) => o.chatId !== chatId);
-    if (s.activeChatId === chatId) s.activeChatId = null;
-    s.back = tidyHistory(s.back, chatId, s.activeChatId);
-    s.forward = tidyHistory(s.forward, chatId, s.activeChatId);
+    if (s.activeChatId === chatId) {
+        s.activeChatId = null;
+        s.subagent = [];
+    }
+    s.back = tidyHistory(s.back, chatId, here(s));
+    s.forward = tidyHistory(s.forward, chatId, here(s));
 }
 
 /** Enough to walk back through a session, small enough not to matter. */
 const HISTORY_LIMIT = 100;
 
-/** Leaves the active chat for `chatId`, remembering it for Back. */
-function navigate(s: Draft, chatId: string | null) {
-    if (s.activeChatId === chatId) return;
-    s.back.push(s.activeChatId);
+/** Leaves the place shown for `to`, remembering it for Back. */
+function navigate(s: Draft, to: Place) {
+    if (samePlace(here(s), to)) return;
+    s.back.push(here(s));
     if (s.back.length > HISTORY_LIMIT) s.back.shift();
     s.forward = [];
-    s.activeChatId = chatId;
+    s.activeChatId = to.chatId;
+    s.subagent = to.subagent;
 }
 
 /** Moves one entry from `from` to `to`, skipping chats that are gone. */
-function step(s: Draft, from: (string | null)[], to: (string | null)[]) {
+function step(s: Draft, from: Place[], to: Place[]) {
     while (from.length > 0) {
-        const chatId = from.pop()!;
-        if (chatId === s.activeChatId) continue;
-        if (chatId !== null && !s.chats.some((c) => c.id === chatId)) continue;
-        to.push(s.activeChatId);
-        s.activeChatId = chatId;
+        const place = from.pop()!;
+        if (samePlace(place, here(s))) continue;
+        if (place.chatId !== null && !s.chats.some((c) => c.id === place.chatId)) continue;
+        to.push(here(s));
+        s.activeChatId = place.chatId;
+        s.subagent = place.subagent;
         return;
     }
 }
 
-/** A history stack without `removed`, repeats, or the chat it leads from. */
-function tidyHistory(
-    stack: (string | null)[],
-    removed: string,
-    current: string | null
-) {
-    const out: (string | null)[] = [];
-    for (const chatId of stack) {
-        if (chatId === removed || chatId === out[out.length - 1]) continue;
-        out.push(chatId);
+/** A history stack without `removed`'s places, repeats, or the place it leads from. */
+function tidyHistory(stack: Place[], removed: string, current: Place) {
+    const out: Place[] = [];
+    for (const place of stack) {
+        if (place.chatId === removed) continue;
+        const last = out[out.length - 1];
+        if (last && samePlace(last, place)) continue;
+        out.push(place);
     }
-    while (out.length > 0 && out[out.length - 1] === current) out.pop();
+    while (out.length > 0 && samePlace(out[out.length - 1], current)) out.pop();
     return out;
 }
 
@@ -286,10 +315,31 @@ export const useChatsStore = create<ChatsState>()(
         transcripts: {},
         outbox: [],
 
+        subagent: [],
         back: [],
         forward: [],
 
-        select: (chatId) => set((s) => navigate(s, chatId)),
+        select: (chatId) =>
+            set((s) => {
+                if (s.activeChatId !== chatId) navigate(s, { chatId, subagent: [] });
+            }),
+        openSubagent: (chatId, id) =>
+            set((s) => {
+                // Deeper from the thread shown; back up to `id` if it's already on the path.
+                const at = s.activeChatId === chatId ? s.subagent.indexOf(id) : -1;
+                const subagent =
+                    s.activeChatId !== chatId
+                        ? [id]
+                        : at >= 0
+                          ? s.subagent.slice(0, at + 1)
+                          : [...s.subagent, id];
+                navigate(s, { chatId, subagent });
+            }),
+        openParent: () =>
+            set((s) => {
+                if (s.subagent.length === 0) return;
+                navigate(s, { chatId: s.activeChatId, subagent: s.subagent.slice(0, -1) });
+            }),
         goBack: () => set((s) => step(s, s.back, s.forward)),
         goForward: () => set((s) => step(s, s.forward, s.back)),
 
@@ -853,6 +903,9 @@ export const chats = {
     get: () => useChatsStore.getState(),
     select: (chatId: string | null) =>
         useChatsStore.getState().select(chatId),
+    openSubagent: (chatId: string, id: string) =>
+        useChatsStore.getState().openSubagent(chatId, id),
+    openParent: () => useChatsStore.getState().openParent(),
     goBack: () => useChatsStore.getState().goBack(),
     goForward: () => useChatsStore.getState().goForward(),
     send: (target: SendTarget, prompt: string, attachments?: Attachment[]) =>

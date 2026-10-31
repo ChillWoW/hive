@@ -7,8 +7,8 @@ export {
     formatElapsed,
     spawnResult,
     SUBAGENT_STATE,
+    subagentName,
     subagentState,
     useSubagent,
-    useSubagentStore,
     type SpawnPart
 } from "./subagents";

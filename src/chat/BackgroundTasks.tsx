@@ -24,7 +24,7 @@ import { chipTriggerClassName, popupClassName } from "@/composer/chip";
 import { HarnessIcon } from "@/harnesses";
 import { cn } from "@/lib/cn";
 import type { BackgroundTask, BackgroundTaskKind, HarnessId, TaskOutput, ToolCall } from "@/proto";
-import { findSpawnIn, progressLine, useSubagentStore, type SpawnPart } from "@/transcript/subagents";
+import { findSpawnIn, progressLine, type SpawnPart } from "@/transcript/subagents";
 import { DotMatrixSpinner, Popover, usePortalContainer } from "@/ui";
 
 const ICON: Record<BackgroundTaskKind, Icon> = {
@@ -175,7 +175,7 @@ export function BackgroundTasks({
                             messages={messages}
                             onOpenAgent={(id) => {
                                 setOpen(false);
-                                useSubagentStore.getState().openSubagent(chatId, id);
+                                chats.openSubagent(chatId, id);
                             }}
                         />
                     </Popover.Popup>
