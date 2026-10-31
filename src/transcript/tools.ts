@@ -7,6 +7,7 @@ import {
     ListChecksIcon,
     MagnifyingGlassIcon,
     PencilSimpleIcon,
+    PlugsConnectedIcon,
     PuzzlePieceIcon,
     StopIcon,
     TerminalIcon,
@@ -131,6 +132,7 @@ type HiveTool = { label?: string; detail?: (input: JsonValue | undefined) => str
  * mark and its name; an entry here can give it a label and a detail line.
  */
 const HIVE_TOOLS: Record<string, HiveTool> = {
+    whoami: { label: "Look up chat" },
     request_secret: {
         label: "Asking for a secret",
         detail: (input) => stringField(input, "label") ?? ""
@@ -185,6 +187,56 @@ function resultPage(output: string | undefined): Record<string, unknown> | undef
     } catch {
         return undefined;
     }
+}
+
+/**
+ * An MCP server's name as people know it: Claude's connector and plugin
+ * prefixes (`claude_ai_Gmail`, `plugin_context7_context7`) peeled,
+ * separators as spaces, all-lowercase words capitalized.
+ */
+export function serverLabel(server: string): string {
+    const peeled = server.replace(/^claude_ai_/, "").replace(/^plugin_[^_]+_/, "");
+    return singleLine(peeled.replace(/[_-]+/g, " "))
+        .split(" ")
+        .map((word) => (word === word.toLowerCase() ? word.charAt(0).toUpperCase() + word.slice(1) : word))
+        .join(" ");
+}
+
+/** A tool's name as words: `get_file_contents` → "get file contents", `browserClick` → "browser click". */
+function toolWords(tool: string): string {
+    return singleLine(tool.replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/[_-]+/g, " ")).toLowerCase();
+}
+
+/** The input's most telling value: a string under a well-known key, else its first short string. */
+function mainArg(input: JsonValue | undefined): string {
+    if (!input || typeof input !== "object" || Array.isArray(input)) return "";
+    for (const key of ["query", "q", "url", "uri", "path", "file_path", "command", "name", "title", "id"]) {
+        const value = stringField(input, key);
+        if (value?.trim()) return value;
+    }
+    for (const value of Object.values(input)) {
+        if (typeof value === "string" && value.trim() && value.length <= 200) return value;
+    }
+    return "";
+}
+
+/** Claude's own tools for MCP resources, by what they do. */
+const MCP_RESOURCE_TOOLS: Record<string, string> = {
+    ListMcpResourcesTool: "List resources",
+    ReadMcpResourceTool: "Read resource",
+    ReadMcpResourceDirTool: "List resources"
+};
+
+function mcpResourceTool(call: ToolCall): string | undefined {
+    return call.kind === "unknown" ? MCP_RESOURCE_TOOLS[call.name] : undefined;
+}
+
+/** "Gmail · uri" for a resource call: the server it asked, then what it asked for. */
+function mcpResourceDetail(call: ToolCall): string {
+    const input = call.kind === "unknown" ? call.input : undefined;
+    const server = stringField(input, "server");
+    const target = stringField(input, "uri") ?? stringField(input, "path") ?? "";
+    return [server && serverLabel(server), target].filter(Boolean).join(" · ");
 }
 
 function isHiveTool(call: ToolCall): boolean {
@@ -256,6 +308,7 @@ export function iconOf(call: ToolCall): ToolIcon {
     if (isHiveTool(call)) return HiveMark;
     if (toolSearch(call)) return ToolboxIcon;
     if (skillOf(call)) return BookOpenIcon;
+    if (mcpResourceTool(call)) return PlugsConnectedIcon;
     const task = taskTool(call);
     if (task) return task.icon;
     switch (call.kind) {
@@ -277,6 +330,8 @@ export function iconOf(call: ToolCall): ToolIcon {
             return GlobeIcon;
         case "todo":
             return ListChecksIcon;
+        case "mcp":
+            return PlugsConnectedIcon;
         default:
             return PuzzlePieceIcon;
     }
@@ -332,6 +387,8 @@ export function chipContent(
     }
     const skill = skillOf(call);
     if (skill) return chip("Skill", skill.name);
+    const resource = mcpResourceTool(call);
+    if (resource) return chip(resource, mcpResourceDetail(call));
     const task = taskTool(call);
     if (task) return chip(task.label, taskDetail(call, output));
     switch (call.kind) {
@@ -361,7 +418,10 @@ export function chipContent(
             return chip("Todo", `${done}/${call.items.length} done`);
         }
         case "mcp":
-            return chip("MCP", `${call.server} · ${call.tool}`);
+            return chip(
+                serverLabel(call.server),
+                [toolWords(call.tool), mainArg(call.input)].filter(Boolean).join(" · ")
+            );
         case "subagent":
             return chip("Agent", call.description);
         case "unknown":
