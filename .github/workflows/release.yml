@@ -1,6 +1,6 @@
 # Builds Hive for a pushed `v*` tag (`bun run release <version>`) and
-# publishes it as a GitHub release, with the signed installer and the
-# `latest.json` the in-app updater reads.
+# publishes it as a GitHub release, with the signed Windows installer, the
+# macOS .dmg / updater bundle, and the `latest.json` the in-app updater reads.
 #
 # Secrets: TAURI_SIGNING_PRIVATE_KEY, TAURI_SIGNING_PRIVATE_KEY_PASSWORD.
 
@@ -41,4 +41,38 @@ jobs:
           releaseDraft: false
           # A tag like v0.1.0-beta.1 is a pre-release: GitHub's "latest" (the
           # stable channel) skips it; the pre-release channel picks it up.
+          prerelease: ${{ contains(github.ref_name, '-') }}
+
+  # One universal (Apple Silicon + Intel) build: the .dmg to download and the
+  # signed .app.tar.gz the updater installs, added to the release the Windows
+  # job made. Runs after it so the two never race on merging `latest.json`.
+  # Ad-hoc signed (`tauri.macos.conf.json`), not notarized: a downloaded copy
+  # has to be opened once via System Settings › Privacy & Security.
+  macos:
+    needs: windows
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - uses: swatinem/rust-cache@v2
+
+      - run: bun install --frozen-lockfile
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          tauriScript: bunx tauri
+          args: --target universal-apple-darwin --bundles app,dmg
+          tagName: ${{ github.ref_name }}
+          releaseName: Hive ${{ github.ref_name }}
+          releaseDraft: false
           prerelease: ${{ contains(github.ref_name, '-') }}

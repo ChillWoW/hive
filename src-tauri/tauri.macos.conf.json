@@ -16,5 +16,10 @@
                 "zoomHotkeysEnabled": true
             }
         ]
+    },
+    "bundle": {
+        "macOS": {
+            "signingIdentity": "-"
+        }
     }
 }
