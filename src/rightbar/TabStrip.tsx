@@ -316,9 +316,9 @@ function tabDetail(tab: RightTab, title: string): ReactNode {
             return `${tab.sha.slice(0, 7)} ${tab.subject}`;
         case "terminal":
             return (
-                <span className="flex flex-col">
-                    <span>{title}</span>
-                    <span className="text-dark-250">{tab.cwd ?? "Home folder"}</span>
+                <span className="flex min-w-0 flex-col">
+                    <span className="truncate">{title}</span>
+                    <span className="truncate text-dark-250">{tab.cwd ?? "Home folder"}</span>
                 </span>
             );
     }
