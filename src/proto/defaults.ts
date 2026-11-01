@@ -7,7 +7,8 @@ export const DEFAULT_SETTINGS: Settings = {
     "resumeInterrupted": false,
     "autoTitle": true,
     "autoArchive": true,
-    "autoArchiveDays": 3
+    "autoArchiveDays": 3,
+    "showActivity": false
   },
   "textGeneration": {
     "harness": null,

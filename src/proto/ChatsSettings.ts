@@ -19,4 +19,9 @@ autoArchive: boolean,
 /**
  * Days of inactivity before a chat is archived; 1–365.
  */
-autoArchiveDays: number, };
+autoArchiveDays: number, 
+/**
+ * A second line under a sidebar row's title while its agent works,
+ * saying what it's doing (`Session::activity`).
+ */
+showActivity: boolean, };

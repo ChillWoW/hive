@@ -7,7 +7,7 @@ use std::time::Duration;
 use hive_engine::{Engine, EngineConfig, EngineError, RESUME_PROMPT};
 use hive_harness::{Harness, MockHarness};
 use hive_proto::{
-    fold_event, stamp_event, AgentEvent, ChatConfig, ChatsUpdate, Command, CommandPayload, CommandStatus,
+    fold_event, stamp_event, AgentActivity, AgentEvent, ChatConfig, ChatsUpdate, Command, CommandPayload, CommandStatus,
     DoneStatus, HarnessId, Message, MessagePart, MessageRole, MessageStatus, MessagesUpdate,
     SandboxLevel, SecretRequest, Session, SessionStatus, UserInputAnswer,
 };
@@ -830,6 +830,41 @@ async fn catalogs_list_registered_harnesses() {
     assert_eq!(catalogs.len(), 1);
     assert_eq!(catalogs[0].id, HarnessId::Mock);
     assert!(!catalogs[0].models.is_empty());
+}
+
+#[tokio::test]
+async fn a_session_shows_what_its_turn_is_doing() {
+    let (_dir, engine) = engine(0.0);
+    let chat = engine
+        .create_chat("/demo", config(HarnessId::Mock))
+        .unwrap();
+    let mut chats = watch_chats(&engine);
+    let mut updates = watch_messages(&engine, &chat.id);
+    engine.queue_command(&chat.id, send("hi")).unwrap();
+    let seen = until(&mut updates, is_input).await;
+    engine
+        .queue_command(&chat.id, answer(request_id(&seen)))
+        .unwrap();
+
+    let sessions: Vec<Session> = until(&mut chats, |u| {
+        matches!(u, ChatsUpdate::Session { session: Some(s), .. } if s.status == SessionStatus::Idle)
+    })
+    .await
+    .into_iter()
+    .filter_map(|u| match u {
+        ChatsUpdate::Session { session, .. } => session,
+        _ => None,
+    })
+    .collect();
+    let activities: Vec<_> = sessions.iter().filter_map(|s| s.activity.as_ref()).collect();
+    assert!(
+        activities
+            .iter()
+            .any(|a| matches!(a, AgentActivity::Tool { running: true, .. })),
+        "a running call shows: {activities:?}"
+    );
+    // Between turns, nothing.
+    assert_eq!(sessions.last().unwrap().activity, None);
 }
 
 #[tokio::test]

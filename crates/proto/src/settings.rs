@@ -63,6 +63,9 @@ pub struct ChatsSettings {
     pub auto_archive: bool,
     /// Days of inactivity before a chat is archived; 1–365.
     pub auto_archive_days: u32,
+    /// A second line under a sidebar row's title while its agent works,
+    /// saying what it's doing (`Session::activity`).
+    pub show_activity: bool,
 }
 
 impl Default for ChatsSettings {
@@ -72,6 +75,7 @@ impl Default for ChatsSettings {
             auto_title: true,
             auto_archive: true,
             auto_archive_days: 3,
+            show_activity: false,
         }
     }
 }

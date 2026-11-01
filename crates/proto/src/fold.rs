@@ -4,6 +4,7 @@
 //! the two in step.
 
 use crate::agent::{AgentEvent, CompactionStatus, DoneStatus, ToolCall};
+use crate::chat::AgentActivity;
 use crate::message::{MessagePart, SubagentStatus};
 
 /// Folds one event into `parts`, in place.
@@ -298,6 +299,112 @@ pub fn has_running_spawn(parts: &[MessagePart]) -> bool {
     })
 }
 
+/// What a reply folded so far is doing now ([`crate::Session::activity`]):
+/// the newest call still running among the latest calls (they may run side
+/// by side), else the latest of them, else what it streams last (thinking,
+/// text, a compaction). `None` before anything shows.
+pub fn activity_of(parts: &[MessagePart]) -> Option<AgentActivity> {
+    let mut finished: Option<&ToolCall> = None;
+    for part in parts.iter().rev() {
+        match part {
+            MessagePart::Tool {
+                call,
+                resolved,
+                subagent,
+                ..
+            } => {
+                let running = !*resolved || *subagent == Some(SubagentStatus::Running);
+                if running {
+                    return Some(AgentActivity::Tool {
+                        call: brief(call),
+                        running: true,
+                    });
+                }
+                finished.get_or_insert(call);
+            }
+            // Past the latest calls.
+            _ if finished.is_some() => break,
+            MessagePart::Reasoning { text, .. } => {
+                return Some(AgentActivity::Thinking {
+                    heading: latest_heading(text),
+                });
+            }
+            MessagePart::Text { text, .. } if !text.trim().is_empty() => {
+                return Some(AgentActivity::Writing);
+            }
+            MessagePart::Compaction {
+                status: CompactionStatus::Running,
+                ..
+            } => return Some(AgentActivity::Compacting),
+            _ => {}
+        }
+    }
+    finished.map(|call| AgentActivity::Tool {
+        call: brief(call),
+        running: false,
+    })
+}
+
+/// A call with what only its full view needs left out, sent on every change.
+fn brief(call: &ToolCall) -> ToolCall {
+    const MAX_COMMAND: usize = 240;
+    const MAX_INPUT: usize = 512;
+    let small = |input: &Option<serde_json::Value>| {
+        input
+            .as_ref()
+            .filter(|v| v.to_string().len() <= MAX_INPUT)
+            .cloned()
+    };
+    match call {
+        ToolCall::Exec { command } => ToolCall::Exec {
+            command: command.chars().take(MAX_COMMAND).collect(),
+        },
+        ToolCall::WriteFile { path, .. } => ToolCall::WriteFile {
+            path: path.clone(),
+            content: None,
+        },
+        ToolCall::EditFile { path, .. } => ToolCall::EditFile {
+            path: path.clone(),
+            old_string: None,
+            new_string: None,
+        },
+        ToolCall::Subagent {
+            description,
+            model,
+            agent,
+            ..
+        } => ToolCall::Subagent {
+            description: description.clone(),
+            model: model.clone(),
+            prompt: None,
+            agent: agent.clone(),
+        },
+        ToolCall::Mcp {
+            server,
+            tool,
+            input,
+        } => ToolCall::Mcp {
+            server: server.clone(),
+            tool: tool.clone(),
+            input: small(input),
+        },
+        ToolCall::Unknown { name, input } => ToolCall::Unknown {
+            name: name.clone(),
+            input: small(input),
+        },
+        other => other.clone(),
+    }
+}
+
+/// The last `**Heading**` line of a thought (Codex opens each section of
+/// its summaries with one).
+fn latest_heading(text: &str) -> Option<String> {
+    text.lines().rev().find_map(|line| {
+        let inner = line.trim().strip_prefix("**")?.strip_suffix("**")?.trim();
+        (!inner.is_empty() && !inner.contains('*')).then(|| inner.chars().take(120).collect())
+    })
+}
+
 /// A subagent spawn by its call id, at this level or in a spawn's thread.
 fn find_spawn<'a>(parts: &'a mut [MessagePart], id: &str) -> Option<&'a mut MessagePart> {
     if let Some(i) = parts
@@ -336,6 +443,82 @@ mod tests {
                 command: "ls".into(),
             },
         }
+    }
+
+    #[test]
+    fn activity_follows_the_reply() {
+        assert_eq!(activity_of(&[]), None);
+        let thinking = fold(&[AgentEvent::ReasoningDelta {
+            text: "**Reading code**\n\nLooking.\n**Planning the fix**\nhm".into(),
+        }]);
+        assert_eq!(
+            activity_of(&thinking),
+            Some(AgentActivity::Thinking {
+                heading: Some("Planning the fix".into())
+            })
+        );
+        assert_eq!(activity_of(&fold(&[text("Hi")])), Some(AgentActivity::Writing));
+
+        // Two calls side by side: the one still running, whichever is newer.
+        let running = fold(&[
+            text("Let me look."),
+            exec("t1"),
+            exec("t2"),
+            AgentEvent::ToolResult {
+                id: "t2".into(),
+                is_error: false,
+                output: None,
+                diff: None,
+            },
+        ]);
+        let ls = ToolCall::Exec {
+            command: "ls".into(),
+        };
+        assert_eq!(
+            activity_of(&running),
+            Some(AgentActivity::Tool {
+                call: ls.clone(),
+                running: true
+            })
+        );
+        let mut done = running.clone();
+        fold_event(
+            &mut done,
+            &AgentEvent::ToolResult {
+                id: "t1".into(),
+                is_error: false,
+                output: None,
+                diff: None,
+            },
+        );
+        assert_eq!(
+            activity_of(&done),
+            Some(AgentActivity::Tool {
+                call: ls,
+                running: false
+            })
+        );
+
+        // An edit's text stays out.
+        let edit = fold(&[AgentEvent::ToolCall {
+            id: "e".into(),
+            call: ToolCall::EditFile {
+                path: "a.rs".into(),
+                old_string: Some("old".into()),
+                new_string: Some("new".into()),
+            },
+        }]);
+        assert_eq!(
+            activity_of(&edit),
+            Some(AgentActivity::Tool {
+                call: ToolCall::EditFile {
+                    path: "a.rs".into(),
+                    old_string: None,
+                    new_string: None
+                },
+                running: true
+            })
+        );
     }
 
     #[test]

@@ -9,7 +9,10 @@ import {
     PushPinSlashIcon,
     TrashIcon
 } from "@phosphor-icons/react";
-import { activity, chats, useChatsStore } from "@/chats";
+import { activity, chats, useChatsStore, workDir } from "@/chats";
+import { describeActivity } from "@/transcript";
+import { ActivityText } from "./ActivityText";
+import { useSetting } from "@/settings/store";
 import { useHasDraft } from "@/composer";
 import { HarnessIcon } from "@/harnesses";
 import { cn } from "@/lib/cn";
@@ -53,6 +56,8 @@ export function ChatRow({
 
     const status = statusOf(chat, session);
     const title = chat.title?.trim() || UNTITLED;
+    const showActivity = useSetting("chats", "showActivity").value;
+    const line = showActivity ? describeActivity(session, workDir(chat)) : null;
 
     const startRename = () => {
         keepFocus.current = true;
@@ -89,18 +94,23 @@ export function ChatRow({
                             aria-current={active ? "page" : undefined}
                             className={cn(
                                 rowClassName(active),
+                                // A second line while the agent works.
+                                line && "h-auto min-h-7 py-1",
                                 "group-has-[[data-popup-open]]/chat:bg-dark-800"
                             )}
                         >
                             <StatusMark status={status} />
-                            <span
-                                className={cn(
-                                    "min-w-0 flex-1 truncate",
-                                    !chat.title && "text-dark-200",
-                                    status === "unseen" && "font-medium text-dark-50"
-                                )}
-                            >
-                                {title}
+                            <span className="flex min-w-0 flex-1 flex-col">
+                                <span
+                                    className={cn(
+                                        "truncate",
+                                        !chat.title && "text-dark-200",
+                                        status === "unseen" && "font-medium text-dark-50"
+                                    )}
+                                >
+                                    {title}
+                                </span>
+                                {line && <ActivityText line={line} />}
                             </span>
                             <span
                                 className={cn(

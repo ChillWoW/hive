@@ -34,7 +34,7 @@ use std::time::Duration;
 
 use hive_harness::{Harness, RunHandle};
 use hive_proto::{
-    has_running_spawn, has_spawn, AgentEvent, Attachment, BackgroundTask, BranchNaming, Chat,
+    activity_of, has_running_spawn, has_spawn, AgentEvent, Attachment, BackgroundTask, BranchNaming, Chat,
     ChatConfig, ChatsUpdate, Command, CommandPayload, CommandStatus, ContextUsage, DoneStatus,
     HarnessCatalog, HarnessId, McpServer, MessageStatus, MessagesUpdate, NewWorktree, RunRequest,
     SecretRequest, Session, SessionStatus, SlashCommand, TaskOutput, TextGenerationSettings,
@@ -1418,10 +1418,20 @@ impl Engine {
         let at = self.record(chat_id, turn, &event);
         let message_id = turn.assistant.id.clone();
         let finished = matches!(event, AgentEvent::Done { .. }).then(|| turn.assistant.clone());
+        // Published only when it changes: a run of deltas leaves it as is.
+        let activity = match event {
+            AgentEvent::Done { .. } => None,
+            _ => activity_of(&turn.assistant.parts),
+        };
         st.publish(MessagesUpdate::Event {
             message_id,
             at,
             event: event.clone(),
+        });
+        self.edit_session(chat_id, st, |session| {
+            let changed = session.activity != activity;
+            session.activity = activity;
+            changed
         });
 
         match event {
@@ -1598,6 +1608,9 @@ impl Engine {
             Some(session) => {
                 session.status = status;
                 session.updated_at = now;
+                if !matches!(status, SessionStatus::Working | SessionStatus::AwaitingInput) {
+                    session.activity = None;
+                }
                 session
             }
             None => st.session.insert(Session {
@@ -1609,6 +1622,7 @@ impl Engine {
                 background: Vec::new(),
                 secrets: Vec::new(),
                 goal: None,
+                activity: None,
             }),
         };
         let session = session.clone();

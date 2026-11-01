@@ -7,6 +7,7 @@ use ts_rs::TS;
 
 use crate::agent::{
     AccessMode, BackgroundTask, Goal, HarnessId, ReasoningLevel, SandboxLevel, SlashCommand,
+    ToolCall,
 };
 
 /// The run settings a chat sends with each turn; the composer edits these.
@@ -169,6 +170,31 @@ pub struct Session {
     /// is set.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub goal: Option<Goal>,
+    /// What the running turn is doing right now (`fold::activity_of` its
+    /// reply); none between turns.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub activity: Option<AgentActivity>,
+}
+
+/// What a live turn is doing at the moment, one line's worth: the sidebar
+/// shows it (`chats.showActivity`) without watching the chat's messages.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+#[ts(optional_fields)]
+pub enum AgentActivity {
+    /// Reasoning; `heading` is its latest `**Heading**` line, if it has one.
+    Thinking {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        heading: Option<String>,
+    },
+    /// Writing its reply.
+    Writing,
+    /// A tool call, `running` until its result came (a spawned subagent until
+    /// it's done). Big fields (file contents, edits, a subagent's prompt) are
+    /// left out.
+    Tool { call: ToolCall, running: bool },
+    /// Summarizing the conversation to free up context.
+    Compacting,
 }
 
 /// An agent asking the user for a secret (an API key, a token) in a card

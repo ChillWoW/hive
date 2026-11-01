@@ -1,4 +1,5 @@
 export { Transcript } from "./Transcript";
+export { describeActivity, type ActivityLine } from "./activity";
 export { LiveTasks } from "./context";
 export { AgentMark, RoundAvatar, SubagentAvatar } from "./parts";
 export {

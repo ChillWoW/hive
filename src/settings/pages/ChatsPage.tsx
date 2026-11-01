@@ -8,6 +8,7 @@ export function ChatsPage() {
     const autoTitle = useSetting("chats", "autoTitle");
     const autoArchive = useSetting("chats", "autoArchive");
     const archiveDays = useSetting("chats", "autoArchiveDays");
+    const showActivity = useSetting("chats", "showActivity");
 
     return (
         <>
@@ -17,6 +18,15 @@ export function ChatsPage() {
                     description="A model run names new chats. Off, their first words do"
                     keywords="title name rename auto generate summary tokens"
                     setting={autoTitle}
+                />
+            </SettingsSection>
+
+            <SettingsSection title="Sidebar">
+                <SwitchRow
+                    label="Show agent activity"
+                    description="A line under a working chat's title saying what its agent is doing"
+                    keywords="sidebar activity status working tool line agent doing progress"
+                    setting={showActivity}
                 />
             </SettingsSection>
 

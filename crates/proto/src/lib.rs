@@ -21,7 +21,7 @@ pub use catalog::*;
 pub use chat::*;
 pub use command::*;
 pub use files::*;
-pub use fold::{fold_event, has_running_spawn, has_spawn, stamp_event};
+pub use fold::{activity_of, fold_event, has_running_spawn, has_spawn, stamp_event};
 pub use git::*;
 pub use message::*;
 pub use provider::*;
