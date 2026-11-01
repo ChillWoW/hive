@@ -120,8 +120,9 @@ impl Server {
     }
 
     async fn start_once(exe: &Path, cwd: &str) -> Result<Self, HarnessError> {
-        let mut cmd = cli::command(exe);
+        let mut cmd = crate::overrides::command(hive_proto::HarnessId::Codex, exe);
         cmd.arg("app-server")
+            .args(crate::overrides::get(hive_proto::HarnessId::Codex).args)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())

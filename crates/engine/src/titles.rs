@@ -141,6 +141,7 @@ impl Engine {
             resume: None,
             attachments: Vec::new(),
             mcp: None,
+            auto_compact_window: None,
         };
         for attempt in 0..=retries.len() {
             match harness.run_title(request.clone()) {

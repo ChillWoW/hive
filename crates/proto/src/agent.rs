@@ -140,6 +140,13 @@ pub struct RunRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(skip)]
     pub mcp: Option<McpServer>,
+    /// The context size, in tokens, the agent compacts its conversation by
+    /// (Claude Code's `autoCompactWindow`); None keeps the CLI's default.
+    /// Stamped on by the engine from the settings; harnesses without such a
+    /// knob ignore it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(skip)]
+    pub auto_compact_window: Option<u32>,
 }
 
 /// A stdio MCP server to launch beside the agent: `command args…` with `env`.

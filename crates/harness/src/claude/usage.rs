@@ -141,7 +141,7 @@ async fn keychain() -> Option<Value> {
 #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 fn keychain_service() -> String {
     use sha2::{Digest, Sha256};
-    match std::env::var_os("CLAUDE_CONFIG_DIR") {
+    match crate::overrides::env_var(hive_proto::HarnessId::ClaudeCode, "CLAUDE_CONFIG_DIR") {
         None => "Claude Code-credentials".into(),
         Some(dir) => {
             let digest = Sha256::digest(dir.to_string_lossy().as_bytes());

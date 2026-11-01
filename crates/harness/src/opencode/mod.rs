@@ -262,6 +262,10 @@ impl Harness for OpencodeHarness {
 
 /// `opencode` on PATH, else where its installers put it.
 pub(crate) fn find_opencode() -> Option<PathBuf> {
+    crate::overrides::binary(HarnessId::Opencode, found_opencode)
+}
+
+fn found_opencode() -> Option<PathBuf> {
     let mut paths = Vec::new();
     let exe = if cfg!(windows) { "opencode.exe" } else { "opencode" };
     if let Some(home) = cli::home_dir() {

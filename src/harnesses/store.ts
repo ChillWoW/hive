@@ -180,7 +180,8 @@ export function providerKey(id: HarnessId): string {
 
 /** Turned on in Settings › Providers; a harness with no switch counts as on. */
 export function isEnabled(providers: ProvidersSettings, id: HarnessId): boolean {
-    return (providers as Record<string, boolean | undefined>)[providerKey(id)] ?? true;
+    const value = (providers as unknown as Record<string, unknown>)[providerKey(id)];
+    return typeof value === "boolean" ? value : true;
 }
 
 /**

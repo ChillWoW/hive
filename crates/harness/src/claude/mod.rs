@@ -123,9 +123,17 @@ impl ClaudeHarness {
         if let Some(session) = &request.resume {
             args.extend(["--resume".into(), session.clone()]);
         }
-        // Off leaves the user's own setting alone.
+        // Inline settings layered over the user's own; a key left out (fast
+        // mode off, no window) leaves theirs alone.
+        let mut settings = serde_json::Map::new();
         if models::fast_mode(request) {
-            args.extend(["--settings".into(), r#"{"fastMode":true}"#.into()]);
+            settings.insert("fastMode".into(), true.into());
+        }
+        if let Some(window) = request.auto_compact_window {
+            settings.insert("autoCompactWindow".into(), window.into());
+        }
+        if !settings.is_empty() {
+            args.extend(["--settings".into(), Value::Object(settings).to_string()]);
         }
         args
     }
@@ -365,8 +373,11 @@ impl Harness for ClaudeHarness {
 impl ClaudeHarness {
     fn spawn(&self, request: RunRequest, title: bool) -> Result<Run, HarnessError> {
         let exe = find_claude().ok_or(HarnessError::NotInstalled("claude"))?;
-        let mut cmd = cli::command(&exe);
+        let mut cmd = crate::overrides::command(HarnessId::ClaudeCode, &exe);
         cmd.args(Self::launch_args(&request));
+        if !title {
+            cmd.args(crate::overrides::get(HarnessId::ClaudeCode).args);
+        }
         if title {
             cmd.args([
                 "--system-prompt",
@@ -446,7 +457,7 @@ impl ClaudeHarness {
 /// The CLI's command list, from an `initialize` sent to a CLI started
 /// just for it.
 async fn probe(exe: &Path, cwd: &str) -> Result<Vec<commands::Advertised>, HarnessError> {
-    let mut cmd = cli::command(exe);
+    let mut cmd = crate::overrides::command(HarnessId::ClaudeCode, exe);
     cmd.args([
         "--print",
         "--input-format",
@@ -962,6 +973,10 @@ fn mcp_config_arg(mcp: &McpServer) -> String {
 
 /// `claude` on PATH, else where its installers put it.
 pub(crate) fn find_claude() -> Option<PathBuf> {
+    crate::overrides::binary(HarnessId::ClaudeCode, found_claude)
+}
+
+fn found_claude() -> Option<PathBuf> {
     let home = cli::home_dir();
     let mut paths = Vec::new();
     if cfg!(windows) {
@@ -1103,6 +1118,12 @@ mod tests {
         let args = ClaudeHarness::launch_args(&request);
         let at = args.iter().position(|a| a == "--settings").unwrap();
         assert_eq!(args[at + 1], r#"{"fastMode":true}"#);
+
+        request.auto_compact_window = Some(300_000);
+        let args = ClaudeHarness::launch_args(&request);
+        let at = args.iter().position(|a| a == "--settings").unwrap();
+        let settings: Value = serde_json::from_str(&args[at + 1]).unwrap();
+        assert_eq!(settings, json!({ "fastMode": true, "autoCompactWindow": 300_000 }));
     }
 
     fn mode_request(access: AccessMode, auto_approve: bool, plan: bool) -> RunRequest {

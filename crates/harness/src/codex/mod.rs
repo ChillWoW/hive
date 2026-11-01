@@ -211,6 +211,10 @@ impl Harness for CodexHarness {
 
 /// `codex` on PATH, else where its installers put it.
 pub(crate) fn find_codex() -> Option<PathBuf> {
+    crate::overrides::binary(HarnessId::Codex, found_codex)
+}
+
+fn found_codex() -> Option<PathBuf> {
     let mut paths = Vec::new();
     if cfg!(windows) {
         if let Some(local) = std::env::var_os("LOCALAPPDATA") {

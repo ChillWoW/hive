@@ -23,6 +23,7 @@ fn request(prompt: &str, cwd: &std::path::Path) -> RunRequest {
         resume: None,
         attachments: Vec::new(),
         mcp: None,
+        auto_compact_window: None,
     }
 }
 

@@ -24,6 +24,7 @@ mod codex;
 mod mock;
 mod models;
 mod opencode;
+pub mod overrides;
 pub mod provider;
 
 pub use claude::ClaudeHarness;
@@ -126,6 +127,7 @@ pub(crate) fn title_request(mut request: RunRequest) -> RunRequest {
     request.access = AccessMode::Supervised;
     request.plan = false;
     request.mcp = None;
+    request.auto_compact_window = None;
     request
 }
 

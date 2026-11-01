@@ -23,14 +23,18 @@ const LEVELS = [
  * composer: muted, warning from 75%, danger from 90%; the
  * token counts in its tooltip. Nothing until the harness reports a window.
  * With `compact` (the harness has `/compact`) it opens a card instead, with
- * the counts and a Compact context button.
+ * the counts and a Compact context button. `autoCompactAt` adds where the
+ * agent compacts by itself: a tick on the card's bar and a line of text.
  */
 export function ContextRing({
     usage,
-    compact
+    compact,
+    autoCompactAt
 }: {
     usage: ContextUsage | undefined;
     compact?: CompactAction;
+    /** Where the agent compacts by itself, when the user set it (Claude). */
+    autoCompactAt?: number;
 }) {
     const [open, setOpen] = useState(false);
     const capacity = usage?.window;
@@ -44,6 +48,10 @@ export function ContextRing({
         tokens != null
             ? `${formatCount(tokens)} / ${formatCount(capacity)} tokens`
             : `${formatCount(capacity)} token window`;
+    const autoNote = autoCompactAt
+        ? `Compacts automatically at about ${formatCount(autoCompactAt)} tokens`
+        : undefined;
+    const tick = autoCompactAt && autoCompactAt < capacity ? autoCompactAt / capacity : undefined;
     const chip = (
         <>
             <Ring fraction={fraction} />
@@ -69,7 +77,10 @@ export function ContextRing({
                     }
                 />
                 <Tooltip.Content side="top">
-                    <span className="tabular-nums">{counts}</span>
+                    <span className="flex flex-col tabular-nums">
+                        <span>{counts}</span>
+                        {autoNote && <span className="text-dark-250">{autoNote}</span>}
+                    </span>
                 </Tooltip.Content>
             </Tooltip>
         );
@@ -89,13 +100,21 @@ export function ContextRing({
                     <span className="text-[12.5px] font-medium text-dark-50">Context window</span>
                     <span className={cn("text-[11.5px] tabular-nums", tone)}>{percent}</span>
                 </div>
-                <div className="h-1.5 overflow-hidden rounded-full bg-dark-700">
+                <div className="relative h-1.5 rounded-full bg-dark-700">
                     <div
                         className={cn("h-full rounded-full", level?.bar ?? "bg-dark-200")}
                         style={{ width: `${(fraction ?? 0) * 100}%` }}
                     />
+                    {tick !== undefined && (
+                        <div
+                            aria-hidden
+                            className="absolute -inset-y-0.5 w-px -translate-x-1/2 bg-dark-50/70"
+                            style={{ left: `${tick * 100}%` }}
+                        />
+                    )}
                 </div>
                 <span className="text-[11px] text-dark-250 tabular-nums">{counts}</span>
+                {autoNote && <span className="-mt-1 text-[11px] text-dark-250">{autoNote}</span>}
             </div>
             <button
                 type="button"

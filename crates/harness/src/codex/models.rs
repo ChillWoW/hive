@@ -88,7 +88,7 @@ pub fn from_cache() -> Option<Models> {
 
 /// `$CODEX_HOME`, else `~/.codex`.
 fn codex_home() -> Option<PathBuf> {
-    if let Some(dir) = std::env::var_os("CODEX_HOME").filter(|d| !d.is_empty()) {
+    if let Some(dir) = crate::overrides::env_var(hive_proto::HarnessId::Codex, "CODEX_HOME") {
         return Some(dir.into());
     }
     Some(cli::home_dir()?.join(".codex"))

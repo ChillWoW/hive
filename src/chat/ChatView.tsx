@@ -24,11 +24,15 @@ import {
 import { BranchPicker, useGitRepo, WorkspaceChip, WorkspacePicker } from "@/git";
 import { useShortcut } from "@/keybindings";
 import type { Attachment, BackgroundTask, ChatConfig, MessagePart } from "@/proto";
+import { useMinuteClock } from "@/lib/time";
+import { useSettingsStore } from "@/settings/store";
 import { LiveTasks, promptText, Transcript } from "@/transcript";
 import { MorphHeight } from "@/ui";
 import { AgentUpdates } from "./AgentUpdates";
 import { BackgroundTasks } from "./BackgroundTasks";
+import { autoCompactAt, isStaleForCompact } from "./compaction";
 import { type CompactAction, ContextRing } from "./ContextRing";
+import { StaleCompactChip } from "./StaleCompactChip";
 import { GoalTray } from "./GoalTray";
 import { QueuedTray } from "./QueuedTray";
 import { SecretRequestCard } from "./SecretRequestCard";
@@ -162,6 +166,34 @@ export function ChatView() {
               }
             : undefined;
 
+    const claudeSettings = useSettingsStore((s) => s.settings.claude);
+    const compactAt = autoCompactAt(
+        chat?.config.harness,
+        claudeSettings.autoCompactWindow,
+        chat?.context?.window
+    );
+
+    // Back in a big Claude chat whose prompt cache expired: compact before
+    // the next prompt unless the chip is switched to full history. Keyed by
+    // the chat's last message, so each idle spell starts out on.
+    const now = useMinuteClock();
+    const stale =
+        claudeSettings.idleCompaction === "onReturn" &&
+        !!compact &&
+        !compact.disabled &&
+        isStaleForCompact(chat, now);
+    const staleKey = `${chat?.id}:${chat?.lastMessageAt}`;
+    const [keepFull, setKeepFull] = useState<string | null>(null);
+    const compactFirst = stale && keepFull !== staleKey;
+
+    const send = (prompt: string, attachments: Attachment[] = []) => {
+        if (compactFirst && !prompt.trimStart().startsWith("/")) {
+            // The prompt waits in the queue until the compaction's turn ends.
+            sendTo("/compact");
+        }
+        return sendTo(prompt, attachments);
+    };
+
     const hero = !chatId && shown.length === 0;
 
     const bottom = (
@@ -224,7 +256,7 @@ export function ChatView() {
                             canAttach={!!catalog?.capabilities.attachments}
                             commands={commands}
                             cwd={folder}
-                            onSend={sendTo}
+                            onSend={send}
                             onStop={chat ? () => void chats.interrupt(chat.id).catch(() => {}) : undefined}
                             placeholder={hero ? "What should we work on?" : "Reply…"}
                         />
@@ -272,8 +304,19 @@ export function ChatView() {
                                 messages={shown}
                             />
                         )}
+                        {stale && (
+                            <StaleCompactChip
+                                tokens={chat?.context?.tokens ?? 0}
+                                on={compactFirst}
+                                onChange={(on) => setKeepFull(on ? null : staleKey)}
+                            />
+                        )}
                         <UsageRing harness={config.harness} />
-                        <ContextRing usage={chat?.context} compact={compact} />
+                        <ContextRing
+                            usage={chat?.context}
+                            compact={compact}
+                            autoCompactAt={compactAt}
+                        />
                     </div>
                 </div>
             </div>

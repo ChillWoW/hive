@@ -33,7 +33,7 @@ fn installed() -> Result<PathBuf, ProviderError> {
 }
 
 fn cli(exe: &Path) -> Command {
-    captured(cli::command(exe))
+    captured(crate::overrides::command(HarnessId::Opencode, exe))
 }
 
 pub async fn status() -> ProviderStatus {

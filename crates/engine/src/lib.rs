@@ -172,6 +172,9 @@ struct Inner {
     auto_title: AtomicBool,
     /// Days before an idle chat is archived; 0 = never. Follows the setting.
     auto_archive_days: AtomicU32,
+    /// Claude's `autoCompactWindow` for runs started from now on; 0 = the
+    /// CLI's default. Follows the setting.
+    auto_compact_window: AtomicU32,
     /// Starts as `config.worktrees_location` / `branch_naming` /
     /// `branch_prefix` / `delete_worktree_branch`; follows the settings.
     worktrees: Mutex<WorktreeOptions>,
@@ -380,6 +383,7 @@ impl Engine {
                 harnesses: harnesses.into_iter().map(|h| (h.id(), h)).collect(),
                 auto_title: AtomicBool::new(config.auto_title),
                 auto_archive_days: AtomicU32::new(0),
+                auto_compact_window: AtomicU32::new(0),
                 text_generation: Mutex::default(),
                 worktrees: Mutex::new(WorktreeOptions {
                     location: config.worktrees_location.clone(),
@@ -406,6 +410,15 @@ impl Engine {
     /// Turns title runs on or off for chats titled from now on.
     pub fn set_auto_title(&self, on: bool) {
         self.inner.auto_title.store(on, Ordering::Relaxed);
+    }
+
+    /// The context size runs started from now on compact by (Claude's
+    /// `autoCompactWindow`); None keeps the CLI's default. Running ones keep
+    /// theirs until they restart.
+    pub fn set_auto_compact_window(&self, window: Option<u32>) {
+        self.inner
+            .auto_compact_window
+            .store(window.unwrap_or(0), Ordering::Relaxed);
     }
 
     /// The model title runs use from now on; no harness means automatic.
@@ -1161,6 +1174,8 @@ impl Engine {
             resume: chat.harness_session_id.clone(),
             attachments: prompt.paths(),
             mcp: self.inner.config.mcp.as_ref().map(|m| m.for_chat(&chat.id)),
+            auto_compact_window: Some(self.inner.auto_compact_window.load(Ordering::Relaxed))
+                .filter(|w| *w > 0),
         };
         let run = {
             let _runtime = self.inner.runtime.enter();

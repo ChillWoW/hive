@@ -1,63 +1,19 @@
-import { useEffect, useState, type ComponentProps } from "react";
+import { useEffect, useState } from "react";
 import { CaretDownIcon, CheckIcon, FolderOpenIcon } from "@phosphor-icons/react";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { cn } from "@/lib/cn";
 import { tildify, untildify, useHomeDir } from "@/lib/home";
 import { isTauri } from "@/lib/platform";
 import type { BranchNaming } from "@/proto";
-import { IconButton, Input, Menu } from "@/ui";
+import { IconButton, Menu } from "@/ui";
 import { settingsApi } from "../api";
+import { DraftInput } from "../DraftInput";
 import { SettingRow, SettingsSection, SwitchRow } from "../SettingsSection";
 import { useSetting } from "../store";
 
 /** `~`, `~/…`, `/…`, `C:\…` or `\\server\…`; what Rust accepts as a location. */
 function looksAbsolute(path: string): boolean {
     return /^(~([/\\]|$)|\/|[A-Za-z]:[/\\]|\\\\)/.test(path);
-}
-
-/**
- * A text setting that's saved when the field loses focus or on Enter, not
- * per keystroke; Escape puts the saved value back.
- */
-function DraftInput({
-    value,
-    onCommit,
-    ...props
-}: { value: string; onCommit: (value: string) => void } & Omit<
-    ComponentProps<typeof Input>,
-    "value" | "onChange"
->) {
-    const [draft, setDraft] = useState(value);
-    useEffect(() => setDraft(value), [value]);
-
-    const commit = () => {
-        const next = draft.trim();
-        if (next !== value) onCommit(next);
-        else setDraft(value);
-    };
-
-    return (
-        <Input
-            size="sm"
-            spellCheck={false}
-            autoComplete="off"
-            {...props}
-            value={draft}
-            onChange={(event) => setDraft(event.target.value)}
-            onBlur={commit}
-            onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                    event.preventDefault();
-                    commit();
-                } else if (event.key === "Escape" && draft !== value) {
-                    // Keeps the settings modal open.
-                    event.preventDefault();
-                    event.stopPropagation();
-                    setDraft(value);
-                }
-            }}
-        />
-    );
 }
 
 const NAMING_LABELS: Record<BranchNaming, string> = {

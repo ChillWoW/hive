@@ -30,6 +30,7 @@ import { useConfirmPress } from "../hooks";
 import { matchesQuery, useSettingsQuery } from "../search";
 import { ROW_DIVIDER, SettingsSection } from "../SettingsSection";
 import { useSettingsStore } from "../store";
+import { ProviderRuntime } from "./ProviderRuntime";
 import { SignInDialog } from "./SignInDialog";
 
 /** The CLI each harness runs, for install hints. */
@@ -160,7 +161,8 @@ function ProviderRow({
     const locked = enabled && lastOn;
     const mock = catalog.id === "mock";
     const installed = status?.installed ?? catalog.installed;
-    const hasDetails = installed && !mock && status !== undefined;
+    // Not installed opens too: its runtime settings (a binary path) are how it gets found.
+    const hasDetails = !mock && status !== undefined;
     const open = expanded && hasDetails;
     const newer = availableUpdate(provider);
     const account = status?.account;
@@ -206,7 +208,7 @@ function ProviderRow({
         !matchesQuery(
             query,
             catalog.label,
-            "provider providers agent harness cli install update upgrade version sign in login logout account plan path"
+            "provider providers agent harness cli install update upgrade version sign in login logout account plan path binary executable config home launch arguments flags environment variables env display name compact compaction idle cache"
         )
     ) {
         return null;
@@ -447,6 +449,7 @@ function Details({
     const { status, latest, probing, action } = provider;
     if (!status) return null;
     const { account } = status;
+    const installed = status.installed;
 
     const versionNote = newer
         ? `v${newer} available`
@@ -461,103 +464,107 @@ function Details({
     return (
         // Inset to line up with the name: row padding + tile + gap.
         <div className="flex flex-col gap-3 pr-4 pb-4 pl-[64px]">
-            <DetailRow
-                label="Account"
-                value={
-                    account?.loggedIn ? (
-                        <span className="flex min-w-0 items-center gap-2">
-                            <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-dark-600 text-[10px] font-medium text-dark-50 uppercase">
-                                {(account.email ?? "?").slice(0, 1)}
-                            </span>
-                            <span className="flex min-w-0 flex-col">
-                                <span className="truncate text-xs text-dark-50">
-                                    {account.email ?? "Signed in"}
+            {installed && (
+                <>
+                    <DetailRow
+                        label="Account"
+                        value={
+                            account?.loggedIn ? (
+                                <span className="flex min-w-0 items-center gap-2">
+                                    <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-dark-600 text-[10px] font-medium text-dark-50 uppercase">
+                                        {(account.email ?? "?").slice(0, 1)}
+                                    </span>
+                                    <span className="flex min-w-0 flex-col">
+                                        <span className="truncate text-xs text-dark-50">
+                                            {account.email ?? "Signed in"}
+                                        </span>
+                                        {accountMeta(account) && (
+                                            <span className="truncate text-[11px] text-dark-250">
+                                                {accountMeta(account)}
+                                            </span>
+                                        )}
+                                    </span>
                                 </span>
-                                {accountMeta(account) && (
-                                    <span className="truncate text-[11px] text-dark-250">
-                                        {accountMeta(account)}
+                            ) : (
+                                <span className="flex flex-col">
+                                    <span className="text-xs text-dark-50">
+                                        {account ? "Not signed in" : "Couldn't check the login"}
+                                    </span>
+                                    <span className="text-[11px] text-dark-250">
+                                        Sign in to start chats with {catalog.label}
+                                    </span>
+                                </span>
+                            )
+                        }
+                        actions={
+                            status.canSignIn &&
+                            (account?.loggedIn ? (
+                                <>
+                                    <Button size="sm" variant="ghost" onClick={onSignIn}>
+                                        Switch account
+                                    </Button>
+                                    <SignOutButton
+                                        busy={action === "signing-out"}
+                                        onConfirm={() => void providers.signOut(catalog.id)}
+                                    />
+                                </>
+                            ) : (
+                                <Button size="sm" variant="primary" onClick={onSignIn}>
+                                    Sign in
+                                </Button>
+                            ))
+                        }
+                    />
+
+                    <DetailRow
+                        label="Version"
+                        value={
+                            <span className="flex min-w-0 flex-col">
+                                <span className="text-xs text-dark-50 tabular-nums">
+                                    {status.version ? `v${status.version}` : "Unknown"}
+                                </span>
+                                {(versionNote || status.updateChannel) && (
+                                    <span
+                                        className={cn(
+                                            "text-[11px] text-dark-250",
+                                            newer && "text-dark-100",
+                                            latest === null && "text-warning"
+                                        )}
+                                    >
+                                        {[versionNote, status.updateChannel && `${status.updateChannel} channel`]
+                                            .filter(Boolean)
+                                            .join(" · ")}
                                     </span>
                                 )}
                             </span>
-                        </span>
-                    ) : (
-                        <span className="flex flex-col">
-                            <span className="text-xs text-dark-50">
-                                {account ? "Not signed in" : "Couldn't check the login"}
-                            </span>
-                            <span className="text-[11px] text-dark-250">
-                                Sign in to start chats with {catalog.label}
-                            </span>
-                        </span>
-                    )
-                }
-                actions={
-                    status.canSignIn &&
-                    (account?.loggedIn ? (
-                        <>
-                            <Button size="sm" variant="ghost" onClick={onSignIn}>
-                                Switch account
-                            </Button>
-                            <SignOutButton
-                                busy={action === "signing-out"}
-                                onConfirm={() => void providers.signOut(catalog.id)}
-                            />
-                        </>
-                    ) : (
-                        <Button size="sm" variant="primary" onClick={onSignIn}>
-                            Sign in
-                        </Button>
-                    ))
-                }
-            />
+                        }
+                        actions={
+                            newer &&
+                            status.canUpdate && (
+                                <Button
+                                    size="sm"
+                                    variant="default"
+                                    loading={action === "updating"}
+                                    onClick={() => void providers.update(catalog.id)}
+                                >
+                                    Update to v{newer}
+                                </Button>
+                            )
+                        }
+                    />
 
-            <DetailRow
-                label="Version"
-                value={
-                    <span className="flex min-w-0 flex-col">
-                        <span className="text-xs text-dark-50 tabular-nums">
-                            {status.version ? `v${status.version}` : "Unknown"}
-                        </span>
-                        {(versionNote || status.updateChannel) && (
-                            <span
-                                className={cn(
-                                    "text-[11px] text-dark-250",
-                                    newer && "text-dark-100",
-                                    latest === null && "text-warning"
-                                )}
-                            >
-                                {[versionNote, status.updateChannel && `${status.updateChannel} channel`]
-                                    .filter(Boolean)
-                                    .join(" · ")}
-                            </span>
-                        )}
-                    </span>
-                }
-                actions={
-                    newer &&
-                    status.canUpdate && (
-                        <Button
-                            size="sm"
-                            variant="default"
-                            loading={action === "updating"}
-                            onClick={() => void providers.update(catalog.id)}
-                        >
-                            Update to v{newer}
-                        </Button>
-                    )
-                }
-            />
-
-            {status.path && (
-                <DetailRow
-                    label="Location"
-                    value={
-                        <span className="font-mono text-[11px] leading-4 break-all text-dark-100">
-                            {status.path}
-                        </span>
-                    }
-                    actions={<CopyButton text={status.path} />}
-                />
+                    {status.path && (
+                        <DetailRow
+                            label="Location"
+                            value={
+                                <span className="font-mono text-[11px] leading-4 break-all text-dark-100">
+                                    {status.path}
+                                </span>
+                            }
+                            actions={<CopyButton text={status.path} />}
+                        />
+                    )}
+                </>
             )}
 
             {status.error && (
@@ -566,6 +573,8 @@ function Details({
                     <span className="min-w-0 break-words">{status.error}</span>
                 </p>
             )}
+
+            <ProviderRuntime harness={catalog.id} />
         </div>
     );
 }

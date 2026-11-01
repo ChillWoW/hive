@@ -31,6 +31,9 @@ pub struct Settings {
     pub notifications: NotificationsSettings,
     pub keyboard: KeyboardSettings,
     pub providers: ProvidersSettings,
+    pub claude: ClaudeSettings,
+    pub codex: CodexSettings,
+    pub opencode: OpencodeSettings,
     pub updates: UpdatesSettings,
 }
 
@@ -44,6 +47,9 @@ impl Default for Settings {
             notifications: NotificationsSettings::default(),
             keyboard: KeyboardSettings::default(),
             providers: ProvidersSettings::default(),
+            claude: ClaudeSettings::default(),
+            codex: CodexSettings::default(),
+            opencode: OpencodeSettings::default(),
             updates: UpdatesSettings::default(),
         }
     }
@@ -261,6 +267,71 @@ impl Default for ProvidersSettings {
     }
 }
 
+/// What Claude Code takes as `autoCompactWindow`.
+pub const AUTO_COMPACT_WINDOW_RANGE: std::ops::RangeInclusive<u32> = 100_000..=1_000_000;
+
+/// When a big Claude chat (over 200K tokens) left idle gets compacted.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub enum IdleCompaction {
+    /// Back in it after its prompt cache expired, the next prompt compacts
+    /// first (a chip beside the rings switches that off for the prompt).
+    #[default]
+    OnReturn,
+    /// Just before its prompt cache expires, Hive sends `/compact` itself,
+    /// so coming back doesn't re-read the whole conversation. Only while
+    /// Hive is open.
+    BeforeCacheExpires,
+    Off,
+}
+
+/// Claude Code's CLI (Settings › Providers). The paths, variables and
+/// arguments go to `hive_harness::overrides::configure` (live; runs started
+/// from then on); the compaction settings to the engine and frontend.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase", default)]
+pub struct ClaudeSettings {
+    /// The name pickers show; empty is the harness's own.
+    pub display_name: String,
+    /// The `claude` to run; empty finds it on PATH. `~` is the home folder.
+    pub binary_path: String,
+    /// `CLAUDE_CONFIG_DIR`: another account's or setup's config folder.
+    pub config_dir: String,
+    /// Added to every chat run's command line, split like a shell would.
+    pub launch_args: String,
+    /// `NAME=value` per line, set on every `claude` process.
+    pub env: String,
+    /// `autoCompactWindow`: the context size, in tokens, it compacts by
+    /// (about 33K short of it). None keeps Claude's default; clamped to
+    /// [`AUTO_COMPACT_WINDOW_RANGE`].
+    pub auto_compact_window: Option<u32>,
+    pub idle_compaction: IdleCompaction,
+}
+
+/// Codex's CLI; see [`ClaudeSettings`].
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase", default)]
+pub struct CodexSettings {
+    pub display_name: String,
+    pub binary_path: String,
+    /// `CODEX_HOME`: another account's or setup's home folder.
+    pub home_path: String,
+    /// Added to `codex app-server`'s command line.
+    pub launch_args: String,
+    pub env: String,
+}
+
+/// OpenCode's CLI; see [`ClaudeSettings`].
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase", default)]
+pub struct OpencodeSettings {
+    pub display_name: String,
+    pub binary_path: String,
+    /// Added to `opencode serve`'s command line.
+    pub launch_args: String,
+    pub env: String,
+}
+
 /// Which releases the updater offers.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "kebab-case")]
@@ -304,6 +375,17 @@ impl Settings {
     fn normalize(&mut self) {
         self.version = SETTINGS_VERSION;
         self.chats.auto_archive_days = self.chats.auto_archive_days.clamp(1, 365);
+        let range = AUTO_COMPACT_WINDOW_RANGE;
+        if let Some(window) = &mut self.claude.auto_compact_window {
+            *window = (*window).clamp(*range.start(), *range.end());
+        }
+        for name in [
+            &mut self.claude.display_name,
+            &mut self.codex.display_name,
+            &mut self.opencode.display_name,
+        ] {
+            *name = name.trim().to_owned();
+        }
         let worktrees = &mut self.worktrees;
         worktrees.location = worktrees.location.trim().to_owned();
         worktrees.branch_prefix = worktrees
@@ -447,6 +529,19 @@ mod tests {
         let cleared = json!({ "textGeneration": { "harness": null, "model": null } });
         let s = Settings::sanitize(&s, &cleared);
         assert_eq!(s.text_generation, TextGenerationSettings::default());
+    }
+
+    #[test]
+    fn auto_compact_window_is_clamped_and_clearable() {
+        let s = Settings::sanitize(
+            &Settings::default(),
+            &json!({ "claude": { "autoCompactWindow": 5000 } }),
+        );
+        assert_eq!(s.claude.auto_compact_window, Some(100_000));
+        let s = Settings::sanitize(&s, &json!({ "claude": { "autoCompactWindow": 2_000_000 } }));
+        assert_eq!(s.claude.auto_compact_window, Some(1_000_000));
+        let s = Settings::sanitize(&s, &json!({ "claude": { "autoCompactWindow": null } }));
+        assert_eq!(s.claude.auto_compact_window, None);
     }
 
     #[test]

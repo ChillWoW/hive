@@ -19,7 +19,6 @@ use tokio::sync::Notify;
 
 use super::find_codex;
 use super::rpc::{Incoming, Server};
-use crate::cli;
 use crate::provider::{self, captured, parse_version, run_ok, ProviderError, UPDATE_TIMEOUT};
 
 const PROBE_TIMEOUT: Duration = Duration::from_secs(20);
@@ -31,7 +30,7 @@ fn installed() -> Result<PathBuf, ProviderError> {
 }
 
 fn cli(exe: &Path) -> Command {
-    captured(cli::command(exe))
+    captured(crate::overrides::command(HarnessId::Codex, exe))
 }
 
 pub async fn status() -> ProviderStatus {

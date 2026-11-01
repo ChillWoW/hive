@@ -121,8 +121,25 @@ pub async fn unwatch(
 }
 
 #[tauri::command]
-pub async fn list_harnesses(engine: State<'_, Engine>) -> Result<Vec<HarnessCatalog>, String> {
-    Ok(engine.catalogs())
+pub async fn list_harnesses(
+    engine: State<'_, Engine>,
+    settings: State<'_, hive_store::SettingsFile>,
+) -> Result<Vec<HarnessCatalog>, String> {
+    let settings = settings.get();
+    let mut catalogs = engine.catalogs();
+    // The user's names for them (Settings › Providers).
+    for catalog in &mut catalogs {
+        let name = match catalog.id {
+            HarnessId::ClaudeCode => &settings.claude.display_name,
+            HarnessId::Codex => &settings.codex.display_name,
+            HarnessId::Opencode => &settings.opencode.display_name,
+            HarnessId::Mock => continue,
+        };
+        if !name.is_empty() {
+            catalog.label = name.clone();
+        }
+    }
+    Ok(catalogs)
 }
 
 /// A harness's commands and skills in `cwd`, for the composer before a

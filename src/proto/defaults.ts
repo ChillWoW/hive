@@ -56,6 +56,28 @@ export const DEFAULT_SETTINGS: Settings = {
     "opencode": true,
     "mock": true
   },
+  "claude": {
+    "displayName": "",
+    "binaryPath": "",
+    "configDir": "",
+    "launchArgs": "",
+    "env": "",
+    "autoCompactWindow": null,
+    "idleCompaction": "onReturn"
+  },
+  "codex": {
+    "displayName": "",
+    "binaryPath": "",
+    "homePath": "",
+    "launchArgs": "",
+    "env": ""
+  },
+  "opencode": {
+    "displayName": "",
+    "binaryPath": "",
+    "launchArgs": "",
+    "env": ""
+  },
   "updates": {
     "autoCheck": true,
     "channel": "stable"

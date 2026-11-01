@@ -29,7 +29,7 @@ const SIGN_IN_START_TIMEOUT: Duration = Duration::from_secs(30);
 const SIGN_IN_FINISH_TIMEOUT: Duration = Duration::from_secs(60);
 
 pub(super) fn cli(exe: &Path) -> Command {
-    let mut cmd = cli::command(exe);
+    let mut cmd = crate::overrides::command(HarnessId::ClaudeCode, exe);
     // Set when Hive itself runs inside Claude Code.
     cmd.env_remove("CLAUDECODE");
     captured(cmd)
@@ -93,7 +93,7 @@ fn parse_account(text: &str) -> Option<ProviderAccount> {
 }
 
 pub(super) fn config_dir() -> Option<PathBuf> {
-    if let Some(dir) = std::env::var_os("CLAUDE_CONFIG_DIR") {
+    if let Some(dir) = crate::overrides::env_var(HarnessId::ClaudeCode, "CLAUDE_CONFIG_DIR") {
         return Some(dir.into());
     }
     Some(cli::home_dir()?.join(".claude"))

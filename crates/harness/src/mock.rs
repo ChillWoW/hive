@@ -853,6 +853,7 @@ mod tests {
             resume: None,
             attachments: Vec::new(),
             mcp: None,
+            auto_compact_window: None,
         }
     }
 

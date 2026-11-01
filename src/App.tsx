@@ -1,6 +1,7 @@
 import { useState, type CSSProperties } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { ChatView } from "@/chat/ChatView";
+import { useIdleCompactionRuntime } from "@/chat/useIdleCompactionRuntime";
 import { chatTitle, useChat, useChatsRuntime, useChatsStore } from "@/chats";
 import { useHtmlCheckRuntime } from "@/htmlpage";
 import { useKeybindingsRuntime } from "@/keybindings";
@@ -24,6 +25,7 @@ export function App() {
     useUsageRuntime();
     usePaletteRuntime();
     useHtmlCheckRuntime();
+    useIdleCompactionRuntime();
     // A maximized right sidebar covers the conversation's column.
     const maximized = usePanelLayout().maximized;
     const chat = useChat(useChatsStore((s) => s.activeChatId));

@@ -62,6 +62,7 @@ fn parse_args() -> Result<Options, String> {
         resume: None,
         attachments: Vec::new(),
         mcp: None,
+        auto_compact_window: None,
     };
     let mut prompt = Vec::new();
     while let Some(arg) = args.next() {

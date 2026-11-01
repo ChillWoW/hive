@@ -82,6 +82,7 @@ async fn two_mock_turns_persist_and_match_their_journal() {
             resume: None,
             attachments: Vec::new(),
             mcp: None,
+            auto_compact_window: None,
         })
         .unwrap();
     let mut first = store.start_turn(&chat.id, "first", &[], None).unwrap();

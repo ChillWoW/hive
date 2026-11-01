@@ -89,12 +89,13 @@ impl Server {
     ) -> Result<Self, (String, bool)> {
         let port = free_port().ok_or(("No free local port for OpenCode.".to_owned(), false))?;
         let password = secret();
-        let mut cmd = cli::command(exe);
+        let mut cmd = crate::overrides::command(hive_proto::HarnessId::Opencode, exe);
         cmd.arg("serve")
             .arg("--port")
             .arg(port.to_string())
             .arg("--hostname")
             .arg("127.0.0.1")
+            .args(crate::overrides::get(hive_proto::HarnessId::Opencode).args)
             // Ours win over anything inherited, which would lock us out.
             .env("OPENCODE_SERVER_PASSWORD", &password)
             .env("OPENCODE_PASSWORD", &password)

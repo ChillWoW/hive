@@ -36,6 +36,8 @@ pub fn apply<R: tauri::Runtime>(app: &impl Manager<R>, engine: &Engine, settings
         log::warn!("auto-archiving chats: {e}");
     }
     engine.set_text_generation(settings.text_generation.clone());
+    engine.set_auto_compact_window(settings.claude.auto_compact_window);
+    hive_harness::overrides::configure(settings);
     let worktrees = &settings.worktrees;
     let home = app.path().home_dir().ok();
     engine.set_worktrees(WorktreeOptions {
