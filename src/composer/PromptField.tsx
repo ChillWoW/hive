@@ -177,6 +177,8 @@ const theme = EditorView.theme({
         fontFamily: "inherit",
         lineHeight: `${LINE_HEIGHT}px`,
         maxHeight: `${MAX_ROWS * LINE_HEIGHT + 8}px`,
+        // Lines wrap; else WebKit can show a horizontal scrollbar.
+        overflowX: "hidden",
         overflowY: "auto",
         overscrollBehavior: "contain"
     },
