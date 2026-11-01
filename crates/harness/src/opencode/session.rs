@@ -18,11 +18,9 @@ use super::normalize::{error_message, Normalizer};
 use super::server::{Api, Bus, Server};
 use crate::approval;
 use crate::attachments;
-use crate::claude::sleep_until;
-use crate::{RunCommand, RunHandle};
+use crate::cli::{sleep_until, INTERRUPT_SETTLE};
+use crate::{Gone, RunCommand};
 
-/// How long an interrupted turn may take to report its end.
-const INTERRUPT_SETTLE: Duration = Duration::from_secs(5);
 /// How long a sent prompt may go without its execution starting. OpenCode
 /// reports it within milliseconds of taking the prompt.
 const STALL: Duration = Duration::from_secs(90);
@@ -30,8 +28,6 @@ const STALL: Duration = Duration::from_secs(90);
 const BUS_CONNECT: Duration = Duration::from_secs(15);
 /// How often the server process is checked on.
 const SERVER_POLL: Duration = Duration::from_millis(500);
-/// The turn that follows an approved plan.
-const IMPLEMENT_PROMPT: &str = "Implement the plan.";
 const STALL_HINT: &str = "OpenCode took the prompt but never started on it. The model's provider may be unreachable or rejecting requests; check `opencode auth list` and the model.";
 
 /// OpenCode's default agent, and its read-only planning one.
@@ -48,14 +44,7 @@ pub(super) struct Launch {
 }
 
 pub(super) fn run(launch: Launch) -> crate::Run {
-    let (events_tx, events) = mpsc::channel(256);
-    let (handle, commands) = RunHandle::new();
-    tokio::spawn(async move {
-        let failed = |message: String| AgentEvent::Done {
-            status: DoneStatus::Errored,
-            error: Some(message),
-            session_id: launch.request.resume.clone(),
-        };
+    crate::Run::spawn(256, |events_tx, commands| async move {
         match Session::open(&launch, events_tx.clone()).await {
             Ok(session) => {
                 session
@@ -67,11 +56,16 @@ pub(super) fn run(launch: Launch) -> crate::Run {
                     .await
             }
             Err(message) => {
-                let _ = events_tx.send(failed(message)).await;
+                let _ = events_tx
+                    .send(AgentEvent::Done {
+                        status: DoneStatus::Errored,
+                        error: Some(message),
+                        session_id: launch.request.resume.clone(),
+                    })
+                    .await;
             }
         }
-    });
-    crate::Run { events, handle }
+    })
 }
 
 struct Prompt {
@@ -158,23 +152,12 @@ struct Session {
     plans: u64,
 }
 
-struct Gone;
-
-/// What a run may do without asking. `auto_approve` means full access.
-pub(super) fn access(request: &RunRequest) -> AccessMode {
-    if request.auto_approve {
-        AccessMode::FullAccess
-    } else {
-        request.access
-    }
-}
-
 /// The session's permission rules for `access`. OpenCode's agents allow
 /// almost everything; a restricted mode adds `ask` rules, which the session
 /// applies after the agent's own. Supervised asks before edits too, except
 /// in plan mode, where the plan agent's own denial must hold (a session
 /// rule would override it).
-pub(super) fn permission_rules(access: AccessMode, plan_agent: bool) -> Value {
+fn permission_rules(access: AccessMode, plan_agent: bool) -> Value {
     if access.is_full_access() {
         return json!([]);
     }
@@ -223,7 +206,7 @@ impl Session {
                 return Err("OpenCode's event stream didn't connect.".into());
             }
         }
-        let access = access(request);
+        let access = approval::access(request);
         let plan = request.plan;
         // Before the harness has listed them (a first run), from this server.
         let models = if launch.models.models.is_empty() {
@@ -621,10 +604,7 @@ impl Session {
         }
         self.plans += 1;
         let request_id = format!("opencode-plan-{}", self.plans);
-        let question = approval::question(
-            "Approve plan",
-            "OpenCode wants to start implementing its plan. Allow it?",
-        );
+        let question = approval::plan("OpenCode");
         if let Some(turn) = &mut self.turn {
             turn.awaiting_plan = true;
         }
@@ -645,7 +625,7 @@ impl Session {
     async fn implement(&mut self) -> Result<(), Gone> {
         self.begin(
             Prompt {
-                text: IMPLEMENT_PROMPT.into(),
+                text: approval::IMPLEMENT_PROMPT.into(),
                 files: Vec::new(),
             },
             false,
@@ -926,7 +906,7 @@ impl Session {
     }
 
     async fn emit(&self, event: AgentEvent) -> Result<(), Gone> {
-        self.events.send(event).await.map_err(|_| Gone)
+        crate::emit(&self.events, event).await
     }
 }
 

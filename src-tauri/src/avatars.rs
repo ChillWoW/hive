@@ -8,12 +8,11 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
-use base64::Engine as _;
 use serde::Deserialize;
-use sha2::{Digest, Sha256};
 use tokio::task::JoinSet;
 
 use crate::http;
+use crate::util::{data_url, image_type, sha256_hex};
 
 const MAX_AVATAR_BYTES: usize = 2 * 1024 * 1024;
 /// Downloads at once.
@@ -110,8 +109,9 @@ pub async fn git_avatars(
         if out.contains_key(&email) {
             continue;
         }
-        if let Some(url) = tokio::fs::read(&path).await.ok().and_then(|b| data_url(&b)) {
-            out.insert(email, url);
+        let Ok(bytes) = tokio::fs::read(&path).await else { continue };
+        if let Some(mime) = image_type(&bytes) {
+            out.insert(email, data_url(mime, &bytes));
         }
     }
     Ok(out)
@@ -192,8 +192,7 @@ async fn read_page(
 
 /// `url`'s image in the cache folder, downloading it the first time.
 async fn cache_image(client: &reqwest::Client, dir: &Path, url: &str) -> Option<PathBuf> {
-    let digest = Sha256::digest(url.as_bytes());
-    let name: String = digest[..16].iter().map(|b| format!("{b:02x}")).collect();
+    let name = &sha256_hex(url.as_bytes())[..32];
     let path = dir.join(format!("{name}.img"));
     if tokio::fs::metadata(&path).await.is_ok_and(|m| m.len() > 0) {
         return Some(path);
@@ -208,7 +207,7 @@ async fn cache_image(client: &reqwest::Client, dir: &Path, url: &str) -> Option<
         return None;
     }
     let bytes = response.bytes().await.ok()?;
-    if bytes.is_empty() || bytes.len() > MAX_AVATAR_BYTES || mime(&bytes).is_none() {
+    if bytes.is_empty() || bytes.len() > MAX_AVATAR_BYTES || image_type(&bytes).is_none() {
         return None;
     }
     // Written aside and renamed in, so a reader never sees half an image.
@@ -221,24 +220,4 @@ async fn cache_image(client: &reqwest::Client, dir: &Path, url: &str) -> Option<
         }
     }
     Some(path)
-}
-
-fn mime(bytes: &[u8]) -> Option<&'static str> {
-    if bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
-        Some("image/png")
-    } else if bytes.starts_with(b"\xff\xd8\xff") {
-        Some("image/jpeg")
-    } else if bytes.starts_with(b"GIF87a") || bytes.starts_with(b"GIF89a") {
-        Some("image/gif")
-    } else if bytes.starts_with(b"RIFF") && bytes.get(8..12) == Some(b"WEBP") {
-        Some("image/webp")
-    } else {
-        None
-    }
-}
-
-fn data_url(bytes: &[u8]) -> Option<String> {
-    let mime = mime(bytes)?;
-    let data = base64::engine::general_purpose::STANDARD.encode(bytes);
-    Some(format!("data:{mime};base64,{data}"))
 }

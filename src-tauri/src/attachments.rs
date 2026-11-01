@@ -4,11 +4,14 @@
 //! back for thumbnails and opens them in their default apps. Only Hive's own
 //! copies can be read or opened.
 
+use std::path::PathBuf;
+
 use hive_engine::Engine;
 use hive_proto::Attachment;
 use tauri::ipc::{InvokeBody, Request, Response};
 use tauri::{AppHandle, State};
-use tauri_plugin_opener::OpenerExt;
+
+use crate::util::{err, open_path};
 
 /// The file's name, percent-encoded (header values are ASCII).
 const NAME_HEADER: &str = "x-hive-name";
@@ -28,22 +31,13 @@ pub async fn save_attachment(
         .and_then(|v| v.to_str().ok())
         .map(percent_decode)
         .unwrap_or_default();
-    engine
-        .store()
-        .attachments()
-        .save(&name, bytes)
-        .map_err(|e| e.to_string())
+    engine.store().attachments().save(&name, bytes).map_err(err)
 }
 
 /// An attachment's bytes, for its thumbnail.
 #[tauri::command]
 pub async fn attachment_bytes(engine: State<'_, Engine>, path: String) -> Result<Response, String> {
-    let file = engine
-        .store()
-        .attachments()
-        .resolve(&path)
-        .ok_or("Not an attachment.")?;
-    let bytes = tokio::fs::read(file).await.map_err(|e| e.to_string())?;
+    let bytes = tokio::fs::read(resolve(&engine, &path)?).await.map_err(err)?;
     Ok(Response::new(bytes))
 }
 
@@ -54,14 +48,13 @@ pub async fn open_attachment(
     engine: State<'_, Engine>,
     path: String,
 ) -> Result<(), String> {
-    let file = engine
-        .store()
-        .attachments()
-        .resolve(&path)
-        .ok_or("Not an attachment.")?;
-    app.opener()
-        .open_path(file.display().to_string(), None::<&str>)
-        .map_err(|e| e.to_string())
+    open_path(&app, &resolve(&engine, &path)?)
+}
+
+/// Hive's own copy at `path`, never anything else.
+fn resolve(engine: &Engine, path: &str) -> Result<PathBuf, String> {
+    let file = engine.store().attachments().resolve(path);
+    file.ok_or_else(|| "Not an attachment.".into())
 }
 
 /// `%XX` escapes back to bytes, read as UTF-8. Malformed escapes stay as

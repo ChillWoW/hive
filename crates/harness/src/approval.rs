@@ -5,10 +5,23 @@
 //!
 //! [`AgentEvent::InputRequested`]: hive_proto::AgentEvent::InputRequested
 
-use hive_proto::{AccessMode, UserInputAnswer, UserInputQuestion};
+use hive_proto::{AccessMode, RunRequest, UserInputAnswer, UserInputQuestion};
 
 pub const ALLOW: &str = "Yes";
 pub const DENY: &str = "No";
+
+/// The turn that follows an approved plan.
+pub const IMPLEMENT_PROMPT: &str = "Implement the plan.";
+
+/// What a run may do without asking. `auto_approve` means full access,
+/// whatever the mode says.
+pub fn access(request: &RunRequest) -> AccessMode {
+    if request.auto_approve {
+        AccessMode::FullAccess
+    } else {
+        request.access
+    }
+}
 
 /// What an agent wants to do, for deciding whether its mode covers it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -47,6 +60,14 @@ pub fn approved(question: &UserInputQuestion, answers: &[UserInputAnswer]) -> bo
     answers.iter().any(|a| {
         a.question_id == question.id && a.labels.iter().any(|l| l.eq_ignore_ascii_case(ALLOW))
     })
+}
+
+/// "`agent` wants to start implementing its plan. Allow it?"
+pub fn plan(agent: &str) -> UserInputQuestion {
+    question(
+        "Approve plan",
+        format!("{agent} wants to start implementing its plan. Allow it?"),
+    )
 }
 
 /// "`agent` wants to run `command`. Allow it?"

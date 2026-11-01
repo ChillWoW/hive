@@ -22,6 +22,8 @@ use serde::Serialize;
 use tauri::ipc::Channel;
 use tauri::{State, Webview};
 
+use crate::util::blocking;
+
 /// A batch goes out once nothing changed for this long…
 const QUIET: Duration = Duration::from_millis(200);
 /// …or this long after its first change, whatever keeps changing.
@@ -36,10 +38,10 @@ const MAX_PATHS: usize = 500;
 pub struct FolderChange {
     /// Changed paths `.gitignore` doesn't hide (in a flat watch, every one),
     /// relative to the folder, `/`-separated.
-    paths: Vec<String>,
+    paths: BTreeSet<String>,
     /// The folders ("" for the folder itself) where an entry appeared, went
     /// or was renamed, ignored ones included.
-    dirs: Vec<String>,
+    dirs: BTreeSet<String>,
     /// Too many folders for `dirs`: any listing may be stale.
     dirs_overflow: bool,
     /// An entry `.gitignore` doesn't hide appeared, went or was renamed.
@@ -53,30 +55,14 @@ pub struct FolderChange {
 }
 
 struct Batch {
-    paths: BTreeSet<String>,
-    dirs: BTreeSet<String>,
-    dirs_overflow: bool,
-    entries: bool,
-    ignored: bool,
-    git: bool,
-    overflow: bool,
+    change: FolderChange,
     first: Instant,
     last: Instant,
 }
 
 impl Batch {
     fn new(now: Instant) -> Self {
-        Batch {
-            paths: BTreeSet::new(),
-            dirs: BTreeSet::new(),
-            dirs_overflow: false,
-            entries: false,
-            ignored: false,
-            git: false,
-            overflow: false,
-            first: now,
-            last: now,
-        }
+        Batch { change: FolderChange::default(), first: now, last: now }
     }
 
     fn due(&self, now: Instant) -> bool {
@@ -107,10 +93,11 @@ struct Sub {
 }
 
 impl Sub {
-    fn batch(&mut self, now: Instant) -> &mut Batch {
+    /// The change being batched, noted as changed again `now`.
+    fn change(&mut self, now: Instant) -> &mut FolderChange {
         let batch = self.batch.get_or_insert_with(|| Batch::new(now));
         batch.last = now;
-        batch
+        &mut batch.change
     }
 
     /// Whether `path` is this subscription's at all.
@@ -123,7 +110,7 @@ impl Sub {
     fn note(&mut self, path: &Path, structural: bool, now: Instant) {
         if let Some(git_dir) = self.git_dirs.iter().find(|g| path.starts_with(g)) {
             if git_relevant(path.strip_prefix(git_dir).unwrap_or(path)) {
-                self.batch(now).git = true;
+                self.change(now).git = true;
             }
             return;
         }
@@ -145,27 +132,27 @@ impl Sub {
         // A flat watch is for open files, which may well be ignored ones.
         let ignored = self.recursive && self.is_ignored(path);
         let rel = rel.to_string_lossy().replace('\\', "/");
-        let batch = self.batch(now);
+        let change = self.change(now);
         if structural {
             if !ignored {
-                batch.entries = true;
+                change.entries = true;
             }
-            if !batch.dirs_overflow {
+            if !change.dirs_overflow {
                 let dir = rel.rfind('/').map_or("", |i| &rel[..i]);
-                batch.dirs.insert(dir.to_owned());
-                if batch.dirs.len() > MAX_PATHS {
-                    batch.dirs.clear();
-                    batch.dirs_overflow = true;
+                change.dirs.insert(dir.to_owned());
+                if change.dirs.len() > MAX_PATHS {
+                    change.dirs.clear();
+                    change.dirs_overflow = true;
                 }
             }
         }
         if ignored {
-            batch.ignored = true;
-        } else if !batch.overflow {
-            batch.paths.insert(rel);
-            if batch.paths.len() > MAX_PATHS {
-                batch.paths.clear();
-                batch.overflow = true;
+            change.ignored = true;
+        } else if !change.overflow {
+            change.paths.insert(rel);
+            if change.paths.len() > MAX_PATHS {
+                change.paths.clear();
+                change.overflow = true;
             }
         }
     }
@@ -198,16 +185,9 @@ impl Sub {
     }
 
     fn flush(&mut self) {
-        let Some(batch) = self.batch.take() else { return };
-        let _ = self.channel.send(FolderChange {
-            paths: batch.paths.into_iter().collect(),
-            dirs: batch.dirs.into_iter().collect(),
-            dirs_overflow: batch.dirs_overflow,
-            entries: batch.entries,
-            ignored: batch.ignored,
-            git: batch.git,
-            overflow: batch.overflow,
-        });
+        if let Some(batch) = self.batch.take() {
+            let _ = self.channel.send(batch.change);
+        }
     }
 }
 
@@ -347,13 +327,13 @@ impl Inner {
         };
         for sub in self.subs.values_mut() {
             if rescan && (paths.is_empty() || paths.iter().any(|p| sub.covers(p))) {
-                let batch = sub.batch(now);
-                batch.overflow = true;
-                batch.paths.clear();
-                batch.dirs.clear();
-                batch.dirs_overflow = true;
-                batch.entries = true;
-                batch.git = true;
+                let change = sub.change(now);
+                change.overflow = true;
+                change.paths.clear();
+                change.dirs.clear();
+                change.dirs_overflow = true;
+                change.entries = true;
+                change.git = true;
             }
             for path in &paths {
                 sub.note(path, structural, now);
@@ -521,11 +501,7 @@ pub async fn watch_folder(
     let watches = watches.inner().clone();
     let owner = webview.label().to_owned();
     // Registering a big tree can take a while (inotify walks it).
-    tauri::async_runtime::spawn_blocking(move || {
-        watches.watch(owner, PathBuf::from(cwd), recursive, on_change)
-    })
-    .await
-    .map_err(|e| e.to_string())?
+    blocking(move || watches.watch(owner, PathBuf::from(cwd), recursive, on_change)).await
 }
 
 #[tauri::command]
@@ -537,8 +513,11 @@ pub fn unwatch_folder(watches: State<'_, FolderWatches>, id: u32) {
 mod tests {
     use super::*;
 
-    fn sub(root: &Path, recursive: bool) -> (Sub, Arc<Mutex<Vec<FolderChange>>>) {
-        let seen = Arc::new(Mutex::new(Vec::new()));
+    type Seen = Arc<Mutex<Vec<FolderChange>>>;
+
+    /// A channel and what it has been sent.
+    fn sink() -> (Channel<FolderChange>, Seen) {
+        let seen = Seen::default();
         let sink = seen.clone();
         let channel = Channel::new(move |body| {
             if let tauri::ipc::InvokeResponseBody::Json(json) = body {
@@ -546,6 +525,11 @@ mod tests {
             }
             Ok(())
         });
+        (channel, seen)
+    }
+
+    fn sub(root: &Path, recursive: bool) -> (Sub, Seen) {
+        let (channel, seen) = sink();
         let (top, git_dir, common) = checkout_of(root).unwrap();
         let sub = Sub {
             owner: "main".into(),
@@ -560,6 +544,10 @@ mod tests {
             batch: None,
         };
         (sub, seen)
+    }
+
+    fn set(items: &[&str]) -> BTreeSet<String> {
+        items.iter().map(|s| s.to_string()).collect()
     }
 
     fn repo() -> tempfile::TempDir {
@@ -590,14 +578,14 @@ mod tests {
         ] {
             sub.note(&root.join(path), structural, now);
         }
-        assert!(!sub.batch.as_ref().unwrap().git);
+        assert!(!sub.batch.as_ref().unwrap().change.git);
         sub.note(&root.join(".git/refs/heads/main"), false, now);
         sub.flush();
         assert_eq!(
             *seen.lock().unwrap(),
             [FolderChange {
-                paths: vec!["src/keep.log".into(), "src/main.rs".into()],
-                dirs: vec!["src".into(), "target/debug".into()],
+                paths: set(&["src/keep.log", "src/main.rs"]),
+                dirs: set(&["src", "target/debug"]),
                 dirs_overflow: false,
                 entries: true,
                 ignored: true,
@@ -629,7 +617,7 @@ mod tests {
         sub.note(&root.join("gen/out.rs"), false, now);
         sub.note(&dir.path().join("README.md"), false, now);
         sub.flush();
-        assert_eq!(seen.lock().unwrap()[0].paths, ["debug.log", "main.rs"]);
+        assert_eq!(seen.lock().unwrap()[0].paths, set(&["debug.log", "main.rs"]));
     }
 
     #[test]
@@ -657,14 +645,7 @@ mod tests {
         let dir = repo();
         let root = dir.path().to_path_buf();
         let watches = FolderWatches::default();
-        let seen = Arc::new(Mutex::new(Vec::<FolderChange>::new()));
-        let sink = seen.clone();
-        let channel = Channel::new(move |body| {
-            if let tauri::ipc::InvokeResponseBody::Json(json) = body {
-                sink.lock().unwrap().push(serde_json::from_str(&json).unwrap());
-            }
-            Ok(())
-        });
+        let (channel, seen) = sink();
         let id = watches.watch("main".into(), root.clone(), true, channel).unwrap();
         std::thread::sleep(Duration::from_millis(100));
         std::fs::write(root.join("src/new.rs"), "x").unwrap();
@@ -676,7 +657,7 @@ mod tests {
             std::thread::sleep(Duration::from_millis(50));
         }
         let changes = seen.lock().unwrap().clone();
-        assert!(changes.iter().any(|c| c.entries && c.dirs.contains(&"src".into())), "{changes:?}");
+        assert!(changes.iter().any(|c| c.entries && c.dirs.contains("src")), "{changes:?}");
         watches.unwatch(id);
         assert!(watches.0.inner.lock().unwrap().counts.is_empty());
     }

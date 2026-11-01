@@ -30,8 +30,8 @@ use hive_proto::GitDiff;
 use tokio::io::AsyncWriteExt as _;
 use tokio::process::Command;
 
-use super::diff::{capped_command, MAX_PATCH_BYTES};
-use super::{command, git, output, GitError};
+use super::diff::{capped, patch_command, read_patch};
+use super::{command, current_branch, git, spawn_error, toplevel, GitError, Output};
 
 /// Largest untracked file a snapshot carries; leaves room for ordinary
 /// binary assets (screenshots, fonts).
@@ -60,27 +60,19 @@ const ALTERNATES_SEPARATOR: char = ':';
 pub struct TreeSnapshot {
     /// The checkout's top folder, as git prints it.
     root: String,
+    /// The tree's hash, readable only through `store`.
     tree: String,
     store: Arc<ObjectStore>,
     /// Untracked paths left out of `tree` (git's spelling, from the root). A
     /// snapshot layered on this one leaves them as they are here.
-    skipped: Arc<Vec<Vec<u8>>>,
+    skipped: Arc<Vec<RawPath>>,
 }
 
 impl TreeSnapshot {
-    /// The checkout's top folder.
-    pub fn root(&self) -> &str {
-        &self.root
-    }
-
-    /// The tree's hash, readable only through this snapshot's store.
-    pub fn tree(&self) -> &str {
-        &self.tree
-    }
-
-    /// Points a git command at this snapshot's objects.
-    fn apply_to(&self, cmd: &mut std::process::Command) {
-        self.store.apply_to(cmd);
+    /// A snapshot of the checkout as it is now, layered on this one (so only
+    /// what changed since is written).
+    async fn now(&self) -> Result<TreeSnapshot, GitError> {
+        snapshot_onto(&self.store.parent, self.root.clone(), Some(self)).await
     }
 }
 
@@ -237,51 +229,21 @@ fn remove_other_runs(parent: &Path, current: &OsStr) {
 /// `dir`; `None` outside a checkout. Neither the real index nor the
 /// checkout's object database is touched.
 pub async fn snapshot_tree(cwd: &Path, dir: &Path) -> Result<Option<TreeSnapshot>, GitError> {
-    if !cwd.is_dir() {
+    let Some(root) = toplevel(cwd).await? else {
         return Ok(None);
-    }
-    let top = git(cwd, &["rev-parse", "--show-toplevel"]).await?;
-    if !top.ok() {
-        if top.stderr.contains("not a git repository") {
-            return Ok(None);
-        }
-        return Err(top.error());
-    }
-    let root = top.stdout.trim().to_owned();
+    };
     snapshot_onto(&dir.join(run_id()), root, None).await.map(Some)
 }
 
 /// The turn's changes: `turn` against the checkout as it is now (a snapshot
-/// layered on it, so only what changed since is written, and deleted again
-/// before this returns).
+/// layered on it, deleted again before this returns).
 pub async fn turn_diff(turn: &TreeSnapshot) -> Result<GitDiff, GitError> {
     let root = Path::new(&turn.root);
-    let current = snapshot_onto(&turn.store.parent, turn.root.clone(), Some(turn)).await?;
-    let branch = git(root, &["symbolic-ref", "-q", "--short", "HEAD"]).await?;
-    let branch = branch.ok().then(|| branch.stdout.trim().to_owned());
-
-    let mut cmd = command(
-        root,
-        &[
-            "-c",
-            "core.quotePath=false",
-            "diff",
-            "--no-ext-diff",
-            "--no-color",
-            "--find-renames",
-            "--unified=3",
-            turn.tree(),
-            current.tree(),
-            "--",
-        ],
-    );
-    current.apply_to(&mut cmd);
-    let (bytes, truncated) = capped_command(cmd, MAX_PATCH_BYTES).await?;
-    let mut patch = String::from_utf8_lossy(&bytes).into_owned();
-    if truncated {
-        // Never end on half a line.
-        patch.truncate(patch.rfind('\n').map_or(0, |i| i + 1));
-    }
+    let current = turn.now().await?;
+    let branch = current_branch(root).await?;
+    let mut cmd = patch_command(root, &[], &[&turn.tree, &current.tree]);
+    current.store.apply_to(&mut cmd);
+    let (patch, truncated) = read_patch(cmd).await?;
     Ok(GitDiff {
         root: turn.root.clone(),
         branch,
@@ -299,7 +261,7 @@ pub async fn turn_diff(turn: &TreeSnapshot) -> Result<GitDiff, GitError> {
 /// Returns the paths put back.
 pub async fn revert_turn(turn: &TreeSnapshot, only: Option<&[String]>) -> Result<Vec<String>, GitError> {
     let root = Path::new(&turn.root);
-    let current = snapshot_onto(&turn.store.parent, turn.root.clone(), Some(turn)).await?;
+    let current = turn.now().await?;
     let mut cmd = command(
         root,
         &[
@@ -310,25 +272,26 @@ pub async fn revert_turn(turn: &TreeSnapshot, only: Option<&[String]>) -> Result
             "--no-renames",
             "--name-status",
             "-z",
-            turn.tree(),
-            current.tree(),
+            &turn.tree,
+            &current.tree,
             "--",
         ],
     );
-    current.apply_to(&mut cmd);
-    let (bytes, truncated) = capped_command(cmd, MAX_LISTING_BYTES).await?;
+    current.store.apply_to(&mut cmd);
+    let (bytes, truncated) = capped(cmd, MAX_LISTING_BYTES).await?;
     if truncated {
         return Err(GitError::Failed("Too many changes to undo.".into()));
     }
     let wanted: Option<HashSet<&str>> = only.map(|p| p.iter().map(String::as_str).collect());
     let (mut added, mut restored) = (Vec::new(), Vec::new());
     let fields = split_nul(&bytes);
-    for pair in fields.chunks_exact(2) {
-        let path = String::from_utf8_lossy(&pair[1]).into_owned();
+    let (pairs, _) = fields.as_chunks::<2>();
+    for [status, path] in pairs {
+        let path = String::from_utf8_lossy(path).into_owned();
         if wanted.as_ref().is_some_and(|w| !w.contains(path.as_str())) {
             continue;
         }
-        if pair[0].first() == Some(&b'A') {
+        if status.first() == Some(&b'A') {
             added.push(path);
         } else {
             restored.push(path);
@@ -345,7 +308,7 @@ pub async fn revert_turn(turn: &TreeSnapshot, only: Option<&[String]>) -> Result
 
     if !restored.is_empty() {
         let index = current.store.dir.join("revert-index");
-        snapshot_git(root, &current.store, &index, &["read-tree", turn.tree()], None)
+        snapshot_git(root, &current.store, &index, &["read-tree", &turn.tree], None)
             .await?
             .checked()?;
         let mut paths = Vec::new();
@@ -429,11 +392,11 @@ async fn write_snapshot(
         // Start from the base tree and leave out what either side left out,
         // so a folder that crossed the budget mid-turn keeps its old state
         // instead of showing as thousands of added or deleted files.
-        snapshot_git(root, &store, &index, &["read-tree", base.tree()], None)
+        snapshot_git(root, &store, &index, &["read-tree", &base.tree], None)
             .await?
             .checked()?;
         let known: HashSet<&[u8]> = skipped.iter().map(Vec::as_slice).collect();
-        let inherited: Vec<Vec<u8>> = base
+        let inherited: Vec<RawPath> = base
             .skipped
             .iter()
             .filter(|p| !known.contains(p.as_slice()))
@@ -481,7 +444,7 @@ async fn snapshot_git(
     index: &Path,
     args: &[&str],
     stdin: Option<Vec<u8>>,
-) -> Result<super::Output, GitError> {
+) -> Result<Output, GitError> {
     let mut std_cmd = command(root, args);
     std_cmd.env("GIT_INDEX_FILE", index);
     store.apply_to(&mut std_cmd);
@@ -490,23 +453,19 @@ async fn snapshot_git(
     }
     let mut cmd = Command::from(std_cmd);
     cmd.kill_on_drop(true);
-    let spawned = cmd.spawn();
-    let mut child = match spawned {
-        Ok(child) => child,
-        Err(e) => return output(Err(e)),
-    };
+    let mut child = cmd.spawn().map_err(spawn_error)?;
     if let (Some(input), Some(mut pipe)) = (stdin, child.stdin.take()) {
         // A short pathspec list would drop exclusions: a failed write fails.
         pipe.write_all(&input).await.map_err(io_error)?;
         pipe.shutdown().await.map_err(io_error)?;
         drop(pipe);
     }
-    output(child.wait_with_output().await)
+    child.wait_with_output().await.map(Output::from).map_err(spawn_error)
 }
 
 /// Runs git for its raw stdout (paths may not be UTF-8): (stdout, cut short).
-async fn listing(root: &Path, args: &[OsString]) -> Result<(Vec<u8>, bool), GitError> {
-    capped_command(command(root, args), MAX_LISTING_BYTES).await
+async fn listing<S: AsRef<OsStr>>(root: &Path, args: &[S]) -> Result<(Vec<u8>, bool), GitError> {
+    capped(command(root, args), MAX_LISTING_BYTES).await
 }
 
 #[cfg(unix)]
@@ -549,11 +508,8 @@ fn path_batches(paths: &[Vec<u8>], budget: usize) -> Vec<&[Vec<u8>]> {
 /// part); inside the folders that fit, and among loose files, only files past
 /// [`MAX_UNTRACKED_FILE_BYTES`] go. If the rest is still over budget, the
 /// largest units go until it fits.
-async fn untracked_to_skip(root: &Path) -> Result<Vec<Vec<u8>>, GitError> {
-    let args: Vec<OsString> = ["ls-files", "--others", "--exclude-standard", "--directory", "-z"]
-        .into_iter()
-        .map(OsString::from)
-        .collect();
+async fn untracked_to_skip(root: &Path) -> Result<Vec<RawPath>, GitError> {
+    let args = ["ls-files", "--others", "--exclude-standard", "--directory", "-z"];
     let (out, truncated) = listing(root, &args).await?;
     if truncated {
         return Err(GitError::Failed("Too many untracked paths to snapshot.".into()));
@@ -594,17 +550,10 @@ async fn untracked_to_skip(root: &Path) -> Result<Vec<Vec<u8>>, GitError> {
         files: Vec::new(),
     }));
     for batch in path_batches(&dirs, MAX_PATH_ARGUMENT_BYTES) {
-        let mut args: Vec<OsString> = [
-            "--literal-pathspecs",
-            "ls-files",
-            "--others",
-            "--exclude-standard",
-            "-z",
-            "--",
-        ]
-        .into_iter()
-        .map(OsString::from)
-        .collect();
+        let mut args: Vec<OsString> =
+            ["--literal-pathspecs", "ls-files", "--others", "--exclude-standard", "-z", "--"]
+                .map(OsString::from)
+                .into();
         args.extend(batch.iter().map(|dir| path_argument(dir)));
         let (out, truncated) = listing(root, &args).await?;
         if truncated {
@@ -643,14 +592,17 @@ impl Drop for StopOnDrop {
     }
 }
 
+/// A path as git spells it from the root: bytes, maybe not UTF-8.
+type RawPath = Vec<u8>;
+
 /// An untracked unit (a loose file, or a wholly untracked folder) and the
-/// files in it, as git spells them.
+/// files in it.
 struct Unit {
-    path: Vec<u8>,
-    files: Vec<Vec<u8>>,
+    path: RawPath,
+    files: Vec<RawPath>,
 }
 
-fn split_nul(bytes: &[u8]) -> Vec<Vec<u8>> {
+fn split_nul(bytes: &[u8]) -> Vec<RawPath> {
     bytes
         .split(|b| *b == 0)
         .filter(|p| !p.is_empty())
@@ -660,12 +612,11 @@ fn split_nul(bytes: &[u8]) -> Vec<Vec<u8>> {
 
 /// Sorts untracked units into folders over budget (skipped whole), folders
 /// that fit, and loose files. Git ends a folder with a slash.
-#[allow(clippy::type_complexity)]
 fn triage_units(
     root: &Path,
-    units: Vec<Vec<u8>>,
+    units: Vec<RawPath>,
     stop: &std::sync::atomic::AtomicBool,
-) -> (Vec<Vec<u8>>, Vec<Vec<u8>>, Vec<Vec<u8>>) {
+) -> (Vec<RawPath>, Vec<RawPath>, Vec<RawPath>) {
     let mut skipped = Vec::new();
     let mut dirs = Vec::new();
     let mut files = Vec::new();
@@ -725,7 +676,7 @@ fn dir_exceeds_budget(dir: &Path) -> bool {
 /// the budget: largest first, so one big folder or a pile of assets costs
 /// only itself and new source files keep showing. A path gone since git
 /// listed it costs nothing; `git add --ignore-errors` copes.
-fn fit_units(root: &Path, units: Vec<Unit>) -> (Vec<Vec<u8>>, Vec<Vec<u8>>) {
+fn fit_units(root: &Path, units: Vec<Unit>) -> (Vec<RawPath>, Vec<RawPath>) {
     let mut oversized = Vec::new();
     // (path, files, bytes) each unit would add.
     let mut costs = Vec::with_capacity(units.len());
@@ -782,18 +733,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let repo = dir.path().join("repo");
         std::fs::create_dir_all(&repo).unwrap();
-        for args in [
-            &["init", "-q", "-b", "main"][..],
-            &["config", "user.email", "hive@example.com"],
-            &["config", "user.name", "Hive"],
-            &["config", "commit.gpgsign", "false"],
-            &["config", "core.autocrlf", "false"],
-        ] {
-            git(&repo, args).await.ok().filter(|o| o.ok())?;
-        }
-        std::fs::write(repo.join("a.txt"), "one\ntwo\n").unwrap();
-        git(&repo, &["add", "."]).await.ok().filter(|o| o.ok())?;
-        git(&repo, &["commit", "-q", "-m", "first"]).await.ok().filter(|o| o.ok())?;
+        crate::test_repo(&repo, "one\ntwo\n").await?;
         Some(dir)
     }
 

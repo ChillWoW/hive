@@ -20,6 +20,7 @@ use tauri_plugin_updater::{Update, UpdaterExt};
 
 use crate::http;
 use crate::terminals::Terminals;
+use crate::util::err;
 
 /// Where releases are published; the same repository as
 /// `plugins.updater.endpoints` in tauri.conf.json.
@@ -73,8 +74,8 @@ pub async fn update_check(
                 .and_then(|builder| builder.build())
         }
     }
-    .map_err(|e| e.to_string())?;
-    let update = updater.check().await.map_err(|e| e.to_string())?;
+    .map_err(err)?;
+    let update = updater.check().await.map_err(err)?;
     let info = update.as_ref().map(|u| UpdateInfo {
         version: u.version.clone(),
         current_version: u.current_version.clone(),
@@ -127,7 +128,7 @@ async fn newest_release_manifest() -> Result<Url, String> {
         .max_by(|a, b| a.0.cmp(&b.0))
         .map(|(_, url)| url)
         .ok_or("No release has an update manifest yet.")?;
-    Url::parse(&url).map_err(|e| e.to_string())
+    Url::parse(&url).map_err(err)
 }
 
 /// Downloads the update `update_check` found, then stops every agent and

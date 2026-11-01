@@ -13,23 +13,16 @@ use serde_json::{json, Map, Value};
 use tokio::process::Child;
 use tokio::sync::mpsc;
 
-use super::models::{self, FAST_MODE, SERVICE_TIER};
+use super::models::SERVICE_TIER;
 use super::goal::{self, GoalCommand};
 use super::normalize::Normalizer;
 use super::rpc::{Client, Incoming, Server};
 use super::skills::{self, Skill};
 use crate::approval::{self, Action};
 use crate::attachments;
-use crate::claude::sleep_until;
-use crate::{RunCommand, RunHandle};
+use crate::cli::{self, sleep_until, StderrTail, INTERRUPT_SETTLE};
+use crate::{Gone, RunCommand};
 
-/// How long an interrupted turn may take to report its end before the run
-/// reports it interrupted anyway.
-const INTERRUPT_SETTLE: Duration = Duration::from_secs(5);
-/// How long the server gets to exit after stdin closes before it's killed.
-const EXIT_GRACE: Duration = Duration::from_secs(3);
-/// The turn that follows an approved plan.
-const IMPLEMENT_PROMPT: &str = "Implement the plan.";
 /// How long a finished turn waits, while a goal is active, for Codex to
 /// start the next turn toward it in the same reply.
 const GOAL_CONTINUATION_GRACE: Duration = Duration::from_secs(5);
@@ -44,25 +37,13 @@ pub(super) struct Launch {
     pub skills: Arc<Mutex<HashMap<String, Vec<Skill>>>>,
 }
 
-pub(super) fn start(
-    launch: Launch,
-    events: mpsc::Sender<AgentEvent>,
-    commands: mpsc::UnboundedReceiver<RunCommand>,
-) {
-    tokio::spawn(async move {
-        let failed = |message: String| AgentEvent::Done {
-            status: DoneStatus::Errored,
-            error: Some(message),
-            session_id: launch.request.resume.clone(),
+pub(super) fn run(launch: Launch) -> crate::Run {
+    crate::Run::spawn(256, |events, commands| async move {
+        let opened = match Server::start(&launch.exe, &launch.request.cwd).await {
+            Ok(server) => Session::open(server, &launch, events.clone()).await,
+            Err(e) => Err(e.to_string()),
         };
-        let server = match Server::start(&launch.exe, &launch.request.cwd).await {
-            Ok(server) => server,
-            Err(e) => {
-                let _ = events.send(failed(e.to_string())).await;
-                return;
-            }
-        };
-        match Session::open(server, &launch, events.clone()).await {
+        match opened {
             Ok(session) => {
                 session
                     .run(
@@ -73,18 +54,16 @@ pub(super) fn start(
                     .await
             }
             Err(message) => {
-                let _ = events.send(failed(message)).await;
+                let _ = events
+                    .send(AgentEvent::Done {
+                        status: DoneStatus::Errored,
+                        error: Some(message),
+                        session_id: launch.request.resume.clone(),
+                    })
+                    .await;
             }
         }
-    });
-}
-
-/// Pairs `start` with a fresh handle.
-pub(super) fn run(launch: Launch) -> crate::Run {
-    let (events_tx, events) = mpsc::channel(256);
-    let (handle, commands) = RunHandle::new();
-    start(launch, events_tx, commands);
-    crate::Run { events, handle }
+    })
 }
 
 struct Prompt {
@@ -154,7 +133,7 @@ struct Session {
     client: Client,
     child: Child,
     incoming: mpsc::Receiver<Incoming>,
-    stderr_tail: Arc<Mutex<String>>,
+    stderr: StderrTail,
     events: mpsc::Sender<AgentEvent>,
     normalizer: Normalizer,
     thread_id: String,
@@ -190,23 +169,11 @@ struct Session {
     continuation_deadline: Option<tokio::time::Instant>,
 }
 
-/// The consumer dropped the event stream.
-struct Gone;
-
-/// What a run may do without asking. `auto_approve` means full access.
-fn access(request: &RunRequest) -> AccessMode {
-    if request.auto_approve {
-        AccessMode::FullAccess
-    } else {
-        request.access
-    }
-}
-
 /// The thread's approval policy: a run in full access is never asked;
 /// otherwise every command that isn't known safe is, and the access mode
 /// decides here which of those reach the user.
 fn approval_policy(request: &RunRequest, title: bool) -> &'static str {
-    if title || access(request).is_full_access() {
+    if title || approval::access(request).is_full_access() {
         "never"
     } else {
         "untrusted"
@@ -228,8 +195,8 @@ fn sandbox_mode(request: &RunRequest, title: bool) -> &'static str {
 }
 
 /// The service tier a run's model options pick, if any.
-pub(super) fn service_tier(request: &RunRequest) -> Option<String> {
-    if request.model_options.get(FAST_MODE).map(String::as_str) == Some("on") {
+fn service_tier(request: &RunRequest) -> Option<String> {
+    if crate::models::fast_mode(request) {
         return Some("fast".into());
     }
     request
@@ -240,7 +207,7 @@ pub(super) fn service_tier(request: &RunRequest) -> Option<String> {
 }
 
 /// `thread/start` (or `thread/resume`) parameters for a run.
-pub(super) fn thread_params(request: &RunRequest, title: bool) -> Map<String, Value> {
+fn thread_params(request: &RunRequest, title: bool) -> Map<String, Value> {
     let mut params = Map::new();
     if !request.cwd.is_empty() {
         params.insert("cwd".into(), json!(request.cwd));
@@ -292,7 +259,7 @@ impl Session {
             child,
             client,
             incoming,
-            stderr_tail,
+            stderr,
         } = server;
         let params = thread_params(request, launch.title);
         let mut resume_note = None;
@@ -312,14 +279,8 @@ impl Session {
             }
             _ => client.request("thread/start", Value::Object(params)).await,
         };
-        let opened = opened.map_err(|e| {
-            let stderr = stderr_tail.lock().unwrap().trim().to_owned();
-            if stderr.is_empty() {
-                format!("Codex couldn't start a session: {e}")
-            } else {
-                format!("Codex couldn't start a session: {e}\n{stderr}")
-            }
-        })?;
+        let opened =
+            opened.map_err(|e| stderr.under(format!("Codex couldn't start a session: {e}")))?;
         let thread_id = opened["thread"]["id"]
             .as_str()
             .unwrap_or_default()
@@ -365,7 +326,7 @@ impl Session {
             client,
             child,
             incoming,
-            stderr_tail,
+            stderr,
             events,
             normalizer,
             thread_id,
@@ -375,10 +336,10 @@ impl Session {
             access: if launch.title {
                 AccessMode::Supervised
             } else {
-                access(request)
+                approval::access(request)
             },
             plan: request.plan && !launch.title,
-            effort: request.reasoning.map(models::effort),
+            effort: request.reasoning.map(crate::models::level_name),
             service_tier: service_tier(request),
             title: launch.title,
             skills,
@@ -873,10 +834,7 @@ impl Session {
         }
         self.plans += 1;
         let request_id = format!("codex-plan-{}", self.plans);
-        let question = approval::question(
-            "Approve plan",
-            "Codex wants to start implementing its plan. Allow it?",
-        );
+        let question = approval::plan("Codex");
         if let Some(turn) = &mut self.turn {
             turn.awaiting_plan = true;
             turn.id = None;
@@ -897,7 +855,7 @@ impl Session {
     async fn implement(&mut self) -> Result<(), Gone> {
         self.begin(
             Prompt {
-                text: IMPLEMENT_PROMPT.into(),
+                text: approval::IMPLEMENT_PROMPT.into(),
                 files: Vec::new(),
             },
             false,
@@ -1173,34 +1131,22 @@ impl Session {
         let Session {
             client,
             mut child,
-            stderr_tail,
+            stderr,
             events,
             thread_id,
             closing,
             ..
         } = self;
         drop(client); // Closes stdin: the server exits.
-        let status = match tokio::time::timeout(EXIT_GRACE, child.wait()).await {
-            Ok(status) => status.ok(),
-            Err(_) => {
-                let _ = child.kill().await;
-                None
-            }
-        };
+        let status = cli::wait_or_kill(&mut child).await;
         if !in_flight {
             return;
         }
         let (status, error) = if closing {
             (DoneStatus::Interrupted, None)
         } else {
-            let stderr = stderr_tail.lock().unwrap().trim().to_owned();
-            let code = status
-                .and_then(|s| s.code())
-                .map_or("unknown".to_owned(), |c| c.to_string());
-            let mut message = format!("codex exited unexpectedly (exit code {code}).");
-            if !stderr.is_empty() {
-                message.push_str(&format!("\n{stderr}"));
-            }
+            let code = cli::exit_code(status);
+            let message = stderr.under(format!("codex exited unexpectedly (exit code {code})."));
             (DoneStatus::Errored, Some(message))
         };
         let _ = events
@@ -1213,7 +1159,7 @@ impl Session {
     }
 
     async fn emit(&self, event: AgentEvent) -> Result<(), Gone> {
-        self.events.send(event).await.map_err(|_| Gone)
+        crate::emit(&self.events, event).await
     }
 }
 

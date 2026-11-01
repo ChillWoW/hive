@@ -11,12 +11,12 @@ use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
 use std::io::{BufRead, BufReader, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
-use std::sync::{Mutex, PoisonError};
+use std::sync::Mutex;
 
 use hive_proto::AgentEvent;
 use serde::{Deserialize, Serialize};
 
-use crate::StoreError;
+use crate::{lock, StoreError};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -43,7 +43,7 @@ pub struct Journal {
 }
 
 impl Journal {
-    pub fn open(dir: impl Into<PathBuf>) -> Result<Self, StoreError> {
+    pub(crate) fn open(dir: impl Into<PathBuf>) -> Result<Self, StoreError> {
         let dir = dir.into();
         std::fs::create_dir_all(&dir)?;
         Ok(Self {
@@ -52,19 +52,19 @@ impl Journal {
         })
     }
 
-    pub fn path(&self, chat_id: &str) -> PathBuf {
+    fn path(&self, chat_id: &str) -> PathBuf {
         self.dir.join(format!("{}.jsonl", file_stem(chat_id)))
     }
 
     /// Appends `event` and returns its seq.
-    pub fn append(
+    pub(crate) fn append(
         &self,
         chat_id: &str,
         message_id: &str,
         at: i64,
         event: &AgentEvent,
     ) -> Result<u64, StoreError> {
-        let mut open = self.open.lock().unwrap_or_else(PoisonError::into_inner);
+        let mut open = lock(&self.open);
         let journal = match open.entry(chat_id.to_owned()) {
             std::collections::hash_map::Entry::Occupied(e) => e.into_mut(),
             std::collections::hash_map::Entry::Vacant(e) => e.insert(self.open_file(chat_id)?),
@@ -114,23 +114,8 @@ impl Journal {
         read_lines(&self.path(chat_id))
     }
 
-    /// Chats that have a journal.
-    pub fn chats(&self) -> Result<Vec<String>, StoreError> {
-        let mut chats = Vec::new();
-        for entry in std::fs::read_dir(&self.dir)? {
-            let name = entry?.file_name();
-            if let Some(stem) = name.to_str().and_then(|n| n.strip_suffix(".jsonl")) {
-                chats.push(stem.to_owned());
-            }
-        }
-        Ok(chats)
-    }
-
-    pub fn delete(&self, chat_id: &str) -> Result<(), StoreError> {
-        self.open
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .remove(chat_id);
+    pub(crate) fn delete(&self, chat_id: &str) -> Result<(), StoreError> {
+        lock(&self.open).remove(chat_id);
         match std::fs::remove_file(self.path(chat_id)) {
             Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(e.into()),
             _ => Ok(()),
@@ -189,7 +174,6 @@ mod tests {
         let lines = journal.read("c1").unwrap();
         assert_eq!(lines.len(), 3);
         assert_eq!(lines[2].message_id, "m2");
-        assert_eq!(journal.chats().unwrap(), vec!["c1".to_owned()]);
     }
 
     #[test]

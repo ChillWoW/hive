@@ -20,23 +20,14 @@ use hive_proto::{
 use tokio::sync::mpsc;
 use tokio::time::Instant;
 
-use crate::{Harness, HarnessError, Run, RunCommand, RunHandle};
+use crate::cli::sleep_until;
+use crate::{Gone, Harness, HarnessError, Run, RunCommand};
 
 /// A command and a skill, for both menus.
 fn commands() -> Vec<SlashCommand> {
     vec![
-        SlashCommand {
-            name: "compact".into(),
-            description: "Summarize the conversation to free up context".into(),
-            input_hint: None,
-            kind: CommandKind::Command,
-        },
-        SlashCommand {
-            name: "review".into(),
-            description: "Review the current diff".into(),
-            input_hint: Some("focus area".into()),
-            kind: CommandKind::Command,
-        },
+        crate::compact_command(),
+        crate::command("review", "Review the current diff", Some("focus area")),
         SlashCommand {
             name: "frontend-design".into(),
             description: "Distinctive, production-grade interfaces".into(),
@@ -108,19 +99,19 @@ impl Harness for MockHarness {
     }
 
     fn run(&self, request: RunRequest) -> Result<Run, HarnessError> {
-        let (events_tx, events) = mpsc::channel(256);
-        let (handle, commands) = RunHandle::new();
-        let player = Player {
-            commands,
-            commands_open: true,
-            events: events_tx,
-            queue: VecDeque::from([request.prompt.clone()]),
-            closing: false,
-            speed: self.speed,
-            background: Vec::new(),
-        };
-        tokio::spawn(player.run(request));
-        Ok(Run { events, handle })
+        let speed = self.speed;
+        Ok(Run::spawn(256, |events, commands| {
+            Player {
+                commands,
+                commands_open: true,
+                events,
+                queue: VecDeque::from([request.prompt.clone()]),
+                closing: false,
+                speed,
+                background: Vec::new(),
+            }
+            .run(request)
+        }))
     }
 
     fn supports_titles(&self) -> bool {
@@ -130,8 +121,6 @@ impl Harness for MockHarness {
     /// Title-cases the request's first four words, which the prompt's last
     /// line carries as a JSON string.
     fn run_title(&self, request: RunRequest) -> Result<Run, HarnessError> {
-        let (events_tx, events) = mpsc::channel(8);
-        let (handle, mut commands) = RunHandle::new();
         let asked = request
             .prompt
             .lines()
@@ -150,7 +139,7 @@ impl Harness for MockHarness {
             .collect::<Vec<_>>()
             .join(" ");
         let delay = Duration::from_secs_f64(0.4 * self.speed);
-        tokio::spawn(async move {
+        Ok(Run::spawn(8, |events_tx, mut commands| async move {
             tokio::time::sleep(delay).await;
             for event in [
                 AgentEvent::TextDelta { text: title },
@@ -170,8 +159,7 @@ impl Harness for MockHarness {
                     return;
                 }
             }
-        });
-        Ok(Run { events, handle })
+        }))
     }
 }
 
@@ -203,8 +191,6 @@ struct Player {
     speed: f64,
     background: Vec<MockTask>,
 }
-
-struct Gone;
 
 enum Interrupted {
     Yes,
@@ -414,14 +400,7 @@ impl Player {
     }
 
     async fn emit(&self, event: AgentEvent) -> Result<(), Gone> {
-        self.events.send(event).await.map_err(|_| Gone)
-    }
-}
-
-async fn sleep_until(deadline: Option<Instant>) {
-    match deadline {
-        Some(at) => tokio::time::sleep_until(at).await,
-        None => std::future::pending().await,
+        crate::emit(&self.events, event).await
     }
 }
 

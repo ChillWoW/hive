@@ -110,20 +110,12 @@ impl Normalizer {
                 Vec::new()
             }
             "session.text.delta" | "session.reasoning.delta" => {
-                let text = data["delta"].as_str().unwrap_or_default();
-                if text.is_empty() {
-                    return Vec::new();
-                }
                 let reasoning = kind == "session.reasoning.delta";
-                self.streamed.insert(item_key(data, reasoning));
-                if reasoning {
-                    vec![AgentEvent::ReasoningDelta { text: text.into() }]
-                } else {
-                    if root {
-                        self.text_seen = true;
-                    }
-                    vec![AgentEvent::TextDelta { text: text.into() }]
+                let text = data["delta"].as_str().unwrap_or_default();
+                if !text.is_empty() {
+                    self.streamed.insert(item_key(data, reasoning));
                 }
+                self.delta(text, reasoning, root)
             }
             // An item that never streamed arrives whole at its end.
             "session.text.ended" | "session.reasoning.ended" => {
@@ -131,18 +123,7 @@ impl Normalizer {
                 if self.streamed.remove(&item_key(data, reasoning)) {
                     return Vec::new();
                 }
-                let text = data["text"].as_str().unwrap_or_default();
-                if text.is_empty() {
-                    return Vec::new();
-                }
-                if reasoning {
-                    vec![AgentEvent::ReasoningDelta { text: text.into() }]
-                } else {
-                    if root {
-                        self.text_seen = true;
-                    }
-                    vec![AgentEvent::TextDelta { text: text.into() }]
-                }
+                self.delta(data["text"].as_str().unwrap_or_default(), reasoning, root)
             }
             "session.tool.input.started" => {
                 let key = call_key(session, message, data);
@@ -300,6 +281,20 @@ impl Normalizer {
 
     /// A child session created under one of ours: bound to that session's
     /// oldest unbound `subagent` call, unless its progress bound it already.
+    fn delta(&mut self, text: &str, reasoning: bool, root: bool) -> Vec<AgentEvent> {
+        if text.is_empty() {
+            return Vec::new();
+        }
+        if reasoning {
+            vec![AgentEvent::ReasoningDelta { text: text.into() }]
+        } else {
+            if root {
+                self.text_seen = true;
+            }
+            vec![AgentEvent::TextDelta { text: text.into() }]
+        }
+    }
+
     fn bind_created(&mut self, session: &str, data: &Value) {
         let Some(parent) = data["parentID"].as_str() else {
             return;

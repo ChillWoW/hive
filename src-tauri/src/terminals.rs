@@ -19,6 +19,8 @@ use sysinfo::{Pid, Process, ProcessRefreshKind, ProcessesToUpdate, System};
 use tauri::ipc::{Channel, InvokeResponseBody};
 use tauri::{AppHandle, Manager, State, Webview};
 
+use crate::util::err;
+
 struct Session {
     /// The webview label that opened it.
     owner: String,
@@ -49,26 +51,23 @@ impl Terminals {
         self.sessions.lock().unwrap().remove(&id)
     }
 
-    fn kill(&self, id: u32) {
-        if let Some(session) = self.sessions.lock().unwrap().get_mut(&id) {
-            let _ = session.killer.kill();
-        }
-    }
-
-    /// Kills every terminal `label` opened.
-    pub fn clear(&self, label: &str) {
-        for session in self.sessions.lock().unwrap().values_mut() {
-            if session.owner == label {
+    /// Kills the terminals `which` picks; their `on_exit` still follows.
+    fn kill_where(&self, which: impl Fn(u32, &Session) -> bool) {
+        for (id, session) in self.sessions.lock().unwrap().iter_mut() {
+            if which(*id, session) {
                 let _ = session.killer.kill();
             }
         }
     }
 
+    /// Kills every terminal `label` opened.
+    pub fn clear(&self, label: &str) {
+        self.kill_where(|_, session| session.owner == label);
+    }
+
     /// Kills every terminal.
     pub fn kill_all(&self) {
-        for session in self.sessions.lock().unwrap().values_mut() {
-            let _ = session.killer.kill();
-        }
+        self.kill_where(|_, _| true);
     }
 
     /// Re-reads the process table and runs `f` on it.
@@ -244,10 +243,15 @@ fn shell_name(cmd: &CommandBuilder) -> String {
         .unwrap_or(program)
 }
 
+fn pty_size(cols: u16, rows: u16) -> PtySize {
+    PtySize { rows: rows.max(1), cols: cols.max(1), pixel_width: 0, pixel_height: 0 }
+}
+
 /// Starts a shell in `cwd` (the home folder when it's missing or gone).
 /// Output arrives on `on_data` as bytes; `on_exit` gets the exit code once
 /// the shell has gone and its last output has been sent.
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub async fn terminal_spawn(
     app: AppHandle,
     webview: Webview,
@@ -259,8 +263,7 @@ pub async fn terminal_spawn(
     on_exit: Channel<Option<u32>>,
     on_process: Channel<Option<String>>,
 ) -> Result<TerminalStarted, String> {
-    let size = PtySize { rows: rows.max(1), cols: cols.max(1), pixel_width: 0, pixel_height: 0 };
-    let pair = native_pty_system().openpty(size).map_err(|e| e.to_string())?;
+    let pair = native_pty_system().openpty(pty_size(cols, rows)).map_err(err)?;
 
     let mut cmd = shell();
     let dir = cwd
@@ -275,11 +278,11 @@ pub async fn terminal_spawn(
     cmd.env("TERM_PROGRAM", "Hive");
     let shell = shell_name(&cmd);
 
-    let mut child = pair.slave.spawn_command(cmd).map_err(|e| e.to_string())?;
+    let mut child = pair.slave.spawn_command(cmd).map_err(err)?;
     // The child holds its own end; ours would keep the output open past its exit.
     drop(pair.slave);
-    let mut reader = pair.master.try_clone_reader().map_err(|e| e.to_string())?;
-    let mut writer = pair.master.take_writer().map_err(|e| e.to_string())?;
+    let mut reader = pair.master.try_clone_reader().map_err(err)?;
+    let mut writer = pair.master.take_writer().map_err(err)?;
     let killer = child.clone_killer();
     let shell_pid = child.process_id();
 
@@ -346,8 +349,8 @@ pub fn terminal_resize(terminals: State<'_, Terminals>, id: u32, cols: u16, rows
     match terminals.sessions.lock().unwrap().get(&id) {
         Some(session) => session
             .master
-            .resize(PtySize { rows: rows.max(1), cols: cols.max(1), pixel_width: 0, pixel_height: 0 })
-            .map_err(|e| e.to_string()),
+            .resize(pty_size(cols, rows))
+            .map_err(err),
         None => Ok(()),
     }
 }
@@ -373,5 +376,5 @@ pub async fn terminal_foreground(app: AppHandle, id: u32) -> Option<String> {
 /// Kills terminal `id`'s shell; `on_exit` still follows.
 #[tauri::command]
 pub fn terminal_kill(terminals: State<'_, Terminals>, id: u32) {
-    terminals.kill(id);
+    terminals.kill_where(|session_id, _| session_id == id);
 }

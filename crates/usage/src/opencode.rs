@@ -12,7 +12,8 @@ use rusqlite::{Connection, OpenFlags};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::record::{CACHE_READ, CACHE_WRITE, INPUT, OUTPUT, REASONING};
+use crate::files::ScanStats;
+use crate::record::{reported_cost, Counts, CACHE_READ, CACHE_WRITE, INPUT, OUTPUT, REASONING};
 
 pub fn data_dir() -> Option<PathBuf> {
     if let Some(dir) = std::env::var_os("OPENCODE_DATA_DIR").filter(|d| !d.is_empty()) {
@@ -35,7 +36,7 @@ pub struct Message {
     #[serde(rename = "p", default, skip_serializing_if = "Option::is_none")]
     pub project: Option<String>,
     #[serde(rename = "t")]
-    pub counts: [u64; 6],
+    pub counts: Counts,
     #[serde(rename = "c", default, skip_serializing_if = "Option::is_none")]
     pub cost: Option<f64>,
 }
@@ -53,18 +54,12 @@ pub struct Database {
 /// still streaming.
 const OVERLAP_MS: i64 = 6 * 3_600_000;
 
-pub struct Stats {
-    pub found: bool,
-    pub files: u32,
-    pub error: Option<String>,
-}
-
-/// Brings `cache` (by database path) up to date for messages created from
-/// `since` on.
-pub fn scan(cache: &mut HashMap<String, Database>, since: i64) -> Stats {
-    let mut stats = Stats { found: false, files: 0, error: None };
-    let Some(dir) = data_dir() else { return stats };
-    let Ok(entries) = std::fs::read_dir(&dir) else { return stats };
+/// Brings `cache` (by database path) up to date with the databases in `dir`
+/// ([`data_dir`]) for messages created from `since` on.
+pub fn scan(dir: Option<&Path>, cache: &mut HashMap<String, Database>, since: i64) -> ScanStats {
+    let mut stats = ScanStats::default();
+    let Some(dir) = dir else { return stats };
+    let Ok(entries) = std::fs::read_dir(dir) else { return stats };
     let mut dbs: Vec<PathBuf> = entries
         .flatten()
         .map(|e| e.path())
@@ -73,6 +68,7 @@ pub fn scan(cache: &mut HashMap<String, Database>, since: i64) -> Stats {
         })
         .collect();
     dbs.sort();
+    let before = signature(cache);
     for path in dbs {
         stats.found = true;
         let key = path.to_string_lossy().into_owned();
@@ -80,11 +76,19 @@ pub fn scan(cache: &mut HashMap<String, Database>, since: i64) -> Stats {
         match read(&path, db, since) {
             Ok(()) => stats.files += 1,
             Err(e) => {
+                stats.failed += 1;
                 stats.error.get_or_insert_with(|| format!("{key}: {e}"));
             }
         }
     }
+    stats.changed = signature(cache) != before;
     stats
+}
+
+fn signature(cache: &HashMap<String, Database>) -> (usize, i64, i64) {
+    cache.values().fold((0, 0, 0), |(n, through, from), db| {
+        (n + db.messages.len(), through.max(db.through), from.min(db.from))
+    })
 }
 
 fn read(path: &Path, db: &mut Database, since: i64) -> rusqlite::Result<()> {
@@ -191,7 +195,7 @@ fn collect(
                 session,
                 project,
                 counts,
-                cost: cost.filter(|c| c.is_finite() && *c > 0.0),
+                cost: reported_cost(cost),
             },
         );
     }

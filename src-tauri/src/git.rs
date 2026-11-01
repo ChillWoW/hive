@@ -5,41 +5,35 @@ use std::path::Path;
 
 use hive_proto::{GitDiff, GitHistoryPage, GitRepo};
 
+use crate::util::{err, inside};
+
 /// Null when `cwd` isn't in a checkout.
 #[tauri::command]
 pub async fn git_repo(cwd: String) -> Result<Option<GitRepo>, String> {
-    hive_git::repo(Path::new(&cwd)).await.map_err(|e| e.to_string())
+    hive_git::repo(Path::new(&cwd)).await.map_err(err)
 }
 
 #[tauri::command]
 pub async fn git_switch_branch(cwd: String, name: String) -> Result<(), String> {
-    hive_git::switch(Path::new(&cwd), &name)
-        .await
-        .map_err(|e| e.to_string())
+    hive_git::switch(Path::new(&cwd), &name).await.map_err(err)
 }
 
 /// Branches off `from` and checks the new branch out.
 #[tauri::command]
 pub async fn git_create_branch(cwd: String, name: String, from: String) -> Result<(), String> {
-    hive_git::create(Path::new(&cwd), &name, &from)
-        .await
-        .map_err(|e| e.to_string())
+    hive_git::create(Path::new(&cwd), &name, &from).await.map_err(err)
 }
 
 #[tauri::command]
 pub async fn git_delete_branch(cwd: String, name: String) -> Result<(), String> {
-    hive_git::delete(Path::new(&cwd), &name)
-        .await
-        .map_err(|e| e.to_string())
+    hive_git::delete(Path::new(&cwd), &name).await.map_err(err)
 }
 
 /// The checkout's changes against HEAD, or with `base` against its merge
 /// base with HEAD; null when `cwd` isn't in a checkout.
 #[tauri::command]
 pub async fn git_diff(cwd: String, base: Option<String>) -> Result<Option<GitDiff>, String> {
-    hive_git::diff(Path::new(&cwd), base.as_deref())
-        .await
-        .map_err(|e| e.to_string())
+    hive_git::diff(Path::new(&cwd), base.as_deref()).await.map_err(err)
 }
 
 /// What a chat's latest prompted turn changed in its checkout so far; null
@@ -49,7 +43,7 @@ pub async fn git_turn_diff(
     engine: tauri::State<'_, hive_engine::Engine>,
     chat_id: String,
 ) -> Result<Option<GitDiff>, String> {
-    engine.turn_diff(&chat_id).await.map_err(|e| e.to_string())
+    engine.turn_diff(&chat_id).await.map_err(err)
 }
 
 /// Puts back what a chat's latest prompted turn changed: every file, or only
@@ -60,10 +54,7 @@ pub async fn git_revert_turn(
     chat_id: String,
     paths: Option<Vec<String>>,
 ) -> Result<Vec<String>, String> {
-    engine
-        .revert_turn(&chat_id, paths)
-        .await
-        .map_err(|e| e.to_string())
+    engine.revert_turn(&chat_id, paths).await.map_err(err)
 }
 
 /// `limit` commits of the checkout's history from `cursor` on (every branch,
@@ -80,7 +71,7 @@ pub async fn git_history(
         limit.unwrap_or(hive_git::HISTORY_DEFAULT_LIMIT),
     )
     .await
-    .map_err(|e| e.to_string())
+    .map_err(err)
 }
 
 /// The commits matching `query` through the whole history, a page at a time.
@@ -98,37 +89,25 @@ pub async fn git_search_history(
         limit.unwrap_or(hive_git::HISTORY_DEFAULT_LIMIT),
     )
     .await
-    .map_err(|e| e.to_string())
+    .map_err(err)
 }
 
 /// `git fetch --all`: remote branches only, never HEAD or the files.
 #[tauri::command]
 pub async fn git_fetch_all(cwd: String) -> Result<(), String> {
-    hive_git::fetch_all(Path::new(&cwd))
-        .await
-        .map_err(|e| e.to_string())
+    hive_git::fetch_all(Path::new(&cwd)).await.map_err(err)
 }
 
 /// The editor's gutter base for `path` (relative to `cwd`): its text at HEAD,
 /// `""` for a new file, null when git doesn't track it (or it isn't text).
 #[tauri::command]
 pub async fn git_head_text(cwd: String, path: String) -> Result<Option<String>, String> {
-    use std::path::Component;
-    if !Path::new(&path)
-        .components()
-        .all(|part| matches!(part, Component::Normal(_)))
-    {
-        return Err(format!("{path} is not inside the folder"));
-    }
-    hive_git::head_text(Path::new(&cwd), &path)
-        .await
-        .map_err(|e| e.to_string())
+    inside(Path::new(&cwd), &path)?;
+    hive_git::head_text(Path::new(&cwd), &path).await.map_err(err)
 }
 
 /// What one commit changed, against its first parent.
 #[tauri::command]
 pub async fn git_commit_diff(cwd: String, sha: String) -> Result<Option<GitDiff>, String> {
-    hive_git::commit_diff(Path::new(&cwd), &sha)
-        .await
-        .map_err(|e| e.to_string())
+    hive_git::commit_diff(Path::new(&cwd), &sha).await.map_err(err)
 }

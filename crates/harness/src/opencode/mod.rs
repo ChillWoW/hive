@@ -39,19 +39,16 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use hive_proto::{
-    AccessMode, AgentEvent, CommandKind, DoneStatus, HarnessCapabilities, HarnessCatalog,
-    HarnessId, RunRequest, SlashCommand,
+    AccessMode, AgentEvent, DoneStatus, HarnessCapabilities, HarnessCatalog, HarnessId, RunRequest,
+    SlashCommand,
 };
 use serde_json::json;
-use tokio::sync::mpsc;
 
-use crate::claude::find_on_path;
-use crate::{Harness, HarnessError, Run, RunHandle};
+use crate::models::ModelCache;
+use crate::{cli, Harness, HarnessError, Run};
 use models::Models;
 use server::Server;
 
-/// How long a model list is used before it's fetched again.
-const MODELS_TTL: Duration = Duration::from_secs(10 * 60);
 /// How long a folder's commands are reused.
 const PROBE_TTL: Duration = Duration::from_secs(30);
 const PROBE_TIMEOUT: Duration = Duration::from_secs(60);
@@ -59,16 +56,8 @@ const PROBE_TIMEOUT: Duration = Duration::from_secs(60);
 const TITLE_TIMEOUT: Duration = Duration::from_secs(60);
 
 #[derive(Default)]
-struct ModelState {
-    models: Option<Models>,
-    fetched: Option<Instant>,
-    refreshing: bool,
-}
-
-#[derive(Default)]
 pub struct OpencodeHarness {
-    executable: Option<PathBuf>,
-    models: Arc<Mutex<ModelState>>,
+    models: ModelCache<Models>,
     /// Each folder's commands and skills, as a run or probe there listed them.
     commands: Arc<Mutex<HashMap<String, Vec<SlashCommand>>>>,
     probes: Arc<Mutex<HashMap<String, Instant>>>,
@@ -79,54 +68,8 @@ impl OpencodeHarness {
         Self::default()
     }
 
-    /// Uses `path` instead of looking `opencode` up on PATH.
-    pub fn with_executable(path: impl Into<PathBuf>) -> Self {
-        Self {
-            executable: Some(path.into()),
-            ..Self::default()
-        }
-    }
-
-    fn exe(&self) -> Option<PathBuf> {
-        self.executable.clone().or_else(find_opencode)
-    }
-
     fn listed_models(&self) -> Models {
-        self.models
-            .lock()
-            .unwrap()
-            .models
-            .clone()
-            .unwrap_or_default()
-    }
-
-    /// Fetches the model list in the background when it's missing or old.
-    fn refresh_models(&self, exe: PathBuf) {
-        let Ok(runtime) = tokio::runtime::Handle::try_current() else {
-            return;
-        };
-        {
-            let mut state = self.models.lock().unwrap();
-            let fresh = state.fetched.is_some_and(|at| at.elapsed() < MODELS_TTL);
-            if fresh || state.refreshing {
-                return;
-            }
-            state.refreshing = true;
-        }
-        let state = Arc::clone(&self.models);
-        runtime.spawn(async move {
-            let listed = tokio::time::timeout(PROBE_TIMEOUT, list_models(exe)).await;
-            let mut state = state.lock().unwrap();
-            state.refreshing = false;
-            // A failure waits out the TTL too, rather than starting a server
-            // per catalog call.
-            state.fetched = Some(Instant::now());
-            if let Ok(Ok(models)) = listed {
-                if !models.models.is_empty() {
-                    state.models = Some(models);
-                }
-            }
-        });
+        self.models.get().unwrap_or_default()
     }
 }
 
@@ -166,12 +109,7 @@ async fn fetch_models(api: &server::Api, attempts: u32) -> Result<Models, String
 
 /// Commands every OpenCode session takes, whatever the folder.
 fn builtin_commands() -> Vec<SlashCommand> {
-    vec![SlashCommand {
-        name: "compact".into(),
-        description: "Summarize the conversation to free up context".into(),
-        input_hint: None,
-        kind: CommandKind::Command,
-    }]
+    vec![crate::compact_command()]
 }
 
 /// The folder's commands after the built-in ones, without repeats.
@@ -191,9 +129,11 @@ impl Harness for OpencodeHarness {
     }
 
     fn catalog(&self) -> HarnessCatalog {
-        let exe = self.exe();
+        let exe = find_opencode();
         if let Some(exe) = &exe {
-            self.refresh_models(exe.clone());
+            self.models.refresh(PROBE_TIMEOUT, list_models(exe.clone()), |m| {
+                !m.models.is_empty()
+            });
         }
         let models = self.listed_models();
         HarnessCatalog {
@@ -220,7 +160,7 @@ impl Harness for OpencodeHarness {
     }
 
     fn run(&self, request: RunRequest) -> Result<Run, HarnessError> {
-        let exe = self.exe().ok_or(HarnessError::NotInstalled("opencode"))?;
+        let exe = find_opencode().ok_or(HarnessError::NotInstalled("opencode"))?;
         Ok(session::run(session::Launch {
             exe,
             request,
@@ -231,7 +171,7 @@ impl Harness for OpencodeHarness {
 
     /// `/api/command` and `/api/skill` on a server started for it.
     fn commands(&self, cwd: &str) -> crate::CommandsFuture {
-        let exe = self.exe();
+        let exe = find_opencode();
         let cache = Arc::clone(&self.commands);
         let probes = Arc::clone(&self.probes);
         let cwd = cwd.to_owned();
@@ -269,11 +209,9 @@ impl Harness for OpencodeHarness {
     /// session, no tools. It takes no system prompt, so the request (the
     /// title instructions with the chat's first prompt) goes as the prompt.
     fn run_title(&self, request: RunRequest) -> Result<Run, HarnessError> {
-        let exe = self.exe().ok_or(HarnessError::NotInstalled("opencode"))?;
+        let exe = find_opencode().ok_or(HarnessError::NotInstalled("opencode"))?;
         let models = self.listed_models();
-        let (events_tx, events) = mpsc::channel(16);
-        let (handle, mut commands) = RunHandle::new();
-        tokio::spawn(async move {
+        Ok(Run::spawn(16, |events_tx, mut commands| async move {
             let work = async {
                 let server = Server::start(&exe, &request.cwd, None).await?;
                 let mut body = json!({ "prompt": request.prompt });
@@ -318,21 +256,15 @@ impl Harness for OpencodeHarness {
                 },
             };
             let _ = events_tx.send(done).await;
-        });
-        Ok(Run { events, handle })
+        }))
     }
 }
 
-/// `opencode` on PATH, else where its installers put it. An app started from
-/// Finder or the Start menu may not see the shell's PATH.
+/// `opencode` on PATH, else where its installers put it.
 pub(crate) fn find_opencode() -> Option<PathBuf> {
-    find_on_path("opencode").or_else(|| install_locations().into_iter().find(|p| p.is_file()))
-}
-
-fn install_locations() -> Vec<PathBuf> {
     let mut paths = Vec::new();
     let exe = if cfg!(windows) { "opencode.exe" } else { "opencode" };
-    if let Some(home) = server::home_dir() {
+    if let Some(home) = cli::home_dir() {
         for dir in [".opencode/bin", ".local/bin", ".bun/bin", ".npm-global/bin"] {
             paths.push(home.join(dir).join(exe));
         }
@@ -345,5 +277,5 @@ fn install_locations() -> Vec<PathBuf> {
         paths.push("/opt/homebrew/bin/opencode".into());
         paths.push("/usr/local/bin/opencode".into());
     }
-    paths
+    cli::find("opencode", paths)
 }

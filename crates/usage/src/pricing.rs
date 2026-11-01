@@ -4,7 +4,6 @@
 //! it doesn't know stays unpriced (counted, never charged $0).
 
 use std::collections::HashMap;
-use std::path::Path;
 use std::sync::OnceLock;
 use std::time::Duration;
 
@@ -111,11 +110,6 @@ impl RateTable {
         }
     }
 
-    /// `None` when the model has no price.
-    pub fn price(&self, model: &str, counts: &Counts, fast: bool) -> Option<Priced> {
-        Some(self.lookup(model)?.price(counts, fast))
-    }
-
     pub fn parse(document: &Value, fetched_at: i64) -> RateTable {
         let mut models = HashMap::new();
         let Some(entries) = document.as_object() else {
@@ -187,19 +181,6 @@ fn scale(r: &Rates, m: f64) -> Rates {
     }
 }
 
-pub fn load(path: &Path) -> RateTable {
-    std::fs::read(path)
-        .ok()
-        .and_then(|bytes| serde_json::from_slice(&bytes).ok())
-        .unwrap_or_default()
-}
-
-pub fn save(path: &Path, table: &RateTable) {
-    if let Ok(bytes) = serde_json::to_vec(table) {
-        crate::write_atomic(path, &bytes);
-    }
-}
-
 pub async fn fetch(now: i64) -> Result<RateTable, String> {
     let client = client()?;
     let response = client
@@ -241,6 +222,10 @@ mod tests {
 
     use super::*;
 
+    fn price(t: &RateTable, model: &str, counts: &Counts, fast: bool) -> Option<Priced> {
+        Some(t.lookup(model)?.price(counts, fast))
+    }
+
     fn table() -> RateTable {
         RateTable::parse(
             &json!({
@@ -267,19 +252,19 @@ mod tests {
     fn prices_by_token_type() {
         let t = table();
         // input, cache read, cache write (1h part 100), output.
-        let p = t.price("claude-opus-5-5", &[1000, 10_000, 300, 500, 0, 100], false).unwrap();
+        let p = price(&t, "claude-opus-5-5", &[1000, 10_000, 300, 500, 0, 100], false).unwrap();
         assert!((p.input - 0.004).abs() < 1e-12);
         assert!((p.cache_read - 0.002).abs() < 1e-12);
         assert!((p.cache_write - (200.0 * 0.000005 + 100.0 * 0.000008)).abs() < 1e-12);
         assert!((p.output - 0.01).abs() < 1e-12);
         assert!((p.savings - 10_000.0 * (0.000004 - 2e-7)).abs() < 1e-12);
 
-        let fast = t.price("claude-opus-5-5[1m]", &[1000, 0, 0, 0, 0, 0], true).unwrap();
+        let fast = price(&t, "claude-opus-5-5[1m]", &[1000, 0, 0, 0, 0, 0], true).unwrap();
         assert!((fast.input - 0.008).abs() < 1e-12);
         assert!((fast.fast_premium - 0.004).abs() < 1e-12);
 
         // Priority tier derives the missing cache rate from the standard ratio.
-        let gpt = t.price("gpt-6-sol", &[0, 1000, 0, 0, 0, 0], true).unwrap();
+        let gpt = price(&t, "gpt-6-sol", &[0, 1000, 0, 0, 0, 0], true).unwrap();
         assert!((gpt.cache_read - 1000.0 * 4e-7).abs() < 1e-12);
     }
 

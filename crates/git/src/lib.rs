@@ -14,10 +14,10 @@ use tokio::process::Command;
 mod diff;
 mod history;
 mod turn;
-pub use diff::{diff, head_text, MAX_PATCH_BYTES};
+pub use diff::{diff, head_text};
 pub use history::{
-    commit_diff, fetch_all, github_remote, history, history_matches, search_history,
-    HISTORY_DEFAULT_LIMIT, HISTORY_MAX_LIMIT,
+    commit_diff, fetch_all, github_remote, history, search_history, HISTORY_DEFAULT_LIMIT,
+    HISTORY_MAX_LIMIT,
 };
 pub use turn::{revert_turn, snapshot_tree, sweep_turn_snapshots, turn_diff, TreeSnapshot};
 
@@ -75,6 +75,22 @@ impl Output {
             Err(self.error())
         }
     }
+
+    /// Stdout, trimmed, when git succeeded and printed something.
+    fn line(&self) -> Option<String> {
+        let text = self.stdout.trim();
+        (self.ok() && !text.is_empty()).then(|| text.to_owned())
+    }
+}
+
+impl From<std::process::Output> for Output {
+    fn from(out: std::process::Output) -> Self {
+        Self {
+            code: out.status.code(),
+            stdout: String::from_utf8_lossy(&out.stdout).into_owned(),
+            stderr: String::from_utf8_lossy(&out.stderr).into_owned(),
+        }
+    }
 }
 
 fn command<S: AsRef<std::ffi::OsStr>>(cwd: &Path, args: &[S]) -> std::process::Command {
@@ -98,31 +114,33 @@ fn command<S: AsRef<std::ffi::OsStr>>(cwd: &Path, args: &[S]) -> std::process::C
     cmd
 }
 
-fn output(out: std::io::Result<std::process::Output>) -> Result<Output, GitError> {
-    let out = out.map_err(|e| match e.kind() {
+/// Git failing to start.
+fn spawn_error(e: std::io::Error) -> GitError {
+    match e.kind() {
         std::io::ErrorKind::NotFound => GitError::NotInstalled,
         _ => GitError::Failed(e.to_string()),
-    })?;
-    Ok(Output {
-        code: out.status.code(),
-        stdout: String::from_utf8_lossy(&out.stdout).into_owned(),
-        stderr: String::from_utf8_lossy(&out.stderr).into_owned(),
-    })
+    }
+}
+
+/// Runs a prepared git command to the end; killed if the future is dropped.
+async fn run(cmd: std::process::Command) -> Result<std::process::Output, GitError> {
+    let mut cmd = Command::from(cmd);
+    cmd.kill_on_drop(true);
+    cmd.output().await.map_err(spawn_error)
 }
 
 async fn git(cwd: &Path, args: &[&str]) -> Result<Output, GitError> {
-    let mut cmd = Command::from(command(cwd, args));
-    cmd.kill_on_drop(true);
-    output(cmd.output().await)
+    run(command(cwd, args)).await.map(Output::from)
 }
 
 /// For callers that can't await; only for rare, quick work.
 fn git_blocking(cwd: &Path, args: &[&str]) -> Result<Output, GitError> {
-    output(command(cwd, args).output())
+    command(cwd, args).output().map(Output::from).map_err(spawn_error)
 }
 
-/// The checkout `cwd` is in; `None` when it isn't in one (or doesn't exist).
-pub async fn repo(cwd: &Path) -> Result<Option<GitRepo>, GitError> {
+/// The top folder of the checkout `cwd` is in, as git prints it; `None` when
+/// it isn't in one (or doesn't exist).
+async fn toplevel(cwd: &Path) -> Result<Option<String>, GitError> {
     if !cwd.is_dir() {
         return Ok(None);
     }
@@ -133,7 +151,19 @@ pub async fn repo(cwd: &Path) -> Result<Option<GitRepo>, GitError> {
         }
         return Err(top.error());
     }
-    let root = top.stdout.trim().to_owned();
+    Ok(Some(top.stdout.trim().to_owned()))
+}
+
+/// The checked-out branch's short name; `None` when HEAD is detached.
+async fn current_branch(cwd: &Path) -> Result<Option<String>, GitError> {
+    Ok(git(cwd, &["symbolic-ref", "-q", "--short", "HEAD"]).await?.line())
+}
+
+/// The checkout `cwd` is in; `None` when it isn't in one (or doesn't exist).
+pub async fn repo(cwd: &Path) -> Result<Option<GitRepo>, GitError> {
+    let Some(root) = toplevel(cwd).await? else {
+        return Ok(None);
+    };
     // Exit 1: detached.
     let head = git(cwd, &["symbolic-ref", "-q", "HEAD"]).await?;
     let branch = match head.code {
@@ -148,8 +178,7 @@ pub async fn repo(cwd: &Path) -> Result<Option<GitRepo>, GitError> {
         _ => return Err(head.error()),
     };
     // Fails before the first commit.
-    let commit = git(cwd, &["rev-parse", "--short", "HEAD"]).await?;
-    let commit = commit.ok().then(|| commit.stdout.trim().to_owned());
+    let commit = git(cwd, &["rev-parse", "--short", "HEAD"]).await?.line();
 
     let list = git(
         cwd,
@@ -288,8 +317,7 @@ pub async fn create(cwd: &Path, name: &str, from: &str) -> Result<(), GitError> 
 /// Deletes branch `name`, merged or not; never the checked-out one.
 pub async fn delete(cwd: &Path, name: &str) -> Result<(), GitError> {
     let name = existing(name)?;
-    let head = git(cwd, &["symbolic-ref", "-q", "--short", "HEAD"]).await?;
-    if head.ok() && head.stdout.trim() == name {
+    if current_branch(cwd).await?.as_deref() == Some(name) {
         return Err(GitError::CurrentBranch(name.to_owned()));
     }
     git(cwd, &["branch", "-D", "--", name]).await?.checked()?;
@@ -365,18 +393,14 @@ pub async fn add_worktree(
 
     let base = match base.map(str::trim).filter(|b| !b.is_empty()) {
         Some(base) => existing(base)?.to_owned(),
-        None => {
-            let head = git(&top, &["symbolic-ref", "-q", "--short", "HEAD"]).await?;
-            if head.ok() {
-                head.stdout.trim().to_owned()
-            } else {
-                git(&top, &["rev-parse", "--short", "HEAD"])
-                    .await?
-                    .checked()?
-                    .trim()
-                    .to_owned()
-            }
-        }
+        None => match current_branch(&top).await? {
+            Some(branch) => branch,
+            None => git(&top, &["rev-parse", "--short", "HEAD"])
+                .await?
+                .checked()?
+                .trim()
+                .to_owned(),
+        },
     };
     let commit = format!("{base}^{{commit}}");
     if !git(&top, &["rev-parse", "--verify", "--quiet", &commit])
@@ -484,8 +508,8 @@ pub async fn remove_worktree(cwd: &Path, worktree: &Worktree) -> Result<(), GitE
     let root = Path::new(&worktree.root);
     let mut failure = None;
     for attempt in 0..6u64 {
+        failure = None;
         if !root.exists() {
-            failure = None;
             break;
         }
         if attempt > 0 {
@@ -496,16 +520,12 @@ pub async fn remove_worktree(cwd: &Path, worktree: &Worktree) -> Result<(), GitE
                 .await
                 .is_ok_and(|out| out.ok());
         if by_git {
-            failure = None;
             break;
         }
         // Git couldn't (the project is gone, or it doesn't know this
         // worktree): delete the folder itself.
         match std::fs::remove_dir_all(root) {
-            Ok(()) => {
-                failure = None;
-                break;
-            }
+            Ok(()) => break,
             Err(e) => failure = Some(e),
         }
     }
@@ -525,6 +545,24 @@ pub async fn remove_worktree(cwd: &Path, worktree: &Worktree) -> Result<(), GitE
     }
 }
 
+/// Makes `path` a repository with `a.txt` (holding `a`) committed on
+/// `main`; `None` without git.
+#[cfg(test)]
+async fn test_repo(path: &Path, a: &str) -> Option<()> {
+    let run = |args: &'static [&'static str]| async move {
+        git(path, args).await.ok().filter(|o| o.ok())
+    };
+    run(&["init", "-q", "-b", "main"]).await?;
+    run(&["config", "user.email", "hive@example.com"]).await?;
+    run(&["config", "user.name", "Hive"]).await?;
+    run(&["config", "commit.gpgsign", "false"]).await?;
+    run(&["config", "core.autocrlf", "false"]).await?;
+    std::fs::write(path.join("a.txt"), a).unwrap();
+    run(&["add", "."]).await?;
+    run(&["commit", "-q", "-m", "first"]).await?;
+    Some(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -532,17 +570,7 @@ mod tests {
     /// A repository with one commit on `main`; `None` without git.
     async fn fixture() -> Option<tempfile::TempDir> {
         let dir = tempfile::tempdir().unwrap();
-        let path = dir.path();
-        let run = |args: &'static [&'static str]| async move {
-            git(path, args).await.ok().filter(|o| o.ok())
-        };
-        run(&["init", "-q", "-b", "main"]).await?;
-        run(&["config", "user.email", "hive@example.com"]).await?;
-        run(&["config", "user.name", "Hive"]).await?;
-        run(&["config", "commit.gpgsign", "false"]).await?;
-        std::fs::write(path.join("a.txt"), "a").unwrap();
-        run(&["add", "."]).await?;
-        run(&["commit", "-q", "-m", "first"]).await?;
+        test_repo(dir.path(), "a").await?;
         Some(dir)
     }
 

@@ -116,6 +116,11 @@ impl Chat {
         self.worktree.as_ref().map_or(&self.cwd, |w| &w.path)
     }
 
+    /// It has a title that isn't blank.
+    pub fn has_title(&self) -> bool {
+        self.title.as_deref().is_some_and(|t| !t.trim().is_empty())
+    }
+
     /// The chat has activity the user hasn't opened yet.
     pub fn unseen(&self) -> bool {
         match (self.last_message_at, self.last_seen_at) {
@@ -191,10 +196,4 @@ pub struct ContextUsage {
     pub tokens: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub window: Option<u64>,
-}
-
-impl ContextUsage {
-    pub fn fraction(self) -> Option<f64> {
-        Some(self.tokens? as f64 / self.window.filter(|n| *n > 0)? as f64)
-    }
 }

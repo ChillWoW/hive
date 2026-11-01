@@ -9,8 +9,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::files::Format;
 use crate::record::{
-    fnv, parse_time, Record, Records, CACHE_READ, CACHE_WRITE, CACHE_WRITE_1H, INPUT, NONE,
-    OUTPUT,
+    fnv, parse_time, reported_cost, Record, Records, CACHE_READ, CACHE_WRITE, CACHE_WRITE_1H,
+    INPUT, OUTPUT,
 };
 
 pub fn roots() -> Vec<PathBuf> {
@@ -95,15 +95,15 @@ impl Format for Claude {
             .unwrap_or(0)
             .min(counts[CACHE_WRITE]);
         let model = out.intern(&model);
-        let session = line.session_id.as_deref().map_or(NONE, |s| out.intern(s));
-        let project = line.cwd.as_deref().map_or(NONE, |s| out.intern(s));
+        let session = out.intern_or_none(line.session_id.as_deref());
+        let project = out.intern_or_none(line.cwd.as_deref());
         out.push(Record {
             at,
             model,
             session,
             project,
             counts,
-            cost: line.cost_usd.filter(|c| c.is_finite() && *c > 0.0),
+            cost: reported_cost(line.cost_usd),
             fast: usage.speed.as_deref() == Some("fast"),
             key,
         });

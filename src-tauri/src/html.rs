@@ -13,13 +13,14 @@ use std::path::Path;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
-use base64::Engine as _;
-use hive_engine::Engine;
 use hive_mcp::Ctx;
 use serde::Deserialize;
 use serde_json::{json, Value};
 use tauri::{AppHandle, Emitter, Manager, State};
 use tokio::sync::oneshot;
+
+use crate::mcp;
+use crate::util::{blocking, data_url, image_type};
 
 pub const PREVIEW_TOOL: &str = "preview_html";
 pub const RENDER_TOOL: &str = "render_html";
@@ -133,8 +134,7 @@ impl HtmlChecks {
 
 /// `preview_html`: the window loads the page and reports on it.
 pub async fn preview(app: AppHandle, args: Value) -> Result<Value, String> {
-    let args: PreviewArgs =
-        serde_json::from_value(args).map_err(|e| format!("Bad arguments: {e}"))?;
+    let args: PreviewArgs = mcp::args(args)?;
     let width = args
         .width
         .unwrap_or(DEFAULT_WIDTH)
@@ -167,9 +167,8 @@ pub async fn preview(app: AppHandle, args: Value) -> Result<Value, String> {
 /// `render_html`: saves the page as an attachment; the transcript reads the
 /// call's result to show it.
 pub async fn render(app: AppHandle, ctx: Ctx, args: Value) -> Result<Value, String> {
-    ctx.chat_id.ok_or("This session isn't a Hive chat.")?;
-    let args: RenderArgs =
-        serde_json::from_value(args).map_err(|e| format!("Bad arguments: {e}"))?;
+    mcp::chat_id(&ctx)?;
+    let args: RenderArgs = mcp::args(args)?;
     let title = args.title.trim();
     if title.is_empty() {
         return Err("`title` can't be empty.".into());
@@ -184,18 +183,16 @@ pub async fn render(app: AppHandle, ctx: Ctx, args: Value) -> Result<Value, Stri
             page.missing.join(", ")
         ));
     }
-    let engine = app
-        .try_state::<Engine>()
-        .ok_or("Hive is still starting.")?
-        .inner()
-        .clone();
+    let engine = mcp::engine(&app)?;
     let name = format!("{}.html", file_stem(title));
-    let saved = tokio::task::spawn_blocking(move || {
-        engine.store().attachments().save(&name, page.html.as_bytes())
+    let saved = blocking(move || {
+        engine
+            .store()
+            .attachments()
+            .save(&name, page.html.as_bytes())
+            .map_err(|e| format!("Couldn't save the page: {e}"))
     })
-    .await
-    .map_err(|e| e.to_string())?
-    .map_err(|e| format!("Couldn't save the page: {e}"))?;
+    .await?;
     Ok(json!({
         "page": {
             "file": saved.path,
@@ -348,7 +345,7 @@ fn inline_images(html: &str) -> (String, Vec<String>) {
         let Some(path) = local_image(raw.trim().trim_matches(['"', '\''])) else {
             continue;
         };
-        match data_url(&path) {
+        match image_file_url(&path) {
             Some(url) => {
                 out.push_str(&url);
                 rest = &rest[end..];
@@ -399,38 +396,13 @@ fn local_image(value: &str) -> Option<String> {
 
 /// The image at `path` as a data URL, typed by its bytes (so a renamed file
 /// that isn't an image is never inlined).
-fn data_url(path: &str) -> Option<String> {
+fn image_file_url(path: &str) -> Option<String> {
     let meta = std::fs::metadata(path).ok()?;
     if !meta.is_file() || meta.len() > MAX_IMAGE {
         return None;
     }
     let bytes = std::fs::read(path).ok()?;
-    let mime = image_type(&bytes)?;
-    Some(format!(
-        "data:{mime};base64,{}",
-        base64::engine::general_purpose::STANDARD.encode(&bytes)
-    ))
-}
-
-fn image_type(bytes: &[u8]) -> Option<&'static str> {
-    Some(match bytes {
-        [0x89, b'P', b'N', b'G', ..] => "image/png",
-        [0xFF, 0xD8, 0xFF, ..] => "image/jpeg",
-        [b'G', b'I', b'F', b'8', ..] => "image/gif",
-        [b'R', b'I', b'F', b'F', _, _, _, _, b'W', b'E', b'B', b'P', ..] => "image/webp",
-        [_, _, _, _, b'f', b't', b'y', b'p', b'a', b'v', b'i', b'f', ..] => "image/avif",
-        [b'B', b'M', ..] => "image/bmp",
-        [0, 0, 1, 0, ..] => "image/x-icon",
-        _ => {
-            let head = std::str::from_utf8(&bytes[..bytes.len().min(1024)]).ok()?;
-            let head = head.trim_start_matches('\u{feff}').trim_start();
-            if head.starts_with("<svg") || (head.starts_with("<?xml") && head.contains("<svg")) {
-                "image/svg+xml"
-            } else {
-                return None;
-            }
-        }
-    })
+    Some(data_url(image_type(&bytes)?, &bytes))
 }
 
 /// A file name for the page: its title, kept to safe characters.

@@ -5,6 +5,8 @@
 use hive_proto::{CommandKind, SlashCommand};
 use serde_json::Value;
 
+use crate::command;
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Skill {
     pub name: String,
@@ -59,30 +61,22 @@ pub fn commands(skills: &[Skill]) -> Vec<SlashCommand> {
 /// into their own app-server requests.
 pub fn builtin() -> Vec<SlashCommand> {
     vec![
-        SlashCommand {
-            name: "goal".into(),
-            description: "Set a goal Codex keeps working toward until it's done".into(),
-            input_hint: Some("objective, or pause, resume, clear".into()),
-            kind: CommandKind::Command,
-        },
-        SlashCommand {
-            name: "compact".into(),
-            description: "Summarize the conversation to free up context".into(),
-            input_hint: None,
-            kind: CommandKind::Command,
-        },
-        SlashCommand {
-            name: "review".into(),
-            description: "Review uncommitted changes, or what you describe".into(),
-            input_hint: Some("instructions".into()),
-            kind: CommandKind::Command,
-        },
-        SlashCommand {
-            name: "feedback".into(),
-            description: "Send this chat and Codex's logs to OpenAI".into(),
-            input_hint: Some("what went wrong (optional)".into()),
-            kind: CommandKind::Command,
-        },
+        command(
+            "goal",
+            "Set a goal Codex keeps working toward until it's done",
+            Some("objective, or pause, resume, clear"),
+        ),
+        crate::compact_command(),
+        command(
+            "review",
+            "Review uncommitted changes, or what you describe",
+            Some("instructions"),
+        ),
+        command(
+            "feedback",
+            "Send this chat and Codex's logs to OpenAI",
+            Some("what went wrong (optional)"),
+        ),
     ]
 }
 

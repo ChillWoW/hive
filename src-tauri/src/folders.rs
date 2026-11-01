@@ -2,7 +2,7 @@
 
 use std::path::Path;
 
-use base64::Engine as _;
+use crate::util::data_url;
 
 /// Where projects keep an icon, best first; the first one found decides.
 const ICON_PATHS: &[&str] = &[
@@ -54,8 +54,7 @@ fn icon_data_url(folder: &Path) -> Option<String> {
             Some("ico") => "image/x-icon",
             _ => "image/png",
         };
-        let data = base64::engine::general_purpose::STANDARD.encode(bytes);
-        return Some(format!("data:{mime};base64,{data}"));
+        return Some(data_url(mime, &bytes));
     }
     None
 }
@@ -73,25 +72,19 @@ pub async fn folder_icon(path: String) -> Option<String> {
 mod tests {
     use super::*;
 
-    fn temp_dir(name: &str) -> std::path::PathBuf {
-        let dir = std::env::temp_dir().join(format!("hive-folders-{name}-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        dir
-    }
-
     #[test]
     fn finds_the_best_icon_from_the_checkout_root() {
-        let root = temp_dir("root");
-        assert_eq!(icon_data_url(&root), None);
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        assert_eq!(icon_data_url(root), None);
 
         std::fs::write(root.join("favicon.ico"), b"ico").unwrap();
-        assert!(icon_data_url(&root).unwrap().starts_with("data:image/x-icon;base64,"));
+        assert!(icon_data_url(root).unwrap().starts_with("data:image/x-icon;base64,"));
 
         std::fs::create_dir_all(root.join("public")).unwrap();
         std::fs::write(root.join("public/favicon.svg"), b"<svg/>").unwrap();
         assert_eq!(
-            icon_data_url(&root).as_deref(),
+            icon_data_url(root).as_deref(),
             Some("data:image/svg+xml;base64,PHN2Zy8+")
         );
 
@@ -99,8 +92,6 @@ mod tests {
         std::fs::create_dir_all(root.join(".git")).unwrap();
         std::fs::create_dir_all(root.join("src/nested")).unwrap();
         assert!(icon_data_url(&root.join("src/nested")).unwrap().starts_with("data:image/svg+xml"));
-
-        std::fs::remove_dir_all(&root).unwrap();
     }
 
     #[test]

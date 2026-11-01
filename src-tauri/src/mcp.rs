@@ -10,9 +10,11 @@ use std::path::Path;
 
 use hive_engine::Engine;
 use hive_mcp::{Ctx, Host, McpServer, Tools};
+use serde::de::DeserializeOwned;
 use serde_json::{json, Value};
 use tauri::{AppHandle, Manager};
 
+use crate::util::err;
 use crate::{html, secrets};
 
 /// Starts the host and returns how agents launch a bridge to it; None (and
@@ -78,15 +80,29 @@ fn whoami(app: &AppHandle, ctx: &Ctx) -> Result<Value, String> {
 
 /// The chat whose agent called.
 fn calling_chat(app: &AppHandle, ctx: &Ctx) -> Result<hive_proto::Chat, String> {
-    let id = ctx
-        .chat_id
-        .as_deref()
-        .ok_or("This session isn't a Hive chat.")?;
-    let engine = app.try_state::<Engine>().ok_or("Hive is still starting.")?;
-    engine
+    let id = chat_id(ctx)?;
+    engine(app)?
         .chats()
-        .map_err(|e| e.to_string())?
+        .map_err(err)?
         .into_iter()
         .find(|c| c.id == id)
         .ok_or_else(|| format!("Chat {id} no longer exists."))
+}
+
+/// The id of the chat whose agent called.
+pub fn chat_id(ctx: &Ctx) -> Result<&str, String> {
+    ctx.chat_id
+        .as_deref()
+        .ok_or_else(|| "This session isn't a Hive chat.".into())
+}
+
+/// The app's engine, once it has one.
+pub fn engine(app: &AppHandle) -> Result<Engine, String> {
+    let engine = app.try_state::<Engine>().ok_or("Hive is still starting.")?;
+    Ok(engine.inner().clone())
+}
+
+/// A tool call's arguments.
+pub fn args<T: DeserializeOwned>(args: Value) -> Result<T, String> {
+    serde_json::from_value(args).map_err(|e| format!("Bad arguments: {e}"))
 }

@@ -43,31 +43,27 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use hive_proto::{
-    AccessMode, AgentEvent, CommandKind, DoneStatus, HarnessCapabilities, HarnessCatalog,
-    HarnessId, McpServer, Model, ModelOption, ModelOptionChoice, ReasoningLevel, RunRequest,
-    SlashCommand, TaskOutput, UserInputAnswer, UserInputQuestion,
+    AccessMode, AgentEvent, DoneStatus, HarnessCapabilities, HarnessCatalog, HarnessId, McpServer,
+    Model, ReasoningLevel, RunRequest, SlashCommand, TaskOutput, UserInputAnswer,
+    UserInputQuestion,
 };
 use serde_json::{json, Value};
-use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
-use tokio::process::{Child, ChildStderr, ChildStdin, Command};
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tokio::process::Child;
 use tokio::sync::{mpsc, oneshot};
 
 use crate::approval::{self, Action};
 use crate::attachments;
-use crate::{Harness, HarnessError, Run, RunCommand, RunHandle};
+use crate::cli::{self, sleep_until, StderrTail, INTERRUPT_SETTLE};
+use crate::models;
+use crate::{Gone, Harness, HarnessError, Run, RunCommand};
 use normalize::Normalizer;
 use wire::{ControlRequestFrame, Frame};
 
 const INITIALIZE_ID: &str = "hive_initialize";
-/// How long an interrupted turn may take to report its `result` before the
-/// run reports it interrupted anyway.
-const INTERRUPT_SETTLE: Duration = Duration::from_secs(5);
-/// How long the CLI gets to exit after stdin closes before it's killed.
-const EXIT_GRACE: Duration = Duration::from_secs(3);
-const STDERR_TAIL_BYTES: usize = 4096;
 /// How long a command probe may take.
 const PROBE_TIMEOUT: Duration = Duration::from_secs(20);
 /// How long a probe's answer is reused for the same folder.
@@ -77,26 +73,18 @@ const INITIALIZE_WAIT: Duration = Duration::from_secs(5);
 
 /// The skills' names from the last `system:init` any run saw.
 type KnownSkills = Arc<Mutex<Option<HashSet<String>>>>;
+/// The last probe's command list per folder.
+type Probes = Arc<Mutex<HashMap<String, (Instant, Vec<commands::Advertised>)>>>;
 
 #[derive(Default)]
 pub struct ClaudeHarness {
-    executable: Option<PathBuf>,
     skills: KnownSkills,
-    /// The last probe's command list per folder.
-    probes: Arc<Mutex<HashMap<String, (std::time::Instant, Vec<commands::Advertised>)>>>,
+    probes: Probes,
 }
 
 impl ClaudeHarness {
     pub fn new() -> Self {
         Self::default()
-    }
-
-    /// Uses `path` instead of looking `claude` up on PATH.
-    pub fn with_executable(path: impl Into<PathBuf>) -> Self {
-        Self {
-            executable: Some(path.into()),
-            ..Self::default()
-        }
     }
 
     fn launch_args(request: &RunRequest) -> Vec<String> {
@@ -135,20 +123,11 @@ impl ClaudeHarness {
         if let Some(session) = &request.resume {
             args.extend(["--resume".into(), session.clone()]);
         }
-        if fast_mode(request) {
+        // Off leaves the user's own setting alone.
+        if models::fast_mode(request) {
             args.extend(["--settings".into(), r#"{"fastMode":true}"#.into()]);
         }
         args
-    }
-}
-
-/// What a run may do without asking. `auto_approve` means full access,
-/// whatever the mode says.
-fn access(request: &RunRequest) -> AccessMode {
-    if request.auto_approve {
-        AccessMode::FullAccess
-    } else {
-        request.access
     }
 }
 
@@ -198,12 +177,7 @@ fn approval_question(
     access: AccessMode,
 ) -> Option<UserInputQuestion> {
     if tool == "ExitPlanMode" {
-        return (!access.is_full_access()).then(|| {
-            approval::question(
-                "Approve plan",
-                "Claude wants to start implementing its plan. Allow it?",
-            )
-        });
+        return (!access.is_full_access()).then(|| approval::plan("Claude"));
     }
     // Hive's own tools act through Hive itself: never asked about.
     if is_hive_tool(tool) {
@@ -251,29 +225,6 @@ const EFFORTS: [ReasoningLevel; 5] = [
     ReasoningLevel::Max,
 ];
 
-/// The model option for Claude's fast mode (its `fastMode` setting), offered
-/// on Opus.
-const FAST_MODE: &str = "fastMode";
-
-fn fast_mode_option() -> ModelOption {
-    let choice = |id: &str, label: &str| ModelOptionChoice {
-        id: id.into(),
-        label: label.into(),
-    };
-    ModelOption {
-        id: FAST_MODE.into(),
-        label: "Fast mode".into(),
-        choices: vec![choice("off", "Off"), choice("on", "On")],
-        default_choice: "off".into(),
-    }
-}
-
-/// On launches with `--settings {"fastMode":true}`; off leaves the user's
-/// own setting alone.
-fn fast_mode(request: &RunRequest) -> bool {
-    request.model_options.get(FAST_MODE).map(String::as_str) == Some("on")
-}
-
 fn model(id: &str, label: &str, description: &str, reasoning: &[ReasoningLevel]) -> Model {
     Model {
         id: id.into(),
@@ -284,20 +235,11 @@ fn model(id: &str, label: &str, description: &str, reasoning: &[ReasoningLevel])
     }
 }
 
-/// An Opus model: these take fast mode.
+/// An Opus model: these take fast mode (Claude's `fastMode` setting).
 fn opus(id: &str, label: &str, description: &str) -> Model {
     Model {
-        options: vec![fast_mode_option()],
+        options: vec![models::fast_mode_option()],
         ..model(id, label, description, &EFFORTS)
-    }
-}
-
-fn command(name: &str, description: &str) -> SlashCommand {
-    SlashCommand {
-        name: name.into(),
-        description: description.into(),
-        input_hint: None,
-        kind: CommandKind::Command,
     }
 }
 
@@ -312,7 +254,7 @@ impl Harness for ClaudeHarness {
         HarnessCatalog {
             id: HarnessId::ClaudeCode,
             label: "Claude Code".into(),
-            installed: self.executable.is_some() || find_claude().is_some(),
+            installed: find_claude().is_some(),
             models: vec![
                 opus(
                     "claude-opus-5-5",
@@ -355,9 +297,9 @@ impl Harness for ClaudeHarness {
             ],
             default_model: Some("claude-opus-5-5".into()),
             commands: vec![
-                command("compact", "Summarize the conversation to free up context"),
-                command("init", "Write a CLAUDE.md describing the codebase"),
-                command("review", "Review a pull request"),
+                crate::compact_command(),
+                crate::command("init", "Write a CLAUDE.md describing the codebase", None),
+                crate::command("review", "Review a pull request", None),
             ],
             access_modes: AccessMode::ALL.to_vec(),
             capabilities: HarnessCapabilities {
@@ -383,7 +325,7 @@ impl Harness for ClaudeHarness {
     /// Starts the CLI in `cwd` for its `initialize` response alone — no
     /// prompt, so no model turn and no MCP servers — then stops it.
     fn commands(&self, cwd: &str) -> crate::CommandsFuture {
-        let exe = self.executable.clone().or_else(find_claude);
+        let exe = find_claude();
         let skills = Arc::clone(&self.skills);
         let probes = Arc::clone(&self.probes);
         let cwd = cwd.to_owned();
@@ -404,7 +346,7 @@ impl Harness for ClaudeHarness {
                     probes
                         .lock()
                         .unwrap()
-                        .insert(cwd, (std::time::Instant::now(), advertised.clone()));
+                        .insert(cwd, (Instant::now(), advertised.clone()));
                     advertised
                 }
             };
@@ -415,25 +357,15 @@ impl Harness for ClaudeHarness {
 
     /// The chat's modes don't apply: its tools are off, and anything it
     /// still asks for is a question the title run fails on.
-    fn run_title(&self, mut request: RunRequest) -> Result<Run, HarnessError> {
-        request.resume = None;
-        request.attachments.clear();
-        request.model_options.clear();
-        request.auto_approve = false;
-        request.access = AccessMode::Supervised;
-        request.plan = false;
-        request.mcp = None;
-        self.spawn(request, true)
+    fn run_title(&self, request: RunRequest) -> Result<Run, HarnessError> {
+        self.spawn(crate::title_request(request), true)
     }
 }
 
 impl ClaudeHarness {
     fn spawn(&self, request: RunRequest, title: bool) -> Result<Run, HarnessError> {
-        let exe = match &self.executable {
-            Some(path) => path.clone(),
-            None => find_claude().ok_or(HarnessError::NotInstalled("claude"))?,
-        };
-        let mut cmd = command_for(&exe);
+        let exe = find_claude().ok_or(HarnessError::NotInstalled("claude"))?;
+        let mut cmd = cli::command(&exe);
         cmd.args(Self::launch_args(&request));
         if title {
             cmd.args([
@@ -465,19 +397,13 @@ impl ClaudeHarness {
         if !request.cwd.is_empty() {
             cmd.current_dir(&request.cwd);
         }
-        #[cfg(windows)]
-        cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
-
         let mut child = cmd.spawn().map_err(|e| HarnessError::Spawn("claude", e))?;
         let stdin = child.stdin.take().expect("piped stdin");
         let stdout = child.stdout.take().expect("piped stdout");
-        let stderr = child.stderr.take().expect("piped stderr");
-
-        let stderr_tail = Arc::new(Mutex::new(String::new()));
-        tokio::spawn(collect_stderr(stderr, Arc::clone(&stderr_tail)));
+        let stderr = StderrTail::collect(child.stderr.take().expect("piped stderr"));
 
         let (stdin_tx, stdin_rx) = mpsc::unbounded_channel::<String>();
-        tokio::spawn(write_stdin(stdin, stdin_rx));
+        tokio::spawn(cli::write_stdin(stdin, stdin_rx));
         // A title run needs no slash commands.
         if !title {
             let _ = stdin_tx.send(wire::initialize_line(INITIALIZE_ID));
@@ -486,18 +412,17 @@ impl ClaudeHarness {
         // are read from disk first.
         let first = (request.prompt.clone(), request.attachments.clone());
 
-        let (events_tx, events) = mpsc::channel(256);
-        let (handle, commands) = RunHandle::new();
-        tokio::spawn(
+        let known_skills = Arc::clone(&self.skills);
+        Ok(Run::spawn(256, |events, commands| {
             Session {
                 child,
                 stdout: BufReader::new(stdout).lines(),
                 stdin: Some(stdin_tx),
                 commands,
-                events: events_tx,
+                events,
                 normalizer: Normalizer::default(),
                 pending: HashMap::new(),
-                access: access(&request),
+                access: approval::access(&request),
                 plan: request.plan,
                 after_plan: access_permission_mode(&request),
                 controls_sent: 0,
@@ -505,24 +430,23 @@ impl ClaudeHarness {
                 interrupt_deadline: None,
                 interrupts_sent: 0,
                 attachments: HashSet::new(),
-                stderr_tail,
+                stderr,
                 advertised: Vec::new(),
                 listed: Vec::new(),
-                known_skills: Arc::clone(&self.skills),
+                known_skills,
                 first: None,
                 first_deadline: (!title).then(|| tokio::time::Instant::now() + INITIALIZE_WAIT),
                 task_outputs: HashMap::new(),
             }
-            .run(first),
-        );
-        Ok(Run { events, handle })
+            .run(first)
+        }))
     }
 }
 
 /// The CLI's command list, from an `initialize` sent to a CLI started
 /// just for it.
 async fn probe(exe: &Path, cwd: &str) -> Result<Vec<commands::Advertised>, HarnessError> {
-    let mut cmd = command_for(exe);
+    let mut cmd = cli::command(exe);
     cmd.args([
         "--print",
         "--input-format",
@@ -544,8 +468,6 @@ async fn probe(exe: &Path, cwd: &str) -> Result<Vec<commands::Advertised>, Harne
     if !cwd.is_empty() {
         cmd.current_dir(cwd);
     }
-    #[cfg(windows)]
-    cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
     let mut child = cmd.spawn().map_err(|e| HarnessError::Spawn("claude", e))?;
     // Kept open until the answer: closing stdin ends the CLI first.
     let mut stdin = child.stdin.take().expect("piped stdin");
@@ -620,7 +542,7 @@ struct Session {
     interrupts_sent: u64,
     /// Paths of every file sent this session: reading one never asks.
     attachments: HashSet<String>,
-    stderr_tail: Arc<Mutex<String>>,
+    stderr: StderrTail,
     /// The CLI's command list, as last given.
     advertised: Vec<commands::Advertised>,
     /// The commands as last reported.
@@ -633,9 +555,6 @@ struct Session {
     /// `get_task_output` requests waiting on the CLI, by request id.
     task_outputs: HashMap<String, oneshot::Sender<Result<TaskOutput, String>>>,
 }
-
-/// The consumer dropped the event stream; tear the session down.
-struct Gone;
 
 impl Session {
     async fn run(mut self, (prompt, files): (String, Vec<String>)) {
@@ -859,8 +778,7 @@ impl Session {
         if !self.plan {
             return;
         }
-        self.controls_sent += 1;
-        let id = format!("hive_mode_{}", self.controls_sent);
+        let id = self.control_id("hive_mode");
         self.write(wire::set_permission_mode_line(&id, "plan"));
     }
 
@@ -977,27 +895,17 @@ impl Session {
     /// The process exited. A turn still in flight ends here.
     async fn finish(mut self) {
         self.stdin = None;
-        let status = match tokio::time::timeout(EXIT_GRACE, self.child.wait()).await {
-            Ok(status) => status.ok(),
-            Err(_) => {
-                let _ = self.child.kill().await;
-                None
-            }
-        };
+        let status = cli::wait_or_kill(&mut self.child).await;
         if self.turns == 0 {
             return;
         }
         let (status, error) = if self.interrupt_deadline.is_some() {
             (DoneStatus::Interrupted, None)
         } else {
-            let stderr = self.stderr_tail.lock().unwrap().trim().to_owned();
-            let code = status
-                .and_then(|s| s.code())
-                .map_or("unknown".to_owned(), |c| c.to_string());
-            let mut message = format!("claude exited unexpectedly (exit code {code}).");
-            if !stderr.is_empty() {
-                message.push_str(&format!("\n{stderr}"));
-            }
+            let code = cli::exit_code(status);
+            let message = self
+                .stderr
+                .under(format!("claude exited unexpectedly (exit code {code})."));
             (DoneStatus::Errored, Some(message))
         };
         let _ = self
@@ -1017,58 +925,7 @@ impl Session {
     }
 
     async fn emit(&self, event: AgentEvent) -> Result<(), Gone> {
-        self.events.send(event).await.map_err(|_| Gone)
-    }
-}
-
-pub(crate) async fn sleep_until(deadline: Option<tokio::time::Instant>) {
-    match deadline {
-        Some(at) => tokio::time::sleep_until(at).await,
-        None => std::future::pending().await,
-    }
-}
-
-/// Writes lines in order; dropping every sender closes stdin.
-pub(crate) async fn write_stdin(mut stdin: ChildStdin, mut lines: mpsc::UnboundedReceiver<String>) {
-    while let Some(mut line) = lines.recv().await {
-        line.push('\n');
-        if stdin.write_all(line.as_bytes()).await.is_err() || stdin.flush().await.is_err() {
-            return;
-        }
-    }
-}
-
-/// Keeps the last few KB of stderr for crash messages.
-pub(crate) async fn collect_stderr(mut stderr: ChildStderr, tail: Arc<Mutex<String>>) {
-    let mut buf = [0u8; 1024];
-    while let Ok(n) = stderr.read(&mut buf).await {
-        if n == 0 {
-            return;
-        }
-        let mut tail = tail.lock().unwrap();
-        tail.push_str(&String::from_utf8_lossy(&buf[..n]));
-        if tail.len() > STDERR_TAIL_BYTES {
-            let mut cut = tail.len() - STDERR_TAIL_BYTES;
-            while !tail.is_char_boundary(cut) {
-                cut += 1;
-            }
-            tail.drain(..cut);
-        }
-    }
-}
-
-/// npm installs `claude.cmd`, which only runs through `cmd /C`.
-pub(crate) fn command_for(exe: &Path) -> Command {
-    let is_batch = exe
-        .extension()
-        .and_then(|e| e.to_str())
-        .is_some_and(|e| e.eq_ignore_ascii_case("cmd") || e.eq_ignore_ascii_case("bat"));
-    if is_batch {
-        let mut cmd = Command::new("cmd");
-        cmd.arg("/C").arg(exe);
-        cmd
-    } else {
-        Command::new(exe)
+        crate::emit(&self.events, event).await
     }
 }
 
@@ -1103,17 +960,10 @@ fn mcp_config_arg(mcp: &McpServer) -> String {
     .to_string()
 }
 
-/// `claude` on PATH, else where its installers put it. An app started from
-/// Finder or the Start menu may not see the shell's PATH, and one running
-/// when the CLI was installed never sees the new entry.
+/// `claude` on PATH, else where its installers put it.
 pub(crate) fn find_claude() -> Option<PathBuf> {
-    find_on_path("claude").or_else(|| install_locations().into_iter().find(|p| p.is_file()))
-}
-
-fn install_locations() -> Vec<PathBuf> {
+    let home = cli::home_dir();
     let mut paths = Vec::new();
-    let home = std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" })
-        .map(PathBuf::from);
     if cfg!(windows) {
         if let Some(home) = &home {
             paths.push(home.join(r".local\bin\claude.exe"));
@@ -1129,21 +979,7 @@ fn install_locations() -> Vec<PathBuf> {
         paths.push("/opt/homebrew/bin/claude".into());
         paths.push("/usr/local/bin/claude".into());
     }
-    paths
-}
-
-pub(crate) fn find_on_path(name: &str) -> Option<PathBuf> {
-    let candidates: &[&str] = if cfg!(windows) {
-        &["exe", "cmd", "bat"]
-    } else {
-        &[""]
-    };
-    std::env::split_paths(&std::env::var_os("PATH")?).find_map(|dir| {
-        candidates.iter().find_map(|ext| {
-            let path = dir.join(name).with_extension(ext);
-            path.is_file().then_some(path)
-        })
-    })
+    cli::find("claude", paths)
 }
 
 /// `AskUserQuestion`'s input → questions. Option descriptions are dropped;

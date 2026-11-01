@@ -16,91 +16,35 @@ use serde_json::Value;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
 use tokio::process::{Child, ChildStdin, Command};
 
-use super::{command_for, find_claude};
-use crate::provider::ProviderError;
+use super::find_claude;
+use crate::cli;
+use crate::provider::{
+    self, captured, parse_version, run, run_ok, strip_ansi, tail, ProviderError, UPDATE_TIMEOUT,
+};
 
 const PROBE_TIMEOUT: Duration = Duration::from_secs(15);
-const INSTALL_TIMEOUT: Duration = Duration::from_secs(15 * 60);
-const UPDATE_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 /// How long the CLI gets to print the sign-in URL.
 const SIGN_IN_START_TIMEOUT: Duration = Duration::from_secs(30);
 /// How long it gets to trade a pasted code for a login.
 const SIGN_IN_FINISH_TIMEOUT: Duration = Duration::from_secs(60);
 
 pub(super) fn cli(exe: &Path) -> Command {
-    let mut cmd = command_for(exe);
+    let mut cmd = cli::command(exe);
     // Set when Hive itself runs inside Claude Code.
-    cmd.env_remove("CLAUDECODE")
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .kill_on_drop(true);
-    no_window(&mut cmd);
-    cmd
-}
-
-pub(crate) fn no_window(cmd: &mut Command) {
-    #[cfg(windows)]
-    cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
-    #[cfg(not(windows))]
-    let _ = cmd;
+    cmd.env_remove("CLAUDECODE");
+    captured(cmd)
 }
 
 fn installed() -> Result<PathBuf, ProviderError> {
     find_claude().ok_or(ProviderError::NotInstalled("claude"))
 }
 
-pub(crate) struct Output {
-    pub(crate) success: bool,
-    pub(crate) stdout: String,
-    stderr: String,
-}
-
-impl Output {
-    /// What to show when it failed: the last lines it printed.
-    pub(crate) fn failure(&self) -> ProviderError {
-        let text = if self.stderr.trim().is_empty() {
-            &self.stdout
-        } else {
-            &self.stderr
-        };
-        ProviderError::Failed(tail(&strip_ansi(text)))
-    }
-}
-
-pub(crate) async fn run(mut cmd: Command, timeout: Duration) -> Result<Output, ProviderError> {
-    let child = cmd.spawn().map_err(|e| ProviderError::Failed(e.to_string()))?;
-    match tokio::time::timeout(timeout, child.wait_with_output()).await {
-        Ok(Ok(out)) => Ok(Output {
-            success: out.status.success(),
-            stdout: String::from_utf8_lossy(&out.stdout).into_owned(),
-            stderr: String::from_utf8_lossy(&out.stderr).into_owned(),
-        }),
-        Ok(Err(e)) => Err(ProviderError::Failed(e.to_string())),
-        // Dropping the future kills the child (`kill_on_drop`).
-        Err(_) => Err(ProviderError::TimedOut),
-    }
-}
-
 pub async fn status() -> ProviderStatus {
-    let mut status = ProviderStatus {
-        harness: HarnessId::ClaudeCode,
-        installed: false,
-        path: None,
-        version: None,
-        update_channel: None,
-        account: None,
-        error: None,
-        can_install: true,
-        can_update: false,
-        can_sign_in: false,
-    };
-    let Some(exe) = find_claude() else {
+    let exe = find_claude();
+    let mut status = provider::found(HarnessId::ClaudeCode, exe.as_deref());
+    let Some(exe) = exe else {
         return status;
     };
-    status.installed = true;
-    status.path = Some(exe.display().to_string());
-    status.can_update = true;
     status.can_sign_in = true;
     status.update_channel = Some(update_channel());
 
@@ -108,12 +52,11 @@ pub async fn status() -> ProviderStatus {
     version.arg("--version");
     let mut auth = cli(&exe);
     auth.args(["auth", "status", "--json"]);
-    let (version, auth) = tokio::join!(run(version, PROBE_TIMEOUT), run(auth, PROBE_TIMEOUT));
+    let (version, auth) = tokio::join!(run_ok(version, PROBE_TIMEOUT), run(auth, PROBE_TIMEOUT));
 
     let mut errors = Vec::new();
     match version {
-        Ok(out) if out.success => status.version = parse_version(&out.stdout),
-        Ok(out) => errors.push(format!("version check failed: {}", out.failure())),
+        Ok(out) => status.version = parse_version(&out.stdout),
         Err(e) => errors.push(format!("version check failed: {e}")),
     }
     // Signed out, it may exit non-zero but still print its JSON.
@@ -129,13 +72,6 @@ pub async fn status() -> ProviderStatus {
         status.error = Some(errors.join("; "));
     }
     status
-}
-
-/// `"2.1.312 (Claude Code)"` → `"2.1.312"`.
-pub(crate) fn parse_version(text: &str) -> Option<String> {
-    text.split_whitespace()
-        .find(|word| word.starts_with(|c: char| c.is_ascii_digit()) && word.contains('.'))
-        .map(str::to_owned)
 }
 
 fn parse_account(text: &str) -> Option<ProviderAccount> {
@@ -160,8 +96,7 @@ pub(super) fn config_dir() -> Option<PathBuf> {
     if let Some(dir) = std::env::var_os("CLAUDE_CONFIG_DIR") {
         return Some(dir.into());
     }
-    let home = std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" })?;
-    Some(PathBuf::from(home).join(".claude"))
+    Some(cli::home_dir()?.join(".claude"))
 }
 
 /// `autoUpdatesChannel` from the user's Claude settings; `latest` unless set.
@@ -176,40 +111,18 @@ fn update_channel() -> String {
 
 /// Runs Anthropic's installer for this platform.
 pub async fn install() -> Result<(), ProviderError> {
-    let mut cmd = if cfg!(windows) {
-        let mut cmd = Command::new("powershell.exe");
-        cmd.args([
-            "-NoProfile",
-            "-NonInteractive",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-Command",
-            "irm https://claude.ai/install.ps1 | iex",
-        ]);
-        cmd
-    } else {
-        let mut cmd = Command::new("/bin/bash");
-        cmd.args(["-c", "curl -fsSL https://claude.ai/install.sh | bash"]);
-        cmd
-    };
-    cmd.env("CI", "1")
-        .env("NONINTERACTIVE", "1")
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .kill_on_drop(true);
-    no_window(&mut cmd);
-    let out = run(cmd, INSTALL_TIMEOUT).await?;
-    if !out.success {
-        return Err(out.failure());
-    }
-    installed().map(|_| ()).map_err(|_| {
-        ProviderError::Failed(
-            "The installer finished, but `claude` wasn't found. Add ~/.local/bin to PATH \
-             and restart Hive."
-                .into(),
-        )
-    })
+    let cmd = provider::install_script(
+        "https://claude.ai/install.ps1",
+        "https://claude.ai/install.sh",
+        "bash",
+    );
+    provider::run_installer(
+        cmd,
+        || installed().is_ok(),
+        "The installer finished, but `claude` wasn't found. Add ~/.local/bin to PATH and \
+         restart Hive.",
+    )
+    .await
 }
 
 /// `claude update`: installs the newest release of its channel, through the
@@ -217,23 +130,13 @@ pub async fn install() -> Result<(), ProviderError> {
 pub async fn update() -> Result<(), ProviderError> {
     let mut cmd = cli(&installed()?);
     cmd.arg("update");
-    let out = run(cmd, UPDATE_TIMEOUT).await?;
-    if out.success {
-        Ok(())
-    } else {
-        Err(out.failure())
-    }
+    run_ok(cmd, UPDATE_TIMEOUT).await.map(drop)
 }
 
 pub async fn sign_out() -> Result<(), ProviderError> {
     let mut cmd = cli(&installed()?);
     cmd.args(["auth", "logout"]);
-    let out = run(cmd, PROBE_TIMEOUT).await?;
-    if out.success {
-        Ok(())
-    } else {
-        Err(out.failure())
-    }
+    run_ok(cmd, PROBE_TIMEOUT).await.map(drop)
 }
 
 /// A `claude auth login` waiting for its code. Dropping it ends the login.
@@ -277,17 +180,13 @@ impl SignIn {
 }
 
 pub async fn start_sign_in(method: SignInMethod) -> Result<SignIn, ProviderError> {
-    let mut cmd = command_for(&installed()?);
+    let mut cmd = cli(&installed()?);
     cmd.args(["auth", "login"]);
     if method == SignInMethod::Console {
         cmd.arg("--console");
     }
-    cmd.env_remove("CLAUDECODE")
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .kill_on_drop(true);
-    no_window(&mut cmd);
+    // The code goes in on stdin.
+    cmd.stdin(Stdio::piped());
     let mut child = cmd.spawn().map_err(|e| ProviderError::Failed(e.to_string()))?;
     let stdin = child.stdin.take().expect("piped stdin");
     let output = Arc::new(Mutex::new(String::new()));
@@ -346,52 +245,9 @@ fn lock(output: &Mutex<String>) -> std::sync::MutexGuard<'_, String> {
     output.lock().unwrap_or_else(|e| e.into_inner())
 }
 
-/// Drops terminal escape sequences (colours, cursor moves).
-pub(crate) fn strip_ansi(text: &str) -> String {
-    let mut out = String::with_capacity(text.len());
-    let mut chars = text.chars().peekable();
-    while let Some(c) = chars.next() {
-        if c != '\u{1b}' {
-            out.push(c);
-            continue;
-        }
-        if chars.peek() == Some(&'[') {
-            chars.next();
-            // Parameters, then one final byte in @..~.
-            for c in chars.by_ref() {
-                if ('@'..='~').contains(&c) {
-                    break;
-                }
-            }
-        } else {
-            chars.next();
-        }
-    }
-    out
-}
-
-/// The last few non-empty lines, for an error message.
-pub(crate) fn tail(text: &str) -> String {
-    let lines: Vec<&str> = text
-        .lines()
-        .map(str::trim)
-        .filter(|line| !line.is_empty())
-        .collect();
-    lines[lines.len().saturating_sub(3)..].join("\n")
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn reads_the_version() {
-        assert_eq!(
-            parse_version("2.1.312 (Claude Code)\n").as_deref(),
-            Some("2.1.312")
-        );
-        assert_eq!(parse_version("Claude Code\n"), None);
-    }
 
     #[test]
     fn reads_the_account() {
@@ -420,10 +276,5 @@ mod tests {
             sign_in_url(&printed).as_deref(),
             Some("https://claude.com/cai/oauth/authorize?code=true&x=1")
         );
-    }
-
-    #[test]
-    fn strips_escapes() {
-        assert_eq!(strip_ansi("\u{1b}[31merror\u{1b}[0m: bad"), "error: bad");
     }
 }

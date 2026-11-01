@@ -47,29 +47,19 @@ use std::time::{Duration, Instant};
 use hive_proto::{AccessMode, HarnessCapabilities, HarnessCatalog, HarnessId, RunRequest};
 use serde_json::json;
 
-use crate::claude::find_on_path;
-use crate::{Harness, HarnessError, Run};
+use crate::models::ModelCache;
+use crate::{cli, Harness, HarnessError, Run};
 use models::Models;
 use rpc::Server;
 use skills::Skill;
 
-/// How long a model list is used before it's fetched again.
-const MODELS_TTL: Duration = Duration::from_secs(10 * 60);
 /// How long a skills probe's answer is reused for the same folder.
 const PROBE_TTL: Duration = Duration::from_secs(30);
 const PROBE_TIMEOUT: Duration = Duration::from_secs(30);
 
 #[derive(Default)]
-struct ModelState {
-    models: Option<Models>,
-    fetched: Option<Instant>,
-    refreshing: bool,
-}
-
-#[derive(Default)]
 pub struct CodexHarness {
-    executable: Option<PathBuf>,
-    models: Arc<Mutex<ModelState>>,
+    models: ModelCache<Models>,
     /// Each folder's skills, as the last run or probe there listed them.
     skills: Arc<Mutex<HashMap<String, Vec<Skill>>>>,
     probes: Arc<Mutex<HashMap<String, Instant>>>,
@@ -80,16 +70,9 @@ impl CodexHarness {
         Self::default()
     }
 
-    /// Uses `path` instead of looking `codex` up on PATH.
-    pub fn with_executable(path: impl Into<PathBuf>) -> Self {
-        Self {
-            executable: Some(path.into()),
-            ..Self::default()
-        }
-    }
-
-    fn exe(&self) -> Option<PathBuf> {
-        self.executable.clone().or_else(find_codex)
+    /// The models as last listed, else as the CLI's own cache has them.
+    fn listed_models(&self) -> Option<Models> {
+        self.models.get().or_else(models::from_cache)
     }
 
     /// A level the model doesn't offer becomes the closest one it does
@@ -99,43 +82,13 @@ impl CodexHarness {
         let (Some(level), Some(model)) = (request.reasoning, &request.model) else {
             return;
         };
-        let listed = self.models.lock().unwrap().models.clone();
-        let Some(models) = listed.or_else(models::from_cache) else {
+        let Some(models) = self.listed_models() else {
             return;
         };
         let Some(offered) = models.models.iter().find(|m| &m.id == model) else {
             return;
         };
         request.reasoning = models::closest_level(&offered.reasoning_levels, level);
-    }
-
-    /// Fetches the model list in the background when it's missing or old.
-    fn refresh_models(&self, exe: PathBuf) {
-        let Ok(runtime) = tokio::runtime::Handle::try_current() else {
-            return;
-        };
-        {
-            let mut state = self.models.lock().unwrap();
-            let fresh = state.fetched.is_some_and(|at| at.elapsed() < MODELS_TTL);
-            if fresh || state.refreshing {
-                return;
-            }
-            state.refreshing = true;
-        }
-        let state = Arc::clone(&self.models);
-        runtime.spawn(async move {
-            let listed = tokio::time::timeout(PROBE_TIMEOUT, list_models(exe)).await;
-            let mut state = state.lock().unwrap();
-            state.refreshing = false;
-            // A failure waits out the TTL too, rather than starting a server
-            // per catalog call.
-            state.fetched = Some(Instant::now());
-            if let Ok(Ok(models)) = listed {
-                if !models.models.is_empty() {
-                    state.models = Some(models);
-                }
-            }
-        });
     }
 }
 
@@ -164,12 +117,13 @@ impl Harness for CodexHarness {
     }
 
     fn catalog(&self) -> HarnessCatalog {
-        let exe = self.exe();
+        let exe = find_codex();
         if let Some(exe) = &exe {
-            self.refresh_models(exe.clone());
+            self.models.refresh(PROBE_TIMEOUT, list_models(exe.clone()), |m| {
+                !m.models.is_empty()
+            });
         }
-        let listed = self.models.lock().unwrap().models.clone();
-        let models = listed.or_else(models::from_cache).unwrap_or_default();
+        let models = self.listed_models().unwrap_or_default();
         HarnessCatalog {
             id: HarnessId::Codex,
             label: "Codex".into(),
@@ -193,7 +147,7 @@ impl Harness for CodexHarness {
     }
 
     fn run(&self, mut request: RunRequest) -> Result<Run, HarnessError> {
-        let exe = self.exe().ok_or(HarnessError::NotInstalled("codex"))?;
+        let exe = find_codex().ok_or(HarnessError::NotInstalled("codex"))?;
         self.fit_reasoning(&mut request);
         Ok(session::run(session::Launch {
             exe,
@@ -205,7 +159,7 @@ impl Harness for CodexHarness {
 
     /// `skills/list` on an app-server started for it.
     fn commands(&self, cwd: &str) -> crate::CommandsFuture {
-        let exe = self.exe();
+        let exe = find_codex();
         let skills = Arc::clone(&self.skills);
         let probes = Arc::clone(&self.probes);
         let cwd = cwd.to_owned();
@@ -242,14 +196,9 @@ impl Harness for CodexHarness {
 
     /// An ephemeral, read-only thread with the title instructions as its
     /// base instructions; anything it asks is refused.
-    fn run_title(&self, mut request: RunRequest) -> Result<Run, HarnessError> {
-        let exe = self.exe().ok_or(HarnessError::NotInstalled("codex"))?;
-        request.resume = None;
-        request.attachments.clear();
-        request.model_options.clear();
-        request.auto_approve = false;
-        request.access = AccessMode::Supervised;
-        request.plan = false;
+    fn run_title(&self, request: RunRequest) -> Result<Run, HarnessError> {
+        let exe = find_codex().ok_or(HarnessError::NotInstalled("codex"))?;
+        let mut request = crate::title_request(request);
         self.fit_reasoning(&mut request);
         Ok(session::run(session::Launch {
             exe,
@@ -260,16 +209,9 @@ impl Harness for CodexHarness {
     }
 }
 
-/// `codex` on PATH, else where its installers put it. An app started from
-/// Finder or the Start menu may not see the shell's PATH.
+/// `codex` on PATH, else where its installers put it.
 pub(crate) fn find_codex() -> Option<PathBuf> {
-    find_on_path("codex").or_else(|| install_locations().into_iter().find(|p| p.is_file()))
-}
-
-fn install_locations() -> Vec<PathBuf> {
     let mut paths = Vec::new();
-    let home =
-        std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" }).map(PathBuf::from);
     if cfg!(windows) {
         if let Some(local) = std::env::var_os("LOCALAPPDATA") {
             paths.push(PathBuf::from(local).join(r"Programs\OpenAI\Codex\bin\codex.exe"));
@@ -278,7 +220,7 @@ fn install_locations() -> Vec<PathBuf> {
             paths.push(PathBuf::from(appdata).join(r"npm\codex.cmd"));
         }
     } else {
-        if let Some(home) = &home {
+        if let Some(home) = cli::home_dir() {
             paths.push(home.join(".local/bin/codex"));
             paths.push(home.join(".codex/bin/codex"));
             paths.push(home.join(".npm-global/bin/codex"));
@@ -286,5 +228,5 @@ fn install_locations() -> Vec<PathBuf> {
         paths.push("/opt/homebrew/bin/codex".into());
         paths.push("/usr/local/bin/codex".into());
     }
-    paths
+    cli::find("codex", paths)
 }

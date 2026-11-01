@@ -16,7 +16,7 @@ use serde_json::Value;
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::net::{TcpListener, TcpStream};
 
-use crate::{Ctx, Tools, PORT_ENV, TOKEN_FILE_ENV};
+use crate::{write_json_line, Ctx, Tools, PORT_ENV, TOKEN_FILE_ENV};
 
 /// How long a bridge may take to send its request line.
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
@@ -97,14 +97,6 @@ impl Host {
         Ok(Self { port, token_file })
     }
 
-    pub fn port(&self) -> u16 {
-        self.port
-    }
-
-    pub fn token_file(&self) -> &Path {
-        &self.token_file
-    }
-
     /// How an agent launches a bridge to this host: `command args…`, which
     /// must end up in [`crate::run_from_env`]. The engine adds the chat
     /// ([`McpServer::for_chat`]).
@@ -137,9 +129,7 @@ async fn answer(stream: TcpStream, tools: Arc<Tools>, token: Arc<str>) {
                     chat_id: request.chat_id,
                 };
                 match request.method {
-                    Method::List => {
-                        Reply::Ok(serde_json::to_value(tools.defs()).unwrap_or_default())
-                    }
+                    Method::List => Reply::Ok(tools.catalog()),
                     Method::Call => match tools.call(&request.name, ctx, request.arguments).await {
                         Ok(value) => Reply::Ok(value),
                         Err(e) => Reply::Error(e),
@@ -151,11 +141,7 @@ async fn answer(stream: TcpStream, tools: Arc<Tools>, token: Arc<str>) {
         },
         _ => return,
     };
-    let Ok(mut text) = serde_json::to_string(&reply) else {
-        return;
-    };
-    text.push('\n');
-    let _ = write.write_all(text.as_bytes()).await;
+    let _ = write_json_line(&mut write, &reply).await;
     let _ = write.shutdown().await;
 }
 

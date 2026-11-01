@@ -23,8 +23,11 @@ use serde_json::{json, Value};
 use tauri::{AppHandle, Manager, State};
 use tokio::sync::oneshot;
 
+use crate::mcp;
+use crate::util::err;
+
 /// How long a saved secret's file is kept.
-pub const TTL: Duration = Duration::from_secs(24 * 60 * 60);
+const TTL: Duration = Duration::from_secs(24 * 60 * 60);
 /// How long the tool waits for the user unless the agent says otherwise.
 const DEFAULT_WAIT: Duration = Duration::from_secs(10 * 60);
 const MIN_WAIT: u64 = 10;
@@ -138,9 +141,8 @@ impl Secrets {
     /// The tool: puts up the card and waits for the user, the timeout, or
     /// the turn ending (a stop, the agent exiting), whichever comes first.
     async fn request(&self, engine: &Engine, ctx: Ctx, args: Value) -> Result<Value, String> {
-        let chat_id = ctx.chat_id.ok_or("This session isn't a Hive chat.")?;
-        let args: Args =
-            serde_json::from_value(args).map_err(|e| format!("Bad arguments: {e}"))?;
+        let chat_id = mcp::chat_id(&ctx)?.to_owned();
+        let args: Args = mcp::args(args)?;
         let label = args.label.trim();
         let reason = args.reason.trim();
         if label.is_empty() || reason.is_empty() {
@@ -173,7 +175,7 @@ impl Secrets {
             Ok(ended) => ended,
             Err(e) => {
                 self.pending().remove(&id);
-                return Err(e.to_string());
+                return Err(err(e));
             }
         };
 
@@ -262,11 +264,7 @@ impl Secrets {
 
 /// `request_secret`'s handler, with the app's engine and [`Secrets`].
 pub async fn request(app: AppHandle, ctx: Ctx, args: Value) -> Result<Value, String> {
-    let engine = app
-        .try_state::<Engine>()
-        .ok_or("Hive is still starting.")?
-        .inner()
-        .clone();
+    let engine = mcp::engine(&app)?;
     let secrets = Arc::clone(app.state::<Arc<Secrets>>().inner());
     secrets.request(&engine, ctx, args).await
 }

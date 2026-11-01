@@ -142,12 +142,6 @@ pub struct Attachment {
     pub size: u64,
 }
 
-impl Attachment {
-    pub fn is_image(&self) -> bool {
-        self.mime_type.starts_with("image/")
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(optional_fields)]

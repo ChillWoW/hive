@@ -15,7 +15,7 @@ use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Child;
 use tokio::sync::{mpsc, oneshot};
 
-use crate::claude::{collect_stderr, command_for, write_stdin};
+use crate::cli::{self, StderrTail};
 use crate::HarnessError;
 
 /// How long the server gets to answer `initialize`.
@@ -95,7 +95,7 @@ pub struct Server {
     pub child: Child,
     pub client: Client,
     pub incoming: mpsc::Receiver<Incoming>,
-    pub stderr_tail: Arc<Mutex<String>>,
+    pub stderr: StderrTail,
 }
 
 impl Server {
@@ -120,7 +120,7 @@ impl Server {
     }
 
     async fn start_once(exe: &Path, cwd: &str) -> Result<Self, HarnessError> {
-        let mut cmd = command_for(exe);
+        let mut cmd = cli::command(exe);
         cmd.arg("app-server")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -129,17 +129,12 @@ impl Server {
         if !cwd.is_empty() {
             cmd.current_dir(cwd);
         }
-        #[cfg(windows)]
-        cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
         let mut child = cmd.spawn().map_err(|e| HarnessError::Spawn("codex", e))?;
         let stdin = child.stdin.take().expect("piped stdin");
         let stdout = child.stdout.take().expect("piped stdout");
-        let stderr = child.stderr.take().expect("piped stderr");
-
-        let stderr_tail = Arc::new(Mutex::new(String::new()));
-        tokio::spawn(collect_stderr(stderr, Arc::clone(&stderr_tail)));
+        let stderr = StderrTail::collect(child.stderr.take().expect("piped stderr"));
         let (lines, lines_rx) = mpsc::unbounded_channel();
-        tokio::spawn(write_stdin(stdin, lines_rx));
+        tokio::spawn(cli::write_stdin(stdin, lines_rx));
 
         let waiters: Waiters = Arc::default();
         let (incoming_tx, incoming) = mpsc::channel(512);
@@ -157,14 +152,7 @@ impl Server {
                 "capabilities": { "experimentalApi": true },
             }),
         );
-        let failed = |message: String| {
-            let stderr = stderr_tail.lock().unwrap().trim().to_owned();
-            HarnessError::Probe(if stderr.is_empty() {
-                message
-            } else {
-                format!("{message}\n{stderr}")
-            })
-        };
+        let failed = |message: String| HarnessError::Probe(stderr.under(message));
         match tokio::time::timeout(INITIALIZE_TIMEOUT, init).await {
             Ok(Ok(_)) => {}
             Ok(Err(e)) => return Err(failed(format!("codex app-server didn't start: {e}"))),
@@ -175,7 +163,7 @@ impl Server {
             child,
             client,
             incoming,
-            stderr_tail,
+            stderr,
         })
     }
 

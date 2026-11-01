@@ -66,15 +66,10 @@ pub(super) fn parse(list: &Value, providers: &Value, default: &Value) -> Models 
 }
 
 fn level(variant: &str) -> Option<ReasoningLevel> {
-    Some(match variant {
-        "minimal" => ReasoningLevel::Minimal,
-        "low" => ReasoningLevel::Low,
-        "medium" => ReasoningLevel::Medium,
-        "high" => ReasoningLevel::High,
-        "xhigh" | "x-high" => ReasoningLevel::XHigh,
-        "max" => ReasoningLevel::Max,
-        _ => return None,
-    })
+    match variant {
+        "x-high" => Some(ReasoningLevel::XHigh),
+        _ => crate::models::level(variant),
+    }
 }
 
 /// The variant to run `level` with: the first of its spellings the model

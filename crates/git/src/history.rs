@@ -11,8 +11,8 @@ use hive_proto::{
     GitHistoryRefKind,
 };
 
-use super::diff::{capped, EMPTY_TREE, MAX_PATCH_BYTES};
-use super::{git, GitError};
+use super::diff::{patch_command, read_patch, EMPTY_TREE};
+use super::{current_branch, git, toplevel, GitError};
 
 pub const HISTORY_DEFAULT_LIMIT: usize = 100;
 pub const HISTORY_MAX_LIMIT: usize = 200;
@@ -23,27 +23,8 @@ const FETCH_TIMEOUT: Duration = Duration::from_secs(120);
 const LOG_FORMAT: &str = "--format=%H%x00%P%x00%s%x00%an%x00%ae%x00%aI%x00";
 const REF_FORMAT: &str = "--format=%(refname)%00%(objectname)%00%(objecttype)%00%(*objectname)%00%(*objecttype)%00%(symref)%00";
 
-/// The checkout's top folder; `None` outside one.
-async fn root_of(cwd: &Path) -> Result<Option<String>, GitError> {
-    if !cwd.is_dir() {
-        return Ok(None);
-    }
-    let top = git(cwd, &["rev-parse", "--show-toplevel"]).await?;
-    if !top.ok() {
-        if top.stderr.contains("not a git repository") {
-            return Ok(None);
-        }
-        return Err(top.error());
-    }
-    Ok(Some(top.stdout.trim().to_owned()))
-}
-
 async fn head_sha(root: &Path) -> Result<Option<String>, GitError> {
-    let out = git(root, &["rev-parse", "--verify", "-q", "HEAD^{commit}"]).await?;
-    Ok(out
-        .ok()
-        .then(|| out.stdout.trim().to_owned())
-        .filter(|sha| !sha.is_empty()))
+    Ok(git(root, &["rev-parse", "--verify", "-q", "HEAD^{commit}"]).await?.line())
 }
 
 /// Every branch, remote branch and tag, by the commit it points at.
@@ -95,7 +76,7 @@ pub async fn history(
     cursor: usize,
     limit: usize,
 ) -> Result<Option<GitHistoryPage>, GitError> {
-    let Some(root) = root_of(cwd).await? else {
+    let Some(root) = toplevel(cwd).await? else {
         return Ok(None);
     };
     let root = Path::new(&root);
@@ -166,9 +147,13 @@ pub async fn history(
     }))
 }
 
+/// Git's one-line answer; `None` on any failure.
+async fn answer(root: &Path, args: &[&str]) -> Option<String> {
+    git(root, args).await.ok()?.line()
+}
+
 async fn count(root: &Path, args: &[&str]) -> Option<u32> {
-    let out = git(root, args).await.ok()?;
-    out.ok().then(|| out.stdout.trim().parse().ok()).flatten()
+    answer(root, args).await?.parse().ok()
 }
 
 /// The checked-out branch against the best local integration ref: a remote's
@@ -176,34 +161,17 @@ async fn count(root: &Path, args: &[&str]) -> Option<u32> {
 /// branch's upstream. Never touches the network.
 async fn comparison(root: &Path) -> Option<GitHistoryComparison> {
     // A detached HEAD has no branch to compare.
-    let branch = git(root, &["symbolic-ref", "-q", "--short", "HEAD"]).await.ok()?;
-    if !branch.ok() {
-        return None;
-    }
+    current_branch(root).await.ok().flatten()?;
     let mut candidates = Vec::new();
     for remote in ["upstream", "origin"] {
         let remote_head = format!("refs/remotes/{remote}/HEAD");
-        if let Ok(out) = git(root, &["symbolic-ref", "-q", "--short", &remote_head]).await {
-            let base = out.stdout.trim();
-            if out.ok() && !base.is_empty() {
-                candidates.push(base.to_owned());
-            }
-        }
+        candidates.extend(answer(root, &["symbolic-ref", "-q", "--short", &remote_head]).await);
     }
     candidates.extend(
         ["upstream/main", "origin/main", "upstream/master", "origin/master"].map(String::from),
     );
-    if let Ok(out) = git(
-        root,
-        &["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"],
-    )
-    .await
-    {
-        let base = out.stdout.trim();
-        if out.ok() && !base.is_empty() {
-            candidates.push(base.to_owned());
-        }
-    }
+    let upstream = ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"];
+    candidates.extend(answer(root, &upstream).await);
 
     let mut seen = HashSet::new();
     for base in candidates.into_iter().filter(|b| seen.insert(b.clone())) {
@@ -236,7 +204,7 @@ pub async fn search_history(
     cursor: usize,
     limit: usize,
 ) -> Result<Option<GitHistoryPage>, GitError> {
-    let Some(root) = root_of(cwd).await? else {
+    let Some(root) = toplevel(cwd).await? else {
         return Ok(None);
     };
     let root = Path::new(&root);
@@ -274,7 +242,7 @@ pub async fn search_history(
 /// The history search's match: the hash starts with `query`, or each of its
 /// words is a subsequence of "hash subject", case-insensitively. The
 /// history tab filters loaded rows the same way (`src/history/graph.ts`).
-pub fn history_matches(query: &str, commit: &GitHistoryCommit) -> bool {
+fn history_matches(query: &str, commit: &GitHistoryCommit) -> bool {
     let query = query.trim().to_lowercase();
     if query.is_empty() {
         return true;
@@ -291,7 +259,7 @@ pub fn history_matches(query: &str, commit: &GitHistoryCommit) -> bool {
 
 /// The `visible` commits, in order, each parent outside the set replaced by
 /// its nearest visible ancestors (a parent not in `commits` stays as is).
-pub(crate) fn compact_to_visible(
+fn compact_to_visible(
     commits: &[GitHistoryCommit],
     visible: &HashSet<&str>,
 ) -> Vec<GitHistoryCommit> {
@@ -359,44 +327,18 @@ pub async fn commit_diff(cwd: &Path, sha: &str) -> Result<Option<GitDiff>, GitEr
     if sha.len() < 4 || sha.len() > 64 || !sha.bytes().all(|b| b.is_ascii_hexdigit()) {
         return Err(GitError::Failed(format!("“{sha}” isn't a commit.")));
     }
-    let Some(root_text) = root_of(cwd).await? else {
+    let Some(root_text) = toplevel(cwd).await? else {
         return Ok(None);
     };
     let root = Path::new(&root_text);
     let spec = format!("{sha}^{{commit}}");
-    let commit = git(root, &["rev-parse", "--verify", "-q", &spec]).await?;
-    if !commit.ok() {
+    let Some(commit) = git(root, &["rev-parse", "--verify", "-q", &spec]).await?.line() else {
         return Err(GitError::Failed(format!("There's no commit “{sha}” here.")));
-    }
-    let commit = commit.stdout.trim().to_owned();
+    };
     let parent_spec = format!("{commit}^");
-    let parent = git(root, &["rev-parse", "--verify", "-q", &parent_spec]).await?;
-    let parent = parent
-        .ok()
-        .then(|| parent.stdout.trim().to_owned())
-        .filter(|p| !p.is_empty());
-    let against = parent.clone().unwrap_or_else(|| EMPTY_TREE.to_owned());
-    let (bytes, truncated) = capped(
-        root,
-        &[
-            "-c",
-            "core.quotePath=false",
-            "diff",
-            "--no-ext-diff",
-            "--no-color",
-            "--find-renames",
-            "--unified=3",
-            &against,
-            &commit,
-            "--",
-        ],
-        MAX_PATCH_BYTES,
-    )
-    .await?;
-    let mut patch = String::from_utf8_lossy(&bytes).into_owned();
-    if truncated {
-        patch.truncate(patch.rfind('\n').map_or(0, |i| i + 1));
-    }
+    let parent = git(root, &["rev-parse", "--verify", "-q", &parent_spec]).await?.line();
+    let against = parent.as_deref().unwrap_or(EMPTY_TREE);
+    let (patch, truncated) = read_patch(patch_command(root, &[], &[against, &commit])).await?;
     Ok(Some(GitDiff {
         root: root_text,
         branch: None,

@@ -11,7 +11,7 @@ use serde_json::{json, Value};
 use tokio::io::{AsyncBufRead, AsyncBufReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::sync::mpsc;
 
-use crate::BoxFuture;
+use crate::{write_json_line, BoxFuture};
 
 /// Revisions this server knows: the client's is echoed when it's one of
 /// these, else the newest is offered and the client decides.
@@ -32,9 +32,9 @@ const INTERNAL_ERROR: i64 = -32603;
 /// Where tool requests go: the [`Bridge`] in `hive mcp`, the [`Tools`]
 /// themselves in tests.
 ///
-/// [`Bridge`]: crate::Bridge
+/// [`Bridge`]: crate::bridge::Bridge
 /// [`Tools`]: crate::Tools
-pub trait Backend: Send + Sync + 'static {
+pub(crate) trait Backend: Send + Sync + 'static {
     /// `tools/list`'s `tools`.
     fn list(&self) -> BoxFuture<'_, Result<Value, String>>;
     /// A tool's result, or the error shown to the agent.
@@ -42,16 +42,19 @@ pub trait Backend: Send + Sync + 'static {
 }
 
 /// Serves MCP on `input`/`output` until `input` ends.
-pub async fn serve<R, W>(backend: Arc<dyn Backend>, input: R, mut output: W) -> std::io::Result<()>
+pub(crate) async fn serve<R, W>(
+    backend: Arc<dyn Backend>,
+    input: R,
+    mut output: W,
+) -> std::io::Result<()>
 where
     R: AsyncBufRead + Unpin,
     W: AsyncWrite + Unpin + Send + 'static,
 {
-    let (out_tx, mut out_rx) = mpsc::channel::<String>(64);
+    let (out_tx, mut out_rx) = mpsc::channel::<Value>(64);
     let writer = tokio::spawn(async move {
-        while let Some(line) = out_rx.recv().await {
-            let line = line + "\n";
-            if output.write_all(line.as_bytes()).await.is_err() || output.flush().await.is_err() {
+        while let Some(reply) = out_rx.recv().await {
+            if write_json_line(&mut output, &reply).await.is_err() || output.flush().await.is_err() {
                 break;
             }
         }
@@ -67,35 +70,31 @@ where
             Ok(value) => value,
             Err(e) => {
                 let reply = error_response(Value::Null, PARSE_ERROR, &format!("parse error: {e}"));
-                let _ = out_tx.send(reply.to_string()).await;
+                let _ = out_tx.send(reply).await;
                 continue;
             }
         };
-        let Some(object) = message.as_object() else {
+        let Value::Object(mut object) = message else {
             let reply = error_response(Value::Null, INVALID_REQUEST, "expected a JSON-RPC object");
-            let _ = out_tx.send(reply.to_string()).await;
+            let _ = out_tx.send(reply).await;
             continue;
         };
-        let id = object.get("id").cloned();
-        let method = object
-            .get("method")
-            .and_then(Value::as_str)
-            .map(str::to_owned);
-        let params = object.get("params").cloned().unwrap_or(Value::Null);
-        match (id, method) {
+        let method = object.get("method").and_then(Value::as_str).map(str::to_owned);
+        let params = object.remove("params").unwrap_or(Value::Null);
+        match (object.remove("id"), method) {
             (Some(id), Some(method)) => {
                 let backend = Arc::clone(&backend);
                 let out = out_tx.clone();
                 tokio::spawn(async move {
                     let reply = handle_request(backend.as_ref(), id, &method, params).await;
-                    let _ = out.send(reply.to_string()).await;
+                    let _ = out.send(reply).await;
                 });
             }
             // A notification, or a reply to a request we never send.
             (None, Some(_)) | (Some(_), None) => {}
             (None, None) => {
                 let reply = error_response(Value::Null, INVALID_REQUEST, "missing method");
-                let _ = out_tx.send(reply.to_string()).await;
+                let _ = out_tx.send(reply).await;
             }
         }
     }
@@ -105,7 +104,7 @@ where
 }
 
 /// The reply to one request.
-pub async fn handle_request(
+async fn handle_request(
     backend: &dyn Backend,
     id: Value,
     method: &str,
@@ -203,7 +202,7 @@ mod tests {
     /// The tools called directly, as the chat `c1`.
     impl Backend for Tools {
         fn list(&self) -> BoxFuture<'_, Result<Value, String>> {
-            Box::pin(async move { Ok(serde_json::to_value(self.defs()).unwrap()) })
+            Box::pin(async move { Ok(self.catalog()) })
         }
         fn call(&self, name: String, arguments: Value) -> BoxFuture<'_, Result<Value, String>> {
             let ctx = Ctx {
@@ -232,9 +231,8 @@ mod tests {
             )
     }
 
-    /// Feeds `lines` and returns the replies, by id.
-    async fn exchange(lines: &[Value]) -> Vec<Value> {
-        let input: String = lines.iter().map(|l| format!("{l}\n")).collect();
+    /// Serves `input` and returns the replies, in the order written.
+    async fn replies(input: &str) -> Vec<Value> {
         let (out, mut read) = tokio::io::duplex(1 << 16);
         serve(Arc::new(tools()), input.as_bytes(), out)
             .await
@@ -243,10 +241,15 @@ mod tests {
         tokio::io::AsyncReadExt::read_to_string(&mut read, &mut text)
             .await
             .unwrap();
-        let mut replies: Vec<Value> = text
-            .lines()
+        text.lines()
             .map(|l| serde_json::from_str(l).unwrap())
-            .collect();
+            .collect()
+    }
+
+    /// Feeds `lines` and returns the replies, by id.
+    async fn exchange(lines: &[Value]) -> Vec<Value> {
+        let input: String = lines.iter().map(|l| format!("{l}\n")).collect();
+        let mut replies = replies(&input).await;
         replies.sort_by_key(|r| r["id"].as_i64().unwrap_or(-1));
         replies
     }
@@ -300,18 +303,7 @@ mod tests {
     #[tokio::test]
     async fn offers_the_newest_revision_for_an_unknown_one_and_rejects_garbage() {
         let input = "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"1999-01-01\"}}\nnot json\n";
-        let (out, mut read) = tokio::io::duplex(1 << 16);
-        serve(Arc::new(tools()), input.as_bytes(), out)
-            .await
-            .unwrap();
-        let mut text = String::new();
-        tokio::io::AsyncReadExt::read_to_string(&mut read, &mut text)
-            .await
-            .unwrap();
-        let replies: Vec<Value> = text
-            .lines()
-            .map(|l| serde_json::from_str(l).unwrap())
-            .collect();
+        let replies = replies(input).await;
         assert!(replies.iter().any(|r| r["error"]["code"] == PARSE_ERROR));
         assert!(replies
             .iter()

@@ -13,11 +13,11 @@ use crate::BoxFuture;
 /// A tool as `tools/list` shows it.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ToolDef {
-    pub name: String,
-    pub description: String,
+struct ToolDef {
+    name: String,
+    description: String,
     /// JSON Schema of the arguments; an object schema.
-    pub input_schema: Value,
+    input_schema: Value,
 }
 
 /// Who's calling.
@@ -67,11 +67,13 @@ impl Tools {
         self
     }
 
-    pub fn defs(&self) -> Vec<ToolDef> {
-        self.tools.iter().map(|(d, _)| d.clone()).collect()
+    /// `tools/list`'s `tools`.
+    pub(crate) fn catalog(&self) -> Value {
+        let defs: Vec<&ToolDef> = self.tools.iter().map(|(d, _)| d).collect();
+        serde_json::to_value(defs).unwrap_or_default()
     }
 
-    pub async fn call(&self, name: &str, ctx: Ctx, arguments: Value) -> Result<Value, String> {
+    pub(crate) async fn call(&self, name: &str, ctx: Ctx, arguments: Value) -> Result<Value, String> {
         let handler = self
             .tools
             .iter()

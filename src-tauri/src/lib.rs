@@ -14,6 +14,7 @@ mod settings;
 mod terminals;
 mod updater;
 mod usage;
+mod util;
 mod watch;
 
 use std::sync::Arc;

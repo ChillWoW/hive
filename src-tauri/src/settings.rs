@@ -9,7 +9,9 @@ use hive_store::SettingsFile;
 use serde_json::Value;
 use tauri::{AppHandle, Emitter, Manager, State};
 
-pub const CHANGED: &str = "settings://changed";
+use crate::util::err;
+
+const CHANGED: &str = "settings://changed";
 
 fn broadcast(app: &AppHandle, (settings, changed): (Settings, bool)) -> Settings {
     if changed {
@@ -83,24 +85,18 @@ pub fn settings_update(
     file: State<'_, SettingsFile>,
     patch: Value,
 ) -> Result<Settings, String> {
-    file.update(&patch)
-        .map(|r| broadcast(&app, r))
-        .map_err(|e| e.to_string())
+    file.update(&patch).map(|r| broadcast(&app, r)).map_err(err)
 }
 
 #[tauri::command]
 pub fn settings_reset(app: AppHandle, file: State<'_, SettingsFile>) -> Result<Settings, String> {
-    file.reset()
-        .map(|r| broadcast(&app, r))
-        .map_err(|e| e.to_string())
+    file.reset().map(|r| broadcast(&app, r)).map_err(err)
 }
 
 /// Re-reads the file, for hand edits. Called when the window regains focus.
 #[tauri::command]
 pub fn settings_reload(app: AppHandle, file: State<'_, SettingsFile>) -> Result<Settings, String> {
-    file.reload()
-        .map(|r| broadcast(&app, r))
-        .map_err(|e| e.to_string())
+    file.reload().map(|r| broadcast(&app, r)).map_err(err)
 }
 
 #[tauri::command]
@@ -126,5 +122,5 @@ pub fn settings_reveal(file: State<'_, SettingsFile>) -> Result<(), String> {
     let result = std::process::Command::new("xdg-open")
         .arg(path.parent().unwrap_or(path))
         .spawn();
-    result.map(|_| ()).map_err(|e| e.to_string())
+    result.map(|_| ()).map_err(err)
 }

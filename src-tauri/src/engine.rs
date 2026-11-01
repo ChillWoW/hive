@@ -14,6 +14,7 @@ use tauri::ipc::Channel;
 use tauri::{State, Webview};
 
 use crate::secrets::Secrets;
+use crate::util::err;
 
 /// Watch ids by the webview that opened them.
 #[derive(Default)]
@@ -64,12 +65,12 @@ pub async fn create_chat(
         }
         None => engine.create_chat(cwd, config),
     }
-    .map_err(|e| e.to_string())
+    .map_err(err)
 }
 
 #[tauri::command]
 pub async fn list_chats(engine: State<'_, Engine>) -> Result<Vec<Chat>, String> {
-    engine.chats().map_err(|e| e.to_string())
+    engine.chats().map_err(err)
 }
 
 /// Issues a command to a chat; returns it settled, or pending when it's a
@@ -80,9 +81,7 @@ pub async fn queue_command(
     chat_id: String,
     payload: CommandPayload,
 ) -> Result<Command, String> {
-    engine
-        .queue_command(&chat_id, payload)
-        .map_err(|e| e.to_string())
+    engine.queue_command(&chat_id, payload).map_err(err)
 }
 
 #[tauri::command]
@@ -93,9 +92,7 @@ pub async fn watch_messages(
     chat_id: String,
     on_update: Channel<MessagesUpdate>,
 ) -> Result<WatchId, String> {
-    let id = engine
-        .watch_messages(&chat_id, move |u| on_update.send(u).is_ok())
-        .map_err(|e| e.to_string())?;
+    let id = engine.watch_messages(&chat_id, move |u| on_update.send(u).is_ok()).map_err(err)?;
     watches.add(&webview, id);
     Ok(id)
 }
@@ -107,9 +104,7 @@ pub async fn watch_chats(
     watches: State<'_, Watches>,
     on_update: Channel<ChatsUpdate>,
 ) -> Result<WatchId, String> {
-    let id = engine
-        .watch_chats(move |u| on_update.send(u).is_ok())
-        .map_err(|e| e.to_string())?;
+    let id = engine.watch_chats(move |u| on_update.send(u).is_ok()).map_err(err)?;
     watches.add(&webview, id);
     Ok(id)
 }
@@ -138,10 +133,7 @@ pub async fn list_commands(
     harness: HarnessId,
     cwd: String,
 ) -> Result<Vec<SlashCommand>, String> {
-    engine
-        .commands(harness, &cwd)
-        .await
-        .map_err(|e| e.to_string())
+    engine.commands(harness, &cwd).await.map_err(err)
 }
 
 /// Saves a chat's run settings; a live run picks them up from its next turn.
@@ -151,9 +143,7 @@ pub async fn update_chat_config(
     chat_id: String,
     config: ChatConfig,
 ) -> Result<Chat, String> {
-    engine
-        .update_config(&chat_id, config)
-        .map_err(|e| e.to_string())
+    engine.update_config(&chat_id, config).map_err(err)
 }
 
 /// A blank title clears it; the chat is named again after its next turn.
@@ -163,9 +153,7 @@ pub async fn rename_chat(
     chat_id: String,
     title: Option<String>,
 ) -> Result<Chat, String> {
-    engine
-        .rename_chat(&chat_id, title)
-        .map_err(|e| e.to_string())
+    engine.rename_chat(&chat_id, title).map_err(err)
 }
 
 #[tauri::command]
@@ -174,9 +162,7 @@ pub async fn set_chat_archived(
     chat_id: String,
     archived: bool,
 ) -> Result<Chat, String> {
-    engine
-        .set_archived(&chat_id, archived)
-        .map_err(|e| e.to_string())
+    engine.set_archived(&chat_id, archived).map_err(err)
 }
 
 #[tauri::command]
@@ -185,14 +171,12 @@ pub async fn set_chat_pinned(
     chat_id: String,
     pinned: bool,
 ) -> Result<Chat, String> {
-    engine
-        .set_pinned(&chat_id, pinned)
-        .map_err(|e| e.to_string())
+    engine.set_pinned(&chat_id, pinned).map_err(err)
 }
 
 #[tauri::command]
 pub async fn mark_chat_seen(engine: State<'_, Engine>, chat_id: String) -> Result<Chat, String> {
-    engine.mark_seen(&chat_id).map_err(|e| e.to_string())
+    engine.mark_seen(&chat_id).map_err(err)
 }
 
 /// Deletes the chat and everything in it, stopping its run.
@@ -202,7 +186,7 @@ pub async fn delete_chat(
     secrets: State<'_, Arc<Secrets>>,
     chat_id: String,
 ) -> Result<(), String> {
-    engine.delete_chat(&chat_id).map_err(|e| e.to_string())?;
+    engine.delete_chat(&chat_id).map_err(err)?;
     secrets.forget_chat(&chat_id);
     Ok(())
 }
@@ -214,9 +198,7 @@ pub async fn cancel_queued(
     chat_id: String,
     command_id: String,
 ) -> Result<Command, String> {
-    engine
-        .cancel_queued(&chat_id, &command_id)
-        .map_err(|e| e.to_string())
+    engine.cancel_queued(&chat_id, &command_id).map_err(err)
 }
 
 /// Puts the listed queued prompts first, in that order.
@@ -226,9 +208,7 @@ pub async fn reorder_queue(
     chat_id: String,
     command_ids: Vec<String>,
 ) -> Result<(), String> {
-    engine
-        .reorder_queue(&chat_id, &command_ids)
-        .map_err(|e| e.to_string())
+    engine.reorder_queue(&chat_id, &command_ids).map_err(err)
 }
 
 /// Stops one of a chat's background tasks (a subagent, a shell).
@@ -238,9 +218,7 @@ pub async fn stop_background_task(
     chat_id: String,
     task_id: String,
 ) -> Result<(), String> {
-    engine
-        .stop_background_task(&chat_id, &task_id)
-        .map_err(|e| e.to_string())
+    engine.stop_background_task(&chat_id, &task_id).map_err(err)
 }
 
 /// The end of a background shell's output.
@@ -250,10 +228,7 @@ pub async fn background_task_output(
     chat_id: String,
     task_id: String,
 ) -> Result<TaskOutput, String> {
-    engine
-        .background_task_output(&chat_id, &task_id)
-        .await
-        .map_err(|e| e.to_string())
+    engine.background_task_output(&chat_id, &task_id).await.map_err(err)
 }
 
 /// Runs a queued prompt next, interrupting the running turn if there is one.
@@ -263,7 +238,5 @@ pub async fn send_queued_now(
     chat_id: String,
     command_id: String,
 ) -> Result<(), String> {
-    engine
-        .send_queued_now(&chat_id, &command_id)
-        .map_err(|e| e.to_string())
+    engine.send_queued_now(&chat_id, &command_id).map_err(err)
 }

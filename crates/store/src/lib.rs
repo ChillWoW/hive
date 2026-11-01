@@ -24,7 +24,7 @@ use hive_proto::{
 };
 use rusqlite::{params, Connection, OptionalExtension};
 
-pub use attachments::{Attachments, MAX_ATTACHMENT_BYTES};
+pub use attachments::Attachments;
 pub use journal::{Journal, JournalLine};
 pub use settings::{SettingsFile, SETTINGS_FILE};
 
@@ -124,7 +124,7 @@ impl Store {
     }
 
     fn db(&self) -> MutexGuard<'_, Connection> {
-        self.db.lock().unwrap_or_else(PoisonError::into_inner)
+        lock(&self.db)
     }
 
     pub fn journal(&self) -> &Journal {
@@ -166,13 +166,7 @@ impl Store {
     }
 
     pub fn chat(&self, id: &str) -> Result<Option<Chat>> {
-        self.db()
-            .query_row("SELECT data FROM chats WHERE id = ?1", [id], |row| {
-                row.get::<_, String>(0)
-            })
-            .optional()?
-            .map(|data| serde_json::from_str(&data).map_err(Into::into))
-            .transpose()
+        query_one(&self.db(), "SELECT data FROM chats WHERE id = ?1", id)
     }
 
     /// Most recently active first.
@@ -234,7 +228,7 @@ impl Store {
         let Some(mut chat) = self.chat(id)? else {
             return Ok(None);
         };
-        if chat.title.as_deref().is_some_and(|t| !t.trim().is_empty()) {
+        if chat.has_title() {
             return Ok(None);
         }
         chat.title = Some(title.to_owned());
@@ -267,20 +261,11 @@ impl Store {
     }
 
     pub fn message(&self, id: &str) -> Result<Option<Message>> {
-        self.db()
-            .query_row("SELECT data FROM messages WHERE id = ?1", [id], |row| {
-                row.get::<_, String>(0)
-            })
-            .optional()?
-            .map(|data| serde_json::from_str(&data).map_err(Into::into))
-            .transpose()
+        query_one(&self.db(), "SELECT data FROM messages WHERE id = ?1", id)
     }
 
-    pub fn save_message(&self, message: &Message) -> Result<()> {
-        let status = message
-            .status
-            .map(|s| serde_json::to_value(s).map(|v| v.as_str().unwrap_or_default().to_owned()))
-            .transpose()?;
+    fn save_message(&self, message: &Message) -> Result<()> {
+        let status = message.status.map(status_text).transpose()?;
         self.db().execute(
             "INSERT INTO messages (id, chat_id, status, data) VALUES (?1, ?2, ?3, ?4)
              ON CONFLICT(id) DO UPDATE SET status = excluded.status, data = excluded.data",
@@ -317,15 +302,9 @@ impl Store {
         status: CommandStatus,
         resolution: Option<String>,
     ) -> Result<Command> {
-        let mut command: Command = self
-            .db()
-            .query_row("SELECT data FROM commands WHERE id = ?1", [id], |row| {
-                row.get::<_, String>(0)
-            })
-            .optional()?
-            .map(|data| serde_json::from_str(&data))
-            .transpose()?
-            .ok_or_else(|| StoreError::NotFound(format!("command {id}")))?;
+        let mut command: Command =
+            query_one(&self.db(), "SELECT data FROM commands WHERE id = ?1", id)?
+                .ok_or_else(|| StoreError::NotFound(format!("command {id}")))?;
         if command.status == CommandStatus::Pending {
             command.status = status;
             command.resolved_at = Some(now_ms());
@@ -345,14 +324,13 @@ impl Store {
     }
 
     fn save_command(&self, command: &Command) -> Result<()> {
-        let status = serde_json::to_value(command.status)?;
         self.db().execute(
             "INSERT INTO commands (id, chat_id, status, data) VALUES (?1, ?2, ?3, ?4)
              ON CONFLICT(id) DO UPDATE SET status = excluded.status, data = excluded.data",
             params![
                 command.id,
                 command.chat_id,
-                status.as_str(),
+                status_text(command.status)?,
                 serde_json::to_string(command)?
             ],
         )?;
@@ -565,6 +543,31 @@ fn query_json<T: serde::de::DeserializeOwned>(
     Ok(out)
 }
 
+/// The row `sql` finds by `id`, read from its JSON `data`.
+fn query_one<T: serde::de::DeserializeOwned>(
+    db: &Connection,
+    sql: &str,
+    id: &str,
+) -> Result<Option<T>> {
+    db.query_row(sql, [id], |row| row.get::<_, String>(0))
+        .optional()?
+        .map(|data| serde_json::from_str(&data).map_err(Into::into))
+        .transpose()
+}
+
+/// A status as its query column holds it: its JSON string.
+fn status_text(status: impl serde::Serialize) -> Result<String> {
+    Ok(serde_json::to_value(status)?
+        .as_str()
+        .unwrap_or_default()
+        .to_owned())
+}
+
+/// Locks `mutex`, carrying on past a panic in another holder.
+pub(crate) fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
+    mutex.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
 pub fn new_id() -> String {
     uuid::Uuid::new_v4().to_string()
 }
@@ -653,7 +656,8 @@ mod tests {
         let turn = store
             .start_turn(&chat.id, "look", std::slice::from_ref(&sent), None)
             .unwrap();
-        assert_eq!(store.message(&turn.user.as_ref().unwrap().id).unwrap().unwrap().attachments, [sent.clone()]);
+        let user = store.message(&turn.user.as_ref().unwrap().id).unwrap().unwrap();
+        assert_eq!(user.attachments, std::slice::from_ref(&sent));
         store
             .issue_command(
                 &chat.id,

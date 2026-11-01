@@ -7,7 +7,6 @@ use std::collections::HashMap;
 use std::fs::{self, File};
 use std::io::{BufRead, BufReader, Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Mutex;
 use std::time::UNIX_EPOCH;
 
@@ -42,15 +41,17 @@ impl<S> FileEntry<S> {
     }
 }
 
+/// How reading a harness's history went (OpenCode's databases too).
 #[derive(Debug, Default)]
 pub struct ScanStats {
-    /// A root existed.
+    /// A root (or database) existed.
     pub found: bool,
     /// Files in range (read now or reused).
     pub files: u32,
     pub failed: u32,
+    /// The first failure.
     pub error: Option<String>,
-    /// Something was read, so the cache should be saved.
+    /// The cache changed, so it should be saved.
     pub changed: bool,
 }
 
@@ -94,24 +95,21 @@ pub fn scan<S: Format>(
     }
     stats.changed = true;
 
-    let jobs: Vec<(String, Meta, Option<FileEntry<S>>)> = todo
+    let jobs: Vec<_> = todo
         .into_iter()
         .map(|(key, meta)| {
             let prev = cache.remove(&key);
             (key, meta, prev)
         })
         .collect();
-    let next = AtomicUsize::new(0);
-    let jobs: Vec<Mutex<Option<(String, Meta, Option<FileEntry<S>>)>>> =
-        jobs.into_iter().map(|j| Mutex::new(Some(j))).collect();
     let done = Mutex::new(Vec::with_capacity(jobs.len()));
     let threads = std::thread::available_parallelism().map_or(4, |n| n.get()).clamp(1, 8);
+    let threads = threads.min(jobs.len());
+    let queue = Mutex::new(jobs.into_iter());
     std::thread::scope(|scope| {
-        for _ in 0..threads.min(jobs.len()) {
+        for _ in 0..threads {
             scope.spawn(|| loop {
-                let i = next.fetch_add(1, Ordering::Relaxed);
-                let Some(slot) = jobs.get(i) else { break };
-                let Some((key, meta, prev)) = slot.lock().unwrap().take() else { continue };
+                let Some((key, meta, prev)) = queue.lock().unwrap().next() else { break };
                 let result = read(&meta, prev.clone());
                 done.lock().unwrap().push((key, prev, result));
             });

@@ -11,16 +11,19 @@ use std::future::Future;
 use std::pin::Pin;
 
 use hive_proto::{
-    AgentEvent, HarnessCatalog, HarnessId, RunRequest, SlashCommand, TaskOutput, UserInputAnswer,
+    AccessMode, AgentEvent, CommandKind, HarnessCatalog, HarnessId, RunRequest, SlashCommand,
+    TaskOutput, UserInputAnswer,
 };
 use tokio::sync::{mpsc, oneshot};
 
-pub mod approval;
-pub mod attachments;
-pub mod claude;
-pub mod codex;
-pub mod mock;
-pub mod opencode;
+mod approval;
+mod attachments;
+mod claude;
+mod cli;
+mod codex;
+mod mock;
+mod models;
+mod opencode;
 pub mod provider;
 
 pub use claude::ClaudeHarness;
@@ -38,6 +41,29 @@ pub enum HarnessError {
     NoTitles,
     #[error("{0}")]
     Probe(String),
+}
+
+/// A reqwest client builder, with the TLS provider reqwest needs in place
+/// (even for plain HTTP).
+pub(crate) fn http_client() -> reqwest::ClientBuilder {
+    // Fails when one is already installed, which is fine.
+    let _ = rustls::crypto::ring::default_provider().install_default();
+    reqwest::Client::builder()
+}
+
+/// A built-in slash command, as the composer lists it.
+pub(crate) fn command(name: &str, description: &str, input_hint: Option<&str>) -> SlashCommand {
+    SlashCommand {
+        name: name.into(),
+        description: description.into(),
+        input_hint: input_hint.map(Into::into),
+        kind: CommandKind::Command,
+    }
+}
+
+/// `/compact`, which every harness takes.
+pub(crate) fn compact_command() -> SlashCommand {
+    command("compact", "Summarize the conversation to free up context", None)
 }
 
 /// What [`Harness::commands`] returns.
@@ -89,9 +115,48 @@ pub const TEXT_INSTRUCTIONS: &str = "You write short labels for coding sessions.
 pub const TITLE_INSTRUCTIONS: &str = "Write a title for this session. Return only a concise \
     3-5 word title in Title Case, without quotes or punctuation.";
 
+/// `request` as a [`Harness::run_title`] runs it: the chat's session, files,
+/// options, modes and MCP servers don't apply, and anything it still asks
+/// for is refused.
+pub(crate) fn title_request(mut request: RunRequest) -> RunRequest {
+    request.resume = None;
+    request.attachments.clear();
+    request.model_options.clear();
+    request.auto_approve = false;
+    request.access = AccessMode::Supervised;
+    request.plan = false;
+    request.mcp = None;
+    request
+}
+
 pub struct Run {
     pub events: mpsc::Receiver<AgentEvent>,
     pub handle: RunHandle,
+}
+
+impl Run {
+    /// Spawns `session` with the sending end of the run's events (a
+    /// `capacity`-deep channel) and the commands its handle sends.
+    pub(crate) fn spawn<F>(
+        capacity: usize,
+        session: impl FnOnce(mpsc::Sender<AgentEvent>, mpsc::UnboundedReceiver<RunCommand>) -> F,
+    ) -> Self
+    where
+        F: Future<Output = ()> + Send + 'static,
+    {
+        let (events_tx, events) = mpsc::channel(capacity);
+        let (handle, commands) = RunHandle::new();
+        tokio::spawn(session(events_tx, commands));
+        Self { events, handle }
+    }
+}
+
+/// The consumer dropped a run's event stream; its session tears down.
+pub(crate) struct Gone;
+
+/// Sends `event` to the run's consumer.
+pub(crate) async fn emit(events: &mpsc::Sender<AgentEvent>, event: AgentEvent) -> Result<(), Gone> {
+    events.send(event).await.map_err(|_| Gone)
 }
 
 const SESSION_ENDED: &str = "The agent's session has ended.";
@@ -128,7 +193,7 @@ pub(crate) enum RunCommand {
 }
 
 impl RunHandle {
-    pub(crate) fn new() -> (Self, mpsc::UnboundedReceiver<RunCommand>) {
+    fn new() -> (Self, mpsc::UnboundedReceiver<RunCommand>) {
         let (commands, rx) = mpsc::unbounded_channel();
         (Self { commands }, rx)
     }

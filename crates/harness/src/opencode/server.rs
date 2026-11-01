@@ -8,7 +8,6 @@
 
 use std::path::Path;
 use std::process::{ExitStatus, Stdio};
-use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use hive_proto::McpServer;
@@ -17,7 +16,7 @@ use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Child;
 use tokio::sync::mpsc;
 
-use crate::claude::{collect_stderr, command_for};
+use crate::cli::{self, StderrTail};
 
 /// How long the server may take to answer its first health check. Plugins
 /// and MCP config load first; a cold start can be slow.
@@ -38,7 +37,7 @@ const BUS_SILENCE: Duration = Duration::from_secs(45);
 pub(super) struct Server {
     child: Child,
     pub api: Api,
-    stderr_tail: Arc<Mutex<String>>,
+    stderr: StderrTail,
     pub version: String,
 }
 
@@ -90,7 +89,7 @@ impl Server {
     ) -> Result<Self, (String, bool)> {
         let port = free_port().ok_or(("No free local port for OpenCode.".to_owned(), false))?;
         let password = secret();
-        let mut cmd = command_for(exe);
+        let mut cmd = cli::command(exe);
         cmd.arg("serve")
             .arg("--port")
             .arg(port.to_string())
@@ -115,25 +114,24 @@ impl Server {
             cmd.env("OPENCODE_CONFIG_CONTENT", config);
         }
         let dir = if cwd.is_empty() {
-            home_dir()
+            cli::home_dir()
         } else {
             Some(cwd.into())
         };
         if let Some(dir) = dir.filter(|d| d.is_dir()) {
             cmd.current_dir(dir);
         }
-        #[cfg(windows)]
-        cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
         #[cfg(unix)]
         cmd.process_group(0);
         let mut child = cmd
             .spawn()
             .map_err(|e| (format!("Couldn't start opencode: {e}"), false))?;
 
-        let stderr_tail = Arc::new(Mutex::new(String::new()));
-        if let Some(stderr) = child.stderr.take() {
-            tokio::spawn(collect_stderr(stderr, Arc::clone(&stderr_tail)));
-        }
+        let stderr = child
+            .stderr
+            .take()
+            .map(StderrTail::collect)
+            .unwrap_or_default();
         // Drained for the server's whole life: a full pipe would block it.
         if let Some(stdout) = child.stdout.take() {
             tokio::spawn(async move {
@@ -156,7 +154,7 @@ impl Server {
         let mut server = Server {
             child,
             api,
-            stderr_tail,
+            stderr,
             version: String::new(),
         };
 
@@ -165,16 +163,11 @@ impl Server {
             if let Ok(Some(status)) = server.child.try_wait() {
                 // Let the last of stderr arrive.
                 tokio::time::sleep(Duration::from_millis(100)).await;
-                let stderr = server.stderr();
-                let retry = is_transient(&stderr);
-                let code = status
-                    .code()
-                    .map_or("unknown".to_owned(), |c| c.to_string());
-                let mut message = format!("opencode serve exited at startup (exit code {code}).");
-                if !stderr.is_empty() {
-                    message.push('\n');
-                    message.push_str(&stderr);
-                }
+                let retry = is_transient(&server.stderr());
+                let code = cli::exit_code(Some(status));
+                let message = server
+                    .stderr
+                    .under(format!("opencode serve exited at startup (exit code {code})."));
                 return Err((message, retry));
             }
             match server.api.probe("/api/info").await {
@@ -212,7 +205,7 @@ impl Server {
 
     /// The last of what the server printed to stderr.
     pub fn stderr(&self) -> String {
-        self.stderr_tail.lock().unwrap().trim().to_owned()
+        self.stderr.text()
     }
 
     /// Its exit, once it has exited.
@@ -247,7 +240,7 @@ impl Drop for Server {
             .stdout(Stdio::null())
             .stderr(Stdio::null());
         #[cfg(windows)]
-        std::os::windows::process::CommandExt::creation_flags(&mut kill, 0x0800_0000);
+        std::os::windows::process::CommandExt::creation_flags(&mut kill, cli::CREATE_NO_WINDOW);
         if kill.spawn().is_err() {
             let _ = self.child.start_kill();
         }
@@ -495,11 +488,9 @@ impl SseDecoder {
     }
 }
 
+/// Loopback only, never through a proxy, plain HTTP.
 fn client() -> reqwest::Client {
-    // Loopback only, never through a proxy, plain HTTP; reqwest still wants
-    // a TLS provider in place to build a client.
-    let _ = rustls::crypto::ring::default_provider().install_default();
-    reqwest::Client::builder()
+    crate::http_client()
         .no_proxy()
         .connect_timeout(Duration::from_secs(2))
         .build()
@@ -608,23 +599,17 @@ fn percent_encode(text: &str) -> String {
     out
 }
 
-pub(super) fn home_dir() -> Option<std::path::PathBuf> {
-    std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" })
-        .map(std::path::PathBuf::from)
-}
-
 /// Stops the process and everything it started.
 async fn kill_tree(child: &mut Child) {
     if let Some(pid) = child.id() {
         #[cfg(windows)]
         {
-            let mut taskkill = tokio::process::Command::new("taskkill");
+            let mut taskkill = cli::command(Path::new("taskkill"));
             taskkill
                 .args(["/T", "/F", "/PID", &pid.to_string()])
                 .stdin(Stdio::null())
                 .stdout(Stdio::null())
-                .stderr(Stdio::null())
-                .creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+                .stderr(Stdio::null());
             let _ = tokio::time::timeout(Duration::from_secs(5), taskkill.status()).await;
         }
         #[cfg(unix)]

@@ -4,11 +4,12 @@
 
 use std::path::PathBuf;
 
-use hive_proto::{Model, ModelOption, ModelOptionChoice, ReasoningLevel};
+use hive_proto::{Model, ModelOption, ReasoningLevel};
 use serde_json::Value;
 
-/// The model option for Codex's fast service tier.
-pub const FAST_MODE: &str = "fastMode";
+use crate::cli;
+use crate::models::{choice, fast_mode_option, level};
+
 /// The model option for any other service tiers a model offers.
 pub const SERVICE_TIER: &str = "serviceTier";
 
@@ -86,12 +87,11 @@ pub fn from_cache() -> Option<Models> {
 }
 
 /// `$CODEX_HOME`, else `~/.codex`.
-pub fn codex_home() -> Option<PathBuf> {
+fn codex_home() -> Option<PathBuf> {
     if let Some(dir) = std::env::var_os("CODEX_HOME").filter(|d| !d.is_empty()) {
         return Some(dir.into());
     }
-    let home = std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" })?;
-    Some(PathBuf::from(home).join(".codex"))
+    Some(cli::home_dir()?.join(".codex"))
 }
 
 fn model<'a>(
@@ -113,8 +113,8 @@ fn model<'a>(
     }
 }
 
-/// A `fast` tier is the composer's Fast mode switch; other tiers are a
-/// choice of their own.
+/// A `fast` tier (Codex's fast service tier) is the composer's Fast mode
+/// switch; other tiers are a choice of their own.
 fn tier_options(tiers: &Value) -> Vec<ModelOption> {
     let tiers: Vec<(&str, &str)> = tiers
         .as_array()
@@ -129,18 +129,9 @@ fn tier_options(tiers: &Value) -> Vec<ModelOption> {
             ))
         })
         .collect();
-    let choice = |id: &str, label: &str| ModelOptionChoice {
-        id: id.into(),
-        label: label.into(),
-    };
     let mut options = Vec::new();
     if tiers.iter().any(|(id, _)| *id == "fast") {
-        options.push(ModelOption {
-            id: FAST_MODE.into(),
-            label: "Fast mode".into(),
-            choices: vec![choice("off", "Off"), choice("on", "On")],
-            default_choice: "off".into(),
-        });
+        options.push(fast_mode_option());
     }
     let others: Vec<_> = tiers.iter().filter(|(id, _)| *id != "fast").collect();
     if !others.is_empty() {
@@ -156,19 +147,6 @@ fn tier_options(tiers: &Value) -> Vec<ModelOption> {
     options
 }
 
-/// A Codex effort as a level; ones Hive has no level for are left out.
-fn level(effort: &str) -> Option<ReasoningLevel> {
-    Some(match effort {
-        "minimal" => ReasoningLevel::Minimal,
-        "low" => ReasoningLevel::Low,
-        "medium" => ReasoningLevel::Medium,
-        "high" => ReasoningLevel::High,
-        "xhigh" => ReasoningLevel::XHigh,
-        "max" => ReasoningLevel::Max,
-        _ => return None,
-    })
-}
-
 /// `level` if offered, else the next higher one offered, else the highest;
 /// `None` (the model's default) when it offers none. `offered` is sorted.
 pub fn closest_level(offered: &[ReasoningLevel], level: ReasoningLevel) -> Option<ReasoningLevel> {
@@ -177,18 +155,6 @@ pub fn closest_level(offered: &[ReasoningLevel], level: ReasoningLevel) -> Optio
         .copied()
         .find(|l| *l >= level)
         .or_else(|| offered.last().copied())
-}
-
-/// A level as Codex's effort.
-pub fn effort(level: ReasoningLevel) -> &'static str {
-    match level {
-        ReasoningLevel::Minimal => "minimal",
-        ReasoningLevel::Low => "low",
-        ReasoningLevel::Medium => "medium",
-        ReasoningLevel::High => "high",
-        ReasoningLevel::XHigh => "xhigh",
-        ReasoningLevel::Max => "max",
-    }
 }
 
 fn str_field<'a>(value: &'a Value, key: &str) -> Option<&'a str> {
@@ -216,7 +182,7 @@ mod tests {
             m.reasoning_levels,
             [ReasoningLevel::Low, ReasoningLevel::Max]
         );
-        assert_eq!(m.options[0].id, FAST_MODE);
+        assert_eq!(m.options[0].id, crate::models::FAST_MODE);
     }
 
     #[test]

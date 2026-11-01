@@ -5,13 +5,13 @@
 //! the original. Links are never followed.
 
 use std::io::Write;
-use std::path::{Component, Path, PathBuf};
+use std::path::{Path, PathBuf};
 
 use hive_proto::{FileText, LineEnding, ReadOnlyReason, WriteOutcome};
-use sha2::{Digest, Sha256};
 use tauri::ipc::Response;
 use tauri::AppHandle;
-use tauri_plugin_opener::OpenerExt;
+
+use crate::util::{blocking, err, inside, open_path, sha256_hex as hash};
 
 /// Past this a file is shown but not editable.
 const MAX_EDITABLE: u64 = 1024 * 1024;
@@ -19,17 +19,12 @@ const MAX_EDITABLE: u64 = 1024 * 1024;
 const MAX_PREVIEW: u64 = 8 * 1024 * 1024;
 const BOM: &[u8] = b"\xEF\xBB\xBF";
 
-/// `path` (relative, `/`-separated) under `cwd`, refused when it would leave it.
+/// `path` (relative, `/`-separated, not "") under `cwd`.
 fn resolve(cwd: &str, path: &str) -> Result<PathBuf, String> {
-    let relative = Path::new(path);
-    if path.is_empty() || !relative.components().all(|part| matches!(part, Component::Normal(_))) {
+    if path.is_empty() {
         return Err(format!("{path} is not inside the folder"));
     }
-    Ok(Path::new(cwd).join(relative))
-}
-
-fn hash(bytes: &[u8]) -> String {
-    format!("{:x}", Sha256::digest(bytes))
+    inside(Path::new(cwd), path)
 }
 
 fn read_only(size: u64, reason: ReadOnlyReason) -> FileText {
@@ -44,7 +39,7 @@ fn read_only(size: u64, reason: ReadOnlyReason) -> FileText {
 }
 
 fn read(file: &Path) -> Result<FileText, String> {
-    let meta = std::fs::symlink_metadata(file).map_err(|e| e.to_string())?;
+    let meta = std::fs::symlink_metadata(file).map_err(err)?;
     if meta.file_type().is_symlink() {
         return Ok(read_only(meta.len(), ReadOnlyReason::Symlink));
     }
@@ -56,7 +51,7 @@ fn read(file: &Path) -> Result<FileText, String> {
         return Ok(read_only(size, ReadOnlyReason::TooLarge));
     }
 
-    let bytes = std::fs::read(file).map_err(|e| e.to_string())?;
+    let bytes = std::fs::read(file).map_err(err)?;
     let hash = hash(&bytes);
     let bom = bytes.starts_with(BOM);
     let body = if bom { &bytes[BOM.len()..] } else { &bytes[..] };
@@ -100,7 +95,7 @@ fn current_hash(file: &Path) -> Result<Option<String>, String> {
     match std::fs::read(file) {
         Ok(bytes) => Ok(Some(hash(&bytes))),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
-        Err(error) => Err(error.to_string()),
+        Err(error) => Err(err(error)),
     }
 }
 
@@ -119,7 +114,7 @@ fn write(
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
             return Ok(WriteOutcome::Conflict { deleted: true })
         }
-        Err(error) => return Err(error.to_string()),
+        Err(error) => return Err(err(error)),
     };
     if !meta.is_file() {
         return Err(format!("{} is not a regular file", file.display()));
@@ -148,30 +143,22 @@ fn write(
     let dir = file.parent().ok_or("The file has no folder.")?;
     let temp = dir.join(format!(".hive-save-{}.tmp", uuid::Uuid::new_v4()));
     let result = (|| {
-        let mut out = std::fs::File::create(&temp).map_err(|e| e.to_string())?;
-        out.write_all(&bytes).map_err(|e| e.to_string())?;
-        out.sync_all().map_err(|e| e.to_string())?;
+        let mut out = std::fs::File::create(&temp).map_err(err)?;
+        out.write_all(&bytes).map_err(err)?;
+        out.sync_all().map_err(err)?;
         drop(out);
-        std::fs::set_permissions(&temp, meta.permissions()).map_err(|e| e.to_string())?;
+        std::fs::set_permissions(&temp, meta.permissions()).map_err(err)?;
         // Once more just before replacing it: it may have changed meanwhile.
         if let Some(conflict) = changed(current_hash(file)?) {
             return Ok(conflict);
         }
-        std::fs::rename(&temp, file).map_err(|e| e.to_string())?;
+        std::fs::rename(&temp, file).map_err(err)?;
         Ok(WriteOutcome::Written { hash: hash(&bytes) })
     })();
     if !matches!(result, Ok(WriteOutcome::Written { .. })) {
         let _ = std::fs::remove_file(&temp);
     }
     result
-}
-
-async fn blocking<T: Send + 'static>(
-    work: impl FnOnce() -> Result<T, String> + Send + 'static,
-) -> Result<T, String> {
-    tokio::task::spawn_blocking(work)
-        .await
-        .map_err(|error| error.to_string())?
 }
 
 #[tauri::command]
@@ -185,14 +172,14 @@ pub async fn read_file(cwd: String, path: String) -> Result<FileText, String> {
 pub async fn read_file_bytes(cwd: String, path: String) -> Result<Response, String> {
     let file = resolve(&cwd, &path)?;
     let bytes = blocking(move || {
-        let meta = std::fs::symlink_metadata(&file).map_err(|e| e.to_string())?;
+        let meta = std::fs::symlink_metadata(&file).map_err(err)?;
         if !meta.is_file() {
             return Err(format!("{} is not a regular file", file.display()));
         }
         if meta.len() > MAX_PREVIEW {
             return Err("The file is too large to preview.".into());
         }
-        std::fs::read(&file).map_err(|e| e.to_string())
+        std::fs::read(&file).map_err(err)
     })
     .await?;
     Ok(Response::new(bytes))
@@ -214,26 +201,17 @@ pub async fn write_file(
 /// Opens a file in its default app.
 #[tauri::command]
 pub async fn open_file(app: AppHandle, cwd: String, path: String) -> Result<(), String> {
-    let file = resolve(&cwd, &path)?;
-    app.opener()
-        .open_path(file.display().to_string(), None::<&str>)
-        .map_err(|e| e.to_string())
+    open_path(&app, &resolve(&cwd, &path)?)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn temp_dir(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("hive-editor-{name}-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        dir
-    }
-
     #[test]
     fn reads_text_with_its_line_endings_and_bom() {
-        let dir = temp_dir("read");
+        let temp = tempfile::tempdir().unwrap();
+        let dir = temp.path();
         std::fs::write(dir.join("crlf.txt"), b"\xEF\xBB\xBFa\r\nb\r\n").unwrap();
         let file = read(&dir.join("crlf.txt")).unwrap();
         assert_eq!(file.text.as_deref(), Some("a\nb\n"));
@@ -254,12 +232,12 @@ mod tests {
             read(&dir.join("latin1.txt")).unwrap().read_only,
             Some(ReadOnlyReason::UnsupportedEncoding)
         );
-        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]
     fn saves_back_the_same_way_and_refuses_a_changed_file() {
-        let dir = temp_dir("write");
+        let temp = tempfile::tempdir().unwrap();
+        let dir = temp.path();
         let path = dir.join("a.txt");
         std::fs::write(&path, b"\xEF\xBB\xBFone\r\n").unwrap();
         let file = read(&path).unwrap();
@@ -283,15 +261,12 @@ mod tests {
             WriteOutcome::Conflict { deleted: true }
         );
         // No temp files left behind.
-        assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 0);
-        std::fs::remove_dir_all(&dir).unwrap();
+        assert_eq!(std::fs::read_dir(dir).unwrap().count(), 0);
     }
 
     #[test]
-    fn stays_inside_the_folder() {
-        assert!(resolve("/x", "../etc/passwd").is_err());
-        assert!(resolve("/x", "a/../../b").is_err());
+    fn needs_a_file() {
         assert!(resolve("/x", "").is_err());
-        assert!(resolve("/x", "src/main.rs").is_ok());
+        assert!(resolve("/x", "../x").is_err());
     }
 }

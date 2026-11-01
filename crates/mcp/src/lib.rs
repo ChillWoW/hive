@@ -27,11 +27,15 @@ mod tools;
 use std::future::Future;
 use std::pin::Pin;
 
-pub use bridge::Bridge;
+use serde::Serialize;
+use tokio::io::{AsyncWrite, AsyncWriteExt};
+
 pub use hive_proto::McpServer;
 pub use host::Host;
-pub use protocol::{handle_request, serve, Backend};
-pub use tools::{Ctx, ToolDef, Tools};
+pub use tools::{Ctx, Tools};
+
+use bridge::Bridge;
+use protocol::serve;
 
 /// The host's loopback port.
 pub const PORT_ENV: &str = "HIVE_MCP_PORT";
@@ -40,7 +44,19 @@ pub const PORT_ENV: &str = "HIVE_MCP_PORT";
 /// processes can read it.
 pub const TOKEN_FILE_ENV: &str = "HIVE_MCP_TOKEN_FILE";
 
-pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
+type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
+
+/// Writes `value` as one line of JSON (what both MCP on stdio and the
+/// host's connections carry).
+async fn write_json_line<W, T>(writer: &mut W, value: &T) -> std::io::Result<()>
+where
+    W: AsyncWrite + Unpin,
+    T: Serialize,
+{
+    let mut line = serde_json::to_vec(value)?;
+    line.push(b'\n');
+    writer.write_all(&line).await
+}
 
 /// `hive mcp`: serves MCP on stdin/stdout, relaying to the host named by the
 /// environment, until stdin closes. Nothing else may write to stdout.

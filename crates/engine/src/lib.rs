@@ -34,19 +34,17 @@ use std::time::Duration;
 
 use hive_harness::{Harness, RunHandle};
 use hive_proto::{
-    AgentEvent, Attachment, BackgroundTask, BranchNaming, Chat, ChatConfig, ChatsUpdate, Command,
-    CommandPayload, CommandStatus, ContextUsage, DoneStatus, HarnessCatalog, HarnessId,
-    has_running_spawn, has_spawn, McpServer, MessageStatus, MessagesUpdate, NewWorktree, RunRequest, SecretRequest, Session,
-    WorktreeStep,
-    SessionStatus, SlashCommand, TaskOutput, TextGenerationSettings, UserInputAnswer,
+    has_running_spawn, has_spawn, AgentEvent, Attachment, BackgroundTask, BranchNaming, Chat,
+    ChatConfig, ChatsUpdate, Command, CommandPayload, CommandStatus, ContextUsage, DoneStatus,
+    HarnessCatalog, HarnessId, McpServer, MessageStatus, MessagesUpdate, NewWorktree, RunRequest,
+    SecretRequest, Session, SessionStatus, SlashCommand, TaskOutput, TextGenerationSettings,
+    UserInputAnswer, WorktreeStep,
 };
 use hive_store::{new_id, now_ms, Recovery, Store, StoreError, Turn};
 use tokio::sync::{mpsc, oneshot, watch};
 
 mod branches;
 mod titles;
-
-pub use hive_store;
 
 /// How long a file attached to a draft but never sent is kept: the app keeps
 /// drafts across restarts.
@@ -284,6 +282,31 @@ impl ChatState {
             .filter(|_| self.background().iter().any(|t| t.id == task_id))
             .ok_or(EngineError::NoTask)
     }
+
+    /// Something happened on the run: an idle timer armed before stands down.
+    fn touch(&mut self) {
+        if let Some(run) = &mut self.run {
+            run.activity += 1;
+        }
+    }
+
+    fn publish(&mut self, update: MessagesUpdate) {
+        publish(&mut self.watchers, update);
+    }
+
+    fn publish_queue(&mut self) {
+        let command_ids = self.queued.iter().map(|q| q.command_id.clone()).collect();
+        self.publish(MessagesUpdate::Queue { command_ids });
+    }
+
+    fn take_queued(&mut self, command_id: &str) -> Result<Queued> {
+        let i = self
+            .queued
+            .iter()
+            .position(|q| q.command_id == command_id)
+            .ok_or(EngineError::NotQueued)?;
+        Ok(self.queued.remove(i).expect("position is in range"))
+    }
 }
 
 struct LiveRun {
@@ -320,6 +343,22 @@ enum Outcome {
     /// Handed to the run, waiting for its turn; settled when it starts.
     Queued,
     Rejected(String),
+}
+
+impl Outcome {
+    /// An error rejects the command, saying why.
+    fn of(result: Result<Outcome>) -> Self {
+        result.unwrap_or_else(|e| Outcome::Rejected(e.to_string()))
+    }
+
+    /// How the command settles; None while it waits in the queue.
+    fn settlement(self) -> Option<(CommandStatus, Option<String>)> {
+        match self {
+            Outcome::Applied => Some((CommandStatus::Applied, None)),
+            Outcome::Queued => None,
+            Outcome::Rejected(reason) => Some((CommandStatus::Rejected, Some(reason))),
+        }
+    }
 }
 
 fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -462,10 +501,7 @@ impl Engine {
 
     pub fn create_chat(&self, cwd: impl Into<String>, config: ChatConfig) -> Result<Chat> {
         let chat = self.store().create_chat(cwd, config)?;
-        publish(
-            &mut lock(&self.inner.list).watchers,
-            ChatsUpdate::Chat { chat: chat.clone() },
-        );
+        self.announce(&chat);
         Ok(chat)
     }
 
@@ -545,10 +581,7 @@ impl Engine {
                 return Err(e.into());
             }
         };
-        publish(
-            &mut lock(&self.inner.list).watchers,
-            ChatsUpdate::Chat { chat: chat.clone() },
-        );
+        self.announce(&chat);
         Ok(chat)
     }
 
@@ -557,7 +590,6 @@ impl Engine {
         Ok(self.store().chats()?)
     }
 
-    /// Every registered harness's catalog, in registration order.
     /// What `harness` would offer in `cwd` before a run reports its own
     /// commands ([`Harness::commands`]); none for an unknown harness.
     pub async fn commands(
@@ -571,6 +603,7 @@ impl Engine {
         }
     }
 
+    /// Every registered harness's catalog, in registration order.
     pub fn catalogs(&self) -> Vec<HarnessCatalog> {
         self.inner
             .order
@@ -609,10 +642,7 @@ impl Engine {
                 self.end_run(chat_id, &mut st);
             }
         }
-        publish(
-            &mut lock(&self.inner.list).watchers,
-            ChatsUpdate::Chat { chat: chat.clone() },
-        );
+        self.announce(&chat);
         Ok(chat)
     }
 
@@ -703,12 +733,9 @@ impl Engine {
         self.store().delete_chat(chat_id)?;
         lock(&self.inner.chats).remove(chat_id);
         lock(&self.inner.turn_bases).remove(chat_id);
-        publish(
-            &mut lock(&self.inner.list).watchers,
-            ChatsUpdate::Removed {
-                chat_id: chat_id.to_owned(),
-            },
-        );
+        self.publish_list(ChatsUpdate::Removed {
+            chat_id: chat_id.to_owned(),
+        });
         if let Some(worktree) = chat.worktree {
             let delete_branch = lock(&self.inner.worktrees).delete_branch;
             self.inner.runtime.spawn(async move {
@@ -791,25 +818,20 @@ impl Engine {
         let waiting =
             !requests.is_empty() || st.run.as_ref().is_some_and(|r| !r.inputs.is_empty());
         let in_flight = st.in_flight();
-        let Some(session) = &mut st.session else {
-            return;
-        };
-        let mut changed = session.secrets != requests;
-        session.secrets = requests;
-        if in_flight {
-            let status = if waiting {
-                SessionStatus::AwaitingInput
-            } else {
-                SessionStatus::Working
-            };
-            changed |= session.status != status;
-            session.status = status;
-        }
-        if changed {
-            session.updated_at = now_ms();
-            let session = session.clone();
-            self.publish_session(chat_id, Some(session));
-        }
+        self.edit_session(chat_id, st, |session| {
+            let mut changed = session.secrets != requests;
+            session.secrets = requests;
+            if in_flight {
+                let status = if waiting {
+                    SessionStatus::AwaitingInput
+                } else {
+                    SessionStatus::Working
+                };
+                changed |= session.status != status;
+                session.status = status;
+            }
+            changed
+        });
     }
 
     /// Changes the chat under its lock, publishing it if anything changed.
@@ -819,10 +841,7 @@ impl Engine {
         let before = self.chat(chat_id)?;
         let chat = self.store().update_chat(chat_id, edit)?;
         if chat != before {
-            publish(
-                &mut lock(&self.inner.list).watchers,
-                ChatsUpdate::Chat { chat: chat.clone() },
-            );
+            self.announce(&chat);
         }
         Ok(chat)
     }
@@ -920,20 +939,13 @@ impl Engine {
         let chat = self.chat(chat_id)?;
         let runtime = self.runtime_for(chat_id);
         let mut st = lock(&runtime.state);
-        let store = self.store();
+        let command = self.store().issue_command(chat_id, payload.clone())?;
+        st.publish(MessagesUpdate::Command {
+            command: command.clone(),
+        });
+        st.touch();
 
-        let command = store.issue_command(chat_id, payload.clone())?;
-        publish(
-            &mut st.watchers,
-            MessagesUpdate::Command {
-                command: command.clone(),
-            },
-        );
-        if let Some(run) = &mut st.run {
-            run.activity += 1;
-        }
-
-        let outcome = match payload {
+        let outcome = Outcome::of(match payload {
             CommandPayload::Send {
                 prompt,
                 message_id,
@@ -951,21 +963,27 @@ impl Engine {
                 answers,
             } => Ok(answer(&mut st, request_id, answers)),
             CommandPayload::Interrupt => Ok(interrupt(&st)),
+        });
+        match outcome.settlement() {
+            Some((status, resolution)) => self.resolve(&mut st, &command.id, status, resolution),
+            None => Ok(command),
         }
-        .unwrap_or_else(|e| Outcome::Rejected(e.to_string()));
+    }
 
-        let (status, resolution) = match outcome {
-            Outcome::Queued => return Ok(command),
-            Outcome::Applied => (CommandStatus::Applied, None),
-            Outcome::Rejected(reason) => (CommandStatus::Rejected, Some(reason)),
-        };
-        let command = store.resolve_command(&command.id, status, resolution)?;
-        publish(
-            &mut st.watchers,
-            MessagesUpdate::Command {
-                command: command.clone(),
-            },
-        );
+    /// Settles a command and shows it.
+    fn resolve(
+        &self,
+        st: &mut ChatState,
+        command_id: &str,
+        status: CommandStatus,
+        resolution: Option<String>,
+    ) -> Result<Command> {
+        let command = self
+            .store()
+            .resolve_command(command_id, status, resolution)?;
+        st.publish(MessagesUpdate::Command {
+            command: command.clone(),
+        });
         Ok(command)
     }
 
@@ -1015,7 +1033,7 @@ impl Engine {
         if st.run.is_none() {
             return self.start_run(chat, runtime, st, prompt);
         }
-        self.start_turn(&chat.id, st, &prompt)?;
+        self.start_turn(&chat.id, st, Some(&prompt))?;
         self.snapshot_turn(chat);
         if let Some(run) = &st.run {
             run.handle.send_with(prompt.text.clone(), prompt.paths());
@@ -1031,17 +1049,8 @@ impl Engine {
         let runtime = self.runtime_for(chat_id);
         let mut st = lock(&runtime.state);
         self.chat(chat_id)?;
-        let q = take_queued(&mut st, command_id)?;
-        let command =
-            self.store()
-                .resolve_command(&q.command_id, CommandStatus::Cancelled, None)?;
-        publish(
-            &mut st.watchers,
-            MessagesUpdate::Command {
-                command: command.clone(),
-            },
-        );
-        Ok(command)
+        let q = st.take_queued(command_id)?;
+        self.resolve(&mut st, &q.command_id, CommandStatus::Cancelled, None)
     }
 
     /// Reorders the queue: the listed command ids first, in that order, then
@@ -1059,7 +1068,7 @@ impl Engine {
         }
         ordered.extend(rest);
         st.queued = ordered;
-        self.publish_queue(&mut st);
+        st.publish_queue();
         Ok(())
     }
 
@@ -1069,16 +1078,16 @@ impl Engine {
         let runtime = self.runtime_for(chat_id);
         let mut st = lock(&runtime.state);
         self.chat(chat_id)?;
-        let q = take_queued(&mut st, command_id)?;
+        let q = st.take_queued(command_id)?;
         if !st.in_flight() {
             self.start_queued(chat_id, &runtime, &mut st, q);
             return Ok(());
         }
         st.queued.push_front(q);
-        self.publish_queue(&mut st);
+        st.publish_queue();
         st.handover = true;
-        if let Some(run) = &mut st.run {
-            run.activity += 1;
+        st.touch();
+        if let Some(run) = &st.run {
             run.handle.interrupt();
         }
         Ok(())
@@ -1103,22 +1112,13 @@ impl Engine {
         st: &mut ChatState,
         q: Queued,
     ) -> bool {
-        let outcome = self
-            .chat(chat_id)
-            .and_then(|chat| self.dispatch(&chat, runtime, st, q.prompt));
-        let (status, resolution) = match outcome {
-            Ok(Outcome::Applied) => (CommandStatus::Applied, None),
-            Ok(Outcome::Rejected(reason)) => (CommandStatus::Rejected, Some(reason)),
-            Ok(Outcome::Queued) => unreachable!("dispatch never queues"),
-            Err(e) => (CommandStatus::Rejected, Some(e.to_string())),
-        };
+        let outcome = Outcome::of(
+            self.chat(chat_id)
+                .and_then(|chat| self.dispatch(&chat, runtime, st, q.prompt)),
+        );
+        let (status, resolution) = outcome.settlement().expect("dispatch never queues");
         self.settle_queued(st, &q.command_id, status, resolution);
         status == CommandStatus::Applied
-    }
-
-    fn publish_queue(&self, st: &mut ChatState) {
-        let command_ids = st.queued.iter().map(|q| q.command_id.clone()).collect();
-        publish(&mut st.watchers, MessagesUpdate::Queue { command_ids });
     }
 
     fn start_run(
@@ -1169,7 +1169,7 @@ impl Engine {
                 Err(e) => return Ok(Outcome::Rejected(e.to_string())),
             }
         };
-        if let Err(e) = self.start_turn(&chat.id, st, &prompt) {
+        if let Err(e) = self.start_turn(&chat.id, st, Some(&prompt)) {
             run.handle.close();
             return Err(e);
         }
@@ -1194,26 +1194,40 @@ impl Engine {
         Ok(Outcome::Applied)
     }
 
-    /// Saves the prompt and an empty reply, and makes it the live turn.
-    fn start_turn(
-        &self,
-        chat_id: &str,
-        st: &mut ChatState,
-        prompt: &Prompt,
-    ) -> Result<()> {
+    /// Saves the prompt and an empty reply, makes it the live turn and shows
+    /// its messages. No prompt opens a reply the agent started on its own.
+    fn start_turn(&self, chat_id: &str, st: &mut ChatState, prompt: Option<&Prompt>) -> Result<()> {
         let store = self.store();
         if let Some(previous) = &mut st.turn {
             store.flush(previous)?;
         }
-        let turn = store.start_turn(
-            chat_id,
-            &prompt.text,
-            &prompt.attachments,
-            Some(prompt.message_id.clone()),
-        )?;
-        self.begin_turn(chat_id, st, turn);
-        // The prompt is saved: an untitled chat is named alongside its turn.
-        self.maybe_title(chat_id);
+        let turn = match prompt {
+            Some(p) => store.start_turn(
+                chat_id,
+                &p.text,
+                &p.attachments,
+                Some(p.message_id.clone()),
+            )?,
+            None => store.start_reply(chat_id)?,
+        };
+        for message in turn.user.iter().chain([&turn.assistant]) {
+            st.publish(MessagesUpdate::Message {
+                message: message.clone(),
+            });
+        }
+        // Its subagents still running keep reporting into it.
+        let previous = st.turn.replace(turn);
+        if let Some(previous) = previous.filter(|t| has_running_spawn(&t.assistant.parts)) {
+            st.earlier.push(previous);
+            if st.earlier.len() > MAX_EARLIER_TURNS {
+                st.earlier.remove(0);
+            }
+        }
+        self.publish_chat(chat_id);
+        if prompt.is_some() {
+            // The prompt is saved: an untitled chat is named alongside its turn.
+            self.maybe_title(chat_id);
+        }
         Ok(())
     }
 
@@ -1284,41 +1298,6 @@ impl Engine {
         }
     }
 
-    /// Opens a reply with no prompt: the agent started a turn on its own.
-    fn start_reply(&self, chat_id: &str, st: &mut ChatState) -> Result<()> {
-        let store = self.store();
-        if let Some(previous) = &mut st.turn {
-            store.flush(previous)?;
-        }
-        let turn = store.start_reply(chat_id)?;
-        self.begin_turn(chat_id, st, turn);
-        Ok(())
-    }
-
-    /// Makes `turn` the live one and shows its messages.
-    fn begin_turn(&self, chat_id: &str, st: &mut ChatState, turn: Turn) {
-        for message in turn.user.iter().chain([&turn.assistant]) {
-            publish(
-                &mut st.watchers,
-                MessagesUpdate::Message {
-                    message: message.clone(),
-                },
-            );
-        }
-        if let Some(mut previous) = st.turn.replace(turn) {
-            if has_running_spawn(&previous.assistant.parts) {
-                if let Err(e) = self.store().flush(&mut previous) {
-                    log::warn!("chat {chat_id}: saving a reply: {e}");
-                }
-                st.earlier.push(previous);
-                if st.earlier.len() > MAX_EARLIER_TURNS {
-                    st.earlier.remove(0);
-                }
-            }
-        }
-        self.publish_chat(chat_id);
-    }
-
     // Events
 
     /// Feeds a run's events into the chat until the process exits.
@@ -1369,25 +1348,21 @@ impl Engine {
         st: &mut ChatState,
         event: AgentEvent,
     ) {
-        let store = self.store();
         if let AgentEvent::BackgroundTasks { tasks } = event {
-            if let Some(run) = &mut st.run {
-                run.activity += 1;
-            }
+            st.touch();
             self.set_background(chat_id, runtime, st, tasks);
             return;
         }
         if let AgentEvent::GoalChanged { goal } = event {
-            if let Some(session) = st.session.as_mut().filter(|s| s.goal != goal) {
+            self.edit_session(chat_id, st, |session| {
+                let changed = session.goal != goal;
                 session.goal = goal;
-                session.updated_at = now_ms();
-                let session = session.clone();
-                self.publish_session(chat_id, Some(session));
-            }
+                changed
+            });
             return;
         }
+        st.touch();
         if let Some(run) = &mut st.run {
-            run.activity += 1;
             match &event {
                 AgentEvent::InputRequested { request_id, .. } => {
                     run.inputs.insert(request_id.clone());
@@ -1403,7 +1378,7 @@ impl Engine {
         // Background work ended between turns and the agent took it up by
         // itself: a reply of its own, which the turn's `Done` ends as usual.
         if matches!(event, AgentEvent::BackgroundTurn { .. }) && !st.in_flight() {
-            if let Err(e) = self.start_reply(chat_id, st) {
+            if let Err(e) = self.start_turn(chat_id, st, None) {
                 log::warn!("chat {chat_id}: starting a reply: {e}");
                 return;
             }
@@ -1422,25 +1397,17 @@ impl Engine {
                 .position(|t| has_spawn(&t.assistant.parts, parent_tool_id));
             if let (false, Some(i)) = (live, earlier) {
                 let turn = &mut st.earlier[i];
-                let at = store.record(turn, &event).unwrap_or_else(|e| {
-                    log::warn!("chat {chat_id}: recording an event: {e}");
-                    now_ms()
-                });
+                let at = self.record(chat_id, turn, &event);
                 let message_id = turn.assistant.id.clone();
                 if !has_running_spawn(&turn.assistant.parts) {
-                    if let Err(e) = store.flush(turn) {
-                        log::warn!("chat {chat_id}: saving a reply: {e}");
-                    }
+                    self.flush(chat_id, turn);
                     st.earlier.remove(i);
                 }
-                publish(
-                    &mut st.watchers,
-                    MessagesUpdate::Event {
-                        message_id,
-                        at,
-                        event,
-                    },
-                );
+                st.publish(MessagesUpdate::Event {
+                    message_id,
+                    at,
+                    event,
+                });
                 return;
             }
         }
@@ -1448,20 +1415,14 @@ impl Engine {
         let Some(turn) = &mut st.turn else {
             return;
         };
-        let at = store.record(turn, &event).unwrap_or_else(|e| {
-            log::warn!("chat {chat_id}: recording an event: {e}");
-            now_ms()
-        });
+        let at = self.record(chat_id, turn, &event);
         let message_id = turn.assistant.id.clone();
         let finished = matches!(event, AgentEvent::Done { .. }).then(|| turn.assistant.clone());
-        publish(
-            &mut st.watchers,
-            MessagesUpdate::Event {
-                message_id,
-                at,
-                event: event.clone(),
-            },
-        );
+        st.publish(MessagesUpdate::Event {
+            message_id,
+            at,
+            event: event.clone(),
+        });
 
         match event {
             AgentEvent::SessionStarted { .. } => self.publish_chat(chat_id),
@@ -1485,22 +1446,17 @@ impl Engine {
                     changed = chat.context != before;
                 });
                 match edited {
-                    Ok(chat) if changed => publish(
-                        &mut lock(&self.inner.list).watchers,
-                        ChatsUpdate::Chat { chat },
-                    ),
+                    Ok(chat) if changed => self.publish_list(ChatsUpdate::Chat { chat }),
                     Ok(_) => {}
                     Err(e) => log::warn!("chat {chat_id}: saving context usage: {e}"),
                 }
             }
             AgentEvent::AvailableCommands { commands } => {
                 st.commands = commands.clone();
-                if let Some(session) = &mut st.session {
+                self.edit_session(chat_id, st, |session| {
                     session.commands = commands;
-                    session.updated_at = now_ms();
-                    let session = session.clone();
-                    self.publish_session(chat_id, Some(session));
-                }
+                    true
+                });
             }
             AgentEvent::Done { status, .. } => {
                 // Nobody is waiting on them any more.
@@ -1508,7 +1464,7 @@ impl Engine {
                 self.sync_secrets(chat_id, st);
                 // Status and duration, which the event alone doesn't carry.
                 if let Some(message) = finished {
-                    publish(&mut st.watchers, MessagesUpdate::Message { message });
+                    st.publish(MessagesUpdate::Message { message });
                 }
                 self.publish_chat(chat_id);
                 let handover = std::mem::take(&mut st.handover);
@@ -1543,9 +1499,23 @@ impl Engine {
         status: CommandStatus,
         resolution: Option<String>,
     ) {
-        match self.store().resolve_command(command_id, status, resolution) {
-            Ok(command) => publish(&mut st.watchers, MessagesUpdate::Command { command }),
-            Err(e) => log::warn!("settling command {command_id}: {e}"),
+        if let Err(e) = self.resolve(st, command_id, status, resolution) {
+            log::warn!("settling command {command_id}: {e}");
+        }
+    }
+
+    /// Records `event` into `turn`; returns when, now if that failed.
+    fn record(&self, chat_id: &str, turn: &mut Turn, event: &AgentEvent) -> i64 {
+        self.store().record(turn, event).unwrap_or_else(|e| {
+            log::warn!("chat {chat_id}: recording an event: {e}");
+            now_ms()
+        })
+    }
+
+    /// Saves what's left unsaved of a reply, best-effort.
+    fn flush(&self, chat_id: &str, turn: &mut Turn) {
+        if let Err(e) = self.store().flush(turn) {
+            log::warn!("chat {chat_id}: saving a reply: {e}");
         }
     }
 
@@ -1559,22 +1529,17 @@ impl Engine {
         st: &mut ChatState,
         mut tasks: Vec<BackgroundTask>,
     ) {
-        let Some(session) = &mut st.session else {
-            return;
-        };
-        let now = now_ms();
-        for task in &mut tasks {
-            let seen = session.background.iter().find(|t| t.id == task.id);
-            task.started_at = seen.and_then(|t| t.started_at).or(Some(now));
-        }
-        if session.background == tasks {
-            return;
-        }
-        session.background = tasks;
-        session.updated_at = now;
-        let session = session.clone();
-        self.publish_session(chat_id, Some(session));
-        if st.busy() {
+        let changed = self.edit_session(chat_id, st, |session| {
+            let now = now_ms();
+            for task in &mut tasks {
+                let seen = session.background.iter().find(|t| t.id == task.id);
+                task.started_at = seen.and_then(|t| t.started_at).or(Some(now));
+            }
+            let changed = session.background != tasks;
+            session.background = tasks;
+            changed
+        });
+        if !changed || st.busy() {
             return;
         }
         if st.restart {
@@ -1617,9 +1582,7 @@ impl Engine {
         st.restart = false;
         // Their subagents went with the run.
         for mut turn in st.earlier.drain(..) {
-            if let Err(e) = self.store().flush(&mut turn) {
-                log::warn!("chat {chat_id}: saving a reply: {e}");
-            }
+            self.flush(chat_id, &mut turn);
         }
         st.commands.clear();
         st.secrets.clear();
@@ -1652,17 +1615,44 @@ impl Engine {
         self.publish_session(chat_id, Some(session));
     }
 
+    /// Edits the live session, if there is one, and publishes it when `edit`
+    /// says it changed. Returns whether it did.
+    fn edit_session(
+        &self,
+        chat_id: &str,
+        st: &mut ChatState,
+        edit: impl FnOnce(&mut Session) -> bool,
+    ) -> bool {
+        let Some(session) = &mut st.session else {
+            return false;
+        };
+        if !edit(session) {
+            return false;
+        }
+        session.updated_at = now_ms();
+        let session = session.clone();
+        self.publish_session(chat_id, Some(session));
+        true
+    }
+
     // Chat list
 
+    /// Shows the chat as the store has it now.
     fn publish_chat(&self, chat_id: &str) {
         match self.store().chat(chat_id) {
-            Ok(Some(chat)) => publish(
-                &mut lock(&self.inner.list).watchers,
-                ChatsUpdate::Chat { chat },
-            ),
+            Ok(Some(chat)) => self.publish_list(ChatsUpdate::Chat { chat }),
             Ok(None) => {}
             Err(e) => log::warn!("reading chat {chat_id}: {e}"),
         }
+    }
+
+    /// Shows a chat added or changed.
+    fn announce(&self, chat: &Chat) {
+        self.publish_list(ChatsUpdate::Chat { chat: chat.clone() });
+    }
+
+    fn publish_list(&self, update: ChatsUpdate) {
+        publish(&mut lock(&self.inner.list).watchers, update);
     }
 
     fn publish_session(&self, chat_id: &str, session: Option<Session>) {
@@ -1679,15 +1669,6 @@ impl Engine {
             },
         );
     }
-}
-
-fn take_queued(st: &mut ChatState, command_id: &str) -> Result<Queued> {
-    let i = st
-        .queued
-        .iter()
-        .position(|q| q.command_id == command_id)
-        .ok_or(EngineError::NotQueued)?;
-    Ok(st.queued.remove(i).expect("position is in range"))
 }
 
 fn answer(st: &mut ChatState, request_id: String, answers: Vec<UserInputAnswer>) -> Outcome {

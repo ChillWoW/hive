@@ -18,12 +18,9 @@ pub fn fold_event(parts: &mut Vec<MessagePart>, event: &AgentEvent) {
         AgentEvent::SessionStarted { .. } => parts.clear(),
 
         AgentEvent::TextDelta { text } => {
-            if text.is_empty() {
-                return;
-            }
             if let Some(MessagePart::Text { text: tail, .. }) = parts.last_mut() {
                 tail.push_str(text);
-            } else {
+            } else if !text.is_empty() {
                 let id = format!("t{}", parts.len());
                 parts.push(MessagePart::Text {
                     id,
@@ -33,12 +30,9 @@ pub fn fold_event(parts: &mut Vec<MessagePart>, event: &AgentEvent) {
         }
 
         AgentEvent::ReasoningDelta { text } => {
-            if text.is_empty() {
-                return;
-            }
             if let Some(MessagePart::Reasoning { text: tail, .. }) = parts.last_mut() {
                 tail.push_str(text);
-            } else {
+            } else if !text.is_empty() {
                 let id = format!("r{}", parts.len());
                 parts.push(MessagePart::Reasoning {
                     id,
@@ -136,12 +130,8 @@ pub fn fold_event(parts: &mut Vec<MessagePart>, event: &AgentEvent) {
             {
                 *s = *status;
                 *a |= *auto;
-                if before_tokens.is_some() {
-                    *b = *before_tokens;
-                }
-                if after_tokens.is_some() {
-                    *af = *after_tokens;
-                }
+                *b = before_tokens.or(*b);
+                *af = after_tokens.or(*af);
                 if error.is_some() {
                     *e = error.clone();
                 }
@@ -158,13 +148,7 @@ pub fn fold_event(parts: &mut Vec<MessagePart>, event: &AgentEvent) {
             }
         }
 
-        AgentEvent::Error { message } => {
-            let id = format!("e{}", parts.len());
-            parts.push(MessagePart::Error {
-                id,
-                message: message.clone(),
-            });
-        }
+        AgentEvent::Error { message } => push_error(parts, message),
 
         AgentEvent::Done { status, error, .. } => {
             // A compaction the turn never reported the end of ends with it.
@@ -176,11 +160,7 @@ pub fn fold_event(parts: &mut Vec<MessagePart>, event: &AgentEvent) {
                 };
             }
             if let Some(message) = error {
-                let id = format!("e{}", parts.len());
-                parts.push(MessagePart::Error {
-                    id,
-                    message: message.clone(),
-                });
+                push_error(parts, message);
             }
         }
 
@@ -236,6 +216,14 @@ pub fn fold_event(parts: &mut Vec<MessagePart>, event: &AgentEvent) {
         | AgentEvent::BackgroundTasks { .. }
         | AgentEvent::GoalChanged { .. } => {}
     }
+}
+
+fn push_error(parts: &mut Vec<MessagePart>, message: &str) {
+    let id = format!("e{}", parts.len());
+    parts.push(MessagePart::Error {
+        id,
+        message: message.to_owned(),
+    });
 }
 
 fn running_compaction(parts: &mut [MessagePart]) -> Option<&mut MessagePart> {

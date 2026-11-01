@@ -5,6 +5,8 @@
 //! settings ([`Harness::run_title`]). If that yields nothing, the prompt's
 //! first words stand in. A rename by the user always wins.
 
+use std::sync::atomic::Ordering;
+use std::sync::Arc;
 use std::time::Duration;
 
 use hive_harness::{Harness, Run, TITLE_INSTRUCTIONS};
@@ -12,8 +14,6 @@ use hive_proto::{
     AccessMode, AgentEvent, DoneStatus, HarnessId, MessagePart, MessageRole, Model, ReasoningLevel,
     RunRequest, SandboxLevel,
 };
-use std::sync::atomic::Ordering;
-use std::sync::Arc;
 
 use crate::{lock, Engine};
 
@@ -32,7 +32,7 @@ impl Engine {
             .chat(chat_id)
             .ok()
             .flatten()
-            .is_none_or(|c| c.title.as_deref().is_some_and(|t| !t.trim().is_empty()));
+            .is_none_or(|c| c.has_title());
         if titled || !lock(&self.inner.titling).insert(chat_id.to_owned()) {
             return;
         }
@@ -48,7 +48,7 @@ impl Engine {
 
     async fn title(&self, chat_id: &str) -> crate::Result<()> {
         let chat = self.chat(chat_id)?;
-        if chat.title.as_deref().is_some_and(|t| !t.trim().is_empty()) {
+        if chat.has_title() {
             return Ok(());
         }
         let Some(prompt) = self.first_prompt(chat_id)? else {

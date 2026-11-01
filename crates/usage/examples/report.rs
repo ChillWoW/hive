@@ -43,8 +43,8 @@ async fn main() {
             let mut by: BTreeMap<String, (f64, u64, u32, u32)> = BTreeMap::new();
             for r in &report.rows {
                 let e = by.entry(format!("{:?} {}", r.harness, r.model)).or_default();
-                e.0 += r.cost.input + r.cost.cache_read + r.cost.cache_write + r.cost.output + r.cost.other;
-                e.1 += r.tokens.input + r.tokens.cache_read + r.tokens.cache_write + r.tokens.output;
+                e.0 += r.cost.total();
+                e.1 += r.tokens.total();
                 e.2 += r.requests;
                 e.3 += r.unpriced;
             }

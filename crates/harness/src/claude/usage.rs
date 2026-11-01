@@ -10,8 +10,8 @@ use hive_proto::{ProviderUsage, UsageWindow};
 use serde_json::Value;
 
 use super::find_claude;
-use super::provider::{cli, config_dir, parse_version, run};
-use crate::provider::ProviderError;
+use super::provider::{cli, config_dir};
+use crate::provider::{parse_version, run_ok, ProviderError};
 
 const USAGE_URL: &str = "https://api.anthropic.com/api/oauth/usage";
 const TIMEOUT: Duration = Duration::from_secs(15);
@@ -72,9 +72,7 @@ fn client() -> Result<&'static reqwest::Client, ProviderError> {
     static CLIENT: OnceLock<Result<reqwest::Client, String>> = OnceLock::new();
     CLIENT
         .get_or_init(|| {
-            // Fails when one is already installed, which is fine.
-            let _ = rustls::crypto::ring::default_provider().install_default();
-            reqwest::Client::builder()
+            crate::http_client()
                 .timeout(TIMEOUT)
                 .build()
                 .map_err(|e| e.to_string())
@@ -94,10 +92,9 @@ async fn user_agent() -> &'static str {
                 Some(exe) => {
                     let mut cmd = cli(&exe);
                     cmd.arg("--version");
-                    run(cmd, TIMEOUT)
+                    run_ok(cmd, TIMEOUT)
                         .await
                         .ok()
-                        .filter(|out| out.success)
                         .and_then(|out| parse_version(&out.stdout))
                 }
                 None => None,

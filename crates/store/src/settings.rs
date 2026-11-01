@@ -4,7 +4,7 @@
 
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::{Mutex, MutexGuard, PoisonError};
+use std::sync::{Mutex, MutexGuard};
 
 use hive_proto::Settings;
 use serde_json::Value;
@@ -59,7 +59,7 @@ impl SettingsFile {
     }
 
     fn lock(&self) -> MutexGuard<'_, Settings> {
-        self.current.lock().unwrap_or_else(PoisonError::into_inner)
+        crate::lock(&self.current)
     }
 
     pub fn get(&self) -> Settings {

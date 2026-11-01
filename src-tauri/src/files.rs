@@ -5,9 +5,11 @@
 //! one folder of it (the file panel's tree).
 
 use std::collections::HashSet;
-use std::path::{Component, Path, PathBuf};
+use std::path::{Path, PathBuf};
 
 use hive_proto::{DirectoryEntry, WorkspaceEntry};
+
+use crate::util::{blocking, err, inside};
 
 /// Past this the walk stops; ranking happens in the webview.
 const MAX_ENTRIES: usize = 50_000;
@@ -87,11 +89,7 @@ fn list(root: &Path, all: bool) -> Result<Vec<WorkspaceEntry>, String> {
 /// folders first, then by name.
 fn list_dir(root: &Path, dir: &str, all: bool) -> Result<Vec<DirectoryEntry>, String> {
     check_root(root)?;
-    let dir = Path::new(dir);
-    if !dir.components().all(|part| matches!(part, Component::Normal(_))) {
-        return Err(format!("{} is not inside the folder", dir.display()));
-    }
-    let target = root.join(dir);
+    let target = inside(root, dir)?;
     if !target.is_dir() {
         return Err(format!("{} is not a folder", target.display()));
     }
@@ -128,16 +126,11 @@ fn list_dir(root: &Path, dir: &str, all: bool) -> Result<Vec<DirectoryEntry>, St
 /// leave it, through a link among its folders too. The entry itself may be a
 /// link: it's renamed or deleted as one, never what it points at.
 fn entry(root: &Path, path: &str) -> Result<PathBuf, String> {
-    let relative = Path::new(path);
     let outside = || format!("{path} is not inside the folder");
-    if path.is_empty()
-        || !relative
-            .components()
-            .all(|part| matches!(part, Component::Normal(_)))
-    {
+    if path.is_empty() {
         return Err(outside());
     }
-    let target = root.join(relative);
+    let target = inside(root, path)?;
     let parent = target.parent().ok_or_else(outside)?;
     let (Ok(root), Ok(parent)) = (root.canonicalize(), parent.canonicalize()) else {
         return Err(format!("{path} no longer exists"));
@@ -174,7 +167,7 @@ fn rename(root: &Path, path: &str, name: &str) -> Result<String, String> {
     if !same && std::fs::symlink_metadata(&to).is_ok() {
         return Err(format!("{name} already exists"));
     }
-    std::fs::rename(&from, &to).map_err(|error| error.to_string())?;
+    std::fs::rename(&from, &to).map_err(err)?;
     Ok(match path.rsplit_once('/') {
         Some((parent, _)) => format!("{parent}/{name}"),
         None => name.to_owned(),
@@ -184,7 +177,7 @@ fn rename(root: &Path, path: &str, name: &str) -> Result<String, String> {
 /// Deletes `path` under `root` for good, a folder with everything in it.
 fn delete(root: &Path, path: &str) -> Result<(), String> {
     let target = entry(root, path)?;
-    let meta = std::fs::symlink_metadata(&target).map_err(|error| error.to_string())?;
+    let meta = std::fs::symlink_metadata(&target).map_err(err)?;
     let result = if meta.is_dir() {
         std::fs::remove_dir_all(&target)
     } else if meta.file_type().is_symlink() {
@@ -193,28 +186,22 @@ fn delete(root: &Path, path: &str) -> Result<(), String> {
     } else {
         std::fs::remove_file(&target)
     };
-    result.map_err(|error| error.to_string())
+    result.map_err(err)
 }
 
 #[tauri::command]
 pub async fn rename_entry(cwd: String, path: String, name: String) -> Result<String, String> {
-    tokio::task::spawn_blocking(move || rename(Path::new(&cwd), &path, &name))
-        .await
-        .map_err(|error| error.to_string())?
+    blocking(move || rename(Path::new(&cwd), &path, &name)).await
 }
 
 #[tauri::command]
 pub async fn delete_entry(cwd: String, path: String) -> Result<(), String> {
-    tokio::task::spawn_blocking(move || delete(Path::new(&cwd), &path))
-        .await
-        .map_err(|error| error.to_string())?
+    blocking(move || delete(Path::new(&cwd), &path)).await
 }
 
 #[tauri::command]
 pub async fn list_files(cwd: String, all: Option<bool>) -> Result<Vec<WorkspaceEntry>, String> {
-    tokio::task::spawn_blocking(move || list(Path::new(&cwd), all.unwrap_or(false)))
-        .await
-        .map_err(|error| error.to_string())?
+    blocking(move || list(Path::new(&cwd), all.unwrap_or(false))).await
 }
 
 #[tauri::command]
@@ -223,25 +210,17 @@ pub async fn list_directory(
     dir: String,
     all: bool,
 ) -> Result<Vec<DirectoryEntry>, String> {
-    tokio::task::spawn_blocking(move || list_dir(Path::new(&cwd), &dir, all))
-        .await
-        .map_err(|error| error.to_string())?
+    blocking(move || list_dir(Path::new(&cwd), &dir, all)).await
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn temp_dir(name: &str) -> std::path::PathBuf {
-        let dir = std::env::temp_dir().join(format!("hive-files-{name}-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        dir
-    }
-
     /// A checkout with an ignored folder and file, a dotfile and nesting.
-    fn project(name: &str) -> std::path::PathBuf {
-        let root = temp_dir(name);
+    fn project() -> tempfile::TempDir {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
         std::fs::create_dir_all(root.join(".git")).unwrap();
         std::fs::write(root.join(".git/HEAD"), "ref").unwrap();
         std::fs::create_dir_all(root.join("src/nested")).unwrap();
@@ -253,7 +232,7 @@ mod tests {
         std::fs::write(root.join("src/debug.log"), "").unwrap();
         std::fs::write(root.join("src/nested/a b.rs"), "").unwrap();
         std::fs::write(root.join("target/debug/app"), "").unwrap();
-        root
+        temp
     }
 
     fn shown(entries: &[DirectoryEntry]) -> Vec<String> {
@@ -272,8 +251,9 @@ mod tests {
 
     #[test]
     fn lists_what_gitignore_does_not_hide() {
-        let root = project("list");
-        let entries = list(&root, false).unwrap();
+        let temp = project();
+        let root = temp.path();
+        let entries = list(root, false).unwrap();
         let listed: Vec<_> = entries
             .iter()
             .map(|e| format!("{}{}", e.path, if e.dir { "/" } else { "" }))
@@ -289,24 +269,24 @@ mod tests {
                 "src/nested/a b.rs"
             ]
         );
-        assert!(list(&root, true).unwrap().iter().any(|e| e.path == "target/debug/app"));
-        std::fs::remove_dir_all(&root).unwrap();
+        assert!(list(root, true).unwrap().iter().any(|e| e.path == "target/debug/app"));
     }
 
     #[test]
     fn lists_one_folder() {
-        let root = project("dir");
+        let temp = project();
+        let root = temp.path();
         assert_eq!(
-            shown(&list_dir(&root, "", false).unwrap()),
+            shown(&list_dir(root, "", false).unwrap()),
             ["src/", ".gitignore", "README.md"]
         );
         // A subfolder still minds the root's `.gitignore`.
         assert_eq!(
-            shown(&list_dir(&root, "src", false).unwrap()),
+            shown(&list_dir(root, "src", false).unwrap()),
             ["src/nested/", "src/main.rs"]
         );
         assert_eq!(
-            shown(&list_dir(&root, "", true).unwrap()),
+            shown(&list_dir(root, "", true).unwrap()),
             [
                 "src/",
                 "target/ (ignored)",
@@ -315,51 +295,50 @@ mod tests {
                 "README.md"
             ]
         );
-        std::fs::remove_dir_all(&root).unwrap();
     }
 
     #[test]
     fn stays_inside_the_folder() {
-        let root = project("escape");
-        assert!(list_dir(&root, "..", false).is_err());
-        assert!(list_dir(&root, "src/../..", false).is_err());
-        assert!(list_dir(&root, "README.md", false).is_err());
-        std::fs::remove_dir_all(&root).unwrap();
+        let temp = project();
+        let root = temp.path();
+        assert!(list_dir(root, "..", false).is_err());
+        assert!(list_dir(root, "src/../..", false).is_err());
+        assert!(list_dir(root, "README.md", false).is_err());
     }
 
     #[test]
     fn renames_in_place() {
-        let root = project("rename");
+        let temp = project();
+        let root = temp.path();
         assert_eq!(
-            rename(&root, "src/main.rs", "lib.rs").unwrap(),
+            rename(root, "src/main.rs", "lib.rs").unwrap(),
             "src/lib.rs"
         );
         assert!(root.join("src/lib.rs").is_file());
-        assert_eq!(rename(&root, "src", "app").unwrap(), "app");
+        assert_eq!(rename(root, "src", "app").unwrap(), "app");
         assert!(root.join("app/nested/a b.rs").is_file());
         assert_eq!(
-            rename(&root, "README.md", "readme.md").unwrap(),
+            rename(root, "README.md", "readme.md").unwrap(),
             "readme.md"
         );
-        assert!(rename(&root, "readme.md", ".gitignore").is_err());
-        assert!(rename(&root, "readme.md", "../x").is_err());
-        assert!(rename(&root, "readme.md", ".git").is_err());
-        assert!(rename(&root, "missing", "x").is_err());
-        assert!(rename(&root, "../escape", "x").is_err());
-        std::fs::remove_dir_all(&root).unwrap();
+        assert!(rename(root, "readme.md", ".gitignore").is_err());
+        assert!(rename(root, "readme.md", "../x").is_err());
+        assert!(rename(root, "readme.md", ".git").is_err());
+        assert!(rename(root, "missing", "x").is_err());
+        assert!(rename(root, "../escape", "x").is_err());
     }
 
     #[test]
     fn deletes_files_and_folders() {
-        let root = project("delete");
-        delete(&root, "README.md").unwrap();
-        delete(&root, "src").unwrap();
+        let temp = project();
+        let root = temp.path();
+        delete(root, "README.md").unwrap();
+        delete(root, "src").unwrap();
         assert!(!root.join("README.md").exists());
         assert!(!root.join("src").exists());
-        assert!(delete(&root, "src").is_err());
-        assert!(delete(&root, "").is_err());
-        assert!(delete(&root, "..").is_err());
-        std::fs::remove_dir_all(&root).unwrap();
+        assert!(delete(root, "src").is_err());
+        assert!(delete(root, "").is_err());
+        assert!(delete(root, "..").is_err());
     }
 
     #[test]

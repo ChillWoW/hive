@@ -53,6 +53,10 @@ fn is_zero(n: &u64) -> bool {
     *n == 0
 }
 
+/// A cost a history reports, when it's a real one (0 means "couldn't price").
+pub fn reported_cost(cost: Option<f64>) -> Option<f64> {
+    cost.filter(|c| c.is_finite() && *c > 0.0)
+}
 
 /// Records parsed from one file, with their strings.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -94,6 +98,11 @@ impl Records {
         self.strings.push(s.to_owned());
         self.interned.insert(s.to_owned(), i);
         i
+    }
+
+    /// [`NONE`] for no string.
+    pub fn intern_or_none(&mut self, s: Option<&str>) -> u32 {
+        s.map_or(NONE, |s| self.intern(s))
     }
 
     pub fn string(&self, i: u32) -> Option<&str> {

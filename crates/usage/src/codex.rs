@@ -11,9 +11,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::files::Format;
-use crate::record::{
-    parse_time, Record, Records, CACHE_READ, CACHE_WRITE, INPUT, NONE, OUTPUT, REASONING,
-};
+use crate::record::{parse_time, Record, Records, CACHE_READ, CACHE_WRITE, INPUT, OUTPUT, REASONING};
 
 pub fn roots() -> Vec<PathBuf> {
     let home = std::env::var_os("CODEX_HOME")
@@ -48,26 +46,24 @@ fn usage(value: &Value) -> Option<Usage> {
     let field = |k: &str| value.get(k).and_then(Value::as_u64);
     let input = field("input_tokens")?;
     let output = field("output_tokens")?;
-    let u = [
+    valid([
         input,
         field("cached_input_tokens").unwrap_or(0),
         field("cache_write_input_tokens").unwrap_or(0),
         output,
         field("reasoning_output_tokens").unwrap_or(0),
         field("total_tokens").unwrap_or(input + output),
-    ];
-    let valid = u[1] + u[2] <= u[0] && u[4] <= u[3] && u[5] >= u[0] + u[3];
-    valid.then_some(u)
+    ])
 }
 
 fn add(a: Option<Usage>, b: &Usage) -> Option<Usage> {
     let a = a.unwrap_or_default();
-    let mut sum = [0; 6];
-    for i in 0..6 {
-        sum[i] = a[i] + b[i];
-    }
-    let valid = sum[1] + sum[2] <= sum[0] && sum[4] <= sum[3] && sum[5] >= sum[0] + sum[3];
-    valid.then_some(sum)
+    valid(std::array::from_fn(|i| a[i] + b[i]))
+}
+
+/// `u` when its parts add up.
+fn valid(u: Usage) -> Option<Usage> {
+    (u[1] + u[2] <= u[0] && u[4] <= u[3] && u[5] >= u[0] + u[3]).then_some(u)
 }
 
 impl Format for Codex {
@@ -172,15 +168,9 @@ impl Format for Codex {
             let restarted = cumulative == last;
             let reconciled = match previous {
                 None => {
-                    let mut prefix = [0; 6];
-                    let mut ok = true;
-                    for i in 0..6 {
-                        match cumulative[i].checked_sub(last[i]) {
-                            Some(v) => prefix[i] = v,
-                            None => ok = false,
-                        }
-                    }
-                    ok && prefix[1] + prefix[2] <= prefix[0] && prefix[4] <= prefix[3]
+                    let prefix: Option<Vec<u64>> =
+                        (0..6).map(|i| cumulative[i].checked_sub(last[i])).collect();
+                    prefix.is_some_and(|p| p[1] + p[2] <= p[0] && p[4] <= p[3])
                 }
                 Some(previous) => (0..6).all(|i| cumulative[i].checked_sub(previous[i]) == Some(last[i])),
             };
@@ -205,9 +195,12 @@ impl Format for Codex {
         counts[CACHE_WRITE] = last[2];
         counts[OUTPUT] = last[3];
         counts[REASONING] = last[4];
-        let model = out.intern(&self.model.clone());
-        let session = if self.session.is_empty() { NONE } else { out.intern(&self.session.clone()) };
-        let project = if self.cwd.is_empty() { NONE } else { out.intern(&self.cwd.clone()) };
+        fn known(s: &str) -> Option<&str> {
+            Some(s).filter(|s| !s.is_empty())
+        }
+        let model = out.intern(&self.model);
+        let session = out.intern_or_none(known(&self.session));
+        let project = out.intern_or_none(known(&self.cwd));
         out.push(Record {
             at,
             model,

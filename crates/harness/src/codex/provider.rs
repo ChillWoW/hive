@@ -8,7 +8,7 @@
 //! itself, so there's no code to paste; finishing waits for
 //! `account/login/completed`.
 
-use std::process::Stdio;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -19,62 +19,39 @@ use tokio::sync::Notify;
 
 use super::find_codex;
 use super::rpc::{Incoming, Server};
-use crate::claude::command_for;
-use crate::claude::provider::{no_window, parse_version, run};
-use crate::provider::ProviderError;
+use crate::cli;
+use crate::provider::{self, captured, parse_version, run_ok, ProviderError, UPDATE_TIMEOUT};
 
 const PROBE_TIMEOUT: Duration = Duration::from_secs(20);
-const INSTALL_TIMEOUT: Duration = Duration::from_secs(15 * 60);
-const UPDATE_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 /// How long the browser sign-in may take.
 const SIGN_IN_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 
-fn installed() -> Result<std::path::PathBuf, ProviderError> {
+fn installed() -> Result<PathBuf, ProviderError> {
     find_codex().ok_or(ProviderError::NotInstalled("codex"))
 }
 
-fn cli(exe: &std::path::Path) -> Command {
-    let mut cmd = command_for(exe);
-    cmd.stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .kill_on_drop(true);
-    no_window(&mut cmd);
-    cmd
+fn cli(exe: &Path) -> Command {
+    captured(cli::command(exe))
 }
 
 pub async fn status() -> ProviderStatus {
-    let mut status = ProviderStatus {
-        harness: HarnessId::Codex,
-        installed: false,
-        path: None,
-        version: None,
-        // `@openai/codex`'s npm dist-tag, for the newest-release check.
-        update_channel: None,
-        account: None,
-        error: None,
-        can_install: true,
-        can_update: false,
-        can_sign_in: false,
-    };
-    let Some(exe) = find_codex() else {
+    let exe = find_codex();
+    let mut status = provider::found(HarnessId::Codex, exe.as_deref());
+    let Some(exe) = exe else {
         return status;
     };
-    status.installed = true;
-    status.path = Some(exe.display().to_string());
-    status.can_update = true;
     status.can_sign_in = true;
+    // `@openai/codex`'s npm dist-tag, for the newest-release check.
     status.update_channel = Some("latest".into());
 
     let mut version = cli(&exe);
     version.arg("--version");
     let account = Server::one_shot(&exe, "", "account/read", json!({}), PROBE_TIMEOUT);
-    let (version, account) = tokio::join!(run(version, PROBE_TIMEOUT), account);
+    let (version, account) = tokio::join!(run_ok(version, PROBE_TIMEOUT), account);
 
     let mut errors = Vec::new();
     match version {
-        Ok(out) if out.success => status.version = parse_version(&out.stdout),
-        Ok(out) => errors.push(format!("version check failed: {}", out.failure())),
+        Ok(out) => status.version = parse_version(&out.stdout),
         Err(e) => errors.push(format!("version check failed: {e}")),
     }
     match account {
@@ -205,62 +182,30 @@ fn rfc3339(secs: i64) -> String {
 
 /// Runs OpenAI's installer for this platform.
 pub async fn install() -> Result<(), ProviderError> {
-    let mut cmd = if cfg!(windows) {
-        let mut cmd = Command::new("powershell.exe");
-        cmd.args([
-            "-NoProfile",
-            "-NonInteractive",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-Command",
-            "irm https://chatgpt.com/codex/install.ps1 | iex",
-        ]);
-        cmd
-    } else {
-        let mut cmd = Command::new("/bin/sh");
-        cmd.args(["-c", "curl -fsSL https://chatgpt.com/codex/install.sh | sh"]);
-        cmd
-    };
-    cmd.env("CI", "1")
-        .env("NONINTERACTIVE", "1")
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .kill_on_drop(true);
-    no_window(&mut cmd);
-    let out = run(cmd, INSTALL_TIMEOUT).await?;
-    if !out.success {
-        return Err(out.failure());
-    }
-    installed().map(|_| ()).map_err(|_| {
-        ProviderError::Failed(
-            "The installer finished, but `codex` wasn't found. Add it to PATH and restart Hive."
-                .into(),
-        )
-    })
+    let cmd = provider::install_script(
+        "https://chatgpt.com/codex/install.ps1",
+        "https://chatgpt.com/codex/install.sh",
+        "sh",
+    );
+    provider::run_installer(
+        cmd,
+        || installed().is_ok(),
+        "The installer finished, but `codex` wasn't found. Add it to PATH and restart Hive.",
+    )
+    .await
 }
 
 /// `codex update`.
 pub async fn update() -> Result<(), ProviderError> {
     let mut cmd = cli(&installed()?);
     cmd.arg("update");
-    let out = run(cmd, UPDATE_TIMEOUT).await?;
-    if out.success {
-        Ok(())
-    } else {
-        Err(out.failure())
-    }
+    run_ok(cmd, UPDATE_TIMEOUT).await.map(drop)
 }
 
 pub async fn sign_out() -> Result<(), ProviderError> {
     let mut cmd = cli(&installed()?);
     cmd.arg("logout");
-    let out = run(cmd, PROBE_TIMEOUT).await?;
-    if out.success {
-        Ok(())
-    } else {
-        Err(out.failure())
-    }
+    run_ok(cmd, PROBE_TIMEOUT).await.map(drop)
 }
 
 /// A ChatGPT sign-in waiting on the browser. Dropping it stops the server,

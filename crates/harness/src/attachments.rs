@@ -2,8 +2,8 @@
 //! text, so the agent can open them with its own tools; a harness whose
 //! model takes images directly also sends those inline ([`load_images`]).
 
-
 use base64::Engine as _;
+use tokio::io::AsyncReadExt;
 
 /// The prompt when only files were sent.
 pub const ATTACHMENTS_ONLY_PROMPT: &str = "See the attached files.";
@@ -45,22 +45,12 @@ pub struct InlineImage {
 pub async fn load_images(paths: &[String]) -> Vec<InlineImage> {
     let mut images = Vec::new();
     for path in paths {
-        let Ok(meta) = tokio::fs::metadata(path).await else {
-            continue;
-        };
-        if !meta.is_file() || meta.len() > MAX_INLINE_IMAGE_BYTES as u64 {
-            continue;
+        if let Some((media_type, bytes)) = read_image(path, true).await {
+            images.push(InlineImage {
+                media_type,
+                data: base64::engine::general_purpose::STANDARD.encode(&bytes),
+            });
         }
-        let Ok(bytes) = tokio::fs::read(path).await else {
-            continue;
-        };
-        let Some(media_type) = image_type(&bytes) else {
-            continue;
-        };
-        images.push(InlineImage {
-            media_type,
-            data: base64::engine::general_purpose::STANDARD.encode(&bytes),
-        });
     }
     images
 }
@@ -70,22 +60,29 @@ pub async fn load_images(paths: &[String]) -> Vec<InlineImage> {
 pub async fn image_paths(paths: &[String]) -> Vec<String> {
     let mut images = Vec::new();
     for path in paths {
-        let Ok(meta) = tokio::fs::metadata(path).await else {
-            continue;
-        };
-        if !meta.is_file() || meta.len() > MAX_INLINE_IMAGE_BYTES as u64 {
-            continue;
-        }
-        let mut head = [0u8; 12];
-        let Ok(mut file) = tokio::fs::File::open(path).await else {
-            continue;
-        };
-        let n = tokio::io::AsyncReadExt::read(&mut file, &mut head).await.unwrap_or(0);
-        if image_type(&head[..n]).is_some() {
+        if read_image(path, false).await.is_some() {
             images.push(path.clone());
         }
     }
     images
+}
+
+/// `path`'s image type and bytes (all of them, or only the few that tell
+/// the type), when it's an image small enough to send inline.
+async fn read_image(path: &str, whole: bool) -> Option<(&'static str, Vec<u8>)> {
+    let meta = tokio::fs::metadata(path).await.ok()?;
+    if !meta.is_file() || meta.len() > MAX_INLINE_IMAGE_BYTES as u64 {
+        return None;
+    }
+    let bytes = if whole {
+        tokio::fs::read(path).await.ok()?
+    } else {
+        let mut head = [0u8; 12];
+        let mut file = tokio::fs::File::open(path).await.ok()?;
+        let n = file.read(&mut head).await.unwrap_or(0);
+        head[..n].to_vec()
+    };
+    Some((image_type(&bytes)?, bytes))
 }
 
 /// An image type the API takes, by content.

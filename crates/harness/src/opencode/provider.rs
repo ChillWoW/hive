@@ -6,62 +6,42 @@
 //! Signing in is per model provider in OpenCode's own `opencode auth
 //! login`, so it isn't offered here.
 
-use std::process::Stdio;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use hive_proto::{HarnessId, ProviderAccount, ProviderStatus};
 use tokio::process::Command;
 
 use super::find_opencode;
-use crate::claude::command_for;
-use crate::claude::find_on_path;
-use crate::claude::provider::{no_window, parse_version, run, strip_ansi};
-
-/// `opencode v2.2.0` → `2.2.0`.
-fn version_of(text: &str) -> Option<String> {
-    parse_version(&text.split_whitespace().map(|w| w.trim_start_matches('v')).collect::<Vec<_>>().join(" "))
-}
-use crate::provider::ProviderError;
+use crate::cli;
+use crate::provider::{
+    self, captured, parse_version, run_ok, strip_ansi, ProviderError, UPDATE_TIMEOUT,
+};
 
 const PROBE_TIMEOUT: Duration = Duration::from_secs(20);
-const INSTALL_TIMEOUT: Duration = Duration::from_secs(15 * 60);
-const UPDATE_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 /// The npm package OpenCode 2 ships as.
 const PACKAGE: &str = "@opencode/cli";
 
-fn installed() -> Result<std::path::PathBuf, ProviderError> {
+/// `opencode v2.2.0` → `2.2.0`.
+fn version_of(text: &str) -> Option<String> {
+    let words: Vec<&str> = text.split_whitespace().map(|w| w.trim_start_matches('v')).collect();
+    parse_version(&words.join(" "))
+}
+
+fn installed() -> Result<PathBuf, ProviderError> {
     find_opencode().ok_or(ProviderError::NotInstalled("opencode"))
 }
 
-fn cli(exe: &std::path::Path) -> Command {
-    let mut cmd = command_for(exe);
-    cmd.stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .kill_on_drop(true);
-    no_window(&mut cmd);
-    cmd
+fn cli(exe: &Path) -> Command {
+    captured(cli::command(exe))
 }
 
 pub async fn status() -> ProviderStatus {
-    let mut status = ProviderStatus {
-        harness: HarnessId::Opencode,
-        installed: false,
-        path: None,
-        version: None,
-        update_channel: None,
-        account: None,
-        error: None,
-        can_install: true,
-        can_update: false,
-        can_sign_in: false,
-    };
-    let Some(exe) = find_opencode() else {
+    let exe = find_opencode();
+    let mut status = provider::found(HarnessId::Opencode, exe.as_deref());
+    let Some(exe) = exe else {
         return status;
     };
-    status.installed = true;
-    status.path = Some(exe.display().to_string());
-    status.can_update = true;
     // `@opencode/cli`'s npm dist-tag, for the newest-release check.
     status.update_channel = Some("latest".into());
 
@@ -70,17 +50,16 @@ pub async fn status() -> ProviderStatus {
     // A private server: the default would start OpenCode's background one.
     let mut auth = cli(&exe);
     auth.args(["auth", "list", "--standalone"]);
-    let (version, auth) = tokio::join!(run(version, PROBE_TIMEOUT), run(auth, PROBE_TIMEOUT));
+    let (version, auth) =
+        tokio::join!(run_ok(version, PROBE_TIMEOUT), run_ok(auth, PROBE_TIMEOUT));
 
     let mut errors = Vec::new();
     match version {
-        Ok(out) if out.success => status.version = version_of(&out.stdout),
-        Ok(out) => errors.push(format!("version check failed: {}", out.failure())),
+        Ok(out) => status.version = version_of(&out.stdout),
         Err(e) => errors.push(format!("version check failed: {e}")),
     }
     match auth {
-        Ok(out) if out.success => status.account = Some(parse_account(&out.stdout)),
-        Ok(out) => errors.push(format!("credentials check failed: {}", out.failure())),
+        Ok(out) => status.account = Some(parse_account(&out.stdout)),
         Err(e) => errors.push(format!("credentials check failed: {e}")),
     }
     if !errors.is_empty() {
@@ -114,12 +93,12 @@ fn parse_account(text: &str) -> ProviderAccount {
 
 /// Installs `@opencode/cli` globally with npm, else bun.
 pub async fn install() -> Result<(), ProviderError> {
-    let mut cmd = if let Some(npm) = find_on_path("npm") {
-        let mut cmd = command_for(&npm);
+    let mut cmd = if let Some(npm) = cli::find_on_path("npm") {
+        let mut cmd = cli(&npm);
         cmd.args(["install", "-g", PACKAGE]);
         cmd
-    } else if let Some(bun) = find_on_path("bun") {
-        let mut cmd = command_for(&bun);
+    } else if let Some(bun) = cli::find_on_path("bun") {
+        let mut cmd = cli(&bun);
         cmd.args(["add", "-g", PACKAGE]);
         cmd
     } else {
@@ -127,34 +106,21 @@ pub async fn install() -> Result<(), ProviderError> {
             "Installing OpenCode needs npm (Node.js) or bun. Install one, or run `npm install -g {PACKAGE}` yourself."
         )));
     };
-    cmd.env("CI", "1")
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .kill_on_drop(true);
-    no_window(&mut cmd);
-    let out = run(cmd, INSTALL_TIMEOUT).await?;
-    if !out.success {
-        return Err(out.failure());
-    }
-    installed().map(|_| ()).map_err(|_| {
-        ProviderError::Failed(
-            "The install finished, but `opencode` wasn't found. Add the global package folder to PATH and restart Hive."
-                .into(),
-        )
-    })
+    cmd.env("CI", "1");
+    provider::run_installer(
+        cmd,
+        || installed().is_ok(),
+        "The install finished, but `opencode` wasn't found. Add the global package folder to \
+         PATH and restart Hive.",
+    )
+    .await
 }
 
 /// `opencode upgrade`: the newest release, through whatever installed it.
 pub async fn update() -> Result<(), ProviderError> {
     let mut cmd = cli(&installed()?);
     cmd.arg("upgrade");
-    let out = run(cmd, UPDATE_TIMEOUT).await?;
-    if out.success {
-        Ok(())
-    } else {
-        Err(out.failure())
-    }
+    run_ok(cmd, UPDATE_TIMEOUT).await.map(drop)
 }
 
 #[cfg(test)]

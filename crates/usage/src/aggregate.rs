@@ -187,7 +187,7 @@ impl<'a> Aggregator<'a> {
                         requests: p.requests,
                     })
                     .collect();
-                harnesses.sort_by(|a, b| b.tokens.cmp(&a.tokens));
+                harnesses.sort_by_key(|h| std::cmp::Reverse(h.tokens));
                 let cost = harnesses.iter().map(|h| h.cost).sum();
                 let tokens = harnesses.iter().map(|h| h.tokens).sum();
                 (cost, tokens, UsageProject { path, harnesses })

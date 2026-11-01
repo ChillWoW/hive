@@ -21,10 +21,6 @@ impl Attachments {
         Ok(Self { dir })
     }
 
-    pub fn dir(&self) -> &Path {
-        &self.dir
-    }
-
     /// Copies `bytes` in as a file called `name`.
     pub fn save(&self, name: &str, bytes: &[u8]) -> Result<Attachment> {
         if bytes.len() > MAX_ATTACHMENT_BYTES {
@@ -203,7 +199,7 @@ mod tests {
         let outside = dir.path().join("secret.txt");
         std::fs::write(&outside, "x").unwrap();
         assert!(attachments.resolve(&outside.display().to_string()).is_none());
-        let sneaky = attachments.dir().join("..").join("secret.txt");
+        let sneaky = attachments.dir.join("..").join("secret.txt");
         assert!(attachments.resolve(&sneaky.display().to_string()).is_none());
         // Removing never leaves the folder.
         attachments.remove([outside.to_str().unwrap(), sneaky.to_str().unwrap()]);

@@ -13,6 +13,8 @@ use hive_proto::{HarnessId, ProviderStatus, ProviderUsage, SignInMethod, SignInS
 use tauri::State;
 use tokio::sync::Notify;
 
+use crate::util::err;
+
 #[derive(Default)]
 pub struct SignIns {
     next: AtomicU64,
@@ -39,22 +41,22 @@ pub async fn provider_status(harness: HarnessId) -> ProviderStatus {
 
 #[tauri::command]
 pub async fn provider_usage(harness: HarnessId) -> Result<Option<ProviderUsage>, String> {
-    provider::usage(harness).await.map_err(|e| e.to_string())
+    provider::usage(harness).await.map_err(err)
 }
 
 #[tauri::command]
 pub async fn provider_install(harness: HarnessId) -> Result<(), String> {
-    provider::install(harness).await.map_err(|e| e.to_string())
+    provider::install(harness).await.map_err(err)
 }
 
 #[tauri::command]
 pub async fn provider_update(harness: HarnessId) -> Result<(), String> {
-    provider::update(harness).await.map_err(|e| e.to_string())
+    provider::update(harness).await.map_err(err)
 }
 
 #[tauri::command]
 pub async fn provider_sign_out(harness: HarnessId) -> Result<(), String> {
-    provider::sign_out(harness).await.map_err(|e| e.to_string())
+    provider::sign_out(harness).await.map_err(err)
 }
 
 #[tauri::command]
@@ -63,9 +65,7 @@ pub async fn provider_sign_in(
     harness: HarnessId,
     method: SignInMethod,
 ) -> Result<SignInStarted, String> {
-    let sign_in = SignIn::start(harness, method)
-        .await
-        .map_err(|e| e.to_string())?;
+    let sign_in = SignIn::start(harness, method).await.map_err(err)?;
     let login_id = format!("login-{}", sign_ins.next.fetch_add(1, Ordering::Relaxed));
     let url = sign_in.url().to_owned();
     let needs_code = sign_in.needs_code();
@@ -92,7 +92,7 @@ pub async fn provider_finish_sign_in(
         .pending()
         .remove(&login_id)
         .ok_or("This sign-in has ended. Start again.")?;
-    let result = sign_in.finish(&code).await.map_err(|e| e.to_string());
+    let result = sign_in.finish(&code).await.map_err(err);
     sign_ins.cancels().remove(&login_id);
     result
 }

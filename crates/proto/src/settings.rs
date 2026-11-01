@@ -9,7 +9,7 @@
 //! each one only if the document still deserializes, so a bad field falls back
 //! to its previous value instead of failing the whole file. Nested maps or
 //! lists would need their own handling there. Clamp ranges in
-//! [`Settings::normalize`].
+//! `Settings::normalize`.
 
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -297,7 +297,7 @@ impl Settings {
     }
 
     /// Clamps values the types alone can't constrain.
-    pub fn normalize(&mut self) {
+    fn normalize(&mut self) {
         self.version = SETTINGS_VERSION;
         self.chats.auto_archive_days = self.chats.auto_archive_days.clamp(1, 365);
         let worktrees = &mut self.worktrees;

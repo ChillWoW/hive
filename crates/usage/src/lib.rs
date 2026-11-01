@@ -5,14 +5,14 @@
 //! What's been read is cached as `usage/scan.json` in the data dir: files
 //! that didn't change aren't read again, grown ones are read on from where
 //! they stopped, and the usage of deleted transcripts (Claude prunes old
-//! ones) stays for [`KEEP_MS`]. Prices: [`pricing`].
+//! ones) stays for `KEEP_MS`. Prices: `pricing.rs`.
 
 mod aggregate;
 mod claude;
 mod codex;
 mod files;
 mod opencode;
-pub mod pricing;
+mod pricing;
 mod record;
 
 use std::collections::HashMap;
@@ -23,18 +23,18 @@ use hive_proto::{
     HarnessId, UsagePricing, UsagePricingStatus, UsageQuery, UsageReport, UsageSource,
     UsageSourceStatus,
 };
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 
 use aggregate::{Aggregator, View};
 use claude::Claude;
 use codex::Codex;
-use files::FileEntry;
+use files::{FileEntry, ScanStats};
 use pricing::RateTable;
-use record::NONE;
 
 /// Usage older than this is dropped from the cache (the longest range is 90 days).
-pub const KEEP_MS: i64 = 92 * 86_400_000;
+const KEEP_MS: i64 = 92 * 86_400_000;
 /// Files last written this long before a range starts can't hold any of it.
 const FILE_SLACK_MS: i64 = 36 * 3_600_000;
 /// Between failed price fetches, unless asked.
@@ -99,15 +99,17 @@ impl Usage {
         if state.prices.is_none() {
             let table = tokio::task::spawn_blocking({
                 let path = path.clone();
-                move || pricing::load(&path)
+                move || read_json(&path)
             })
             .await
+            .ok()
+            .flatten()
             .unwrap_or_default();
             state.prices = Some(table);
         }
         let now = now_ms();
         let fetched = state.prices.as_ref().and_then(|t| t.fetched_at);
-        let stale = fetched.map_or(true, |t| now - t > pricing::MAX_AGE_MS);
+        let stale = fetched.is_none_or(|t| now - t > pricing::MAX_AGE_MS);
         let forced = force && now - state.price_forced >= PRICE_FORCE_MS;
         if forced || (stale && now - state.price_attempt >= PRICE_RETRY_MS) {
             state.price_attempt = now;
@@ -117,7 +119,7 @@ impl Usage {
             match pricing::fetch(now).await {
                 Ok(table) => {
                     let saved = table.clone();
-                    let _ = tokio::task::spawn_blocking(move || pricing::save(&path, &saved)).await;
+                    let _ = tokio::task::spawn_blocking(move || write_json(&path, &saved)).await;
                     state.prices = Some(table);
                     state.price_fresh = true;
                 }
@@ -153,29 +155,23 @@ fn build(
     let now = now_ms();
     let since = query.buckets[0];
     let skip_before = since - FILE_SLACK_MS;
-    let mut sources = Vec::new();
 
     let claude_roots = claude::roots();
     let claude = files::scan(&claude_roots, &mut cache.claude, skip_before);
-    sources.push(file_source(HarnessId::ClaudeCode, &claude_roots, &claude));
     let codex_roots = codex::roots();
     let codex = files::scan(&codex_roots, &mut cache.codex, skip_before);
-    sources.push(file_source(HarnessId::Codex, &codex_roots, &codex));
-    let before = opencode_signature(cache);
-    let oc = opencode::scan(&mut cache.opencode, since);
-    let oc_changed = opencode_signature(cache) != before;
-    sources.push(UsageSource {
-        harness: HarnessId::Opencode,
-        status: status(oc.found, oc.files, u32::from(oc.error.is_some())),
-        path: opencode::data_dir().map(|d| d.to_string_lossy().into_owned()),
-        files: oc.files,
-        error: oc.error,
-    });
+    let oc_dir = opencode::data_dir();
+    let oc = opencode::scan(oc_dir.as_deref(), &mut cache.opencode, since);
+    let sources = vec![
+        source(HarnessId::ClaudeCode, claude_roots.first(), &claude),
+        source(HarnessId::Codex, codex_roots.first(), &codex),
+        source(HarnessId::Opencode, oc_dir.as_ref(), &oc),
+    ];
 
     let pruned = prune(cache, now);
-    if claude.changed || codex.changed || oc_changed || pruned || cache.version != CACHE_VERSION {
+    if claude.changed || codex.changed || oc.changed || pruned || cache.version != CACHE_VERSION {
         cache.version = CACHE_VERSION;
-        save_cache(dir, cache);
+        write_json(&dir.join("scan.json"), cache);
     }
 
     let mut agg = Aggregator::new(query, prices);
@@ -226,14 +222,14 @@ fn add_file<S>(agg: &mut Aggregator<'_>, harness: HarnessId, path: &str, entry: 
         if rec.at < agg.since() {
             continue;
         }
-        let text = |i: u32| if i == NONE { None } else { r.string(i) };
+        // `NONE` is past the end of the table.
         agg.add(
             View {
                 harness,
                 at: rec.at,
-                model: text(rec.model).unwrap_or(""),
-                session: text(rec.session).unwrap_or(""),
-                project: text(rec.project),
+                model: r.string(rec.model).unwrap_or(""),
+                session: r.string(rec.session).unwrap_or(""),
+                project: r.string(rec.project),
                 counts: &rec.counts,
                 cost: rec.cost,
                 fast: rec.fast,
@@ -244,29 +240,20 @@ fn add_file<S>(agg: &mut Aggregator<'_>, harness: HarnessId, path: &str, entry: 
     }
 }
 
-fn file_source(harness: HarnessId, roots: &[PathBuf], stats: &files::ScanStats) -> UsageSource {
+/// `path`: the folder the harness's history is read from.
+fn source(harness: HarnessId, path: Option<&PathBuf>, stats: &ScanStats) -> UsageSource {
     UsageSource {
         harness,
-        status: status(stats.found, stats.files, stats.failed),
-        path: roots.first().map(|r| r.to_string_lossy().into_owned()),
+        status: match (stats.found, stats.files, stats.failed) {
+            (false, _, _) => UsageSourceStatus::Missing,
+            (true, _, 0) => UsageSourceStatus::Ok,
+            (true, 0, _) => UsageSourceStatus::Failed,
+            (true, _, _) => UsageSourceStatus::Partial,
+        },
+        path: path.map(|p| p.to_string_lossy().into_owned()),
         files: stats.files,
         error: stats.error.clone(),
     }
-}
-
-fn status(found: bool, read: u32, failed: u32) -> UsageSourceStatus {
-    match (found, read, failed) {
-        (false, _, _) => UsageSourceStatus::Missing,
-        (true, _, 0) => UsageSourceStatus::Ok,
-        (true, 0, _) => UsageSourceStatus::Failed,
-        (true, _, _) => UsageSourceStatus::Partial,
-    }
-}
-
-fn opencode_signature(cache: &Cache) -> (usize, i64, i64) {
-    cache.opencode.values().fold((0, 0, 0), |(n, through, from), db| {
-        (n + db.messages.len(), through.max(db.through), from.min(db.from))
-    })
 }
 
 /// Drops usage older than [`KEEP_MS`]; true when anything went.
@@ -285,22 +272,21 @@ fn prune(cache: &mut Cache, now: i64) -> bool {
 }
 
 fn load_cache(dir: &Path) -> Cache {
-    std::fs::read(dir.join("scan.json"))
-        .ok()
-        .and_then(|bytes| serde_json::from_slice::<Cache>(&bytes).ok())
+    read_json::<Cache>(&dir.join("scan.json"))
         .filter(|c| c.version == CACHE_VERSION)
         .unwrap_or_default()
 }
 
-fn save_cache(dir: &Path, cache: &Cache) {
-    match serde_json::to_vec(cache) {
-        Ok(bytes) => write_atomic(&dir.join("scan.json"), &bytes),
-        Err(e) => eprintln!("hive-usage: couldn't save the scan: {e}"),
-    }
+fn read_json<T: DeserializeOwned>(path: &Path) -> Option<T> {
+    serde_json::from_slice(&std::fs::read(path).ok()?).ok()
 }
 
 /// Through a temp file renamed over the target.
-pub(crate) fn write_atomic(path: &Path, bytes: &[u8]) {
+fn write_json<T: Serialize>(path: &Path, value: &T) {
+    let bytes = match serde_json::to_vec(value) {
+        Ok(bytes) => bytes,
+        Err(e) => return eprintln!("hive-usage: couldn't save {}: {e}", path.display()),
+    };
     let Some(dir) = path.parent() else { return };
     if std::fs::create_dir_all(dir).is_err() {
         return;

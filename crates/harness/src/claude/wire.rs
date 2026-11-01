@@ -12,7 +12,7 @@ use crate::attachments::InlineImage;
 /// One parsed stdout line.
 #[derive(Debug)]
 pub(crate) enum Frame {
-    System(SystemFrame),
+    System(Box<SystemFrame>),
     StreamEvent(StreamEventFrame),
     Assistant(MessageFrame),
     User(MessageFrame),
@@ -307,7 +307,7 @@ pub(crate) fn parse_frame(line: &str) -> Result<Frame, serde_json::Error> {
     let value: Value = serde_json::from_str(line)?;
     let kind = value.get("type").and_then(Value::as_str).unwrap_or("");
     Ok(match kind {
-        "system" => Frame::System(serde_json::from_value(value)?),
+        "system" => Frame::System(Box::new(serde_json::from_value(value)?)),
         "stream_event" => Frame::StreamEvent(serde_json::from_value(value)?),
         "assistant" => Frame::Assistant(serde_json::from_value(value)?),
         "user" => Frame::User(serde_json::from_value(value)?),

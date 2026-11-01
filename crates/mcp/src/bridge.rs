@@ -5,15 +5,16 @@ use std::path::PathBuf;
 
 use hive_proto::McpServer;
 use serde_json::Value;
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::net::TcpStream;
 
 use crate::host::{Method, Reply, Request};
-use crate::{Backend, BoxFuture, PORT_ENV, TOKEN_FILE_ENV};
+use crate::protocol::Backend;
+use crate::{write_json_line, BoxFuture, PORT_ENV, TOKEN_FILE_ENV};
 
 /// Where the host is and who's asking, from the bridge's environment.
-#[derive(Debug, Clone, Default)]
-pub struct Bridge {
+#[derive(Debug)]
+pub(crate) struct Bridge {
     port: Option<u16>,
     token_file: Option<PathBuf>,
     chat_id: Option<String>,
@@ -56,13 +57,10 @@ impl Bridge {
             name,
             arguments,
         };
-        let mut line = serde_json::to_string(&request).map_err(|e| e.to_string())?;
-        line.push('\n');
         let mut stream = TcpStream::connect(("127.0.0.1", port)).await.map_err(|e| {
             format!("Hive isn't reachable on port {port} ({e}). Is it still running?")
         })?;
-        stream
-            .write_all(line.as_bytes())
+        write_json_line(&mut stream, &request)
             .await
             .map_err(|e| e.to_string())?;
         let mut reply = String::new();

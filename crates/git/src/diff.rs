@@ -7,10 +7,10 @@ use hive_proto::GitDiff;
 use tokio::io::AsyncReadExt as _;
 use tokio::process::Command;
 
-use super::{command, git, GitError};
+use super::{command, current_branch, existing, git, run, spawn_error, toplevel, GitError};
 
 /// The patch stops growing past this; the rest is left out ("partial").
-pub const MAX_PATCH_BYTES: usize = 3 * 1024 * 1024;
+const MAX_PATCH_BYTES: usize = 3 * 1024 * 1024;
 /// What git diffs against before the first commit.
 pub(crate) const EMPTY_TREE: &str = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
 
@@ -31,9 +31,7 @@ pub async fn head_text(cwd: &Path, path: &str) -> Result<Option<String>, GitErro
     }
     // `./` makes the path relative to `cwd`, not the checkout's root.
     let spec = format!("HEAD:./{path}");
-    let mut cmd = Command::from(command(cwd, &["cat-file", "blob", &spec]));
-    cmd.kill_on_drop(true);
-    let out = cmd.output().await.map_err(|e| GitError::Failed(e.to_string()))?;
+    let out = run(command(cwd, &["cat-file", "blob", &spec])).await?;
     if out.status.success() {
         let bytes = out.stdout;
         if bytes.len() > MAX_HEAD_TEXT || bytes.contains(&0) {
@@ -53,67 +51,33 @@ pub async fn head_text(cwd: &Path, path: &str) -> Result<Option<String>, GitErro
 /// `cwd`'s checkout against HEAD, or with `base` against `merge-base(base,
 /// HEAD)`; `None` outside a checkout. Paths are relative to its root.
 pub async fn diff(cwd: &Path, base: Option<&str>) -> Result<Option<GitDiff>, GitError> {
-    if !cwd.is_dir() {
+    let Some(root_text) = toplevel(cwd).await? else {
         return Ok(None);
-    }
-    let top = git(cwd, &["rev-parse", "--show-toplevel"]).await?;
-    if !top.ok() {
-        if top.stderr.contains("not a git repository") {
-            return Ok(None);
-        }
-        return Err(top.error());
-    }
-    let root_text = top.stdout.trim().to_owned();
+    };
     let root = Path::new(&root_text);
 
-    let head = git(root, &["rev-parse", "--verify", "-q", "HEAD"]).await?;
-    let head = head.ok().then(|| head.stdout.trim().to_owned());
-    let branch = git(root, &["symbolic-ref", "-q", "--short", "HEAD"]).await?;
-    let branch = branch.ok().then(|| branch.stdout.trim().to_owned());
+    let head = git(root, &["rev-parse", "--verify", "-q", "HEAD"]).await?.line();
+    let branch = current_branch(root).await?;
 
     let (against, merge_base) = match base {
         Some(base) => {
-            if base.is_empty() || base.starts_with('-') {
-                return Err(GitError::InvalidName(base.to_owned()));
-            }
+            let base = existing(base)?;
             if head.is_none() {
                 return Err(GitError::Failed("There are no commits yet.".into()));
             }
-            let out = git(root, &["merge-base", base, "HEAD"]).await?;
-            let sha = out.stdout.trim().to_owned();
-            if !out.ok() || sha.is_empty() {
+            let Some(sha) = git(root, &["merge-base", base, "HEAD"]).await?.line() else {
                 return Err(GitError::Failed(format!(
                     "“{base}” has no history in common with HEAD."
                 )));
-            }
+            };
             let short = sha.chars().take(7).collect();
             (sha, Some(short))
         }
         None => (head.unwrap_or_else(|| EMPTY_TREE.to_owned()), None),
     };
 
-    let (tracked, mut truncated) = capped(
-        root,
-        &[
-            "-c",
-            "core.quotePath=false",
-            "--no-optional-locks",
-            "diff",
-            "--no-ext-diff",
-            "--no-color",
-            "--find-renames",
-            "--unified=3",
-            &against,
-            "--",
-        ],
-        MAX_PATCH_BYTES,
-    )
-    .await?;
-    let mut patch = String::from_utf8_lossy(&tracked).into_owned();
-    if truncated {
-        // Never end on half a line.
-        patch.truncate(patch.rfind('\n').map_or(0, |i| i + 1));
-    }
+    let (mut patch, mut truncated) =
+        read_patch(patch_command(root, &["--no-optional-locks"], &[&against])).await?;
 
     // Untracked files, without optional locks so this never takes the index
     // from an agent running git here.
@@ -185,22 +149,37 @@ pub async fn diff(cwd: &Path, base: Option<&str>) -> Result<Option<GitDiff>, Git
     }))
 }
 
-/// Runs git, keeping at most `cap` bytes of its output: (stdout, cut short).
-pub(crate) async fn capped(cwd: &Path, args: &[&str], cap: usize) -> Result<(Vec<u8>, bool), GitError> {
-    capped_command(command(cwd, args), cap).await
+/// `git diff` printing the patch from one tree-ish to another (or to the
+/// working tree): paths unquoted, renames found. `options` go before `diff`.
+pub(crate) fn patch_command(cwd: &Path, options: &[&str], revs: &[&str]) -> std::process::Command {
+    let mut args = vec!["-c", "core.quotePath=false"];
+    args.extend_from_slice(options);
+    args.extend(["diff", "--no-ext-diff", "--no-color", "--find-renames", "--unified=3"]);
+    args.extend_from_slice(revs);
+    args.push("--");
+    command(cwd, &args)
 }
 
-/// [`capped`] for a prepared git command (stdout and stderr piped).
-pub(crate) async fn capped_command(
+/// Runs a [`patch_command`], keeping at most [`MAX_PATCH_BYTES`] of the
+/// patch and never ending on half a line: (patch, cut short).
+pub(crate) async fn read_patch(cmd: std::process::Command) -> Result<(String, bool), GitError> {
+    let (bytes, truncated) = capped(cmd, MAX_PATCH_BYTES).await?;
+    let mut patch = String::from_utf8_lossy(&bytes).into_owned();
+    if truncated {
+        patch.truncate(patch.rfind('\n').map_or(0, |i| i + 1));
+    }
+    Ok((patch, truncated))
+}
+
+/// Runs a prepared git command (stdout and stderr piped), keeping at most
+/// `cap` bytes of its output: (stdout, cut short).
+pub(crate) async fn capped(
     cmd: std::process::Command,
     cap: usize,
 ) -> Result<(Vec<u8>, bool), GitError> {
     let mut cmd = Command::from(cmd);
     cmd.kill_on_drop(true);
-    let mut child = cmd.spawn().map_err(|e| match e.kind() {
-        std::io::ErrorKind::NotFound => GitError::NotInstalled,
-        _ => GitError::Failed(e.to_string()),
-    })?;
+    let mut child = cmd.spawn().map_err(spawn_error)?;
     let mut stdout = child.stdout.take().expect("piped stdout");
     let mut stderr = child.stderr.take().expect("piped stderr");
     // Read on its own, so a chatty stderr (CRLF warnings per file) can't
