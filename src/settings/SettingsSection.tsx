@@ -71,6 +71,7 @@ export function SettingsSection({
  */
 export function SettingRow({
     label,
+    labelContent,
     description,
     keywords,
     setting,
@@ -78,6 +79,8 @@ export function SettingRow({
     controlClassName
 }: {
     label: string;
+    /** Shown in place of `label`, which still names the row for search and reset. */
+    labelContent?: ReactNode;
     /** A short phrase, no full stop. */
     description?: ReactNode;
     keywords?: string;
@@ -104,7 +107,7 @@ export function SettingRow({
             <div className="flex min-w-0 flex-col gap-0.5">
                 <div className="flex items-center gap-2">
                     <span className="text-[13px] leading-5 font-medium text-dark-50">
-                        <Highlight text={label} />
+                        {labelContent ?? <Highlight text={label} />}
                     </span>
                     {modified && setting && (
                         <ResetMarker label={label} onReset={setting.reset} />

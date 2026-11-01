@@ -21,7 +21,7 @@ import {
     withFastMode
 } from "@/harnesses";
 import { cn } from "@/lib/cn";
-import { settings } from "@/settings/store";
+import { openProviderSettings } from "@/settings/pages/providerSelection";
 import { Popover, Tooltip } from "@/ui";
 import {
     footerButtonClassName,
@@ -305,7 +305,7 @@ function ModelCard({
 
     const pick = (row: Row) => {
         // Settings › Providers can install it.
-        if (!row.harness.installed) return settings.open("providers");
+        if (!row.harness.installed) return openProviderSettings(row.harness.id);
         if (row.key !== selectedKey) {
             onChange(
                 fitConfig(row.harness, {

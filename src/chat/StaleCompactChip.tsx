@@ -1,6 +1,6 @@
 import { ArrowsInLineVerticalIcon, StackIcon } from "@phosphor-icons/react";
 import { cn } from "@/lib/cn";
-import { formatCount } from "@/lib/format";
+import { formatTokens } from "@/lib/format";
 import { chipTriggerClassName } from "@/ui/chip";
 import { Tooltip } from "@/ui";
 
@@ -31,7 +31,7 @@ export function StaleCompactChip({
                     >
                         <Icon className="size-3.5" />
                         {on ? "Compact" : "Full"}
-                        <span className="text-dark-250 tabular-nums">{formatCount(tokens)}</span>
+                        <span className="text-dark-250 tabular-nums">{formatTokens(tokens)}</span>
                     </button>
                 }
             />

@@ -1,7 +1,6 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, type KeyboardEvent } from "react";
 import {
     ArrowClockwiseIcon,
-    CaretRightIcon,
     CircleNotchIcon,
     WarningCircleIcon,
     XIcon
@@ -9,7 +8,6 @@ import {
 import {
     HarnessIcon,
     isEnabled,
-    providerKey,
     refreshCatalogs,
     useHarnesses,
     useHarnessesStore
@@ -22,33 +20,36 @@ import {
     useProvider,
     type ProviderEntry
 } from "@/providers";
-import type { HarnessCatalog, ProviderAccount, ProvidersSettings } from "@/proto";
-import { DEFAULT_SETTINGS } from "@/proto";
-import { Button, IconButton, iconButtonClassName, Skeleton, Switch, Tooltip } from "@/ui";
-import { CopyButton } from "../CopyButton";
+import type { HarnessCatalog, ProviderAccount } from "@/proto";
+import { Button, IconButton, Skeleton, Tooltip } from "@/ui";
 import { useConfirmPress } from "../hooks";
 import { matchesQuery, useSettingsQuery } from "../search";
-import { ROW_DIVIDER, SettingsSection } from "../SettingsSection";
+import { SettingRow, SettingsSection } from "../SettingsSection";
 import { useSettingsStore } from "../store";
-import { ProviderRuntime } from "./ProviderRuntime";
+import {
+    AdvancedSection,
+    CLI_NAMES,
+    CompactionSection,
+    GeneralSection,
+    InstallationSection,
+    useReprobe
+} from "./ProviderFields";
+import { useProviderSelection } from "./providerSelection";
 import { SignInDialog } from "./SignInDialog";
 
-/** The CLI each harness runs, for install hints. */
-const CLI_NAMES: Partial<Record<HarnessCatalog["id"], string>> = {
-    "claude-code": "claude",
-    codex: "codex",
-    opencode: "opencode"
-};
-
 /**
- * One card, a row per harness: its CLI's version and login at a glance, an
- * Install / Update / Sign in action when one is due, and a switch for whether
- * the pickers offer it. A row opens into its account, version and location.
+ * Settings › Providers: a card per coding agent on top, each with its state
+ * at a glance (Ready, Not signed in, Update available, Not installed, Off);
+ * under it the picked one's settings: a header with its one due action,
+ * then Account, General, Installation, Context (Claude) and Advanced.
+ * While searching, every provider's matching rows, one after another.
  */
 export function ProvidersPage() {
     const harnesses = useHarnesses();
     const loaded = useHarnessesStore((s) => s.loaded);
-    const [expanded, setExpanded] = useState<HarnessCatalog["id"] | null>(null);
+    const query = useSettingsQuery();
+    const selected = useProviderSelection((s) => s.selected);
+    const select = useProviderSelection((s) => s.select);
     const [signingIn, setSigningIn] = useState<HarnessCatalog | null>(null);
     const providersSettings = useSettingsStore((s) => s.settings.providers);
 
@@ -62,38 +63,220 @@ export function ProvidersPage() {
         }
     }, [ids]);
 
-    const enabledCount = harnesses.filter((h) => isEnabled(providersSettings, h.id)).length;
+    const lastOn = harnesses.filter((h) => isEnabled(providersSettings, h.id)).length <= 1;
+    const current = harnesses.find((h) => h.id === selected) ?? harnesses[0];
+
+    if (query) {
+        return (
+            <>
+                {harnesses.map((catalog) => (
+                    <div
+                        key={catalog.id}
+                        className="flex flex-col gap-4 [&:not(:has([data-setting-row]))]:hidden"
+                    >
+                        <span className="flex items-center gap-2 px-1 text-xs font-medium text-dark-100">
+                            <HarnessIcon harness={catalog.id} className="size-3.5" />
+                            {catalog.label}
+                        </span>
+                        <ProviderSettings
+                            catalog={catalog}
+                            lastOn={lastOn}
+                            onSignIn={() => setSigningIn(catalog)}
+                        />
+                    </div>
+                ))}
+                <SignInDialog catalog={signingIn} onClose={() => setSigningIn(null)} />
+            </>
+        );
+    }
 
     return (
         <>
-            <SettingsSection
-                title="Coding agents"
-                action={<RefreshButton ids={harnesses.map((h) => h.id)} />}
-            >
+            <div className="flex flex-col gap-2.5">
+                <div className="flex min-h-6 items-center gap-2 px-1">
+                    <h3 className="min-w-0 flex-1 text-[13px] font-medium text-dark-100">
+                        Coding agents
+                    </h3>
+                    <RefreshButton ids={harnesses.map((h) => h.id)} />
+                </div>
                 {!loaded && harnesses.length === 0 ? (
-                    <RowSkeleton />
+                    <PickerSkeleton />
                 ) : (
-                    harnesses.map((catalog) => (
-                        <ProviderRow
-                            key={catalog.id}
-                            catalog={catalog}
-                            expanded={expanded === catalog.id}
-                            onToggle={() =>
-                                setExpanded((open) => (open === catalog.id ? null : catalog.id))
-                            }
-                            lastOn={enabledCount <= 1}
-                            onSignIn={() => setSigningIn(catalog)}
-                        />
-                    ))
+                    <ProviderTabs
+                        harnesses={harnesses}
+                        current={current?.id}
+                        onSelect={select}
+                    />
                 )}
-            </SettingsSection>
-            <p className="-mt-4 px-1 text-xs leading-4 text-dark-250">
-                Hive runs the agent CLIs installed on this computer, signed in with their own
-                accounts.
-            </p>
+            </div>
+
+            {current && (
+                <div key={current.id} role="tabpanel" className="flex flex-col gap-7">
+                    <ProviderHeader catalog={current} onSignIn={() => setSigningIn(current)} />
+                    <ProviderSettings
+                        catalog={current}
+                        lastOn={lastOn}
+                        onSignIn={() => setSigningIn(current)}
+                    />
+                </div>
+            )}
 
             <SignInDialog catalog={signingIn} onClose={() => setSigningIn(null)} />
         </>
+    );
+}
+
+type Tone = "success" | "warning" | "info" | "muted";
+
+const TONES: Record<Tone, { dot: string; text: string; pill: string }> = {
+    success: { dot: "bg-success", text: "text-success", pill: "bg-success/10 text-success" },
+    warning: { dot: "bg-warning", text: "text-warning", pill: "bg-warning/10 text-warning" },
+    info: { dot: "bg-info", text: "text-info", pill: "bg-info/10 text-info" },
+    muted: { dot: "bg-dark-300", text: "text-dark-250", pill: "bg-dark-700 text-dark-200" }
+};
+
+type State = { label: string; tone: Tone; busy?: boolean };
+
+/** A provider's state in a word or two, most pressing first. */
+function providerState(catalog: HarnessCatalog, provider: ProviderEntry, enabled: boolean): State | undefined {
+    if (catalog.id === "mock") return { label: "Built in", tone: "muted" };
+    const { status, action } = provider;
+    if (action === "installing") return { label: "Installing…", tone: "info", busy: true };
+    if (action === "updating") return { label: "Updating…", tone: "info", busy: true };
+    if (action === "signing-out") return { label: "Signing out…", tone: "info", busy: true };
+    if (!status) return undefined;
+    if (!status.installed) return { label: "Not installed", tone: "muted" };
+    if (status.account && !status.account.loggedIn) return { label: "Not signed in", tone: "warning" };
+    if (!enabled) return { label: "Off", tone: "muted" };
+    if (availableUpdate(provider)) return { label: "Update available", tone: "info" };
+    return { label: "Ready", tone: "success" };
+}
+
+/**
+ * The providers as one strip of compact tabs (icon with a state dot, name),
+ * wrapping onto more lines as providers are added; the full state is in the
+ * header below and each tab's tooltip. ←/→ (and Home/End) move between them.
+ */
+function ProviderTabs({
+    harnesses,
+    current,
+    onSelect
+}: {
+    harnesses: HarnessCatalog[];
+    current: HarnessCatalog["id"] | undefined;
+    onSelect: (id: HarnessCatalog["id"]) => void;
+}) {
+    const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+        const index = harnesses.findIndex((h) => h.id === current);
+        const last = harnesses.length - 1;
+        const next =
+            event.key === "ArrowRight"
+                ? Math.min(index + 1, last)
+                : event.key === "ArrowLeft"
+                  ? Math.max(index - 1, 0)
+                  : event.key === "Home"
+                    ? 0
+                    : event.key === "End"
+                      ? last
+                      : null;
+        if (next === null || next === index) return;
+        event.preventDefault();
+        const id = harnesses[next]!.id;
+        onSelect(id);
+        event.currentTarget.querySelector<HTMLElement>(`[data-provider="${id}"]`)?.focus();
+    };
+
+    return (
+        <div
+            role="tablist"
+            aria-label="Coding agents"
+            onKeyDown={onKeyDown}
+            className="flex flex-wrap gap-1 rounded-lg bg-dark-800 p-1"
+        >
+            {harnesses.map((catalog) => (
+                <ProviderTab
+                    key={catalog.id}
+                    catalog={catalog}
+                    active={catalog.id === current}
+                    onSelect={() => onSelect(catalog.id)}
+                />
+            ))}
+        </div>
+    );
+}
+
+function ProviderTab({
+    catalog,
+    active,
+    onSelect
+}: {
+    catalog: HarnessCatalog;
+    active: boolean;
+    onSelect: () => void;
+}) {
+    const provider = useProvider(catalog.id);
+    const enabled = useSettingsStore((s) => isEnabled(s.settings.providers, catalog.id));
+    const state = providerState(catalog, provider, enabled);
+    const version = provider.status?.installed ? provider.status.version : undefined;
+    const faded = state?.label === "Not installed" || state?.label === "Off";
+
+    return (
+        <Tooltip>
+            <Tooltip.Trigger
+                render={
+                    <button
+                        type="button"
+                        role="tab"
+                        data-provider={catalog.id}
+                        aria-selected={active}
+                        tabIndex={active ? 0 : -1}
+                        onClick={onSelect}
+                        className={cn(
+                            "flex h-8 min-w-0 items-center gap-2 rounded-md pr-3 pl-2 text-xs outline-none",
+                            "transition-[background-color,color,box-shadow] duration-150",
+                            active
+                                ? "bg-dark-600 text-dark-50 shadow-sm shadow-black/30"
+                                : "text-dark-200 hover:bg-dark-700 hover:text-dark-50 focus-visible:bg-dark-700"
+                        )}
+                    >
+                        <span className="relative flex size-5 shrink-0 items-center justify-center">
+                            <HarnessIcon
+                                harness={catalog.id}
+                                className={cn("size-4", faded && !active && "opacity-50")}
+                            />
+                            {state && state.tone !== "muted" && (
+                                <span
+                                    aria-hidden
+                                    className={cn(
+                                        "absolute -right-0.5 -bottom-0.5 size-2 rounded-full ring-2",
+                                        active ? "ring-dark-600" : "ring-dark-800",
+                                        TONES[state.tone].dot,
+                                        state.busy && "animate-pulse"
+                                    )}
+                                />
+                            )}
+                        </span>
+                        <span className="truncate font-medium">{catalog.label}</span>
+                    </button>
+                }
+            />
+            <Tooltip.Content side="bottom">
+                {[state?.label ?? "Checking…", version && `v${version}`].filter(Boolean).join(" · ")}
+            </Tooltip.Content>
+        </Tooltip>
+    );
+}
+
+function PickerSkeleton() {
+    return (
+        <div className="flex flex-wrap gap-1 rounded-lg bg-dark-800 p-1">
+            {[0, 1, 2].map((i) => (
+                <div key={i} className="flex h-8 items-center gap-2 px-2">
+                    <Skeleton className="size-4 rounded-sm" />
+                    <Skeleton className="h-3 w-16" />
+                </div>
+            ))}
+        </div>
     );
 }
 
@@ -123,273 +306,208 @@ function RefreshButton({ ids }: { ids: HarnessCatalog["id"][] }) {
     );
 }
 
-function RowSkeleton() {
-    return (
-        <div data-setting-row className="flex items-center gap-3 px-4 py-3">
-            <Skeleton className="size-9 rounded-[10px]" />
-            <div className="flex flex-col gap-1.5">
-                <Skeleton className="h-3 w-24" />
-                <Skeleton className="h-2.5 w-40" />
-            </div>
-        </div>
-    );
-}
-
-function ProviderRow({
-    catalog,
-    expanded,
-    onToggle,
-    lastOn,
-    onSignIn
-}: {
-    catalog: HarnessCatalog;
-    expanded: boolean;
-    onToggle: () => void;
-    /** It's the only one on, so it can't be turned off. */
-    lastOn: boolean;
-    onSignIn: () => void;
-}) {
-    const query = useSettingsQuery();
+/** The picked provider: name, state, what it is, and the one thing to do next. */
+function ProviderHeader({ catalog, onSignIn }: { catalog: HarnessCatalog; onSignIn: () => void }) {
     const provider = useProvider(catalog.id);
-    const providersSettings = useSettingsStore((s) => s.settings.providers);
-    const update = useSettingsStore((s) => s.update);
+    const enabled = useSettingsStore((s) => isEnabled(s.settings.providers, catalog.id));
     const { status, action } = provider;
-
-    const key = providerKey(catalog.id) as keyof ProvidersSettings;
-    const hasSwitch = key in DEFAULT_SETTINGS.providers;
-    const enabled = isEnabled(providersSettings, catalog.id);
-    const locked = enabled && lastOn;
-    const mock = catalog.id === "mock";
-    const installed = status?.installed ?? catalog.installed;
-    // Not installed opens too: its runtime settings (a binary path) are how it gets found.
-    const hasDetails = !mock && status !== undefined;
-    const open = expanded && hasDetails;
+    const state = providerState(catalog, provider, enabled);
     const newer = availableUpdate(provider);
-    const account = status?.account;
+    const cli = CLI_NAMES[catalog.id];
 
-    const actionButton = (() => {
-        // Opened, the details carry the same actions.
-        if (!status || mock || open) return null;
-        if (!installed) {
+    const summary = (() => {
+        if (catalog.id === "mock") return "Scripted turns for building the UI";
+        if (!status) return undefined;
+        if (!status.installed) {
+            return cli
+                ? `Install the ${cli} CLI, or point Installation › Custom binary at one`
+                : "Not available yet";
+        }
+        // The account has its own section; here, what runs.
+        const account = status.account;
+        const login = account?.loggedIn
+            ? `Signed in${account.plan ? ` · ${PLAN_LABELS[account.plan] ?? account.plan} plan` : ""}`
+            : account
+              ? `Sign in to start chats with ${catalog.label}`
+              : status.error
+                ? "Couldn't check the login"
+                : undefined;
+        return [cli && `${cli} CLI`, status.version && `v${status.version}`, login]
+            .filter(Boolean)
+            .join(" · ");
+    })();
+
+    const action_ = (() => {
+        if (!status || catalog.id === "mock") return null;
+        if (!status.installed) {
             return status.canInstall ? (
                 <Button
-                    size="sm"
+                    size="md"
                     variant="primary"
                     loading={action === "installing"}
                     onClick={() => void providers.install(catalog.id)}
                 >
-                    Install
+                    Install {catalog.label}
                 </Button>
             ) : null;
+        }
+        if (status.account && !status.account.loggedIn && status.canSignIn) {
+            return (
+                <Button size="md" variant="primary" onClick={onSignIn}>
+                    Sign in
+                </Button>
+            );
         }
         if (newer && status.canUpdate) {
             return (
                 <Button
-                    size="sm"
+                    size="md"
                     variant="primary"
                     loading={action === "updating"}
                     onClick={() => void providers.update(catalog.id)}
                 >
-                    Update
-                </Button>
-            );
-        }
-        if (account && !account.loggedIn && status.canSignIn) {
-            return (
-                <Button size="sm" variant="primary" onClick={onSignIn}>
-                    Sign in
+                    Update to v{newer}
                 </Button>
             );
         }
         return null;
     })();
 
-    if (
-        !matchesQuery(
-            query,
-            catalog.label,
-            "provider providers agent harness cli install update upgrade version sign in login logout account plan path binary executable config home launch arguments flags environment variables env display name compact compaction idle cache"
-        )
-    ) {
-        return null;
-    }
-
     return (
-        <div
-            data-setting-row
-            className={cn("relative", ROW_DIVIDER)}
-        >
-            <div className="flex items-center gap-3 px-4 py-3">
-                <button
-                    type="button"
-                    disabled={!hasDetails}
-                    aria-expanded={hasDetails ? open : undefined}
-                    onClick={onToggle}
-                    className={cn(
-                        "-m-1 flex min-w-0 flex-1 items-center gap-3 rounded-md p-1 text-left outline-none",
-                        "focus-visible:bg-dark-700/60",
-                        !installed && !mock && "opacity-60"
-                    )}
-                >
-                    <span className="flex size-9 shrink-0 items-center justify-center rounded-[10px] bg-dark-700">
-                        <HarnessIcon harness={catalog.id} className="size-4" />
-                    </span>
-                    <span className="flex min-w-0 flex-col gap-0.5">
-                        <span className="text-[13px] leading-5 font-medium text-dark-50">
+        <div className="flex flex-col gap-3">
+            <div className="flex items-center gap-4 rounded-md bg-dark-800 px-4 py-4">
+                <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-dark-700">
+                    <HarnessIcon harness={catalog.id} className="size-5" />
+                </span>
+                <div className="flex min-w-0 flex-1 flex-col gap-1">
+                    <div className="flex min-w-0 items-center gap-2">
+                        <h3 className="truncate text-[15px] leading-5 font-semibold text-dark-50">
                             {catalog.label}
-                        </span>
-                        <MetaLine catalog={catalog} provider={provider} newer={newer} />
-                    </span>
-                </button>
-
-                <div className="flex shrink-0 items-center gap-2">
-                    {actionButton}
-                    {hasDetails && (
-                        <button
-                            type="button"
-                            aria-label={open ? "Hide details" : "Show details"}
-                            onClick={onToggle}
-                            className={iconButtonClassName}
-                        >
-                            <CaretRightIcon
-                                weight="bold"
+                        </h3>
+                        {state && (
+                            <span
                                 className={cn(
-                                    "size-3 transition-transform duration-150",
-                                    open && "rotate-90"
+                                    "flex shrink-0 items-center gap-1 rounded-full px-2 py-px text-[11px] leading-4",
+                                    TONES[state.tone].pill
                                 )}
-                            />
-                        </button>
-                    )}
-                    {hasSwitch && (
-                        <LockedTooltip locked={locked}>
-                            <Switch
-                                checked={enabled}
-                                disabled={locked}
-                                onCheckedChange={(on) =>
-                                    void update({ providers: { [key]: on } })
-                                }
-                                aria-label={`Offer ${catalog.label} in new chats`}
-                            />
-                        </LockedTooltip>
+                            >
+                                {state.busy && <CircleNotchIcon weight="bold" className="size-2.5 animate-spin" />}
+                                {state.label}
+                            </span>
+                        )}
+                    </div>
+                    {summary ? (
+                        <p className="truncate text-xs leading-4 text-dark-250">{summary}</p>
+                    ) : (
+                        !status && <Skeleton className="h-3 w-40" />
                     )}
                 </div>
+                {action_}
             </div>
 
             {provider.error && (
-                <ErrorStrip
-                    message={provider.error}
-                    onDismiss={() => providers.clearError(catalog.id)}
-                />
+                <ErrorStrip message={provider.error} onDismiss={() => providers.clearError(catalog.id)} />
             )}
-
-            {hasDetails && (
-                <div
-                    className={cn(
-                        "grid transition-[grid-template-rows] duration-200 ease-out",
-                        open ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
-                    )}
-                    inert={!open}
-                >
-                    <div className="min-h-0 overflow-hidden">
-                        <Details
-                            catalog={catalog}
-                            provider={provider}
-                            newer={newer}
-                            onSignIn={onSignIn}
-                        />
-                    </div>
-                </div>
+            {status?.error && status.installed && (
+                <p className="flex items-start gap-1.5 px-1 text-[11px] leading-4 text-warning">
+                    <WarningCircleIcon className="mt-px size-3 shrink-0" />
+                    <span className="min-w-0 break-words">{status.error}</span>
+                </p>
             )}
         </div>
     );
 }
 
-function LockedTooltip({ locked, children }: { locked: boolean; children: ReactNode }) {
-    if (!locked) return <>{children}</>;
+/** The provider's sections; each row filters itself while searching. */
+function ProviderSettings({
+    catalog,
+    lastOn,
+    onSignIn
+}: {
+    catalog: HarnessCatalog;
+    lastOn: boolean;
+    onSignIn: () => void;
+}) {
+    useReprobe(catalog.id);
+    const provider = useProvider(catalog.id);
+    const mock = catalog.id === "mock";
     return (
-        <Tooltip>
-            <Tooltip.Trigger render={<span className="inline-flex">{children}</span>} />
-            <Tooltip.Content side="left">At least one agent stays on</Tooltip.Content>
-        </Tooltip>
+        <>
+            {!mock && <AccountSection catalog={catalog} provider={provider} onSignIn={onSignIn} />}
+            <GeneralSection catalog={catalog} lastOn={lastOn} />
+            {!mock && <InstallationSection catalog={catalog} provider={provider} />}
+            {catalog.id === "claude-code" && <CompactionSection />}
+            {!mock && <AdvancedSection catalog={catalog} />}
+        </>
     );
 }
 
-/** Under the name: what state the CLI is in, in a few words. */
-function MetaLine({
+function AccountSection({
     catalog,
     provider,
-    newer
+    onSignIn
 }: {
     catalog: HarnessCatalog;
     provider: ProviderEntry;
-    newer: string | undefined;
+    onSignIn: () => void;
 }) {
+    const query = useSettingsQuery();
     const { status, action } = provider;
-    const muted = "text-xs leading-4 text-dark-250";
-
-    if (catalog.id === "mock") {
-        return <span className={muted}>Built in · scripted turns for building the UI</span>;
-    }
-    if (action === "installing") {
-        return (
-            <span className={cn(muted, "flex items-center gap-1.5")}>
-                <CircleNotchIcon weight="bold" className="size-3 animate-spin" />
-                Installing {catalog.label}… this can take a minute
-            </span>
-        );
-    }
-    if (!status) {
-        return <Skeleton className="my-0.5 h-3 w-36" />;
-    }
-    if (!status.installed) {
-        const cli = CLI_NAMES[catalog.id];
-        return (
-            <span className={muted}>
-                {cli ? `Install the ${cli} CLI to use it` : "Not available yet"}
-            </span>
-        );
-    }
-
-    const parts: ReactNode[] = [];
-    if (action === "updating") {
-        parts.push(
-            <span key="v" className="flex items-center gap-1.5">
-                <CircleNotchIcon weight="bold" className="size-3 animate-spin" />
-                Updating{newer ? ` to v${newer}` : ""}…
-            </span>
-        );
-    } else if (status.version) {
-        parts.push(
-            <span key="v" className="tabular-nums">
-                v{status.version}
-                {newer && <span className="text-dark-100"> → v{newer}</span>}
-            </span>
-        );
-    }
+    if (!status?.installed) return null;
     const { account } = status;
-    if (account?.loggedIn) {
-        parts.push(<span key="a" className="truncate">{account.email ?? "Signed in"}</span>);
-    } else if (account) {
-        parts.push(<span key="a" className="text-warning">Not signed in</span>);
-    } else if (status.error) {
-        parts.push(<span key="a" className="text-warning">Couldn't check the login</span>);
-    }
+    if (!account && !status.canSignIn) return null;
+    const keywords = `${catalog.label} account sign in login logout switch email plan subscription`;
+    if (!matchesQuery(query, "Account", keywords)) return null;
 
     return (
-        <span className={cn(muted, "flex min-w-0 items-center gap-1.5")}>
-            {parts.map((part, i) => (
-                <span key={i} className="flex min-w-0 items-center gap-1.5">
-                    {i > 0 && <span className="text-dark-400">·</span>}
-                    {part}
-                </span>
-            ))}
-        </span>
+        <SettingsSection title="Account">
+            <SettingRow
+                label={account?.loggedIn ? "Signed in" : "Not signed in"}
+                labelContent={
+                    account?.loggedIn && account.email ? (
+                        // Blurred until hovered, so a screenshot doesn't share it.
+                        <span
+                            className="cursor-default blur-[5px] transition-[filter] duration-150 select-none hover:blur-none hover:select-text"
+                        >
+                            {account.email}
+                        </span>
+                    ) : undefined
+                }
+                description={
+                    account?.loggedIn
+                        ? accountMeta(account) || "Signed in"
+                        : account
+                          ? `Sign in to start chats with ${catalog.label}`
+                          : "Couldn't check the login"
+                }
+                keywords={keywords}
+                controlClassName="w-auto gap-1.5"
+                control={
+                    status.canSignIn &&
+                    (account?.loggedIn ? (
+                        <>
+                            <Button size="sm" variant="ghost" onClick={onSignIn}>
+                                Switch account
+                            </Button>
+                            <SignOutButton
+                                busy={action === "signing-out"}
+                                onConfirm={() => void providers.signOut(catalog.id)}
+                            />
+                        </>
+                    ) : (
+                        <Button size="sm" variant="primary" onClick={onSignIn}>
+                            Sign in
+                        </Button>
+                    ))
+                }
+            />
+        </SettingsSection>
     );
 }
 
 function ErrorStrip({ message, onDismiss }: { message: string; onDismiss: () => void }) {
     return (
-        <div className="mx-4 mb-3 flex items-start gap-2 rounded-md bg-danger/10 px-3 py-2 text-xs leading-4 text-danger">
+        <div className="flex items-start gap-2 rounded-md bg-danger/10 px-3 py-2 text-xs leading-4 text-danger">
             <WarningCircleIcon className="mt-px size-3.5 shrink-0" />
             <span className="min-w-0 flex-1 break-words whitespace-pre-line">{message}</span>
             <button
@@ -431,170 +549,7 @@ function accountMeta(account: ProviderAccount): string {
         account.organization && !account.organization.startsWith(account.email ?? "\0")
             ? account.organization
             : undefined;
-    return [plan, methodLabel(account.method), org].filter(Boolean).join(" · ");
-}
-
-/** The opened row: account, version, location, laid out as a label column beside values. */
-function Details({
-    catalog,
-    provider,
-    newer,
-    onSignIn
-}: {
-    catalog: HarnessCatalog;
-    provider: ProviderEntry;
-    newer: string | undefined;
-    onSignIn: () => void;
-}) {
-    const { status, latest, probing, action } = provider;
-    if (!status) return null;
-    const { account } = status;
-    const installed = status.installed;
-
-    const versionNote = newer
-        ? `v${newer} available`
-        : latest === null
-          ? "Couldn't check for updates"
-          : latest
-            ? "Up to date"
-            : probing
-              ? "Checking for updates…"
-              : undefined;
-
-    return (
-        // Inset to line up with the name: row padding + tile + gap.
-        <div className="flex flex-col gap-3 pr-4 pb-4 pl-[64px]">
-            {installed && (
-                <>
-                    <DetailRow
-                        label="Account"
-                        value={
-                            account?.loggedIn ? (
-                                <span className="flex min-w-0 items-center gap-2">
-                                    <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-dark-600 text-[10px] font-medium text-dark-50 uppercase">
-                                        {(account.email ?? "?").slice(0, 1)}
-                                    </span>
-                                    <span className="flex min-w-0 flex-col">
-                                        <span className="truncate text-xs text-dark-50">
-                                            {account.email ?? "Signed in"}
-                                        </span>
-                                        {accountMeta(account) && (
-                                            <span className="truncate text-[11px] text-dark-250">
-                                                {accountMeta(account)}
-                                            </span>
-                                        )}
-                                    </span>
-                                </span>
-                            ) : (
-                                <span className="flex flex-col">
-                                    <span className="text-xs text-dark-50">
-                                        {account ? "Not signed in" : "Couldn't check the login"}
-                                    </span>
-                                    <span className="text-[11px] text-dark-250">
-                                        Sign in to start chats with {catalog.label}
-                                    </span>
-                                </span>
-                            )
-                        }
-                        actions={
-                            status.canSignIn &&
-                            (account?.loggedIn ? (
-                                <>
-                                    <Button size="sm" variant="ghost" onClick={onSignIn}>
-                                        Switch account
-                                    </Button>
-                                    <SignOutButton
-                                        busy={action === "signing-out"}
-                                        onConfirm={() => void providers.signOut(catalog.id)}
-                                    />
-                                </>
-                            ) : (
-                                <Button size="sm" variant="primary" onClick={onSignIn}>
-                                    Sign in
-                                </Button>
-                            ))
-                        }
-                    />
-
-                    <DetailRow
-                        label="Version"
-                        value={
-                            <span className="flex min-w-0 flex-col">
-                                <span className="text-xs text-dark-50 tabular-nums">
-                                    {status.version ? `v${status.version}` : "Unknown"}
-                                </span>
-                                {(versionNote || status.updateChannel) && (
-                                    <span
-                                        className={cn(
-                                            "text-[11px] text-dark-250",
-                                            newer && "text-dark-100",
-                                            latest === null && "text-warning"
-                                        )}
-                                    >
-                                        {[versionNote, status.updateChannel && `${status.updateChannel} channel`]
-                                            .filter(Boolean)
-                                            .join(" · ")}
-                                    </span>
-                                )}
-                            </span>
-                        }
-                        actions={
-                            newer &&
-                            status.canUpdate && (
-                                <Button
-                                    size="sm"
-                                    variant="default"
-                                    loading={action === "updating"}
-                                    onClick={() => void providers.update(catalog.id)}
-                                >
-                                    Update to v{newer}
-                                </Button>
-                            )
-                        }
-                    />
-
-                    {status.path && (
-                        <DetailRow
-                            label="Location"
-                            value={
-                                <span className="font-mono text-[11px] leading-4 break-all text-dark-100">
-                                    {status.path}
-                                </span>
-                            }
-                            actions={<CopyButton text={status.path} />}
-                        />
-                    )}
-                </>
-            )}
-
-            {status.error && (
-                <p className="flex items-start gap-1.5 text-[11px] leading-4 text-warning">
-                    <WarningCircleIcon className="mt-px size-3 shrink-0" />
-                    <span className="min-w-0 break-words">{status.error}</span>
-                </p>
-            )}
-
-            <ProviderRuntime harness={catalog.id} />
-        </div>
-    );
-}
-
-function DetailRow({
-    label,
-    value,
-    actions
-}: {
-    label: string;
-    value: ReactNode;
-    actions?: ReactNode;
-}) {
-    return (
-        <div className="flex min-h-7 items-center gap-4">
-            <span className="w-16 shrink-0 text-xs text-dark-250">{label}</span>
-            <div className="flex min-w-0 flex-1 items-center">{value}</div>
-            {actions && <div className="flex shrink-0 items-center gap-1.5">{actions}</div>}
-        </div>
-    );
+    return [plan && `${plan} plan`, methodLabel(account.method), org].filter(Boolean).join(" · ");
 }
 
 /** Two-step, like Reset. */
@@ -612,3 +567,4 @@ function SignOutButton({ busy, onConfirm }: { busy: boolean; onConfirm: () => vo
         </Button>
     );
 }
+
