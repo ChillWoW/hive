@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowDownIcon } from "@phosphor-icons/react";
 import { useWorktreeSetup, type TranscriptMessage } from "@/chats";
 import { cn } from "@/lib/cn";
@@ -6,6 +6,8 @@ import type { HarnessId, Worktree } from "@/proto";
 import { WorktreeSetupCard } from "./WorktreeSetupCard";
 import { AssistantMessage } from "./AssistantMessage";
 import { ChatCwd, OpenSubagent } from "./context";
+import { Minimap } from "./Minimap";
+import { minimapItems, type MinimapItem } from "./minimapItems";
 import { CompactionRow } from "./parts";
 import { promptText } from "./text";
 import { UserMessage } from "./UserMessage";
@@ -144,11 +146,63 @@ export function Transcript({
     const lastMessage = messages.at(-1);
     const firstUser = messages.find((m) => m.role === "user")?.id;
 
+    const items = useMemo(() => minimapItems(messages, isBareCompact), [messages]);
+    const ticks = useRef(new Map<string, HTMLSpanElement>()).current;
+
+    // Lights the ticks whose turns are on screen: a turn runs from its
+    // prompt to the next one. Written straight onto the ticks, not rendered.
+    const markInView = useCallback(() => {
+        const el = scrollRef.current;
+        if (!el || ticks.size === 0) return;
+        const view = el.getBoundingClientRect();
+        const turns = [...el.querySelectorAll<HTMLElement>("[data-turn]")];
+        const contentBottom = contentRef.current?.getBoundingClientRect().bottom ?? view.bottom;
+        turns.forEach((turn, i) => {
+            const top = turn.getBoundingClientRect().top;
+            const bottom = turns[i + 1]?.getBoundingClientRect().top ?? contentBottom;
+            const tick = ticks.get(turn.dataset.turn!);
+            if (tick) tick.dataset.inView = String(bottom > view.top && top < view.bottom);
+        });
+    }, [ticks]);
+
+    const frame = useRef(0);
+    const scheduleMark = useCallback(() => {
+        cancelAnimationFrame(frame.current);
+        frame.current = requestAnimationFrame(markInView);
+    }, [markInView]);
+
+    useEffect(() => {
+        const el = scrollRef.current;
+        const content = contentRef.current;
+        if (!el || !content) return;
+        const observer = new ResizeObserver(scheduleMark);
+        observer.observe(el);
+        observer.observe(content);
+        return () => {
+            observer.disconnect();
+            cancelAnimationFrame(frame.current);
+        };
+    }, [scheduleMark]);
+    useEffect(scheduleMark, [items, scheduleMark]);
+
+    const jumpTo = (item: MinimapItem) => {
+        const el = scrollRef.current;
+        const turn = el?.querySelector<HTMLElement>(`[data-turn="${CSS.escape(item.id)}"]`);
+        if (!el || !turn) return;
+        const top = turn.getBoundingClientRect().top - el.getBoundingClientRect().top + el.scrollTop - 24;
+        // Unpinned so streaming doesn't pull it away; reaching the bottom pins again.
+        pin(false);
+        el.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
+    };
+
     return (
         <div className="relative flex min-h-0 flex-1 flex-col">
             <div
                 ref={scrollRef}
-                onScroll={onScroll}
+                onScroll={() => {
+                    onScroll();
+                    scheduleMark();
+                }}
                 className="min-h-0 flex-1 overflow-y-auto px-6 [scrollbar-gutter:stable_both-edges]"
             >
                 <ChatCwd value={cwd}>
@@ -167,7 +221,7 @@ export function Transcript({
                                     <PendingCompaction key={message.id} />
                                 )
                             ) : message.role === "user" ? (
-                                <Fragment key={message.id}>
+                                <div key={message.id} data-turn={message.id} className="flex flex-col gap-5">
                                     <UserMessage
                                         message={message}
                                         onRetry={onRetry && (() => onRetry(message))}
@@ -178,7 +232,7 @@ export function Transcript({
                                         worktree={message.id === firstUser ? worktree : undefined}
                                         agent={agent}
                                     />
-                                </Fragment>
+                                </div>
                             ) : (
                                 <AssistantMessage
                                     key={message.id}
@@ -194,6 +248,12 @@ export function Transcript({
                 </OpenSubagent>
                 </ChatCwd>
             </div>
+            <Minimap
+                items={items}
+                ticks={ticks}
+                onSelect={jumpTo}
+                onWheel={(deltaY) => scrollRef.current?.scrollBy({ top: deltaY })}
+            />
             <button
                 type="button"
                 aria-label="Jump to bottom"
