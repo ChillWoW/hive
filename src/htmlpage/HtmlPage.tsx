@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import {
@@ -6,8 +6,11 @@ import {
     ArrowSquareOutIcon,
     ArrowsOutSimpleIcon
 } from "@phosphor-icons/react";
+import { backend } from "@/lib/backend";
+import { cn } from "@/lib/cn";
+import { errorMessage } from "@/lib/errors";
 import { isTauri } from "@/lib/platform";
-import { iconButtonClassName, Modal, Tooltip } from "@/ui";
+import { IconButton, Modal } from "@/ui";
 import { PAGE_SANDBOX, pageDocument, readMessage } from "./page";
 
 /** A page `render_html` showed: Hive's saved copy, else the HTML the call carried. */
@@ -26,11 +29,9 @@ const documents = new Map<string, Promise<string>>();
 function readPage(file: string): Promise<string> {
     let page = documents.get(file);
     if (!page) {
-        page = isTauri
-            ? invoke<ArrayBuffer>("attachment_bytes", { path: file }).then((bytes) =>
-                  new TextDecoder().decode(bytes)
-              )
-            : Promise.reject(new Error("Pages need the Hive app."));
+        page = backend<ArrayBuffer>("attachment_bytes", { path: file }, () =>
+            Promise.reject(new Error("Pages need the Hive app."))
+        ).then((bytes) => new TextDecoder().decode(bytes));
         page.catch(() => documents.delete(file));
         documents.set(file, page);
     }
@@ -51,7 +52,7 @@ function usePageDocument(page: PageRef) {
                 live &&
                 (page.html !== undefined
                     ? setState({ doc: pageDocument(page.html) })
-                    : setState({ error: e instanceof Error ? e.message : String(e) }))
+                    : setState({ error: errorMessage(e) }))
         );
         return () => {
             live = false;
@@ -72,7 +73,6 @@ export function HtmlPage({ page }: { page: PageRef }) {
     const [height, setHeight] = useState(() => clampHeight(page.height ?? DEFAULT_HEIGHT));
     const [reloads, setReloads] = useState(0);
     const [fullScreen, setFullScreen] = useState(false);
-    const frame = useLinkedFrame((h) => setHeight(clampHeight(h)));
 
     if (error) {
         return (
@@ -85,34 +85,33 @@ export function HtmlPage({ page }: { page: PageRef }) {
     return (
         <div className="group/page relative">
             {doc ? (
-                <iframe
+                <PageFrame
                     key={reloads}
-                    ref={frame}
                     title={page.title}
-                    srcDoc={doc}
-                    sandbox={PAGE_SANDBOX}
-                    style={{ height, colorScheme: "dark" }}
-                    className="block w-full border-0 bg-transparent"
+                    doc={doc}
+                    height={height}
+                    onHeight={(h) => setHeight(clampHeight(h))}
+                    className="w-full"
                 />
             ) : (
                 <div style={{ height }} />
             )}
             <div className="absolute -top-3 right-0 flex items-center gap-0.5 rounded-md border border-dark-600 bg-dark-850 py-0.5 pr-0.5 pl-2 opacity-0 shadow-md shadow-black/30 transition-opacity group-hover/page:opacity-100 focus-within:opacity-100">
                 <span className="mr-1 max-w-56 truncate text-[11.5px] text-dark-200">{page.title}</span>
-                <ToolbarButton label="Reload" onClick={() => setReloads((n) => n + 1)}>
+                <IconButton label="Reload" onClick={() => setReloads((n) => n + 1)}>
                     <ArrowClockwiseIcon className="size-3.5" />
-                </ToolbarButton>
+                </IconButton>
                 {page.file && (
-                    <ToolbarButton
+                    <IconButton
                         label="Open in browser"
                         onClick={() => void invoke("open_attachment", { path: page.file })}
                     >
                         <ArrowSquareOutIcon className="size-3.5" />
-                    </ToolbarButton>
+                    </IconButton>
                 )}
-                <ToolbarButton label="Full screen" onClick={() => setFullScreen(true)}>
+                <IconButton label="Full screen" onClick={() => setFullScreen(true)}>
                     <ArrowsOutSimpleIcon className="size-3.5" />
-                </ToolbarButton>
+                </IconButton>
             </div>
             {doc && (
                 <Modal
@@ -122,23 +121,36 @@ export function HtmlPage({ page }: { page: PageRef }) {
                     className="w-[92%] max-w-none"
                     bodyClassName="h-[calc(86vh-6rem)]"
                 >
-                    <FullScreenFrame title={page.title} doc={doc} />
+                    <PageFrame title={page.title} doc={doc} className="size-full" />
                 </Modal>
             )}
         </div>
     );
 }
 
-function FullScreenFrame({ title, doc }: { title: string; doc: string }) {
-    const frame = useLinkedFrame();
+/** The page in its sandboxed frame, `height` tall (else as styled). */
+function PageFrame({
+    title,
+    doc,
+    height,
+    onHeight,
+    className
+}: {
+    title: string;
+    doc: string;
+    height?: number;
+    onHeight?: (height: number) => void;
+    className: string;
+}) {
+    const frame = useLinkedFrame(onHeight);
     return (
         <iframe
             ref={frame}
             title={title}
             srcDoc={doc}
             sandbox={PAGE_SANDBOX}
-            style={{ colorScheme: "dark" }}
-            className="block size-full border-0 bg-transparent"
+            style={{ height, colorScheme: "dark" }}
+            className={cn("block border-0 bg-transparent", className)}
         />
     );
 }
@@ -165,27 +177,4 @@ function useLinkedFrame(onHeight?: (height: number) => void) {
         return () => window.removeEventListener("message", onMessage);
     }, []);
     return ref;
-}
-
-function ToolbarButton({
-    label,
-    onClick,
-    children
-}: {
-    label: string;
-    onClick: () => void;
-    children: ReactNode;
-}) {
-    return (
-        <Tooltip>
-            <Tooltip.Trigger
-                render={
-                    <button type="button" aria-label={label} onClick={onClick} className={iconButtonClassName}>
-                        {children}
-                    </button>
-                }
-            />
-            <Tooltip.Content side="bottom">{label}</Tooltip.Content>
-        </Tooltip>
-    );
 }

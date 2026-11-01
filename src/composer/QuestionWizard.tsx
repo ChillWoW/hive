@@ -12,7 +12,7 @@ type Draft = { picked: string[]; custom: string };
 
 const EMPTY: Draft = { picked: [], custom: "" };
 
-function labelsOf(draft: Draft): string[] {
+function labelsOf(draft: Draft = EMPTY): string[] {
     const custom = draft.custom.trim();
     return custom ? [...draft.picked, custom] : draft.picked;
 }
@@ -60,7 +60,7 @@ export function QuestionWizard({
         onSubmit(
             questions.map((q, i) => ({
                 questionId: q.id,
-                labels: labelsOf(all[i] ?? EMPTY)
+                labels: labelsOf(all[i])
             }))
         ).catch((e: unknown) => {
             setSending(false);
@@ -69,7 +69,7 @@ export function QuestionWizard({
     };
 
     const next = (all = drafts) => {
-        if (!labelsOf(all[step] ?? EMPTY).length) return;
+        if (!labelsOf(all[step]).length) return;
         if (last) send(all);
         else setStep(step + 1);
     };
@@ -198,7 +198,7 @@ export function QuestionWizard({
                                     "size-1.5 rounded-full transition-colors",
                                     i === step
                                         ? "bg-dark-50"
-                                        : labelsOf(drafts[i] ?? EMPTY).length
+                                        : labelsOf(drafts[i]).length
                                           ? "bg-dark-250"
                                           : "bg-dark-600"
                                 )}

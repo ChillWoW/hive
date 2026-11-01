@@ -10,7 +10,7 @@ import type { Message, Worktree, WorktreeStep } from "@/proto";
  * without one shows only its worktree.
  */
 
-export type SetupStageId = "name" | "checkout" | "agent";
+type SetupStageId = "name" | "checkout" | "agent";
 export type SetupStatus = "pending" | "running" | "done" | "failed";
 
 export type SetupStage = {
@@ -36,7 +36,7 @@ export type WorktreeSetup = {
 
 type SetupsState = { setups: Record<string, WorktreeSetup> };
 
-export const useWorktreeSetups = create<SetupsState>()(immer(() => ({ setups: {} })));
+const useWorktreeSetups = create<SetupsState>()(immer(() => ({ setups: {} })));
 
 const set = useWorktreeSetups.setState;
 

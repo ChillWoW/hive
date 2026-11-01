@@ -1,10 +1,10 @@
 import { ArrowUpLeftIcon } from "@phosphor-icons/react";
 import { type TranscriptMessage, useChatsStore } from "@/chats";
 import { cn } from "@/lib/cn";
+import { formatElapsed } from "@/lib/time";
 import type { BackgroundTask, HarnessId } from "@/proto";
 import {
     findSpawnIn,
-    formatElapsed,
     LiveTasks,
     spawnResult,
     SUBAGENT_STATE,
@@ -87,9 +87,10 @@ function threadMessages(
     if (spawn.call.kind !== "subagent") return [];
     const thread = spawn.thread ?? [];
     // A harness that reported nothing of its work still has its result.
+    const result = spawnResult(spawn);
     const parts =
-        !thread.some((p) => p.kind === "text") && spawnResult(spawn)
-            ? [...thread, { kind: "text" as const, id: "result", text: spawnResult(spawn) ?? "" }]
+        result && !thread.some((p) => p.kind === "text")
+            ? [...thread, { kind: "text" as const, id: "result", text: result }]
             : thread;
     return [
         {

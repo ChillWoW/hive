@@ -3,12 +3,20 @@ import { useComposerStore } from "@/composer/store";
 import { platform } from "@/lib/platform";
 import { openFileTab } from "./actions";
 
+/** The folder the open chat works in, if a chat is open. */
+const chatFolder = ({ chats, activeChatId }: ReturnType<typeof useChatsStore.getState>) => {
+    const chat = activeChatId ? chats.find((c) => c.id === activeChatId) : undefined;
+    return chat ? workDir(chat) : undefined;
+};
+
 /** The folder the open chat works in, or the new-chat view's; null for neither. */
+export function activeFolder(): string | null {
+    return chatFolder(useChatsStore.getState()) ?? useComposerStore.getState().newChat.cwd ?? null;
+}
+
+/** `activeFolder`, kept up to date. */
 export function useActiveFolder() {
-    const chatDir = useChatsStore((s) => {
-        const chat = s.activeChatId ? s.chats.find((c) => c.id === s.activeChatId) : undefined;
-        return chat ? workDir(chat) : undefined;
-    });
+    const chatDir = useChatsStore(chatFolder);
     const newChatDir = useComposerStore((s) => s.newChat.cwd ?? null);
     return chatDir ?? newChatDir;
 }

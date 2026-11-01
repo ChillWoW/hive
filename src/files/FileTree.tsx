@@ -9,11 +9,13 @@ import {
 import type { DirectoryEntry } from "@/proto";
 import { cn } from "@/lib/cn";
 import { openFileTab } from "@/rightbar/actions";
-import { ContextMenu, FileIcon } from "@/ui";
+import { errorMessage } from "@/lib/errors";
+import { ContextMenu, FileIcon, useInlineRename } from "@/ui";
 import { addEntryToChat, copyEntryPath, renameTreeEntry } from "./actions";
 import { DeleteEntryDialog, type DeleteTarget } from "./DeleteEntryDialog";
 import { useFilesPanelStore } from "./panel";
-import { dirKey, loadDir, nameOf, useTreeStore, type DirListing } from "./tree";
+import { baseName } from "@/lib/paths";
+import { dirKey, loadDir, useTreeStore, type DirListing } from "./tree";
 
 // Tree metrics.
 const ROW_HEIGHT = 27;
@@ -107,6 +109,9 @@ export function FileTree({ cwd, all }: { cwd: string; all: boolean }) {
         clearReveal();
     }, [reveal, rows, clearReveal]);
 
+    const rowOf = (path: string) =>
+        list.current?.querySelector<HTMLElement>(`[data-path="${CSS.escape(path)}"]`);
+
     const entryAt = (target: EventTarget) => {
         const path = (target as Element).closest?.("[data-path]")?.getAttribute("data-path");
         return rows.find(
@@ -165,11 +170,7 @@ export function FileTree({ cwd, all }: { cwd: string; all: boolean }) {
                                         if (!refocus) return;
                                         // Back on its row, for the keyboard.
                                         requestAnimationFrame(() =>
-                                            list.current
-                                                ?.querySelector<HTMLElement>(
-                                                    `[data-path="${CSS.escape(path ?? row.entry.path)}"]`
-                                                )
-                                                ?.focus()
+                                            rowOf(path ?? row.entry.path)?.focus()
                                         );
                                     }}
                                 />
@@ -271,29 +272,21 @@ function RenameField({
     onDone: (renamedTo: string | null, refocus: boolean) => void;
 }) {
     const { entry, depth, expanded } = row;
-    const name = nameOf(entry.path);
-    const input = useRef<HTMLInputElement>(null);
+    const name = baseName(entry.path);
     const [error, setError] = useState<string | null>(null);
     const [busy, setBusy] = useState(false);
-    const done = useRef(false);
+    const rename = useInlineRename({
+        select: (field) => field.setSelectionRange(0, stemEnd(name, entry.dir)),
+        onEnter: () => void submit(),
+        onEscape: () => finish(null),
+        onBlur: () => !busy && finish(null, false)
+    });
 
-    useEffect(() => {
-        // After the menu's own focus handling settles.
-        const frame = requestAnimationFrame(() => {
-            input.current?.focus();
-            input.current?.setSelectionRange(0, stemEnd(name, entry.dir));
-        });
-        return () => cancelAnimationFrame(frame);
-    }, [name, entry.dir]);
-
-    const finish = (to: string | null, refocus = true) => {
-        if (done.current) return;
-        done.current = true;
-        onDone(to, refocus);
-    };
+    const finish = (to: string | null, refocus = true) =>
+        rename.finish(() => onDone(to, refocus));
 
     const submit = async () => {
-        const next = input.current?.value.trim() ?? "";
+        const next = rename.value();
         if (busy) return;
         if (!next || next === name) return finish(null);
         setBusy(true);
@@ -301,9 +294,9 @@ function RenameField({
         try {
             finish(await renameTreeEntry(cwd, entry.path, next));
         } catch (e) {
-            setError(e instanceof Error ? e.message : String(e));
+            setError(errorMessage(e));
             setBusy(false);
-            input.current?.focus();
+            rename.input.current?.focus();
         }
     };
 
@@ -315,7 +308,7 @@ function RenameField({
             <span className="size-3.5 shrink-0" />
             <FileIcon name={name} folder={entry.dir} open={expanded} className="size-3.5" />
             <input
-                ref={input}
+                {...rename.inputProps}
                 defaultValue={name}
                 aria-label={`New name for ${name}`}
                 aria-invalid={!!error}
@@ -325,10 +318,8 @@ function RenameField({
                 onChange={() => setError(null)}
                 onKeyDown={(event) => {
                     event.stopPropagation();
-                    if (event.key === "Enter") void submit();
-                    else if (event.key === "Escape") finish(null);
+                    rename.inputProps.onKeyDown(event);
                 }}
-                onBlur={() => !busy && finish(null, false)}
                 className={cn(
                     "h-[23px] min-w-0 flex-1 rounded-sm border bg-white/[0.035] px-1 text-[11.5px] text-dark-50 outline-none",
                     error ? "border-danger" : "border-primary-500"
@@ -359,7 +350,7 @@ function TreeRow({
     onKeyDown: (event: KeyboardEvent<HTMLButtonElement>) => void;
 }) {
     const { entry, depth, expanded } = row;
-    const name = nameOf(entry.path);
+    const name = baseName(entry.path);
     return (
         <button
             type="button"

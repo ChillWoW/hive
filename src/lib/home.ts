@@ -5,7 +5,7 @@ import { isTauri, platform } from "./platform";
 let home: Promise<string | null> | null = null;
 
 /** The user's home folder, asked once; null under plain `bun run dev`. */
-export function getHomeDir(): Promise<string | null> {
+function getHomeDir(): Promise<string | null> {
     home ??= isTauri
         ? homeDir().then((dir) => dir.replace(/[/\\]+$/, ""), () => null)
         : Promise.resolve(null);

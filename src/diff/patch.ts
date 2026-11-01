@@ -3,7 +3,7 @@
  * truncated hunk keeps what parsed.
  */
 
-export type LineKind = "context" | "add" | "del" | "meta";
+type LineKind = "context" | "add" | "del" | "meta";
 
 export type PatchLine = {
     kind: LineKind;
@@ -14,7 +14,7 @@ export type PatchLine = {
 
 export type Hunk = { header: string; lines: PatchLine[] };
 
-export type FileStatus = "added" | "deleted" | "modified" | "renamed";
+type FileStatus = "added" | "deleted" | "modified" | "renamed";
 
 export type FileDiff = {
     /** The path after the change, relative to the checkout's root. */
@@ -181,7 +181,7 @@ export function fileNotices(file: FileDiff): string[] {
 }
 
 /** One split row: indices into a hunk's lines for the old and the new column. */
-export type LinePair = [number | undefined, number | undefined];
+type LinePair = [number | undefined, number | undefined];
 
 /**
  * Pairs a hunk's lines into split rows: context sits
@@ -241,7 +241,7 @@ export function splitPairs(lines: PatchLine[]): LinePair[] {
     return pairs;
 }
 
-export type DiffTotals = { files: number; additions: number; deletions: number };
+type DiffTotals = { files: number; additions: number; deletions: number };
 
 export function totals(files: FileDiff[]): DiffTotals {
     let additions = 0;

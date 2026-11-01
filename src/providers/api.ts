@@ -1,4 +1,3 @@
-import { invoke } from "@tauri-apps/api/core";
 import type {
     HarnessId,
     ProviderStatus,
@@ -6,15 +5,13 @@ import type {
     SignInMethod,
     SignInStarted
 } from "@/proto";
-import { isTauri } from "@/lib/platform";
+import { backend } from "@/lib/backend";
 
 /**
  * Transport for Settings › Providers (`src-tauri/src/providers.rs`). Under a
  * plain `bun run dev` there's no backend: statuses are made up so the page
  * renders, and every action rejects.
  */
-
-const NO_BACKEND = "Needs the Hive app; there's no backend under `bun run dev`.";
 
 function browserStatus(harness: HarnessId): ProviderStatus {
     if (harness === "codex") {
@@ -59,30 +56,21 @@ function browserUsage(harness: HarnessId): ProviderUsage | null {
     };
 }
 
-const reject = () => Promise.reject(new Error(NO_BACKEND));
-
 export const providersApi = {
     status: (harness: HarnessId): Promise<ProviderStatus> =>
-        isTauri
-            ? invoke("provider_status", { harness })
-            : Promise.resolve(browserStatus(harness)),
+        backend("provider_status", { harness }, () => browserStatus(harness)),
     /** The signed-in account's plan usage; null when there's none to show. */
     usage: (harness: HarnessId): Promise<ProviderUsage | null> =>
-        isTauri
-            ? invoke("provider_usage", { harness })
-            : Promise.resolve(browserUsage(harness)),
-    install: (harness: HarnessId): Promise<void> =>
-        isTauri ? invoke("provider_install", { harness }) : reject(),
-    update: (harness: HarnessId): Promise<void> =>
-        isTauri ? invoke("provider_update", { harness }) : reject(),
-    signOut: (harness: HarnessId): Promise<void> =>
-        isTauri ? invoke("provider_sign_out", { harness }) : reject(),
+        backend("provider_usage", { harness }, () => browserUsage(harness)),
+    install: (harness: HarnessId): Promise<void> => backend("provider_install", { harness }),
+    update: (harness: HarnessId): Promise<void> => backend("provider_update", { harness }),
+    signOut: (harness: HarnessId): Promise<void> => backend("provider_sign_out", { harness }),
     signIn: (harness: HarnessId, method: SignInMethod): Promise<SignInStarted> =>
-        isTauri ? invoke("provider_sign_in", { harness, method }) : reject(),
+        backend("provider_sign_in", { harness, method }),
     finishSignIn: (loginId: string, code: string): Promise<void> =>
-        isTauri ? invoke("provider_finish_sign_in", { loginId, code }) : reject(),
+        backend("provider_finish_sign_in", { loginId, code }),
     cancelSignIn: (loginId: string): Promise<void> =>
-        isTauri ? invoke("provider_cancel_sign_in", { loginId }) : Promise.resolve()
+        backend("provider_cancel_sign_in", { loginId }, () => undefined)
 };
 
 /** npm packages that publish each CLI, for the newest-release check. */

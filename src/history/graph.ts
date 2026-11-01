@@ -7,7 +7,7 @@ import type { GitHistoryCommit, GitHistoryRef } from "@/proto";
  * lanes passing through, lanes ending in its node, and lanes leaving it.
  */
 
-export type SegmentShape = "through" | "incoming" | "outgoing";
+type SegmentShape = "through" | "incoming" | "outgoing";
 
 export type GraphSegment = { from: number; to: number; color: number; shape: SegmentShape };
 
@@ -20,7 +20,7 @@ export type GraphRow = {
     isHead: boolean;
 };
 
-export type GraphLayout = { rows: GraphRow[]; laneCount: number };
+type GraphLayout = { rows: GraphRow[]; laneCount: number };
 
 type Lane = { id: number; color: number; target: string };
 

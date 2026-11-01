@@ -14,7 +14,8 @@ import {
     chipTriggerClassName,
     sideMenuClassName,
     sideMenuItemClassName
-} from "@/composer/chip";
+} from "@/ui/chip";
+import { copyText } from "@/lib/clipboard";
 import { cn } from "@/lib/cn";
 import { isTauri, REVEAL_LABEL } from "@/lib/platform";
 import type { Chat } from "@/proto";
@@ -30,8 +31,6 @@ const ICONS: Record<Workspace, ReactNode> = {
     local: <LaptopIcon className="size-3.5 shrink-0" />,
     worktree: <GitForkIcon className="size-3.5 shrink-0" />
 };
-
-const copy = (text: string) => void navigator.clipboard.writeText(text).catch(() => {});
 
 /**
  * Where a new chat in `cwd` works, as a chip after the folder chip: the
@@ -227,11 +226,17 @@ export function WorkspaceChip({ chat }: { chat: Chat }) {
                     </span>
                 </div>
                 <Menu.Separator />
-                <Menu.Item onClick={() => copy(worktree.path)} className={sideMenuItemClassName}>
+                <Menu.Item
+                    onClick={() => void copyText(worktree.path)}
+                    className={sideMenuItemClassName}
+                >
                     <CopyIcon className="size-3.5" />
                     Copy path
                 </Menu.Item>
-                <Menu.Item onClick={() => copy(worktree.branch)} className={sideMenuItemClassName}>
+                <Menu.Item
+                    onClick={() => void copyText(worktree.branch)}
+                    className={sideMenuItemClassName}
+                >
                     <CopyIcon className="size-3.5" />
                     Copy branch name
                 </Menu.Item>

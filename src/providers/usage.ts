@@ -1,6 +1,9 @@
 import { useEffect, useRef } from "react";
 import { create } from "zustand";
-import { useChatsStore } from "@/chats";
+import { isBusy, useChatsStore } from "@/chats";
+import { errorMessage } from "@/lib/errors";
+import { singleFlight } from "@/lib/singleFlight";
+import { onWindowFocus } from "@/lib/windowFocus";
 import type { HarnessId, ProviderUsage, UsageWindow } from "@/proto";
 import { providersApi } from "./api";
 
@@ -21,12 +24,12 @@ export type UsageEntry = {
 
 type UsageState = { entries: Partial<Record<HarnessId, UsageEntry>> };
 
-export const useUsageStore = create<UsageState>()(() => ({ entries: {} }));
+const useProviderUsageStore = create<UsageState>()(() => ({ entries: {} }));
 
 const EMPTY: UsageEntry = { loading: false };
 
 function patch(harness: HarnessId, next: Partial<UsageEntry>) {
-    useUsageStore.setState((s) => ({
+    useProviderUsageStore.setState((s) => ({
         entries: { ...s.entries, [harness]: { ...(s.entries[harness] ?? EMPTY), ...next } }
     }));
 }
@@ -36,7 +39,7 @@ const FORCED_MIN_INTERVAL = 30_000;
 /** While a composer is up: usage moves as turns run. */
 const POLL_INTERVAL = 5 * 60_000;
 
-const reads = new Map<HarnessId, Promise<void>>();
+const reads = singleFlight<HarnessId>();
 /** When the last read started, failed or not, for the spacing. */
 const lastTried = new Map<HarnessId, number>();
 
@@ -44,27 +47,21 @@ export function refreshUsage(
     harness: HarnessId,
     { force = false }: { force?: boolean } = {}
 ): Promise<void> {
-    const running = reads.get(harness);
-    if (running) return running;
-    const since = Date.now() - (lastTried.get(harness) ?? 0);
-    if (since < (force ? FORCED_MIN_INTERVAL : MIN_INTERVAL)) return Promise.resolve();
-    lastTried.set(harness, Date.now());
-
-    const read = (async () => {
+    return reads(harness, async () => {
+        const since = Date.now() - (lastTried.get(harness) ?? 0);
+        if (since < (force ? FORCED_MIN_INTERVAL : MIN_INTERVAL)) return;
+        lastTried.set(harness, Date.now());
         patch(harness, { loading: true });
         try {
             const usage = await providersApi.usage(harness);
             patch(harness, { usage, error: undefined, fetchedAt: Date.now() });
         } catch (error) {
             console.warn("[providers] usage failed", harness, error);
-            patch(harness, { error: error instanceof Error ? error.message : String(error) });
+            patch(harness, { error: errorMessage(error) });
         } finally {
             patch(harness, { loading: false });
-            reads.delete(harness);
         }
-    })();
-    reads.set(harness, read);
-    return read;
+    });
 }
 
 /** A chat on `harness` is mid-turn. */
@@ -72,11 +69,9 @@ function useHarnessBusy(harness: HarnessId | undefined) {
     return useChatsStore(
         (s) =>
             !!harness &&
-            s.chats.some((c) => {
-                if (c.config.harness !== harness) return false;
-                const status = s.sessions[c.id]?.status;
-                return status === "working" || status === "awaitingInput";
-            })
+            s.chats.some(
+                (c) => c.config.harness === harness && isBusy(s.sessions[c.id]?.status)
+            )
     );
 }
 
@@ -85,7 +80,7 @@ function useHarnessBusy(harness: HarnessId | undefined) {
  * window focus and when a turn on that harness ends.
  */
 export function useProviderUsage(harness: HarnessId | undefined): UsageEntry {
-    const entry = useUsageStore((s) => (harness ? s.entries[harness] : undefined)) ?? EMPTY;
+    const entry = useProviderUsageStore((s) => (harness ? s.entries[harness] : undefined)) ?? EMPTY;
     const busy = useHarnessBusy(harness);
     const wasBusy = useRef(busy);
 
@@ -99,20 +94,23 @@ export function useProviderUsage(harness: HarnessId | undefined): UsageEntry {
         if (!harness) return;
         const refresh = () => void refreshUsage(harness);
         const timer = window.setInterval(refresh, POLL_INTERVAL);
-        window.addEventListener("focus", refresh);
+        const offFocus = onWindowFocus(refresh);
         return () => {
             window.clearInterval(timer);
-            window.removeEventListener("focus", refresh);
+            offFocus();
         };
     }, [harness]);
 
     return entry;
 }
 
+/** A window's share used, clamped to 0–1. */
+const usedOf = (window: UsageWindow) => Math.min(Math.max(window.used, 0), 1);
+
 /** The binding limit: the most-used window. */
 export function mostUsed(windows: UsageWindow[]): number | undefined {
     if (windows.length === 0) return undefined;
-    return Math.max(...windows.map((w) => Math.min(Math.max(w.used, 0), 1)));
+    return Math.max(...windows.map(usedOf));
 }
 
 export type UsageLimitWarning = {
@@ -136,7 +134,7 @@ export function limitWarning(
     for (const window of windows) {
         const resetsAt = window.resetsAt ? Date.parse(window.resetsAt) : Number.NaN;
         if (Number.isFinite(resetsAt) && resetsAt <= now) continue;
-        const used = Math.min(Math.max(window.used, 0), 1);
+        const used = usedOf(window);
         const level = used >= 1 ? "reached" : usageLevel(used);
         if (level === "normal" || (worst && worst.used >= used)) continue;
         worst = { window, used, level };

@@ -1,5 +1,6 @@
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { cn } from "@/lib/cn";
+import { useResizeObserver } from "@/lib/useResizeObserver";
 
 /** How long a swap takes; the same feel as the composer's own morph. */
 const MORPH_MS = 220;
@@ -39,18 +40,9 @@ export function MorphHeight({
 
     // The frame's height is written straight from the content's, before
     // paint, so it has something to transition from and never lags a frame.
-    useLayoutEffect(() => {
-        const frame = frameRef.current;
-        const content = contentRef.current;
-        if (!frame || !content) return;
-        const sync = () => {
-            frame.style.height = `${content.offsetHeight}px`;
-        };
-        sync();
-        const observer = new ResizeObserver(sync);
-        observer.observe(content);
-        return () => observer.disconnect();
-    }, []);
+    useResizeObserver(contentRef, (content) => {
+        if (frameRef.current) frameRef.current.style.height = `${content.offsetHeight}px`;
+    });
 
     return (
         <div

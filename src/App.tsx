@@ -1,8 +1,7 @@
 import { useState, type CSSProperties } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { ChatView } from "@/chat/ChatView";
-import { useChat, useChatsRuntime, useChatsStore } from "@/chats";
-import { folderName } from "@/composer";
+import { chatTitle, useChat, useChatsRuntime, useChatsStore } from "@/chats";
 import { useHtmlCheckRuntime } from "@/htmlpage";
 import { useKeybindingsRuntime } from "@/keybindings";
 import { RightPanels, Sidebar, TopBar, WINDOW_CONTROLS_WIDTH } from "@/layout";
@@ -28,7 +27,7 @@ export function App() {
     // A maximized right sidebar covers the conversation's column.
     const maximized = usePanelLayout().maximized;
     const chat = useChat(useChatsStore((s) => s.activeChatId));
-    const title = chat ? (chat.title ?? folderName(chat.cwd)) : undefined;
+    const title = chat ? chatTitle(chat) : undefined;
     // The subagent threads open in it, outermost first, after the chat's title.
     const subagents = useChatsStore(
         useShallow((s) => {

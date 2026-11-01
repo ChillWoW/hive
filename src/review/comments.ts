@@ -90,7 +90,7 @@ const norm = (path: string) => path.replace(/\\/g, "/").replace(/\/+$/, "");
  * `path` (relative to `root`) as the agent in `folder` should read it:
  * relative to the folder when it's inside it, else in full.
  */
-export function promptPath(folder: string, root: string, path: string): string {
+function promptPath(folder: string, root: string, path: string): string {
     if (!root) return path;
     const r = norm(root);
     const f = norm(folder);
@@ -112,7 +112,7 @@ export function promptPath(folder: string, root: string, path: string): string {
 const TOKEN = /([\w-]+)/g;
 
 /** A comment's place in a draft's text. */
-export const commentToken = (id: string) => `${id}`;
+const commentToken = (id: string) => `${id}`;
 
 /** The comment tokens in a draft's text, in order. */
 export function commentTokens(text: string): { id: string; from: number; to: number }[] {
@@ -142,6 +142,15 @@ export function withoutCommentTokens(
 
 const sentRef = (n: number) => `[comment ${n}]`;
 const SENT_REF = /\[comment (\d+)\]/g;
+
+/** The `[comment N]`s in a sent prompt's text, in order. */
+export function sentCommentRefs(text: string): { n: string; from: number; to: number }[] {
+    return [...text.matchAll(SENT_REF)].map((m) => ({
+        n: m[1]!,
+        from: m.index,
+        to: m.index + m[0].length
+    }));
+}
 
 const OPEN = "<diff_comments>";
 const CLOSE = "</diff_comments>";
@@ -267,7 +276,7 @@ function parseLines(label: string): [LineRef, LineRef] | null {
  * back to edit). Their paths are already the agent's, so they keep no root
  * and don't show in the diff.
  */
-export function restoredComments(sent: SentDiffComment[]): DiffComment[] {
+function restoredComments(sent: SentDiffComment[]): DiffComment[] {
     // One per sent comment, in order (`restoreDraft` pairs them up).
     return sent.map((c) => {
         const [start, end] = parseLines(c.lines) ?? [

@@ -1,6 +1,8 @@
 import { useEffect } from "react";
 import { create } from "zustand";
 import { useFolderWatch } from "@/lib/folderWatch";
+import { singleFlight } from "@/lib/singleFlight";
+import { onWindowFocus } from "@/lib/windowFocus";
 import type { WorkspaceEntry } from "@/proto";
 import { listFiles } from "./api";
 
@@ -19,39 +21,25 @@ const useFilesStore = create<{ listings: Record<string, Listing> }>()(() => ({
 
 const keyOf = (cwd: string, all: boolean) => (all ? `all\0${cwd}` : cwd);
 
-const inflight = new Map<string, Promise<void>>();
-/** Forced while a listing ran: it may predate the change, so list once more. */
-const again = new Map<string, Promise<void>>();
+const listings = singleFlight<string>();
 
 /** Re-lists `cwd` unless its last listing is fresh (or `force`). */
 export function refreshFiles(cwd: string, all = false, force = false): Promise<void> {
     const key = keyOf(cwd, all);
     const last = useFilesStore.getState().listings[key];
     if (!force && last && Date.now() - last.at < FRESH_MS) return Promise.resolve();
-    const running = inflight.get(key);
-    if (running) {
-        if (!force) return running;
-        let next = again.get(key);
-        if (!next) {
-            next = running.then(() => {
-                again.delete(key);
-                return refreshFiles(cwd, all, true);
-            });
-            again.set(key, next);
-        }
-        return next;
-    }
-    const pending = listFiles(cwd, all)
-        .then(
-            (entries) =>
-                useFilesStore.setState((s) => ({
-                    listings: { ...s.listings, [key]: { at: Date.now(), entries } }
-                })),
-            (error: unknown) => console.warn("[files] listing failed", error)
-        )
-        .finally(() => inflight.delete(key));
-    inflight.set(key, pending);
-    return pending;
+    return listings(
+        key,
+        () =>
+            listFiles(cwd, all).then(
+                (entries) =>
+                    useFilesStore.setState((s) => ({
+                        listings: { ...s.listings, [key]: { at: Date.now(), entries } }
+                    })),
+                (error: unknown) => console.warn("[files] listing failed", error)
+            ),
+        force
+    );
 }
 
 /**
@@ -74,8 +62,7 @@ export function useWorkspaceFiles(
         if (!cwd || !active) return;
         const refresh = () => void refreshFiles(cwd, all);
         refresh();
-        window.addEventListener("focus", refresh);
-        return () => window.removeEventListener("focus", refresh);
+        return onWindowFocus(refresh);
     }, [cwd, active, all]);
 
     useFolderWatch(active ? cwd : null, (change) => {

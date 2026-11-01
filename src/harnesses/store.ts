@@ -1,5 +1,4 @@
 import { useMemo } from "react";
-import { invoke } from "@tauri-apps/api/core";
 import { create } from "zustand";
 import type {
     AccessMode,
@@ -8,9 +7,11 @@ import type {
     HarnessId,
     Model,
     ProvidersSettings,
-    ReasoningLevel
+    ReasoningLevel,
+    SlashCommand
 } from "@/proto";
-import { isTauri } from "@/lib/platform";
+import { backend } from "@/lib/backend";
+import { singleFlight } from "@/lib/singleFlight";
 import { useSettingsStore } from "@/settings/store";
 import { ACCESS_MODES } from "./labels";
 
@@ -19,6 +20,12 @@ import { ACCESS_MODES } from "./labels";
  * slash commands, capabilities. Fetched at launch and again
  * whenever a picker opens, since `installed` can change while Hive runs.
  */
+
+const COMPACT: SlashCommand = {
+    name: "compact",
+    description: "Summarize the conversation to free up context",
+    kind: "command"
+};
 
 /** Under a plain `bun run dev` there's no engine; the pickers still need something to show. */
 const BROWSER_CATALOGS: HarnessCatalog[] = [
@@ -60,14 +67,8 @@ const BROWSER_CATALOGS: HarnessCatalog[] = [
                 : []
         })),
         defaultModel: "claude-opus-5-5",
-        commands: [
-            {
-                name: "compact",
-                description: "Summarize the conversation to free up context",
-                kind: "command"
-            }
-        ],
-        accessModes: ["supervised", "auto-accept-edits", "full-access"],
+        commands: [COMPACT],
+        accessModes: ACCESS_MODES,
         capabilities: { steering: false, interrupt: true, attachments: false, plan: true }
     },
     {
@@ -96,11 +97,7 @@ const BROWSER_CATALOGS: HarnessCatalog[] = [
                 inputHint: "objective, or pause, resume, clear",
                 kind: "command"
             },
-            {
-                name: "compact",
-                description: "Summarize the conversation to free up context",
-                kind: "command"
-            },
+            COMPACT,
             {
                 name: "review",
                 description: "Review uncommitted changes, or what you describe",
@@ -114,7 +111,7 @@ const BROWSER_CATALOGS: HarnessCatalog[] = [
                 kind: "command"
             }
         ],
-        accessModes: ["supervised", "auto-accept-edits", "full-access"],
+        accessModes: ACCESS_MODES,
         capabilities: { steering: false, interrupt: true, attachments: true, plan: true }
     },
     {
@@ -135,14 +132,8 @@ const BROWSER_CATALOGS: HarnessCatalog[] = [
             options: []
         })),
         defaultModel: "opencode/big-pickle",
-        commands: [
-            {
-                name: "compact",
-                description: "Summarize the conversation to free up context",
-                kind: "command"
-            }
-        ],
-        accessModes: ["supervised", "auto-accept-edits", "full-access"],
+        commands: [COMPACT],
+        accessModes: ACCESS_MODES,
         capabilities: { steering: false, interrupt: true, attachments: true, plan: true }
     }
 ];
@@ -158,26 +149,19 @@ export const useHarnessesStore = create<HarnessesState>()(() => ({
     loaded: false
 }));
 
-let inflight: Promise<void> | null = null;
+const listing = singleFlight<"catalogs">();
 
 /** Fetches the catalogs; concurrent calls share one request. */
 export function refreshCatalogs(): Promise<void> {
-    inflight ??= (
-        isTauri
-            ? invoke<HarnessCatalog[]>("list_harnesses")
-            : Promise.resolve(BROWSER_CATALOGS)
-    )
-        .then(
+    return listing("catalogs", () =>
+        backend<HarnessCatalog[]>("list_harnesses", undefined, () => BROWSER_CATALOGS).then(
             (catalogs) => useHarnessesStore.setState({ catalogs, loaded: true }),
             (error: unknown) => {
                 console.warn("[harnesses] listing failed", error);
                 useHarnessesStore.setState({ loaded: true });
             }
         )
-        .finally(() => {
-            inflight = null;
-        });
-    return inflight;
+    );
 }
 
 /** Mock plays a scripted turn; it's for building the UI, not for users. */
@@ -229,7 +213,7 @@ export function resolveModel(
 }
 
 /** A model's effort when none is picked: High, else Medium, else its first level. */
-export function defaultReasoning(model: Model | undefined): ReasoningLevel | undefined {
+function defaultReasoning(model: Model | undefined): ReasoningLevel | undefined {
     const levels = model?.reasoningLevels ?? [];
     return levels.find((l) => l === "high") ?? levels.find((l) => l === "medium") ?? levels[0];
 }
@@ -260,7 +244,7 @@ function fitOptions(
 }
 
 /** Claude's fast mode, on the models whose catalog entry offers it. */
-export const FAST_MODE = "fastMode";
+const FAST_MODE = "fastMode";
 
 /** Whether `model` offers fast mode. */
 export function hasFastMode(model: Model | undefined): boolean {

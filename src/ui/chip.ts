@@ -35,23 +35,15 @@ export const popupClassName = cn(
     "data-[ending-style]:scale-95 data-[ending-style]:opacity-0"
 );
 
-/** A list row: icon or blank, label, check. */
-export const rowClassName = cn(
-    "grid cursor-pointer grid-cols-[0.875rem_1fr_1rem] items-center gap-x-2 rounded-sm px-2 py-1.5 outline-none select-none",
-    "text-xs text-dark-100 data-[highlighted]:bg-dark-700",
-    "data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
-);
-
 export const footerButtonClassName = cn(
     "flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-xs text-dark-100 outline-none select-none",
     "hover:bg-dark-700 disabled:pointer-events-none disabled:opacity-50"
 );
 
-/**
- * The card pickers (folder, branch): the dropdown with an inset, rows with
- * their detail shown while highlighted, a footer, menus beside a row.
+/*
+ * The card pickers (folder, branch): the dropdown (`popupClassName`), rows
+ * with their detail shown while highlighted, a footer, menus beside a row.
  */
-export const cardClassName = popupClassName;
 
 /** The search on top of a card, edge to edge. */
 export const cardSearchClassName =

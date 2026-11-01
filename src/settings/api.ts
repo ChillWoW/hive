@@ -1,6 +1,6 @@
-import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { DEFAULT_SETTINGS, type Settings } from "@/proto";
+import { backend } from "@/lib/backend";
 import { isTauri } from "@/lib/platform";
 
 /**
@@ -62,41 +62,27 @@ const browser = {
 };
 
 export const settingsApi = {
-    get: (): Promise<Settings> =>
-        isTauri
-            ? invoke<Settings>("settings_get")
-            : Promise.resolve(browser.read()),
+    get: (): Promise<Settings> => backend("settings_get", undefined, browser.read),
 
     /** Returns what was stored, which may differ from the patch (clamping). */
     update: (patch: SettingsPatch): Promise<Settings> =>
-        isTauri
-            ? invoke<Settings>("settings_update", { patch })
-            : Promise.resolve(
-                  browser.write(mergeSettings(browser.read(), patch))
-              ),
+        backend("settings_update", { patch }, () =>
+            browser.write(mergeSettings(browser.read(), patch))
+        ),
 
     reset: (): Promise<Settings> =>
-        isTauri
-            ? invoke<Settings>("settings_reset")
-            : Promise.resolve(browser.write(DEFAULT_SETTINGS)),
+        backend("settings_reset", undefined, () => browser.write(DEFAULT_SETTINGS)),
 
     /** Picks up hand edits to settings.json. */
-    reload: (): Promise<Settings> =>
-        isTauri
-            ? invoke<Settings>("settings_reload")
-            : Promise.resolve(browser.read()),
+    reload: (): Promise<Settings> => backend("settings_reload", undefined, browser.read),
 
-    path: (): Promise<string | null> =>
-        isTauri ? invoke<string>("settings_path") : Promise.resolve(null),
+    path: (): Promise<string | null> => backend("settings_path", undefined, () => null),
 
-    reveal: (): Promise<void> =>
-        isTauri ? invoke("settings_reveal") : Promise.resolve(),
+    reveal: (): Promise<void> => backend("settings_reveal", undefined, () => undefined),
 
     /** Where worktrees go while `worktrees.location` is empty. */
     defaultWorktreesDir: (): Promise<string> =>
-        isTauri
-            ? invoke<string>("worktrees_default_dir")
-            : Promise.resolve("~/.hive/worktrees"),
+        backend("worktrees_default_dir", undefined, () => "~/.hive/worktrees"),
 
     /** Every change from any window, including this one. */
     onChanged: async (

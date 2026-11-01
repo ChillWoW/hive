@@ -1,7 +1,6 @@
 import type { CSSProperties } from "react";
-import { LanguageDescription } from "@codemirror/language";
-import { languages } from "@codemirror/language-data";
 import { highlightTree, tagHighlighter } from "@lezer/highlight";
+import { languageOf } from "@/editor/language";
 import { HIGHLIGHT_SPECS } from "@/editor/theme";
 import type { FileDiff, PatchLine } from "./patch";
 
@@ -49,10 +48,8 @@ function highlightDoc(path: string, lines: string[]): Promise<Span[][] | null> {
 }
 
 async function run(path: string, lines: string[]): Promise<Span[][] | null> {
-    const name = path.slice(path.lastIndexOf("/") + 1);
-    const description = LanguageDescription.matchFilename(languages, name);
-    if (!description) return null;
-    const support = description.support ?? (await description.load());
+    const support = await languageOf(path);
+    if (!support) return null;
     const text = lines.join("\n");
     const starts: number[] = [];
     let pos = 0;

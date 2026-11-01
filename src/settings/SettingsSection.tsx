@@ -1,8 +1,13 @@
 import type { ReactNode } from "react";
 import { ArrowCounterClockwiseIcon } from "@phosphor-icons/react";
 import { cn } from "@/lib/cn";
+import { Switch } from "@/ui";
 import { matchesQuery, splitMatches, useSettingsQuery } from "./search";
 import type { SettingHandle } from "./store";
+
+/** The hairline between a card's rows, inset to the content. */
+export const ROW_DIVIDER =
+    "not-first:before:absolute not-first:before:inset-x-4 not-first:before:top-0 not-first:before:h-px not-first:before:bg-dark-600";
 
 /** Marks each query word inside `text`. */
 function Highlight({ text }: { text: string }) {
@@ -34,22 +39,15 @@ function Highlight({ text }: { text: string }) {
 export function SettingsSection({
     title,
     action,
-    children,
-    className
+    children
 }: {
     title?: string;
     /** Beside the title, on the right. */
     action?: ReactNode;
     children: ReactNode;
-    className?: string;
 }) {
     return (
-        <section
-            className={cn(
-                "flex flex-col gap-2.5 [&:not(:has([data-setting-row]))]:hidden",
-                className
-            )}
-        >
+        <section className="flex flex-col gap-2.5 [&:not(:has([data-setting-row]))]:hidden">
             {(title || action) && (
                 <div className={cn("flex items-center gap-2 px-1", action && "min-h-6")}>
                     <h3 className="min-w-0 flex-1 text-[13px] font-medium text-dark-100">
@@ -77,8 +75,6 @@ export function SettingRow({
     keywords,
     setting,
     control,
-    stacked,
-    className,
     controlClassName
 }: {
     label: string;
@@ -87,9 +83,6 @@ export function SettingRow({
     keywords?: string;
     setting?: SettingHandle;
     control: ReactNode;
-    /** Puts the control under the label, full width. */
-    stacked?: boolean;
-    className?: string;
     controlClassName?: string;
 }) {
     const query = useSettingsQuery();
@@ -104,11 +97,8 @@ export function SettingRow({
             data-setting-row
             data-modified={modified || undefined}
             className={cn(
-                "relative flex min-h-13 gap-x-8 gap-y-3 px-4 py-3",
-                // Hairline between rows, inset to the content.
-                "not-first:before:absolute not-first:before:inset-x-4 not-first:before:top-0 not-first:before:h-px not-first:before:bg-dark-600",
-                stacked ? "flex-col" : "items-center justify-between",
-                className
+                "relative flex min-h-13 items-center justify-between gap-x-8 px-4 py-3",
+                ROW_DIVIDER
             )}
         >
             <div className="flex min-w-0 flex-col gap-0.5">
@@ -131,16 +121,35 @@ export function SettingRow({
                 )}
             </div>
 
-            <div
-                className={cn(
-                    "flex shrink-0 items-center",
-                    stacked ? "w-full" : "w-48 justify-end",
-                    controlClassName
-                )}
-            >
+            <div className={cn("flex w-48 shrink-0 items-center justify-end", controlClassName)}>
                 {control}
             </div>
         </div>
+    );
+}
+
+/** A `SettingRow` whose control is a switch bound to `setting`. */
+export function SwitchRow({
+    setting,
+    "aria-label": ariaLabel,
+    ...row
+}: Omit<Parameters<typeof SettingRow>[0], "control" | "setting"> & {
+    setting: SettingHandle & { value: boolean; set: (value: boolean) => void };
+    /** The switch's name, when the label alone doesn't say it. */
+    "aria-label"?: string;
+}) {
+    return (
+        <SettingRow
+            {...row}
+            setting={setting}
+            control={
+                <Switch
+                    checked={setting.value}
+                    onCheckedChange={setting.set}
+                    aria-label={ariaLabel ?? row.label}
+                />
+            }
+        />
     );
 }
 

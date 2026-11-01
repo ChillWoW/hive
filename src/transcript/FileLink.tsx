@@ -1,10 +1,9 @@
 import type { ReactNode } from "react";
+import { baseName } from "@/lib/paths";
 import { openFileTab } from "@/rightbar";
 import { FileIcon, Tooltip } from "@/ui";
 import type { FileTarget } from "./filePaths";
-import { LINK_CLASS } from "./WebLink";
-
-const nameOf = (path: string) => path.slice(path.lastIndexOf("/") + 1) || path;
+import { LINK_CLASS, LINK_ICON_CLASS } from "./WebLink";
 
 const lineSuffix = (target: FileTarget) =>
     target.at ? `:${target.at.line}${target.at.column ? `:${target.at.column}` : ""}` : "";
@@ -32,11 +31,8 @@ export function FileLink({ target, children }: { target: FileTarget; children?: 
                         onClick={() => openFileTab(target.cwd, target.path, target.at)}
                         className={LINK_CLASS}
                     >
-                        <FileIcon
-                            name={target.path}
-                            className="mr-1 inline-block size-3.5 translate-y-[-1px] align-middle"
-                        />
-                        {children ?? `${nameOf(target.path)}${lineSuffix(target)}`}
+                        <FileIcon name={target.path} className={LINK_ICON_CLASS} />
+                        {children ?? `${baseName(target.path)}${lineSuffix(target)}`}
                     </button>
                 }
             />

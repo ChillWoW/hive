@@ -10,6 +10,7 @@ import type {
     TaskOutput,
     WorktreeStep
 } from "@/proto";
+import { backend } from "@/lib/backend";
 import { isTauri } from "@/lib/platform";
 
 /**
@@ -42,6 +43,13 @@ function watch<T>(
     );
 }
 
+const offline = () => Promise.reject(new Error(NO_BACKEND));
+
+/** Invokes `command`; rejects under `bun run dev`. */
+function call<T>(command: string, args: Record<string, unknown>): Promise<T> {
+    return backend<T>(command, args, offline);
+}
+
 export const chatsApi = {
     /**
      * With `worktree`, the chat works in a worktree of its own;
@@ -53,7 +61,7 @@ export const chatsApi = {
         worktree?: NewWorktree,
         onProgress?: (step: WorktreeStep) => void
     ): Promise<Chat> => {
-        if (!isTauri) return Promise.reject(new Error(NO_BACKEND));
+        if (!isTauri) return offline();
         const channel = new Channel<WorktreeStep>();
         if (onProgress) channel.onmessage = onProgress;
         return invoke<Chat>("create_chat", {
@@ -66,81 +74,55 @@ export const chatsApi = {
 
     /** A live run picks the new settings up from its next turn. */
     updateConfig: (chatId: string, config: ChatConfig): Promise<Chat> =>
-        isTauri
-            ? invoke<Chat>("update_chat_config", { chatId, config })
-            : Promise.reject(new Error(NO_BACKEND)),
+        call<Chat>("update_chat_config", { chatId, config }),
 
     /** A blank title clears it; the next completed turn names the chat again. */
     rename: (chatId: string, title: string | null): Promise<Chat> =>
-        isTauri
-            ? invoke<Chat>("rename_chat", { chatId, title })
-            : Promise.reject(new Error(NO_BACKEND)),
+        call<Chat>("rename_chat", { chatId, title }),
 
     /** Archiving also unpins. */
     setArchived: (chatId: string, archived: boolean): Promise<Chat> =>
-        isTauri
-            ? invoke<Chat>("set_chat_archived", { chatId, archived })
-            : Promise.reject(new Error(NO_BACKEND)),
+        call<Chat>("set_chat_archived", { chatId, archived }),
 
     /** Pinning also unarchives. */
     setPinned: (chatId: string, pinned: boolean): Promise<Chat> =>
-        isTauri
-            ? invoke<Chat>("set_chat_pinned", { chatId, pinned })
-            : Promise.reject(new Error(NO_BACKEND)),
+        call<Chat>("set_chat_pinned", { chatId, pinned }),
 
     /** Clears the chat's unread dot. */
     markSeen: (chatId: string): Promise<Chat> =>
-        isTauri
-            ? invoke<Chat>("mark_chat_seen", { chatId })
-            : Promise.reject(new Error(NO_BACKEND)),
+        call<Chat>("mark_chat_seen", { chatId }),
 
     /** Deletes the chat with its transcript, stopping its run. */
     remove: (chatId: string): Promise<void> =>
-        isTauri
-            ? invoke<void>("delete_chat", { chatId })
-            : Promise.reject(new Error(NO_BACKEND)),
+        call<void>("delete_chat", { chatId }),
 
     /** Settled, or `pending` for a prompt queued behind the running turn. */
     queueCommand: (chatId: string, payload: CommandPayload): Promise<Command> =>
-        isTauri
-            ? invoke<Command>("queue_command", { chatId, payload })
-            : Promise.reject(new Error(NO_BACKEND)),
+        call<Command>("queue_command", { chatId, payload }),
 
     /** Withdraws a prompt still waiting behind the running turn. */
     cancelQueued: (chatId: string, commandId: string): Promise<Command> =>
-        isTauri
-            ? invoke<Command>("cancel_queued", { chatId, commandId })
-            : Promise.reject(new Error(NO_BACKEND)),
+        call<Command>("cancel_queued", { chatId, commandId }),
 
     /** Puts the listed queued prompts first, in that order. */
     reorderQueue: (chatId: string, commandIds: string[]): Promise<void> =>
-        isTauri
-            ? invoke<void>("reorder_queue", { chatId, commandIds })
-            : Promise.reject(new Error(NO_BACKEND)),
+        call<void>("reorder_queue", { chatId, commandIds }),
 
     /** Runs a queued prompt next, interrupting the running turn if any. */
     sendQueuedNow: (chatId: string, commandId: string): Promise<void> =>
-        isTauri
-            ? invoke<void>("send_queued_now", { chatId, commandId })
-            : Promise.reject(new Error(NO_BACKEND)),
+        call<void>("send_queued_now", { chatId, commandId }),
 
     /** Stops one of the session's background tasks (`Session.background`). */
     stopTask: (chatId: string, taskId: string): Promise<void> =>
-        isTauri
-            ? invoke<void>("stop_background_task", { chatId, taskId })
-            : Promise.reject(new Error(NO_BACKEND)),
+        call<void>("stop_background_task", { chatId, taskId }),
 
     /** Answers a secret card (`Session.secrets`): the value is saved for the agent, null declines. */
     answerSecret: (chatId: string, requestId: string, value: string | null): Promise<void> =>
-        isTauri
-            ? invoke<void>("answer_secret_request", { chatId, requestId, value })
-            : Promise.reject(new Error(NO_BACKEND)),
+        call<void>("answer_secret_request", { chatId, requestId, value }),
 
     /** The end of a background shell's output (its last 8 KiB). */
     taskOutput: (chatId: string, taskId: string): Promise<TaskOutput> =>
-        isTauri
-            ? invoke<TaskOutput>("background_task_output", { chatId, taskId })
-            : Promise.reject(new Error(NO_BACKEND)),
+        call<TaskOutput>("background_task_output", { chatId, taskId }),
 
     /** A snapshot, then every change to the list and live sessions. */
     watchChats: (onUpdate: (update: ChatsUpdate) => void): Promise<Unwatch> => {

@@ -7,6 +7,7 @@ import { tildify, useHomeDir } from "@/lib/home";
 import { Button } from "@/ui";
 import { settingsApi } from "../api";
 import { CopyButton } from "../CopyButton";
+import { useConfirmPress } from "../hooks";
 import { SettingRow, SettingsSection } from "../SettingsSection";
 import { useSettingsStore } from "../store";
 import { UpdatesSection } from "./UpdatesSection";
@@ -61,16 +62,10 @@ export function AboutPage() {
     );
 }
 
-/** Two-step: the first press arms it, a second within a few seconds resets. */
+/** Two-step, so a stray click can't wipe every setting. */
 function ResetRow() {
     const resetAll = useSettingsStore((s) => s.resetAll);
-    const [armed, setArmed] = useState(false);
-
-    useEffect(() => {
-        if (!armed) return;
-        const timer = setTimeout(() => setArmed(false), 4000);
-        return () => clearTimeout(timer);
-    }, [armed]);
+    const { armed, onClick, onBlur } = useConfirmPress(() => void resetAll());
 
     return (
         <SettingRow
@@ -85,12 +80,8 @@ function ResetRow() {
                     leftIcon={
                         <ArrowCounterClockwiseIcon className="size-3.5" />
                     }
-                    onClick={() => {
-                        if (!armed) return setArmed(true);
-                        setArmed(false);
-                        void resetAll();
-                    }}
-                    onBlur={() => setArmed(false)}
+                    onClick={onClick}
+                    onBlur={onBlur}
                 >
                     {armed ? "Click to confirm" : "Reset"}
                 </Button>

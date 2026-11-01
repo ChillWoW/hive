@@ -1,5 +1,6 @@
 import { useContext, useMemo, useState } from "react";
 import { ArrowCounterClockwiseIcon } from "@phosphor-icons/react";
+import { LineCounts } from "@/diff/DiffFiles";
 import { parsePatch, totals } from "@/diff/patch";
 import { RevertTurnDialog, type RevertRequest } from "@/diff/RevertTurnDialog";
 import { useDiffPrefs, useTurnSummary } from "@/diff/store";
@@ -36,8 +37,7 @@ export function TurnChanges({ chatId, messageId }: { chatId: string; messageId: 
                             className="inline-flex h-6 items-center gap-1.5 rounded-sm px-1.5 text-dark-250 transition-colors hover:bg-dark-700 hover:text-dark-50"
                         >
                             {sum.files === 1 ? "1 file" : `${sum.files} files`}
-                            <span className="tabular-nums text-[#34d399]">+{sum.additions}</span>
-                            <span className="tabular-nums text-[#f87171]">−{sum.deletions}</span>
+                            <LineCounts additions={sum.additions} deletions={sum.deletions} />
                         </button>
                     }
                 />

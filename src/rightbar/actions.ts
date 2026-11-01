@@ -1,5 +1,3 @@
-import { useChatsStore, workDir } from "@/chats";
-import { useComposerStore } from "@/composer/store";
 import {
     blockClose,
     dropDoc,
@@ -9,38 +7,49 @@ import {
     useDocsStore,
     type LinePosition
 } from "@/editor";
+import { baseName } from "@/lib/paths";
 import { fitColumns, useLayoutStore } from "@/stores/useLayoutStore";
 import { rememberFile } from "@/palette/store";
 import { createSession, disposeSession } from "@/terminal";
-import { useRightbarStore } from "./store";
-
-const nameOf = (path: string) => path.slice(path.lastIndexOf("/") + 1);
-
-/** The folder the open chat works in, or the new-chat view's folder. */
-export function activeFolder(): string | null {
-    const { chats, activeChatId } = useChatsStore.getState();
-    const chat = activeChatId ? chats.find((c) => c.id === activeChatId) : undefined;
-    return chat ? workDir(chat) : (useComposerStore.getState().newChat.cwd ?? null);
-}
+import { activeFolder } from "./folders";
+import { useRightbarStore, type RightTab, type TabContent } from "./store";
 
 /**
- * Opens `path` of `cwd` in a tab (the one it's already in, if any) and shows
- * the right sidebar; with `at`, the
- * cursor goes to that line.
+ * Shows the first tab `matches` picks, else adds one with `content` (`added`
+ * runs on its id), and shows the right sidebar; the tab's id.
  */
-export function openFileTab(cwd: string, path: string, at?: LinePosition) {
+function showTab(
+    matches: (tab: RightTab) => boolean,
+    content: TabContent,
+    title: string,
+    added?: (id: string) => void
+): string {
     const { tabs, activate, add } = useRightbarStore.getState();
-    const open = tabs.find((t) => t.kind === "file" && t.cwd === cwd && t.path === path);
+    const open = tabs.find(matches);
     let id: string;
     if (open) {
         id = open.id;
         activate(id);
     } else {
-        id = add({ kind: "file", cwd, path }, nameOf(path));
-        void openDoc(id, cwd, path);
+        id = add(content, title);
+        added?.(id);
     }
-    if (at) revealLine(id, at);
     useLayoutStore.getState().show("right");
+    return id;
+}
+
+/**
+ * Opens `path` of `cwd` in a tab (the one it's already in, if any) and shows
+ * the right sidebar; with `at`, the cursor goes to that line.
+ */
+export function openFileTab(cwd: string, path: string, at?: LinePosition) {
+    const id = showTab(
+        (t) => t.kind === "file" && t.cwd === cwd && t.path === path,
+        { kind: "file", cwd, path },
+        baseName(path),
+        (id) => void openDoc(id, cwd, path)
+    );
+    if (at) revealLine(id, at);
     rememberFile(cwd, path);
 }
 
@@ -63,11 +72,7 @@ export function openTerminalTab(cwd: string | null = activeFolder()) {
  * adding it if it isn't open, and shows the right sidebar.
  */
 export function openDiffTab() {
-    const { tabs, activate, add } = useRightbarStore.getState();
-    const open = tabs.find((t) => t.kind === "diff");
-    if (open) activate(open.id);
-    else add({ kind: "diff" }, "Diff");
-    useLayoutStore.getState().show("right");
+    showTab((t) => t.kind === "diff", { kind: "diff" }, "Diff");
 }
 
 /**
@@ -75,26 +80,18 @@ export function openDiffTab() {
  * adding it if it isn't open, and shows the right sidebar.
  */
 export function openHistoryTab() {
-    const { tabs, activate, add } = useRightbarStore.getState();
-    const open = tabs.find((t) => t.kind === "history");
-    if (open) activate(open.id);
-    else add({ kind: "history" }, "History");
-    useLayoutStore.getState().show("right");
+    showTab((t) => t.kind === "history", { kind: "history" }, "History");
 }
 
 /** Opens what commit `sha` of `cwd` changed in a tab (the one it's already in, if any). */
 export function openCommitTab(cwd: string, commit: { sha: string; subject: string }) {
-    const { tabs, activate, add } = useRightbarStore.getState();
-    const open = tabs.find((t) => t.kind === "commit" && t.cwd === cwd && t.sha === commit.sha);
-    if (open) activate(open.id);
-    else {
-        const subject = commit.subject.trim();
-        add(
-            { kind: "commit", cwd, sha: commit.sha, subject },
-            subject || commit.sha.slice(0, 7)
-        );
-    }
-    useLayoutStore.getState().show("right");
+    const { sha } = commit;
+    const subject = commit.subject.trim();
+    showTab(
+        (t) => t.kind === "commit" && t.cwd === cwd && t.sha === sha,
+        { kind: "commit", cwd, sha, subject },
+        subject || sha.slice(0, 7)
+    );
 }
 
 /** Closes a tab, saving its file first; a failed save keeps it open and says so. */

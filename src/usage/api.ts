@@ -1,14 +1,13 @@
-import { invoke } from "@tauri-apps/api/core";
 import type { HarnessId, UsageQuery, UsageReport, UsageRow } from "@/proto";
-import { isTauri } from "@/lib/platform";
+import { backend } from "@/lib/backend";
 
 /**
  * Transport for the Usage panel (`src-tauri/src/usage.rs`). Under a plain
  * `bun run dev` there's no backend: a made-up report, so the panel renders.
  */
 export const usageApi = {
-    report: (query: UsageQuery): Promise<UsageReport> =>
-        isTauri ? invoke("usage_report", { query }) : Promise.resolve(browserReport(query))
+    report: (query: UsageQuery) =>
+        backend<UsageReport>("usage_report", { query }, () => browserReport(query))
 };
 
 const FAKE_MODELS: [HarnessId, string, number, number][] = [

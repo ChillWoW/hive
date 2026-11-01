@@ -1,10 +1,13 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import type { HarnessId, UsageQuery, UsageReport } from "@/proto";
+import { errorMessage } from "@/lib/errors";
 import { usageApi } from "./api";
 
 export type Period = "24h" | "7d" | "30d" | "90d";
 export type Metric = "cost" | "tokens" | "limits";
+/** The metrics that are amounts: dollars or processed tokens. */
+export type Measure = Exclude<Metric, "limits">;
 export type Breakdown = "model" | "day" | "project";
 
 export const PERIODS: { id: Period; label: string; days: number }[] = [
@@ -76,7 +79,7 @@ const HOUR = 3_600_000;
  * 23 or 25 hours long. Ends at the current bucket's end, so the same period
  * asks the same question until the next bucket starts.
  */
-export function periodQuery(period: Period, now = new Date()): UsageQuery {
+function periodQuery(period: Period, now = new Date()): UsageQuery {
     if (period === "24h") {
         const current = new Date(now);
         current.setMinutes(0, 0, 0);
@@ -112,9 +115,6 @@ export async function loadUsage({ refresh = false }: { refresh?: boolean } = {})
     } catch (error) {
         if (mine !== seq) return;
         console.warn("[usage] report failed", error);
-        useUsageStore.setState({
-            loading: false,
-            error: error instanceof Error ? error.message : String(error)
-        });
+        useUsageStore.setState({ loading: false, error: errorMessage(error) });
     }
 }

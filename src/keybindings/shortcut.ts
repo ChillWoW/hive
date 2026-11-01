@@ -112,7 +112,7 @@ export function stringifyShortcut(s: Shortcut): string {
 
 /** The comparable spelling of a stored shortcut; null when unbound or unreadable. */
 export function canonical(text: string): string | null {
-    const shortcut = text.trim() ? parseShortcut(text) : null;
+    const shortcut = parseShortcut(text);
     return shortcut ? stringifyShortcut(shortcut) : null;
 }
 
@@ -138,7 +138,7 @@ export function shortcutFromEvent(event: KeyboardEvent): Shortcut | null {
     };
 }
 
-export type Assignable = { ok: true } | { ok: false; reason: string };
+type Assignable = { ok: true } | { ok: false; reason: string };
 
 /** Editing shortcuts every text field relies on. */
 const RESERVED = new Set(

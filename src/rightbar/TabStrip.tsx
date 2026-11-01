@@ -1,22 +1,14 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import {
-    ArrowsInSimpleIcon,
-    ArrowsOutSimpleIcon,
-    ClockCounterClockwiseIcon,
-    GitCommitIcon,
-    GitDiffIcon,
-    PlusIcon,
-    TerminalWindowIcon,
-    XIcon
-} from "@phosphor-icons/react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { ArrowsInSimpleIcon, ArrowsOutSimpleIcon, PlusIcon, XIcon } from "@phosphor-icons/react";
 import { SCOPE_LABELS, useDiffPrefs } from "@/diff/store";
-import { ShortcutKeys, useBinding, type ActionId } from "@/keybindings";
 import { cn } from "@/lib/cn";
 import { useDocsStore } from "@/editor";
+import { useResizeObserver } from "@/lib/useResizeObserver";
 import { useLayoutStore, usePanelLayout } from "@/stores/useLayoutStore";
-import { FileIcon, iconButtonClassName, Menu, Tooltip } from "@/ui";
+import { FileIcon, IconButton, iconButtonClassName, Menu, Tooltip } from "@/ui";
 import { closeTab } from "./actions";
-import { NEW_TABS } from "./kinds";
+import { NEW_TABS, TAB_ICONS } from "./kinds";
+import { ActionKeys } from "./parts";
 import { useRightbarStore, type RightTab } from "./store";
 
 // Chip metrics: fixed width, so drag reordering works in whole slots.
@@ -62,14 +54,9 @@ export function TabStrip() {
         setFade((f) => (f.left === left && f.right === right ? f : { left, right }));
     };
 
-    useLayoutEffect(() => {
-        const el = strip.current;
-        if (!el) return;
-        updateFade();
-        const observer = new ResizeObserver(updateFade);
-        observer.observe(el);
-        return () => observer.disconnect();
-    }, [tabs.length]);
+    useResizeObserver(strip, updateFade);
+    // Tabs coming and going change what overflows without resizing the strip.
+    useLayoutEffect(updateFade, [tabs.length]);
 
     // The shown tab stays in view, e.g. a new one at the end.
     useEffect(() => {
@@ -165,53 +152,40 @@ export function TabStrip() {
                 )}
             </div>
 
-            {NEW_TABS.length > 0 && (
-                <Menu>
-                    <Tooltip>
-                        <Tooltip.Trigger
-                            render={
-                                <Menu.Trigger aria-label="New tab" className={iconButtonClassName}>
-                                    <PlusIcon className="size-3.5" />
-                                </Menu.Trigger>
-                            }
-                        />
-                        <Tooltip.Content side="bottom">New tab</Tooltip.Content>
-                    </Tooltip>
-                    <Menu.Content side="bottom" align="end" sideOffset={6} className="w-48 min-w-0">
-                        {NEW_TABS.map(({ label, icon: TabIcon, shortcut, open }) => (
-                            <Menu.Item key={label} onClick={open}>
-                                <TabIcon className="size-3.5 text-dark-200" />
-                                {label}
-                                {shortcut && <MenuShortcut id={shortcut} />}
-                            </Menu.Item>
-                        ))}
-                    </Menu.Content>
-                </Menu>
-            )}
+            <Menu>
+                <Tooltip>
+                    <Tooltip.Trigger
+                        render={
+                            <Menu.Trigger aria-label="New tab" className={iconButtonClassName}>
+                                <PlusIcon className="size-3.5" />
+                            </Menu.Trigger>
+                        }
+                    />
+                    <Tooltip.Content side="bottom">New tab</Tooltip.Content>
+                </Tooltip>
+                <Menu.Content side="bottom" align="end" sideOffset={6} className="w-48 min-w-0">
+                    {NEW_TABS.map(({ label, icon: Icon, shortcut, open }) => (
+                        <Menu.Item key={label} onClick={open}>
+                            <Icon className="size-3.5 text-dark-200" />
+                            {label}
+                            {shortcut && <ActionKeys id={shortcut} className="ml-auto pl-4" />}
+                        </Menu.Item>
+                    ))}
+                </Menu.Content>
+            </Menu>
 
             <div data-tauri-drag-region className="h-full flex-1" />
-            <Tooltip>
-                <Tooltip.Trigger
-                    render={
-                        <button
-                            type="button"
-                            aria-label={maximized ? "Restore panel" : "Maximize panel"}
-                            aria-pressed={maximized}
-                            onClick={toggleRightMaximized}
-                            className={iconButtonClassName}
-                        >
-                            {maximized ? (
-                                <ArrowsInSimpleIcon className="size-3.5" />
-                            ) : (
-                                <ArrowsOutSimpleIcon className="size-3.5" />
-                            )}
-                        </button>
-                    }
-                />
-                <Tooltip.Content side="bottom">
-                    {maximized ? "Restore panel" : "Maximize panel"}
-                </Tooltip.Content>
-            </Tooltip>
+            <IconButton
+                label={maximized ? "Restore panel" : "Maximize panel"}
+                aria-pressed={maximized}
+                onClick={toggleRightMaximized}
+            >
+                {maximized ? (
+                    <ArrowsInSimpleIcon className="size-3.5" />
+                ) : (
+                    <ArrowsOutSimpleIcon className="size-3.5" />
+                )}
+            </IconButton>
         </div>
     );
 }
@@ -277,17 +251,7 @@ function TabChip({
             {/* The icon, swapped for the ✕ while the tab is hovered or focused. */}
             <span className="relative flex size-[18px] shrink-0 items-center justify-center">
                 <span className="flex transition-opacity group-hover/tab:opacity-0 group-focus-within/tab:opacity-0">
-                    {tab.kind === "diff" ? (
-                        <GitDiffIcon className={cn("size-3.5", !active && "opacity-80")} />
-                    ) : tab.kind === "terminal" ? (
-                        <TerminalWindowIcon className={cn("size-3.5", !active && "opacity-80")} />
-                    ) : tab.kind === "history" ? (
-                        <ClockCounterClockwiseIcon className={cn("size-3.5", !active && "opacity-80")} />
-                    ) : tab.kind === "commit" ? (
-                        <GitCommitIcon className={cn("size-3.5", !active && "opacity-80")} />
-                    ) : (
-                        <FileIcon name={tab.title} className={cn("size-3.5", !active && "opacity-80")} />
-                    )}
+                    <TabIcon tab={tab} className={cn("size-3.5", !active && "opacity-80")} />
                 </span>
                 <Tooltip disabled={dragging}>
                     <Tooltip.Trigger
@@ -322,22 +286,7 @@ function TabChip({
                     delay={350}
                     render={<span className="min-w-0 flex-1 truncate text-[11.5px]">{title}</span>}
                 />
-                <Tooltip.Content side="bottom">
-                    {tab.kind === "file"
-                        ? tab.path
-                        : tab.kind === "diff"
-                          ? "Changes in the open chat's folder"
-                          : tab.kind === "history"
-                            ? "Commits of the open chat's folder"
-                            : tab.kind === "commit"
-                              ? `${tab.sha.slice(0, 7)} ${tab.subject}`
-                              : (
-                                  <span className="flex flex-col">
-                                      <span>{title}</span>
-                                      <span className="text-dark-250">{tab.cwd ?? "Home folder"}</span>
-                                  </span>
-                              )}
-                </Tooltip.Content>
+                <Tooltip.Content side="bottom">{tabDetail(tab, title)}</Tooltip.Content>
             </Tooltip>
             {dirty && (
                 <span aria-hidden className="flex size-[18px] shrink-0 items-center justify-center">
@@ -348,7 +297,29 @@ function TabChip({
     );
 }
 
-function MenuShortcut({ id }: { id: ActionId }) {
-    const binding = useBinding(id);
-    return <ShortcutKeys shortcut={binding} variant="plain" className="ml-auto pl-4" />;
+function TabIcon({ tab, className }: { tab: RightTab; className: string }) {
+    if (tab.kind === "file") return <FileIcon name={tab.title} className={className} />;
+    const Icon = TAB_ICONS[tab.kind];
+    return <Icon className={className} />;
+}
+
+/** A tab's title tooltip: a file's path, a terminal's title and folder… */
+function tabDetail(tab: RightTab, title: string): ReactNode {
+    switch (tab.kind) {
+        case "file":
+            return tab.path;
+        case "diff":
+            return "Changes in the open chat's folder";
+        case "history":
+            return "Commits of the open chat's folder";
+        case "commit":
+            return `${tab.sha.slice(0, 7)} ${tab.subject}`;
+        case "terminal":
+            return (
+                <span className="flex flex-col">
+                    <span>{title}</span>
+                    <span className="text-dark-250">{tab.cwd ?? "Home folder"}</span>
+                </span>
+            );
+    }
 }

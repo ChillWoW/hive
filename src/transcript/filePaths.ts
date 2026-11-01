@@ -1,9 +1,10 @@
 import type { LinePosition } from "@/editor";
+import { baseName } from "@/lib/paths";
 import { platform } from "@/lib/platform";
 import type { WorkspaceEntry } from "@/proto";
 
 /** A file an agent named: its path as written, and maybe a line in it. */
-export type FileRef = { path: string; at?: LinePosition };
+type FileRef = { path: string; at?: LinePosition };
 
 /** Where a file opens: a folder and a path relative to it. */
 export type FileTarget = { cwd: string; path: string; at?: LinePosition };
@@ -106,7 +107,7 @@ export function resolveFileRef(folder: string | undefined, ref: FileRef): FileTa
 }
 
 /** A folder listing's files by path and by name (for names given bare). */
-export type FileIndex = { paths: Set<string>; byName: Map<string, string[]> };
+type FileIndex = { paths: Set<string>; byName: Map<string, string[]> };
 
 const indexes = new WeakMap<WorkspaceEntry[], FileIndex>();
 
@@ -118,7 +119,7 @@ export function fileIndex(entries: WorkspaceEntry[]): FileIndex {
             if (entry.dir) continue;
             const key = fold(entry.path);
             index.paths.add(key);
-            const name = key.slice(key.lastIndexOf("/") + 1);
+            const name = baseName(key);
             const list = index.byName.get(name);
             if (list) list.push(entry.path);
             else index.byName.set(name, [entry.path]);

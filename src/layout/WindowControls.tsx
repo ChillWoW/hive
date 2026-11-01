@@ -19,12 +19,7 @@ function runOnWindow(action: (w: AppWindow) => unknown) {
     void action(getCurrentWindow());
 }
 
-type ControlButtonProps = ComponentProps<"button"> & {
-    label: string;
-    className?: string;
-};
-
-function ControlButton({ label, className, ...props }: ControlButtonProps) {
+function ControlButton({ label, className, ...props }: ComponentProps<"button"> & { label: string }) {
     return (
         <button
             type="button"
@@ -46,21 +41,15 @@ export const WINDOW_CONTROLS_WIDTH = 88;
  * and drawing these as well gives the window two sets of buttons. `TopBar` is
  * where that choice is made, next to the space held open for the real ones.
  */
-export function WindowControls({ className }: { className?: string }) {
+export function WindowControls() {
     const { maximized } = useWindowState();
 
     return (
         <div
             style={{ width: WINDOW_CONTROLS_WIDTH }}
-            className={cn(
-                "flex h-full shrink-0 items-center justify-end gap-0.5 pr-2 pl-1",
-                className
-            )}
+            className="flex h-full shrink-0 items-center justify-end gap-0.5 pr-2 pl-1"
         >
-            <ControlButton
-                label="Minimize"
-                onClick={() => runOnWindow((w) => w.minimize())}
-            >
+            <ControlButton label="Minimize" onClick={() => runOnWindow((w) => w.minimize())}>
                 <MinusIcon className="size-4" />
             </ControlButton>
             <ControlButton

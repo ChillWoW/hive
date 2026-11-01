@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { ArrowClockwiseIcon, ChartBarIcon } from "@phosphor-icons/react";
 import { ShortcutKeys, useBinding } from "@/keybindings";
+import { formatAgo } from "@/lib/format";
 import { useUsageStore } from "@/usage/store";
-import { chipTriggerClassName, popupClassName } from "@/composer/chip";
 import { HarnessIcon, useCatalog } from "@/harnesses";
 import { cn } from "@/lib/cn";
 import type { HarnessId, UsageWindow } from "@/proto";
@@ -17,7 +17,7 @@ import {
     type UsageEntry,
     type UsageLevel
 } from "@/providers";
-import { Popover, usePortalContainer } from "@/ui";
+import { cardActionClassName, ChipPopover } from "@/ui/ChipPopover";
 import { Ring } from "./Ring";
 
 const ARC: Record<UsageLevel, string> = {
@@ -49,7 +49,6 @@ const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 export function UsageRing({ harness }: { harness: HarnessId }) {
     const entry = useProviderUsage(harness);
     const { usage } = entry;
-    const container = usePortalContainer();
     const [open, setOpen] = useState(false);
     const usageBinding = useBinding("openUsage");
     const fraction = usage ? mostUsed(usage.windows) : undefined;
@@ -58,53 +57,37 @@ export function UsageRing({ harness }: { harness: HarnessId }) {
     const level = fraction == null ? "normal" : usageLevel(fraction);
 
     return (
-        <Popover
+        <ChipPopover
             open={open}
             onOpenChange={(next) => {
                 setOpen(next);
                 // Opening the card is when someone cares: read again.
                 if (next) void refreshUsage(harness, { force: true });
             }}
+            label="Plan usage"
+            triggerClassName={cn("tabular-nums", fraction == null ? "text-dark-250" : LABEL[level])}
+            trigger={
+                <>
+                    <Ring fraction={fraction ?? null} arcClassName={ARC[level]} />
+                    {fraction == null ? "—" : percent(fraction)}
+                </>
+            }
+            className="w-80"
         >
-            <Popover.Trigger
-                aria-label="Plan usage"
-                className={cn(
-                    chipTriggerClassName,
-                    "shrink-0 gap-1.5 px-1.5 tabular-nums",
-                    fraction == null ? "text-dark-250" : LABEL[level]
-                )}
+            <UsageCard harness={harness} entry={entry} />
+            <button
+                type="button"
+                onClick={() => {
+                    setOpen(false);
+                    useUsageStore.getState().setOpen(true);
+                }}
+                className={cardActionClassName}
             >
-                <Ring fraction={fraction ?? null} arcClassName={ARC[level]} />
-                {fraction == null ? "—" : percent(fraction)}
-            </Popover.Trigger>
-            <Popover.Portal container={container ?? undefined}>
-                <Popover.Positioner
-                    side="top"
-                    align="end"
-                    sideOffset={10}
-                    collisionPadding={{ top: 48, right: 12, bottom: 12, left: 12 }}
-                >
-                    <Popover.Popup
-                        aria-label="Plan usage"
-                        className={cn(popupClassName, "w-80 min-w-0 rounded-xl p-0")}
-                    >
-                        <UsageCard harness={harness} entry={entry} />
-                        <button
-                            type="button"
-                            onClick={() => {
-                                setOpen(false);
-                                useUsageStore.getState().setOpen(true);
-                            }}
-                            className="flex w-full items-center gap-2 border-t border-dark-700 px-3 py-2 text-left text-[11.5px] text-dark-200 outline-none transition-colors hover:bg-dark-700 hover:text-dark-50 focus-visible:bg-dark-700"
-                        >
-                            <ChartBarIcon className="size-3.5" />
-                            <span className="flex-1">Tokens and cost across agents</span>
-                            <ShortcutKeys shortcut={usageBinding} variant="plain" />
-                        </button>
-                    </Popover.Popup>
-                </Popover.Positioner>
-            </Popover.Portal>
-        </Popover>
+                <ChartBarIcon className="size-3.5" />
+                <span className="flex-1">Tokens and cost across agents</span>
+                <ShortcutKeys shortcut={usageBinding} variant="plain" />
+            </button>
+        </ChipPopover>
     );
 }
 
@@ -149,7 +132,7 @@ export function UsageCard({ harness, entry }: { harness: HarnessId; entry: Usage
                 <span
                     className={cn("min-w-0 flex-1 line-clamp-2", error ? "text-danger" : "text-dark-250")}
                 >
-                    {error ?? (fetchedAt ? `Updated ${ago(fetchedAt)}` : "")}
+                    {error ?? (fetchedAt ? `Updated ${formatAgo(fetchedAt)}` : "")}
                 </span>
                 <button
                     type="button"
@@ -193,12 +176,4 @@ function Meter({ window }: { window: UsageWindow }) {
             {reset && <span className="text-[11px] text-dark-250">{reset}</span>}
         </div>
     );
-}
-
-function ago(at: number): string {
-    const seconds = Math.max(0, Math.round((Date.now() - at) / 1000));
-    if (seconds < 45) return "just now";
-    const minutes = Math.round(seconds / 60);
-    if (minutes < 60) return `${minutes}m ago`;
-    return `${Math.round(minutes / 60)}h ago`;
 }

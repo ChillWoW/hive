@@ -180,5 +180,3 @@ export const ACTIONS: readonly Action[] = [
         scope: "composer"
     }
 ];
-
-export const actionById = (id: ActionId) => ACTIONS.find((a) => a.id === id)!;

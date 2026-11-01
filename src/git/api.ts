@@ -1,6 +1,5 @@
-import { invoke } from "@tauri-apps/api/core";
+import { backend } from "@/lib/backend";
 import type { GitBranch, GitDiff, GitRepo } from "@/proto";
-import { isTauri } from "@/lib/platform";
 
 /**
  * Transport for a folder's branches (`src-tauri/src/git.rs`). Under a plain
@@ -89,57 +88,52 @@ new file mode 100644
 `;
 
 export const gitApi = {
-    repo: (cwd: string): Promise<GitRepo | null> =>
-        isTauri ? invoke("git_repo", { cwd }) : Promise.resolve(fakeRepo(cwd)),
+    repo: (cwd: string) => backend<GitRepo | null>("git_repo", { cwd }, () => fakeRepo(cwd)),
     /** The checkout's changes against HEAD, or with `base` against its merge base. */
-    diff: (cwd: string, base?: string): Promise<GitDiff | null> =>
-        isTauri
-            ? invoke("git_diff", { cwd, base: base ?? null })
-            : Promise.resolve({
-                  root: cwd,
-                  branch: fake.current,
-                  mergeBase: base ? "1f2e3d4" : undefined,
-                  patch: FAKE_PATCH,
-                  truncated: false
-              }),
+    diff: (cwd: string, base?: string) =>
+        backend<GitDiff | null>("git_diff", { cwd, base: base ?? null }, () => ({
+            root: cwd,
+            branch: fake.current,
+            mergeBase: base ? "1f2e3d4" : undefined,
+            patch: FAKE_PATCH,
+            truncated: false
+        })),
     /** What a chat's latest turn changed in its checkout; null before a turn since launch. */
-    turnDiff: (chatId: string): Promise<GitDiff | null> =>
-        isTauri
-            ? invoke("git_turn_diff", { chatId })
-            : Promise.resolve({
-                  root: "",
-                  branch: fake.current,
-                  patch: FAKE_PATCH.slice(FAKE_PATCH.indexOf("diff --git a/notes.md")),
-                  truncated: false
-              }),
+    turnDiff: (chatId: string) =>
+        backend<GitDiff | null>("git_turn_diff", { chatId }, () => ({
+            root: "",
+            branch: fake.current,
+            patch: FAKE_PATCH.slice(FAKE_PATCH.indexOf("diff --git a/notes.md")),
+            truncated: false
+        })),
     /**
      * Puts back what a chat's latest turn changed: every file, or only `paths`
      * (relative to the checkout's root). Resolves to the paths put back.
      */
-    revertTurn: (chatId: string, paths?: string[]): Promise<string[]> =>
-        isTauri
-            ? invoke("git_revert_turn", { chatId, paths: paths ?? null })
-            : Promise.resolve(paths ?? ["notes.md"]),
-    switchBranch: (cwd: string, name: string): Promise<void> =>
-        isTauri
-            ? invoke("git_switch_branch", { cwd, name })
-            : fakeChange(() => {
-                  fake.current = name;
-              }),
-    createBranch: (cwd: string, name: string, from: string): Promise<void> =>
-        isTauri
-            ? invoke("git_create_branch", { cwd, name, from })
-            : fakeChange(() => {
-                  if (fake.branches.some((b) => b.name === name)) {
-                      throw new Error(`a branch named '${name}' already exists`);
-                  }
-                  fake.branches.push({ name, subject: "Branched", age: 0 });
-                  fake.current = name;
-              }),
-    deleteBranch: (cwd: string, name: string): Promise<void> =>
-        isTauri
-            ? invoke("git_delete_branch", { cwd, name })
-            : fakeChange(() => {
-                  fake.branches = fake.branches.filter((b) => b.name !== name);
-              })
+    revertTurn: (chatId: string, paths?: string[]) =>
+        backend<string[]>("git_revert_turn", { chatId, paths: paths ?? null }, () =>
+            paths ?? ["notes.md"]
+        ),
+    switchBranch: (cwd: string, name: string) =>
+        backend<void>("git_switch_branch", { cwd, name }, () =>
+            fakeChange(() => {
+                fake.current = name;
+            })
+        ),
+    createBranch: (cwd: string, name: string, from: string) =>
+        backend<void>("git_create_branch", { cwd, name, from }, () =>
+            fakeChange(() => {
+                if (fake.branches.some((b) => b.name === name)) {
+                    throw new Error(`a branch named '${name}' already exists`);
+                }
+                fake.branches.push({ name, subject: "Branched", age: 0 });
+                fake.current = name;
+            })
+        ),
+    deleteBranch: (cwd: string, name: string) =>
+        backend<void>("git_delete_branch", { cwd, name }, () =>
+            fakeChange(() => {
+                fake.branches = fake.branches.filter((b) => b.name !== name);
+            })
+        )
 };

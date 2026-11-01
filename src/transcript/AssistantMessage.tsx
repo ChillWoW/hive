@@ -1,14 +1,16 @@
-import { useEffect, useState, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { CheckIcon, CopyIcon } from "@phosphor-icons/react";
+import { HtmlPage } from "@/htmlpage";
 import type { HarnessId, Message, MessagePart } from "@/proto";
 import { cn } from "@/lib/cn";
 import { DOT_MATRIX_FULL, DotMatrixSpinner, Tooltip } from "@/ui";
 import { Markdown } from "./Markdown";
 import { CompactionRow, ErrorChip, InputRow, SubagentChip, WakeRow } from "./parts";
-import { HtmlPage } from "@/htmlpage";
+import { formatElapsed, useNow } from "@/lib/time";
 import { ToolGroup } from "./ToolGroup";
 import { TurnChanges } from "./TurnChanges";
 import { pageOf, pushCall, type GroupItem, type ToolPart } from "./tools";
+import { useCopy } from "@/lib/clipboard";
 
 /**
  * What a turn renders as, in order: a group of calls and thoughts, a stack
@@ -18,8 +20,6 @@ type Block =
     | { kind: "group"; items: GroupItem[]; first: number; last: number }
     | { kind: "agents"; parts: ToolPart[]; first: number }
     | { kind: "part"; part: MessagePart; index: number };
-
-const isAgent = (part: MessagePart) => part.kind === "tool" && part.call.kind === "subagent";
 
 /**
  * Consecutive tool calls and thoughts fold into one group; text, a question
@@ -42,9 +42,9 @@ function toBlocks(parts: MessagePart[], streaming: boolean): Block[] {
             blocks.push({ kind: "part", part, index });
             return;
         }
-        if (isAgent(part)) {
+        if (part.kind === "tool" && part.call.kind === "subagent") {
             if (open?.kind !== "agents") blocks.push((open = { kind: "agents", parts: [], first: index }));
-            open.parts.push(part as ToolPart);
+            open.parts.push(part);
             return;
         }
         if (part.kind === "tool" || part.kind === "reasoning") {
@@ -64,23 +64,7 @@ function toBlocks(parts: MessagePart[], streaming: boolean): Block[] {
     return blocks;
 }
 
-function formatDuration(ms: number): string {
-    const s = Math.max(0, Math.round(ms / 1000));
-    if (s < 60) return `${s}s`;
-    const m = Math.floor(s / 60);
-    if (m < 60) return `${m}m ${s % 60}s`;
-    return `${Math.floor(m / 60)}h ${m % 60}m`;
-}
-
-function useNow(active: boolean) {
-    const [now, setNow] = useState(Date.now);
-    useEffect(() => {
-        if (!active) return;
-        const timer = window.setInterval(() => setNow(Date.now()), 1000);
-        return () => window.clearInterval(timer);
-    }, [active]);
-    return now;
-}
+const formatDuration = (ms: number) => formatElapsed(ms, { round: true });
 
 /** The line under a turn in progress: what it's doing and for how long. */
 function WorkingStatus({ since, waiting }: { since: number; waiting: boolean }) {
@@ -103,13 +87,7 @@ function WorkingStatus({ since, waiting }: { since: number; waiting: boolean }) 
 }
 
 function CopyButton({ text }: { text: string }) {
-    const [copied, setCopied] = useState(false);
-    useEffect(() => {
-        if (!copied) return;
-        const timer = window.setTimeout(() => setCopied(false), 1500);
-        return () => window.clearTimeout(timer);
-    }, [copied]);
-
+    const [copied, copy] = useCopy();
     return (
         <Tooltip>
             <Tooltip.Trigger
@@ -117,9 +95,7 @@ function CopyButton({ text }: { text: string }) {
                     <button
                         type="button"
                         aria-label="Copy"
-                        onClick={() => {
-                            void navigator.clipboard.writeText(text).then(() => setCopied(true));
-                        }}
+                        onClick={() => copy(text)}
                         className="inline-flex size-6 items-center justify-center rounded-sm text-dark-250 transition-colors hover:bg-dark-700 hover:text-dark-50"
                     >
                         {copied ? (

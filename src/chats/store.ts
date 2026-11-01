@@ -10,8 +10,11 @@ import type {
     Message,
     MessagesUpdate,
     Session,
+    SessionStatus,
     UserInputAnswer
 } from "@/proto";
+import { errorMessage } from "@/lib/errors";
+import { baseName } from "@/lib/paths";
 import { useSettingsStore } from "@/settings/store";
 import { foldEvent, stampEvent } from "@/transcript/fold";
 import { chatsApi, type Unwatch } from "./api";
@@ -26,7 +29,7 @@ import { setups } from "./setups";
  */
 
 /** A prompt shown before the backend saves it as a user message. */
-export type Outgoing = {
+type Outgoing = {
     messageId: string;
     /** Null until a new chat's `create_chat` returns. */
     chatId: string | null;
@@ -39,7 +42,7 @@ export type Outgoing = {
     error?: string;
 };
 
-export type Transcript = {
+type Transcript = {
     /** Saved messages, oldest first, with live events folded in. */
     messages: Message[];
     /** The first snapshot arrived (or the watch failed). */
@@ -48,7 +51,7 @@ export type Transcript = {
 };
 
 /** Where a prompt goes: an existing chat, or a new one created first. */
-export type SendTarget =
+type SendTarget =
     | { chatId: string }
     | {
           cwd: string;
@@ -125,7 +128,7 @@ type ChatsState = {
 type Draft = ChatsState;
 
 /** A stop in Back/Forward history: a chat (null: the new-chat view) and the subagent shown in it. */
-export type Place = { chatId: string | null; subagent: string[] };
+type Place = { chatId: string | null; subagent: string[] };
 
 function samePlace(a: Place, b: Place) {
     return (
@@ -149,6 +152,16 @@ export function activity(chat: Chat) {
 /** Where the chat's agent works: its worktree, else its folder (`Chat::work_dir`). */
 export function workDir(chat: Chat) {
     return chat.worktree?.path ?? chat.cwd;
+}
+
+/** The chat's title, else its folder's name. */
+export function chatTitle(chat: Chat) {
+    return chat.title ?? baseName(chat.cwd);
+}
+
+/** A turn is running, or waiting on the user mid-turn. */
+export function isBusy(status: SessionStatus | undefined) {
+    return status === "working" || status === "awaitingInput";
 }
 
 /** The chat has activity the user hasn't opened yet (`Chat::unseen`). */
@@ -217,6 +230,11 @@ function upsertChat(s: Draft, chat: Chat) {
     const i = s.chats.findIndex((c) => c.id === chat.id);
     if (i >= 0) s.chats[i] = chat;
     else s.chats.push(chat);
+    sortChats(s);
+}
+
+/** Most recently active first, as the backend orders them. */
+function sortChats(s: Draft) {
     s.chats.sort((a, b) => activity(b) - activity(a));
 }
 
@@ -300,11 +318,6 @@ function removeOutgoing(s: Draft, messageId: string) {
     if (i >= 0) s.outbox.splice(i, 1);
 }
 
-function errorText(error: unknown) {
-    if (error instanceof Error) return error.message;
-    return typeof error === "string" ? error : NOT_SENT;
-}
-
 export const useChatsStore = create<ChatsState>()(
     immer((set) => ({
         chats: [],
@@ -383,7 +396,7 @@ export const useChatsStore = create<ChatsState>()(
                             setups.step(messageId, step)
                         )
                         .catch((error: unknown) => {
-                            setups.failed(messageId, errorText(error));
+                            setups.failed(messageId, errorMessage(error, NOT_SENT));
                             throw error;
                         });
                     chatId = chat.id;
@@ -413,9 +426,9 @@ export const useChatsStore = create<ChatsState>()(
                     setups.failed(messageId, command.resolution ?? NOT_SENT);
                 }
             } catch (error) {
-                setups.failed(messageId, errorText(error));
+                setups.failed(messageId, errorMessage(error, NOT_SENT));
                 edit((o) => {
-                    o.error = errorText(error);
+                    o.error = errorMessage(error, NOT_SENT);
                 });
             }
         },
@@ -488,29 +501,8 @@ export const useChatsStore = create<ChatsState>()(
             }
         },
 
-        updateConfig: async (chatId, config) => {
-            let previous: ChatConfig | undefined;
-            set((s) => {
-                const chat = s.chats.find((c) => c.id === chatId);
-                if (!chat) return;
-                previous = chat.config;
-                chat.config = config;
-            });
-            try {
-                const chat = await chatsApi.updateConfig(chatId, config);
-                set((s) => upsertChat(s, chat));
-            } catch (error) {
-                console.warn(`[chats] updating ${chatId}'s config failed`, error);
-                set((s) => {
-                    const chat = s.chats.find((c) => c.id === chatId);
-                    // Only if nothing changed it again meanwhile.
-                    if (chat && previous && chat.config === config) {
-                        chat.config = previous;
-                    }
-                });
-                throw error;
-            }
-        },
+        updateConfig: (chatId, config) =>
+            editChat(chatId, { config }, () => chatsApi.updateConfig(chatId, config)),
 
         rename: (chatId, title) => {
             const trimmed = title?.trim() || undefined;
@@ -611,7 +603,7 @@ async function editChat(
         if (!chat) return;
         for (const key of keys) (before as Record<string, unknown>)[key] = chat[key];
         Object.assign(chat, patch);
-        s.chats.sort((a, b) => activity(b) - activity(a));
+        sortChats(s);
     });
     try {
         const chat = await request();
@@ -622,7 +614,7 @@ async function editChat(
             const chat = s.chats.find((c) => c.id === chatId);
             if (!chat) return;
             for (const key of keys) {
-                if (chat[key] === patch[key]) {
+                if (key in before && chat[key] === patch[key]) {
                     (chat as Record<string, unknown>)[key] = before[key];
                 }
             }
@@ -804,7 +796,7 @@ const watches = new Map<string, MessagesWatch>();
  * transcript stays cached after the last release; the next watch's snapshot
  * replaces it.
  */
-export function retainMessages(chatId: string): () => void {
+function retainMessages(chatId: string): () => void {
     let watch = watches.get(chatId);
     if (!watch) {
         const entry: MessagesWatch = { refs: 0, stop: Promise.resolve(null) };
@@ -825,7 +817,7 @@ export function retainMessages(chatId: string): () => void {
                             loaded: false
                         });
                         t.loaded = true;
-                        t.error = errorText(error);
+                        t.error = errorMessage(error, NOT_SENT);
                     });
                 }
                 return null;
@@ -846,7 +838,7 @@ export function retainMessages(chatId: string): () => void {
 }
 
 /** How far a shown prompt got; absent once the backend saved it. */
-export type Delivery =
+type Delivery =
     | { state: "sending" }
     | { state: "queued" }
     | { state: "failed"; error: string };
@@ -898,43 +890,25 @@ export function useSession(chatId: string | null) {
     return useChatsStore((s) => (chatId ? s.sessions[chatId] : undefined));
 }
 
+type Actions<T> = {
+    [K in keyof T as T[K] extends (...args: never[]) => unknown ? K : never]: T[K];
+};
+
+/** A store's actions: they never change (`set` only touches state), so they're taken once. */
+function actionsOf<T extends object>(state: T): Actions<T> {
+    return Object.fromEntries(
+        Object.entries(state).filter(([, value]) => typeof value === "function")
+    ) as Actions<T>;
+}
+
 /** Same actions outside React. */
 export const chats = {
-    get: () => useChatsStore.getState(),
-    select: (chatId: string | null) =>
-        useChatsStore.getState().select(chatId),
-    openSubagent: (chatId: string, id: string) =>
-        useChatsStore.getState().openSubagent(chatId, id),
-    openParent: () => useChatsStore.getState().openParent(),
-    goBack: () => useChatsStore.getState().goBack(),
-    goForward: () => useChatsStore.getState().goForward(),
-    send: (target: SendTarget, prompt: string, attachments?: Attachment[]) =>
-        useChatsStore.getState().send(target, prompt, attachments),
-    discard: (messageId: string) => useChatsStore.getState().discard(messageId),
-    cancelQueued: (messageId: string) =>
-        useChatsStore.getState().cancelQueued(messageId),
-    reorderQueued: (chatId: string, messageIds: string[]) =>
-        useChatsStore.getState().reorderQueued(chatId, messageIds),
-    sendNow: (messageId: string) => useChatsStore.getState().sendNow(messageId),
-    updateConfig: (chatId: string, config: ChatConfig) =>
-        useChatsStore.getState().updateConfig(chatId, config),
-    rename: (chatId: string, title: string | null) =>
-        useChatsStore.getState().rename(chatId, title),
-    setArchived: (chatId: string, archived: boolean) =>
-        useChatsStore.getState().setArchived(chatId, archived),
-    setPinned: (chatId: string, pinned: boolean) =>
-        useChatsStore.getState().setPinned(chatId, pinned),
-    markSeen: (chatId: string) => useChatsStore.getState().markSeen(chatId),
-    remove: (chatId: string) => useChatsStore.getState().remove(chatId),
-    interrupt: (chatId: string) => useChatsStore.getState().interrupt(chatId),
-    answer: (chatId: string, requestId: string, answers: UserInputAnswer[]) =>
-        useChatsStore.getState().answer(chatId, requestId, answers),
+    ...actionsOf(useChatsStore.getState()),
     /** Background tasks live on the session; nothing here to update. */
-    stopTask: (chatId: string, taskId: string) => chatsApi.stopTask(chatId, taskId),
-    taskOutput: (chatId: string, taskId: string) => chatsApi.taskOutput(chatId, taskId),
+    stopTask: chatsApi.stopTask,
+    taskOutput: chatsApi.taskOutput,
     /** The card goes when the session drops it (`Session.secrets`). */
-    answerSecret: (chatId: string, requestId: string, value: string | null) =>
-        chatsApi.answerSecret(chatId, requestId, value)
+    answerSecret: chatsApi.answerSecret
 };
 
 export function useChat(chatId: string | null) {

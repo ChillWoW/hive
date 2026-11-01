@@ -1,6 +1,5 @@
-import { useEffect, useState } from "react";
-import { errorText } from "@/git/store";
-import { Button, FileIcon, Modal } from "@/ui";
+import { ConfirmDialog, FileIcon, useLastNonNull } from "@/ui";
+import { LineCounts } from "./DiffFiles";
 import { revertTurn, type RevertRequest } from "./revert";
 
 export type { RevertRequest } from "./revert";
@@ -15,39 +14,19 @@ export function RevertTurnDialog({
     request: RevertRequest | null;
     onClose: () => void;
 }) {
-    const [shown, setShown] = useState(request);
-    const [error, setError] = useState<string | null>(null);
-    const [busy, setBusy] = useState(false);
-
-    useEffect(() => {
-        if (!request) return;
-        setShown(request);
-        setError(null);
-    }, [request]);
-
-    const confirm = async () => {
-        if (!shown) return;
-        setBusy(true);
-        setError(null);
-        try {
-            await revertTurn(shown);
-            onClose();
-        } catch (e) {
-            setError(errorText(e));
-        } finally {
-            setBusy(false);
-        }
-    };
-
+    const shown = useLastNonNull(request);
     const files = shown?.files ?? [];
     const one = files.length === 1 ? files[0] : undefined;
     const added = files.filter((f) => f.status === "added").length;
     return (
-        <Modal
+        <ConfirmDialog
             open={request !== null}
-            onOpenChange={(open) => !open && onClose()}
             title={shown?.whole ? "Undo this turn's changes?" : "Undo this file's changes?"}
-            size="sm"
+            confirmLabel="Undo changes"
+            onConfirm={async () => {
+                if (shown) await revertTurn(shown);
+            }}
+            onClose={onClose}
         >
             <p>
                 {one ? (
@@ -69,10 +48,9 @@ export function RevertTurnDialog({
                 <ul className="mt-3 flex flex-col gap-1 text-xs">
                     {files.slice(0, LISTED).map((f) => (
                         <li key={f.path} className="flex min-w-0 items-center gap-2">
-                            <FileIcon name={f.path.slice(f.path.lastIndexOf("/") + 1)} className="size-3.5" />
+                            <FileIcon name={f.path} className="size-3.5" />
                             <span className="min-w-0 flex-1 truncate text-dark-100">{f.path}</span>
-                            <span className="shrink-0 tabular-nums text-[#34d399]">+{f.additions}</span>
-                            <span className="shrink-0 tabular-nums text-[#f87171]">−{f.deletions}</span>
+                            <LineCounts additions={f.additions} deletions={f.deletions} className="shrink-0" />
                         </li>
                     ))}
                     {files.length > LISTED && (
@@ -80,21 +58,6 @@ export function RevertTurnDialog({
                     )}
                 </ul>
             )}
-            {error && (
-                <p className="mt-2 text-xs break-words whitespace-pre-wrap text-danger">{error}</p>
-            )}
-            <div className="mt-4 flex justify-end gap-2">
-                <Modal.Close render={<Button size="sm" variant="ghost" />}>Cancel</Modal.Close>
-                <Button
-                    size="sm"
-                    variant="destructive"
-                    loading={busy}
-                    onClick={() => void confirm()}
-                    autoFocus
-                >
-                    Undo changes
-                </Button>
-            </div>
-        </Modal>
+        </ConfirmDialog>
     );
 }

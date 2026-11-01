@@ -3,6 +3,7 @@ import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import type { Attachment, ChatConfig } from "@/proto";
 import { isImage, primeAttachmentUrl, saveAttachment } from "@/attachments";
+import { errorMessage } from "@/lib/errors";
 import {
     type DiffComment,
     withCommentToken,
@@ -12,7 +13,7 @@ import {
 /** New-chat drafts are keyed `new:<uuid>`; chat ids are UUIDs, so they can't collide. */
 const NEW_PREFIX = "new:";
 const mintNewKey = () => `${NEW_PREFIX}${crypto.randomUUID()}`;
-export const isNewDraftKey = (key: string) => key.startsWith(NEW_PREFIX);
+const isNewDraftKey = (key: string) => key.startsWith(NEW_PREFIX);
 
 /**
  * Where a new chat works: the folder's own checkout, or a worktree made for
@@ -21,7 +22,7 @@ export const isNewDraftKey = (key: string) => key.startsWith(NEW_PREFIX);
 export type Workspace = "local" | "worktree";
 
 /** A file in a draft: being copied in, copied (`attachment`), or failed. */
-export type DraftAttachment = {
+type DraftAttachment = {
     id: string;
     name: string;
     mimeType: string;
@@ -32,7 +33,7 @@ export type DraftAttachment = {
 };
 
 /** What the next new chat is created with. */
-export type NewChatSettings = {
+type NewChatSettings = {
     /** Null until a folder is picked. */
     cwd: string | null;
     config: ChatConfig;
@@ -42,7 +43,7 @@ export type NewChatSettings = {
 };
 
 /** A new-chat draft that isn't the one open in the new-chat view. */
-export type ParkedDraft = {
+type ParkedDraft = {
     /** The new chat's settings as they were when it was left. */
     settings: NewChatSettings;
     /** When it was left. */
@@ -129,7 +130,7 @@ export const useComposerStore = create<ComposerState>()(
                 set((s) => {
                     const key = chatId ?? s.newDraftId;
                     if ((s.drafts[key] ?? "") === text) return s;
-                    const { [key]: _, ...rest } = s.drafts;
+                    const rest = omit(s.drafts, key);
                     return { drafts: text ? { ...rest, [key]: text } : rest };
                 }),
             attachments: {},
@@ -141,12 +142,7 @@ export const useComposerStore = create<ComposerState>()(
                     mimeType: file.type || "application/octet-stream",
                     previewUrl: isImage(file.type) ? URL.createObjectURL(file) : undefined
                 }));
-                set((s) => ({
-                    attachments: {
-                        ...s.attachments,
-                        [key]: [...(s.attachments[key] ?? []), ...added]
-                    }
-                }));
+                set((s) => ({ attachments: appended(s.attachments, key, added) }));
                 const update = (id: string, patch: Partial<DraftAttachment>) =>
                     set((s) => {
                         const list = s.attachments[key];
@@ -166,7 +162,7 @@ export const useComposerStore = create<ComposerState>()(
                         )
                         .catch((error: unknown) =>
                             update(id, {
-                                error: error instanceof Error ? error.message : String(error)
+                                error: errorMessage(error)
                             })
                         );
                 });
@@ -174,20 +170,13 @@ export const useComposerStore = create<ComposerState>()(
             restoreAttachments: (chatId, restored) => {
                 if (restored.length === 0) return;
                 const key = keyOf(chatId);
-                set((s) => ({
-                    attachments: {
-                        ...s.attachments,
-                        [key]: [
-                            ...(s.attachments[key] ?? []),
-                            ...restored.map((attachment) => ({
-                                id: crypto.randomUUID(),
-                                name: attachment.name,
-                                mimeType: attachment.mimeType,
-                                attachment
-                            }))
-                        ]
-                    }
+                const added = restored.map((attachment) => ({
+                    id: crypto.randomUUID(),
+                    name: attachment.name,
+                    mimeType: attachment.mimeType,
+                    attachment
                 }));
+                set((s) => ({ attachments: appended(s.attachments, key, added) }));
             },
             removeAttachment: (chatId, id) =>
                 set((s) => {
@@ -195,10 +184,8 @@ export const useComposerStore = create<ComposerState>()(
                     const list = s.attachments[key] ?? [];
                     const gone = list.find((a) => a.id === id);
                     if (!gone) return s;
-                    if (gone.previewUrl) URL.revokeObjectURL(gone.previewUrl);
-                    const rest = list.filter((a) => a !== gone);
-                    const { [key]: _, ...others } = s.attachments;
-                    return { attachments: rest.length ? { ...others, [key]: rest } : others };
+                    revokePreviews([gone]);
+                    return { attachments: withList(s.attachments, key, list.filter((a) => a !== gone)) };
                 }),
             takeAttachments: (chatId) => {
                 const key = keyOf(chatId);
@@ -209,14 +196,11 @@ export const useComposerStore = create<ComposerState>()(
                         sent.push(a.attachment);
                         // The transcript shows the same image; it takes the URL over.
                         if (a.previewUrl) primeAttachmentUrl(a.attachment, a.previewUrl);
-                    } else if (a.previewUrl) {
-                        URL.revokeObjectURL(a.previewUrl);
+                    } else {
+                        revokePreviews([a]);
                     }
                 }
-                set((s) => {
-                    const { [key]: _, ...others } = s.attachments;
-                    return { attachments: others };
-                });
+                set((s) => ({ attachments: omit(s.attachments, key) }));
                 return sent;
             },
             comments: {},
@@ -224,27 +208,26 @@ export const useComposerStore = create<ComposerState>()(
                 const key = keyOf(chatId);
                 set((s) => {
                     const list = s.comments[key] ?? [];
-                    const known = list.some((c) => c.id === comment.id);
-                    const next = known
-                        ? list.map((c) => (c.id === comment.id ? comment : c))
-                        : [...list, comment];
+                    if (list.some((c) => c.id === comment.id)) {
+                        const next = list.map((c) => (c.id === comment.id ? comment : c));
+                        return { comments: { ...s.comments, [key]: next } };
+                    }
                     // A new one goes into the text as a tag, at the end.
-                    const drafts = known
-                        ? s.drafts
-                        : { ...s.drafts, [key]: withCommentToken(s.drafts[key] ?? "", comment.id) };
-                    return { comments: { ...s.comments, [key]: next }, drafts };
+                    return {
+                        comments: appended(s.comments, key, [comment]),
+                        drafts: { ...s.drafts, [key]: withTokens(s.drafts[key], [comment]) }
+                    };
                 });
             },
             removeComment: (chatId, id) => {
                 const key = keyOf(chatId);
                 set((s) => {
                     const rest = (s.comments[key] ?? []).filter((c) => c.id !== id);
-                    const { [key]: _, ...others } = s.comments;
-                    const { [key]: draft = "", ...otherDrafts } = s.drafts;
-                    const text = withoutCommentTokens(draft, (other) => other === id);
+                    const drafts = omit(s.drafts, key);
+                    const text = withoutCommentTokens(s.drafts[key] ?? "", (other) => other === id);
                     return {
-                        comments: rest.length ? { ...others, [key]: rest } : others,
-                        drafts: text.trim() ? { ...otherDrafts, [key]: text } : otherDrafts
+                        comments: withList(s.comments, key, rest),
+                        drafts: text.trim() ? { ...drafts, [key]: text } : drafts
                     };
                 });
             },
@@ -252,28 +235,18 @@ export const useComposerStore = create<ComposerState>()(
                 if (restored.length === 0) return;
                 const key = keyOf(chatId);
                 set((s) => ({
-                    comments: { ...s.comments, [key]: [...(s.comments[key] ?? []), ...restored] },
-                    drafts: {
-                        ...s.drafts,
-                        [key]: restored.reduce(
-                            (text, c) => withCommentToken(text, c.id),
-                            s.drafts[key] ?? ""
-                        )
-                    }
+                    comments: appended(s.comments, key, restored),
+                    drafts: { ...s.drafts, [key]: withTokens(s.drafts[key], restored) }
                 }));
             },
             takeComments: (chatId) => {
                 const key = keyOf(chatId);
                 const list: DiffComment[] = useComposerStore.getState().comments[key] ?? [];
-                set((s) => {
-                    const { [key]: _, ...others } = s.comments;
-                    return { comments: others };
-                });
+                set((s) => ({ comments: omit(s.comments, key) }));
                 return list;
             },
             focus: () => set((s) => ({ focusToken: s.focusToken + 1 })),
-            setNewChat: (patch) =>
-                set((s) => ({ newChat: { ...s.newChat, ...patch } })),
+            setNewChat: (patch) => set((s) => ({ newChat: { ...s.newChat, ...patch } })),
             newDraftId: mintNewKey(),
             parked: {},
             startNewChat: (cwd) =>
@@ -290,61 +263,23 @@ export const useComposerStore = create<ComposerState>()(
                 set((s) => {
                     const draft = s.parked[key];
                     if (key === s.newDraftId || !draft) return s;
-                    const { [key]: _, ...parked } = park(s).parked;
-                    return { parked, newDraftId: key, newChat: draft.settings };
+                    return {
+                        parked: omit(park(s).parked, key),
+                        newDraftId: key,
+                        newChat: draft.settings
+                    };
                 }),
-            discardDraft: (key) =>
-                set((s) => {
-                    for (const a of s.attachments[key] ?? []) {
-                        if (a.previewUrl) URL.revokeObjectURL(a.previewUrl);
-                    }
-                    const { [key]: _d, ...drafts } = s.drafts;
-                    const { [key]: _a, ...attachments } = s.attachments;
-                    const { [key]: _c, ...comments } = s.comments;
-                    const { [key]: _p, ...parked } = s.parked;
-                    return { drafts, attachments, comments, parked };
-                }),
+            discardDraft: (key) => set((s) => dropDrafts(s, (k) => k === key)),
             discardFolderDrafts: (cwd) =>
-                set((s) => {
-                    const keys = [s.newDraftId, ...Object.keys(s.parked)].filter((key) =>
+                set((s) =>
+                    dropDrafts(s, (key) =>
                         key === s.newDraftId
                             ? s.newChat.cwd === cwd
                             : s.parked[key]?.settings.cwd === cwd
-                    );
-                    if (!keys.length) return s;
-                    for (const key of keys) {
-                        for (const a of s.attachments[key] ?? []) {
-                            if (a.previewUrl) URL.revokeObjectURL(a.previewUrl);
-                        }
-                    }
-                    const drop = <T,>(record: Record<string, T>) =>
-                        Object.fromEntries(
-                            Object.entries(record).filter(([k]) => !keys.includes(k))
-                        );
-                    return {
-                        drafts: drop(s.drafts),
-                        attachments: drop(s.attachments),
-                        comments: drop(s.comments),
-                        parked: drop(s.parked)
-                    };
-                }),
+                    )
+                ),
             pruneDrafts: (chatIds) =>
-                set((s) => {
-                    const gone = (key: string) => !isNewDraftKey(key) && !chatIds.has(key);
-                    const keys = [
-                        ...Object.keys(s.drafts),
-                        ...Object.keys(s.attachments),
-                        ...Object.keys(s.comments)
-                    ];
-                    if (!keys.some(gone)) return s;
-                    const keep = <T,>(record: Record<string, T>) =>
-                        Object.fromEntries(Object.entries(record).filter(([k]) => !gone(k)));
-                    return {
-                        drafts: keep(s.drafts),
-                        attachments: keep(s.attachments),
-                        comments: keep(s.comments)
-                    };
-                }),
+                set((s) => dropDrafts(s, (key) => !isNewDraftKey(key) && !chatIds.has(key))),
             favorites: [],
             toggleFavorite: (key) =>
                 set((s) => ({
@@ -380,49 +315,34 @@ export const useComposerStore = create<ComposerState>()(
                 newDraftId: s.newDraftId,
                 parked: s.parked
             }),
-            // Settings saved before access modes existed lack them.
             merge: (saved, current) => {
-                const persisted = saved as Partial<ComposerState> | undefined;
-                const favorites = Array.isArray(persisted?.favorites)
-                    ? persisted.favorites
-                    : current.favorites;
-                const drafts = isRecord(persisted?.drafts) ? persisted.drafts : current.drafts;
-                const comments = isRecord(persisted?.comments)
-                    ? persisted.comments
-                    : current.comments;
-                const restored = {
-                    favorites,
-                    // Comments saved before they sat in the text go at its end.
-                    drafts: Object.entries(comments).reduce(
-                        (all, [key, list]) => {
-                            if (!Array.isArray(list) || list.length === 0) return all;
-                            const text = list.reduce(
-                                (draft, c) => withCommentToken(draft, c.id),
-                                all[key] ?? ""
-                            );
-                            return { ...all, [key]: text };
-                        },
-                        drafts
-                    ),
-                    attachments: isRecord(persisted?.attachments)
-                        ? persisted.attachments
-                        : current.attachments,
-                    comments,
-                    newDraftId:
-                        typeof persisted?.newDraftId === "string"
-                            ? persisted.newDraftId
-                            : current.newDraftId,
-                    parked: isRecord(persisted?.parked) ? persisted.parked : current.parked
-                };
-                const newChat = persisted?.newChat;
-                if (!newChat) return { ...current, ...restored };
+                const persisted = (saved ?? {}) as Partial<ComposerState>;
+                const comments = recordOr(persisted.comments, current.comments);
+                // Comments saved before they sat in the text go at its end.
+                const drafts = { ...recordOr(persisted.drafts, current.drafts) };
+                for (const [key, list] of Object.entries(comments)) {
+                    if (Array.isArray(list) && list.length) {
+                        drafts[key] = withTokens(drafts[key], list);
+                    }
+                }
                 return {
                     ...current,
-                    ...restored,
+                    favorites: Array.isArray(persisted.favorites)
+                        ? persisted.favorites
+                        : current.favorites,
+                    drafts,
+                    attachments: recordOr(persisted.attachments, current.attachments),
+                    comments,
+                    newDraftId:
+                        typeof persisted.newDraftId === "string"
+                            ? persisted.newDraftId
+                            : current.newDraftId,
+                    parked: recordOr(persisted.parked, current.parked),
+                    // Settings saved before access modes existed lack them.
                     newChat: {
                         ...current.newChat,
-                        ...newChat,
-                        config: { ...current.newChat.config, ...newChat.config }
+                        ...persisted.newChat,
+                        config: { ...current.newChat.config, ...persisted.newChat?.config }
                     }
                 };
             }
@@ -447,8 +367,54 @@ function park(s: ComposerState): Pick<ComposerState, "parked"> {
     };
 }
 
-function isRecord<T>(value: Record<string, T> | undefined): value is Record<string, T> {
-    return typeof value === "object" && value !== null && !Array.isArray(value);
+/** `record` without `key`. */
+function omit<T>(record: Record<string, T>, key: string): Record<string, T> {
+    const { [key]: _, ...rest } = record;
+    return rest;
+}
+
+/** `record` with `items` added to `key`'s list. */
+function appended<T>(record: Record<string, T[]>, key: string, items: T[]): Record<string, T[]> {
+    return { ...record, [key]: [...(record[key] ?? []), ...items] };
+}
+
+/** `record` with `key`'s list set to `list`, or dropped when it's empty. */
+function withList<T>(record: Record<string, T[]>, key: string, list: T[]): Record<string, T[]> {
+    return list.length ? { ...record, [key]: list } : omit(record, key);
+}
+
+/** A draft's text with each comment's token appended. */
+function withTokens(draft: string | undefined, comments: DiffComment[]): string {
+    return comments.reduce((text, c) => withCommentToken(text, c.id), draft ?? "");
+}
+
+function revokePreviews(list: DraftAttachment[]) {
+    for (const a of list) if (a.previewUrl) URL.revokeObjectURL(a.previewUrl);
+}
+
+/**
+ * Drops the drafts whose keys `gone` picks: their text, files (previews
+ * revoked), comments and parked settings.
+ */
+function dropDrafts(s: ComposerState, gone: (key: string) => boolean): Partial<ComposerState> {
+    const keys = new Set(
+        [s.drafts, s.attachments, s.comments, s.parked].flatMap(Object.keys).filter(gone)
+    );
+    if (keys.size === 0) return s;
+    for (const key of keys) revokePreviews(s.attachments[key] ?? []);
+    const keep = <T,>(record: Record<string, T>) =>
+        Object.fromEntries(Object.entries(record).filter(([k]) => !keys.has(k)));
+    return {
+        drafts: keep(s.drafts),
+        attachments: keep(s.attachments),
+        comments: keep(s.comments),
+        parked: keep(s.parked)
+    };
+}
+
+/** A saved record, if it is one. */
+function recordOr<T>(value: Record<string, T> | undefined, fallback: Record<string, T>) {
+    return typeof value === "object" && value !== null && !Array.isArray(value) ? value : fallback;
 }
 
 export function useDraft(chatId: string | null): string {

@@ -3,7 +3,7 @@ import { MagnifyingGlassIcon } from "@phosphor-icons/react";
 import { ShortcutKeys, useBinding } from "@/keybindings";
 import { cn } from "@/lib/cn";
 import { StatusMark } from "@/sidebar/StatusMark";
-import { timeAgo, useMinuteClock } from "@/sidebar/time";
+import { timeAgo, useMinuteClock } from "@/lib/time";
 import { Modal } from "@/ui";
 import { PREFIXES, usePaletteSections, type PaletteItem } from "./items";
 import { usePaletteStore } from "./store";

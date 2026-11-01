@@ -1,4 +1,4 @@
-import { useEffect, useState, type KeyboardEvent } from "react";
+import { useState, type KeyboardEvent } from "react";
 import { ACTIONS, CATEGORIES, type Action, type CategoryId } from "@/keybindings/actions";
 import { ShortcutKeys } from "@/keybindings/ShortcutKeys";
 import {
@@ -11,6 +11,7 @@ import { cn } from "@/lib/cn";
 import { isMac } from "@/lib/platform";
 import type { SendKey } from "@/proto";
 import { SegmentedControl } from "@/ui";
+import { useAutoReset } from "../hooks";
 import { SettingRow, SettingsSection } from "../SettingsSection";
 import { useSetting, useSettingsStore } from "../store";
 
@@ -85,13 +86,7 @@ function ShortcutRows({ category }: { category: CategoryId }) {
 function ShortcutRow({ action }: { action: Action }) {
     const setting = useSetting("keyboard", action.id);
     const [recording, setRecording] = useState(false);
-    const [note, setNote] = useState<string | null>(null);
-
-    useEffect(() => {
-        if (!note) return;
-        const timer = setTimeout(() => setNote(null), 3000);
-        return () => clearTimeout(timer);
-    }, [note]);
+    const [note, setNote] = useAutoReset<string | null>(null, 3000);
 
     const assign = (text: string) => {
         setRecording(false);

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { CaretDownIcon, CaretUpIcon } from "@phosphor-icons/react";
 import { HarnessIcon, useCatalogs } from "@/harnesses";
 import { cn } from "@/lib/cn";
+import { onWindowFocus } from "@/lib/windowFocus";
 import type { HarnessCatalog, HarnessId } from "@/proto";
 import {
     availableUpdate,
@@ -36,8 +37,7 @@ export function AgentUpdates() {
             }
         };
         check();
-        window.addEventListener("focus", check);
-        return () => window.removeEventListener("focus", check);
+        return onWindowFocus(check);
     }, [ids]);
 
     const updates: Update[] = catalogs.flatMap((catalog) => {

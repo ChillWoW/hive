@@ -1,6 +1,6 @@
 import type { FileDiff, PatchLine } from "@/diff/patch";
 
-export type DiffLine ={ kind: "same" | "add" | "del"; text: string };
+type DiffLine = { kind: "same" | "add" | "del"; text: string };
 
 /** Past this many cells the LCS table is skipped for a plain replace. */
 const MAX_CELLS = 400_000;

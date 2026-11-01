@@ -1,6 +1,5 @@
-import { invoke } from "@tauri-apps/api/core";
 import type { FileText, LineEnding, WriteOutcome } from "@/proto";
-import { isTauri } from "@/lib/platform";
+import { backend } from "@/lib/backend";
 
 /** Files of the made-up project under plain `bun run dev`, by path. */
 const fake = new Map<string, string>();
@@ -11,15 +10,16 @@ const fakeHash = (text: string) => `${text.length}:${[...text].reduce((h, c) => 
 
 /** `path` (relative to `cwd`) for the editor (`src-tauri/src/editor.rs`). */
 export function readFile(cwd: string, path: string): Promise<FileText> {
-    if (isTauri) return invoke<FileText>("read_file", { cwd, path });
-    const text = fakeText(path);
-    return Promise.resolve({
-        text,
-        hash: fakeHash(text),
-        size: text.length,
-        lineEnding: "lf",
-        bom: false,
-        readOnly: null
+    return backend<FileText>("read_file", { cwd, path }, () => {
+        const text = fakeText(path);
+        return {
+            text,
+            hash: fakeHash(text),
+            size: text.length,
+            lineEnding: "lf",
+            bom: false,
+            readOnly: null
+        };
     });
 }
 
@@ -28,14 +28,16 @@ export function readFile(cwd: string, path: string): Promise<FileText> {
  * null when git doesn't track it. A made-up older version under `bun run dev`.
  */
 export function headText(cwd: string, path: string): Promise<string | null> {
-    if (isTauri) return invoke<string | null>("git_head_text", { cwd, path });
-    return Promise.resolve(`// ${path}\n// An older line.\n`);
+    return backend<string | null>(
+        "git_head_text",
+        { cwd, path },
+        () => `// ${path}\n// An older line.\n`
+    );
 }
 
 /** A file's bytes as an object URL (an image preview). */
 export async function fileObjectUrl(cwd: string, path: string, mimeType: string) {
-    if (!isTauri) throw new Error("No backend under plain `bun run dev`.");
-    const bytes = await invoke<ArrayBuffer>("read_file_bytes", { cwd, path });
+    const bytes = await backend<ArrayBuffer>("read_file_bytes", { cwd, path });
     return URL.createObjectURL(new Blob([bytes], { type: mimeType }));
 }
 
@@ -48,25 +50,18 @@ export function writeFile(
     lineEnding: LineEnding,
     bom: boolean
 ): Promise<WriteOutcome> {
-    if (isTauri) {
-        return invoke<WriteOutcome>("write_file", {
-            cwd,
-            path,
-            text,
-            expectedHash,
-            lineEnding,
-            bom
-        });
-    }
-    if (fakeHash(fakeText(path)) !== expectedHash) {
-        return Promise.resolve({ kind: "conflict", deleted: false });
-    }
-    fake.set(path, text);
-    return Promise.resolve({ kind: "written", hash: fakeHash(text) });
+    return backend<WriteOutcome>(
+        "write_file",
+        { cwd, path, text, expectedHash, lineEnding, bom },
+        () => {
+            if (fakeHash(fakeText(path)) !== expectedHash) return { kind: "conflict", deleted: false };
+            fake.set(path, text);
+            return { kind: "written", hash: fakeHash(text) };
+        }
+    );
 }
 
 /** Opens a file in its default app. */
 export function openFile(cwd: string, path: string): Promise<void> {
-    if (!isTauri) return Promise.reject(new Error("No backend under plain `bun run dev`."));
-    return invoke("open_file", { cwd, path });
+    return backend("open_file", { cwd, path });
 }

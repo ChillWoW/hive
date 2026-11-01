@@ -5,6 +5,7 @@ import type {
     UsageReport,
     UsageTokens
 } from "@/proto";
+import type { Measure } from "./store";
 
 /** Chart and legend order, and each harness's fixed colour (validated as a
  * set against the dark surface; follows the harness, never its rank). */
@@ -55,7 +56,7 @@ function addCost(a: UsageCost, b: UsageCost) {
     a.fastPremium += b.fastPremium;
 }
 
-export type Totals = {
+type Totals = {
     tokens: UsageTokens;
     cost: UsageCost;
     requests: number;
@@ -78,8 +79,8 @@ const totals = (): Totals => ({
     sessions: 0
 });
 
-export type HarnessTotals = Totals & { harness: HarnessId };
-export type ModelTotals = Totals & { harness: HarnessId; model: string };
+type HarnessTotals = Totals & { harness: HarnessId };
+type ModelTotals = Totals & { harness: HarnessId; model: string };
 export type BucketTotals = {
     start: number;
     end: number;
@@ -87,7 +88,7 @@ export type BucketTotals = {
     tokens: number;
     by: Partial<Record<HarnessId, { cost: number; tokens: number }>>;
 };
-export type ProjectTotals = {
+type ProjectTotals = {
     path: string;
     cost: number;
     tokens: number;
@@ -183,5 +184,5 @@ export function summarize(
 }
 
 /** Of a metric, by its job: dollars or processed tokens. */
-export const valueOf = (t: Totals, metric: "cost" | "tokens") =>
+export const valueOf = (t: Totals, metric: Measure) =>
     metric === "cost" ? costTotal(t.cost) : processed(t.tokens);

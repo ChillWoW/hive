@@ -1,9 +1,8 @@
 import { FolderPlusIcon, MagnifyingGlassIcon, XIcon } from "@phosphor-icons/react";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { projects } from "@/projects";
-import { cn } from "@/lib/cn";
 import { isTauri } from "@/lib/platform";
-import { iconButtonClassName, Tooltip } from "@/ui";
+import { IconButton } from "@/ui";
 import { useSidebarStore } from "./store";
 
 /** The sidebar's top row: a search over its chats, then Add project. */
@@ -48,23 +47,15 @@ export function SidebarSearch() {
                 )}
             </label>
 
-            <Tooltip>
-                <Tooltip.Trigger
-                    render={
-                        <button
-                            type="button"
-                            // No native dialog in a browser-only run.
-                            disabled={!isTauri}
-                            onClick={() => void addProject()}
-                            aria-label="Add project"
-                            className={cn(iconButtonClassName, "size-7 shrink-0 rounded-md")}
-                        >
-                            <FolderPlusIcon className="size-4" />
-                        </button>
-                    }
-                />
-                <Tooltip.Content side="bottom">Add project</Tooltip.Content>
-            </Tooltip>
+            <IconButton
+                label="Add project"
+                // No native dialog in a browser-only run.
+                disabled={!isTauri}
+                onClick={() => void addProject()}
+                className="size-7 shrink-0 rounded-md"
+            >
+                <FolderPlusIcon className="size-4" />
+            </IconButton>
         </div>
     );
 }

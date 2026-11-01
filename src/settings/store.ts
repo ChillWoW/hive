@@ -157,8 +157,5 @@ export type SettingHandle = Pick<
 /** Same actions outside React. */
 export const settings = {
     get: () => useSettingsStore.getState().settings,
-    update: (patch: SettingsPatch) =>
-        useSettingsStore.getState().update(patch),
-    open: (page?: SettingsPageId) => useSettingsStore.getState().open(page),
-    toggle: () => useSettingsStore.getState().toggle()
+    open: (page?: SettingsPageId) => useSettingsStore.getState().open(page)
 };

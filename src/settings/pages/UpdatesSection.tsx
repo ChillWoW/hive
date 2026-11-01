@@ -3,10 +3,10 @@ import { getVersion } from "@tauri-apps/api/app";
 import { ArrowClockwiseIcon, ArrowCircleUpIcon } from "@phosphor-icons/react";
 import type { UpdateChannel } from "@/proto";
 import { isTauri } from "@/lib/platform";
-import { timeAgo, useMinuteClock } from "@/sidebar/time";
-import { Button, SegmentedControl, Switch } from "@/ui";
-import { checkNow, install, useUpdaterStore } from "@/updater";
-import { SettingRow, SettingsSection } from "../SettingsSection";
+import { agoLabel, useMinuteClock } from "@/lib/time";
+import { Button, SegmentedControl } from "@/ui";
+import { checkNow, install, isInstalling, useUpdaterStore } from "@/updater";
+import { SettingRow, SettingsSection, SwitchRow } from "../SettingsSection";
 import { useSetting } from "../store";
 
 /** About's first section: the version, update status and update settings. */
@@ -18,18 +18,12 @@ export function UpdatesSection() {
     return (
         <SettingsSection title="Hive">
             <StatusRow />
-            <SettingRow
+            <SwitchRow
                 label="Check automatically"
                 description="Checks every few hours. Nothing installs until you click Update"
                 keywords="update auto check automatic background release new version"
                 setting={autoCheck}
-                control={
-                    <Switch
-                        checked={autoCheck.value}
-                        onCheckedChange={autoCheck.set}
-                        aria-label="Check for updates automatically"
-                    />
-                }
+                aria-label="Check for updates automatically"
             />
             <SettingRow
                 label="Channel"
@@ -68,7 +62,7 @@ function StatusRow() {
     }, []);
 
     const current = version ? `Hive ${version}` : "Hive";
-    const working = state.phase === "downloading" || state.phase === "installing";
+    const working = isInstalling(state);
     const description = checking
         ? "Checking…"
         : error
@@ -78,7 +72,7 @@ function StatusRow() {
             : state.phase !== "none"
             ? `Hive ${state.update.version} is available`
             : checkedAt
-              ? `${current} is up to date · checked ${ago(checkedAt, now)}`
+              ? `${current} is up to date · checked ${agoLabel(checkedAt, now)}`
               : `${current} · not checked yet`;
 
     return (
@@ -114,9 +108,4 @@ function StatusRow() {
             }
         />
     );
-}
-
-function ago(at: number, now: number): string {
-    const text = timeAgo(at, Math.max(now, at));
-    return text === "now" ? "just now" : `${text} ago`;
 }

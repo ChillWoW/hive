@@ -5,9 +5,9 @@ import { cn } from "@/lib/cn";
 import { tildify, untildify, useHomeDir } from "@/lib/home";
 import { isTauri } from "@/lib/platform";
 import type { BranchNaming } from "@/proto";
-import { iconButtonClassName, Input, Menu, Switch, Tooltip } from "@/ui";
+import { IconButton, Input, Menu } from "@/ui";
 import { settingsApi } from "../api";
-import { SettingRow, SettingsSection } from "../SettingsSection";
+import { SettingRow, SettingsSection, SwitchRow } from "../SettingsSection";
 import { useSetting } from "../store";
 
 /** `~`, `~/…`, `/…`, `C:\…` or `\\server\…`; what Rust accepts as a location. */
@@ -142,21 +142,14 @@ export function WorktreesPage() {
                             aria-label="Worktree location"
                             rightIcon={
                                 isTauri && (
-                                    <Tooltip>
-                                        <Tooltip.Trigger
-                                            render={
-                                                <button
-                                                    type="button"
-                                                    aria-label="Choose a folder"
-                                                    onClick={() => void browse()}
-                                                    className={cn(iconButtonClassName, "-mr-1 size-5")}
-                                                >
-                                                    <FolderOpenIcon className="size-3.5" />
-                                                </button>
-                                            }
-                                        />
-                                        <Tooltip.Content side="left">Choose a folder</Tooltip.Content>
-                                    </Tooltip>
+                                    <IconButton
+                                        label="Choose a folder"
+                                        side="left"
+                                        onClick={() => void browse()}
+                                        className="-mr-1 size-5"
+                                    >
+                                        <FolderOpenIcon className="size-3.5" />
+                                    </IconButton>
                                 )
                             }
                         />
@@ -192,18 +185,11 @@ export function WorktreesPage() {
             </SettingsSection>
 
             <SettingsSection title="Deleting chats">
-                <SettingRow
+                <SwitchRow
                     label="Delete the branch"
                     description="Deleting a worktree chat deletes its branch too"
                     keywords="worktree branch delete remove cleanup chat git"
                     setting={deleteBranch}
-                    control={
-                        <Switch
-                            checked={deleteBranch.value}
-                            onCheckedChange={deleteBranch.set}
-                            aria-label="Delete the branch"
-                        />
-                    }
                 />
             </SettingsSection>
         </>

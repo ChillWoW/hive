@@ -1,10 +1,13 @@
 import { useEffect, useRef } from "react";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { useChatsStore } from "@/chats";
+import { isBusy, useChatsStore } from "@/chats";
 import { gitApi } from "@/git/api";
-import { errorText, useFolderBusy } from "@/git/store";
+import { useFolderBusy } from "@/git/store";
+import { errorMessage } from "@/lib/errors";
 import { touchesTree, useFolderWatch } from "@/lib/folderWatch";
+import { singleFlight } from "@/lib/singleFlight";
+import { onWindowFocus } from "@/lib/windowFocus";
 import type { GitDiff } from "@/proto";
 
 /** What the diff tab compares against, as the scope menu offers. */
@@ -57,21 +60,21 @@ type Entry = {
 };
 
 /** What a diff is read from: a folder (against `base`'s merge base when given) or a chat's latest turn. */
-export type DiffSource = { cwd: string; base?: string } | { turnOf: string };
+type DiffSource = { cwd: string; base?: string } | { turnOf: string };
 
 /** Each source's diff, by `keyOf`. */
-export const useDiffStore = create<{ entries: Record<string, Entry> }>()(() => ({
+const useDiffStore = create<{ entries: Record<string, Entry> }>()(() => ({
     entries: {}
 }));
 
 const keyOf = (source: DiffSource) =>
     "turnOf" in source ? `turn\0${source.turnOf}` : `${source.cwd}\0${source.base ?? ""}`;
-const inFlight = new Map<string, Promise<void>>();
 
 const read = (source: DiffSource) =>
     "turnOf" in source ? gitApi.turnDiff(source.turnOf) : gitApi.diff(source.cwd, source.base);
 
-const again = new Map<string, Promise<void>>();
+/** One read at a time per source key. */
+const readOnce = singleFlight<string>();
 
 /**
  * Reads a diff again; one read at a time per source. With `fresh`, a read
@@ -79,51 +82,39 @@ const again = new Map<string, Promise<void>>();
  */
 export function refreshDiff(source: DiffSource, fresh = false): Promise<void> {
     const key = keyOf(source);
-    let request = inFlight.get(key);
-    if (request && fresh) {
-        let next = again.get(key);
-        if (!next) {
-            next = request.then(() => {
-                again.delete(key);
-                return refreshDiff(source);
-            });
-            again.set(key, next);
-        }
-        return next;
-    }
-    if (!request) {
-        request = read(source)
-            .then(
-                (diff): Entry => ({ diff, loadedAt: Date.now() }),
-                (error): Entry => ({
-                    // A failed read keeps what was shown, with the reason.
-                    diff: useDiffStore.getState().entries[key]?.diff,
-                    error: errorText(error),
-                    loadedAt: Date.now()
-                })
-            )
-            .then((entry) => {
-                const previous = useDiffStore.getState().entries[key];
-                // The same patch again: keep the old object, so nothing re-renders.
-                const same =
-                    previous &&
-                    previous.error === entry.error &&
-                    previous.diff?.patch === entry.diff?.patch &&
-                    previous.diff?.branch === entry.diff?.branch &&
-                    previous.diff?.mergeBase === entry.diff?.mergeBase &&
-                    previous.diff?.truncated === entry.diff?.truncated &&
-                    (previous.diff === null) === (entry.diff === null);
-                useDiffStore.setState((s) => ({
-                    entries: {
-                        ...s.entries,
-                        [key]: same ? { ...previous, loadedAt: entry.loadedAt } : entry
-                    }
-                }));
+    return readOnce(key, () => load(key, source), fresh);
+}
+
+/** Reads `source` into its entry. */
+function load(key: string, source: DiffSource): Promise<void> {
+    return read(source)
+        .then(
+            (diff): Entry => ({ diff, loadedAt: Date.now() }),
+            (error): Entry => ({
+                // A failed read keeps what was shown, with the reason.
+                diff: useDiffStore.getState().entries[key]?.diff,
+                error: errorMessage(error, "Git failed."),
+                loadedAt: Date.now()
             })
-            .finally(() => inFlight.delete(key));
-        inFlight.set(key, request);
-    }
-    return request;
+        )
+        .then((entry) => {
+            const previous = useDiffStore.getState().entries[key];
+            // The same patch again: keep the old object, so nothing re-renders.
+            const same =
+                previous &&
+                previous.error === entry.error &&
+                previous.diff?.patch === entry.diff?.patch &&
+                previous.diff?.branch === entry.diff?.branch &&
+                previous.diff?.mergeBase === entry.diff?.mergeBase &&
+                previous.diff?.truncated === entry.diff?.truncated &&
+                (previous.diff === null) === (entry.diff === null);
+            useDiffStore.setState((s) => ({
+                entries: {
+                    ...s.entries,
+                    [key]: same ? { ...previous, loadedAt: entry.loadedAt } : entry
+                }
+            }));
+        });
 }
 
 /**
@@ -133,18 +124,8 @@ export function refreshDiff(source: DiffSource, fresh = false): Promise<void> {
  * there starts or ends.
  */
 export function useCheckoutDiff(cwd: string | null, base: string | undefined, enabled = true) {
-    const key = cwd ? keyOf({ cwd, base }) : null;
-    const entry = useDiffStore((s) => (key ? s.entries[key] : undefined));
-    const busy = useFolderBusy(cwd);
-
-    // Runs again when an agent there starts or ends a turn, reading it then.
-    useEffect(() => {
-        if (!cwd || !enabled) return;
-        const refresh = () => void refreshDiff({ cwd, base });
-        refresh();
-        window.addEventListener("focus", refresh);
-        return () => window.removeEventListener("focus", refresh);
-    }, [cwd, base, busy, enabled]);
+    // Read again when an agent there starts or ends a turn.
+    const entry = useDiff(cwd ? { cwd, base } : null, enabled, useFolderBusy(cwd));
 
     useFolderWatch(enabled ? cwd : null, (change) => {
         if (cwd && touchesTree(change)) void refreshDiff({ cwd, base }, true);
@@ -154,20 +135,29 @@ export function useCheckoutDiff(cwd: string | null, base: string | undefined, en
 }
 
 /**
+ * `source`'s diff, read while `enabled`: at once, on window focus and
+ * whenever `when` changes.
+ */
+function useDiff(source: DiffSource | null, enabled: boolean, when: unknown) {
+    const key = source ? keyOf(source) : null;
+    const entry = useDiffStore((s) => (key ? s.entries[key] : undefined));
+    useEffect(() => {
+        if (!source || !enabled) return;
+        const refresh = () => void refreshDiff(source);
+        refresh();
+        return onWindowFocus(refresh);
+        // `key` stands for `source`, a new object every render.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [key, enabled, when]);
+    return entry;
+}
+
+/**
  * `chatId`'s latest turn diff for a finished reply's summary: read when
  * `version` changes (a new reply) and on window focus, never polled.
  */
 export function useTurnSummary(chatId: string | undefined, version: string) {
-    const key = chatId ? keyOf({ turnOf: chatId }) : null;
-    const entry = useDiffStore((s) => (key ? s.entries[key] : undefined));
-    useEffect(() => {
-        if (!chatId) return;
-        const refresh = () => void refreshDiff({ turnOf: chatId });
-        refresh();
-        window.addEventListener("focus", refresh);
-        return () => window.removeEventListener("focus", refresh);
-    }, [chatId, version]);
-    return entry;
+    return useDiff(chatId ? { turnOf: chatId } : null, true, version);
 }
 
 /**
@@ -177,20 +167,10 @@ export function useTurnSummary(chatId: string | undefined, version: string) {
  * and on window focus.
  */
 export function useTurnDiff(cwd: string | null, chatId: string | null, enabled = true) {
-    const key = chatId ? keyOf({ turnOf: chatId }) : null;
-    const entry = useDiffStore((s) => (key ? s.entries[key] : undefined));
     const treePatch = useCheckoutDiff(cwd, undefined, enabled && !!chatId)?.diff?.patch;
-    const status = useChatsStore((s) => (chatId ? s.sessions[chatId]?.status : undefined));
-    const busy = status === "working" || status === "awaitingInput";
-
-    // Runs again when the chat starts or ends a turn, reading it then.
-    useEffect(() => {
-        if (!chatId || !enabled) return;
-        const refresh = () => void refreshDiff({ turnOf: chatId });
-        refresh();
-        window.addEventListener("focus", refresh);
-        return () => window.removeEventListener("focus", refresh);
-    }, [chatId, enabled, busy]);
+    const busy = useChatsStore((s) => isBusy(chatId ? s.sessions[chatId]?.status : undefined));
+    // Read again when the chat starts or ends a turn.
+    const entry = useDiff(chatId ? { turnOf: chatId } : null, enabled, busy);
 
     // The working tree moved: so may the turn. Not its first read.
     const lastTree = useRef(treePatch);

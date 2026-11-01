@@ -1,36 +1,33 @@
-import type { ComponentProps, FC, ReactElement, ReactNode } from "react";
+import { useEffect, useState, type ComponentProps, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Dialog as BaseDialog } from "@base-ui/react/dialog";
 import { XIcon } from "@phosphor-icons/react";
 import { cn } from "@/lib/cn";
-import { iconButtonClassName } from "./iconButton";
+import { iconButtonClassName } from "./IconButton";
 import { useChromeLayer, usePortalContainer } from "./PortalContainer";
 
-type Size = "sm" | "md" | "lg" | "xl";
+type Size = "sm" | "md" | "xl";
 
 const sizeStyles: Record<Size, string> = {
     sm: "max-w-sm",
     md: "max-w-md",
-    lg: "max-w-lg",
     xl: "max-w-2xl"
 };
 
 type BaseDialogRootProps = ComponentProps<typeof BaseDialog.Root>;
-type BaseDialogPortalProps = ComponentProps<typeof BaseDialog.Portal>;
 type OpenChangeHandler = NonNullable<BaseDialogRootProps["onOpenChange"]>;
 
 export interface ModalProps
     extends Omit<BaseDialogRootProps, "children" | "render"> {
     title?: ReactNode;
-    trigger?: ReactElement;
     size?: Size;
     showClose?: boolean;
-    container?: BaseDialogPortalProps["container"];
     children?: ReactNode;
     className?: string;
     backdropClassName?: string;
-    titleClassName?: string;
     bodyClassName?: string;
+    /** Called when the dialog asks to close (Escape, backdrop, ✕). */
+    onClose?: () => void;
     /** Where focus goes on close (Base UI's `Popup.finalFocus`); default: back where it was. */
     finalFocus?: ComponentProps<typeof BaseDialog.Popup>["finalFocus"];
 }
@@ -40,22 +37,20 @@ const backdropClassNames = cn(
     "data-[starting-style]:opacity-0 data-[ending-style]:opacity-0"
 );
 
-const ModalRoot = ({
+function ModalRoot({
     title,
-    trigger,
     size = "md",
     showClose = true,
-    container,
     modal = "trap-focus",
     onOpenChange,
+    onClose,
     children,
     className,
     backdropClassName,
-    titleClassName,
     bodyClassName,
     finalFocus,
     ...rootProps
-}: ModalProps) => {
+}: ModalProps) {
     // Mounts into the shell's overlay layer, which starts below the top bar, so the backdrop dims
     // only the content area. Base UI reads an explicit `null` as "the container hasn't resolved
     // yet" and renders nothing, so fall through to `undefined` — its own default — when no
@@ -79,18 +74,12 @@ const ModalRoot = ({
         }
 
         onOpenChange?.(nextOpen, details);
+        if (!nextOpen) onClose?.();
     };
 
     return (
-        <BaseDialog.Root
-            modal={modal}
-            onOpenChange={handleOpenChange}
-            {...rootProps}
-        >
-            {trigger && <BaseDialog.Trigger render={trigger} />}
-            <BaseDialog.Portal
-                container={container ?? portalContainer ?? undefined}
-            >
+        <BaseDialog.Root modal={modal} onOpenChange={handleOpenChange} {...rootProps}>
+            <BaseDialog.Portal container={portalContainer ?? undefined}>
                 {/* The top bar dims too, only to look: the strip under the dim is a drag region,
                     so the window still moves, and it stops short of the window controls
                     (`--chrome-controls`), which stay clickable. Presses here land outside the
@@ -111,15 +100,10 @@ const ModalRoot = ({
                                     <div
                                         hidden={props.hidden}
                                         data-starting-style={
-                                            state.transitionStatus ===
-                                            "starting"
-                                                ? ""
-                                                : undefined
+                                            state.transitionStatus === "starting" ? "" : undefined
                                         }
                                         data-ending-style={
-                                            state.transitionStatus === "ending"
-                                                ? ""
-                                                : undefined
+                                            state.transitionStatus === "ending" ? "" : undefined
                                         }
                                         className={cn(
                                             "pointer-events-none absolute inset-0",
@@ -154,50 +138,38 @@ const ModalRoot = ({
                     {(title || showClose) && (
                         <div className="mb-3 flex items-start justify-between gap-4">
                             {title ? (
-                                <BaseDialog.Title
-                                    className={cn(
-                                        "text-base leading-tight font-semibold text-dark-50",
-                                        titleClassName
-                                    )}
-                                >
+                                <BaseDialog.Title className="text-base leading-tight font-semibold text-dark-50">
                                     {title}
                                 </BaseDialog.Title>
                             ) : (
                                 <span />
                             )}
                             {showClose && (
-                                <BaseDialog.Close
-                                    className={cn(iconButtonClassName, "-m-0.5")}
-                                >
+                                <BaseDialog.Close className={cn(iconButtonClassName, "-m-0.5")}>
                                     <XIcon className="size-4" />
                                 </BaseDialog.Close>
                             )}
                         </div>
                     )}
-                    <div className={cn("text-sm text-dark-100", bodyClassName)}>
-                        {children}
-                    </div>
+                    <div className={cn("text-sm text-dark-100", bodyClassName)}>{children}</div>
                 </BaseDialog.Popup>
             </BaseDialog.Portal>
         </BaseDialog.Root>
     );
-};
-
-ModalRoot.displayName = "Modal";
-
-type BaseModalTriggerProps = ComponentProps<typeof BaseDialog.Trigger>;
-export interface ModalTriggerProps extends BaseModalTriggerProps {}
-
-const ModalTrigger = BaseDialog.Trigger as FC<ModalTriggerProps>;
-(ModalTrigger as { displayName?: string }).displayName = "Modal.Trigger";
-
-type BaseModalCloseProps = ComponentProps<typeof BaseDialog.Close>;
-export interface ModalCloseProps extends BaseModalCloseProps {}
-
-const ModalClose = BaseDialog.Close as FC<ModalCloseProps>;
-(ModalClose as { displayName?: string }).displayName = "Modal.Close";
+}
 
 export const Modal = Object.assign(ModalRoot, {
-    Trigger: ModalTrigger,
-    Close: ModalClose
+    Close: BaseDialog.Close
 });
+
+/**
+ * `value`, or the last non-null one while it's null: a dialog driven by a
+ * nullable subject keeps showing it while it animates out.
+ */
+export function useLastNonNull<T>(value: T | null): T | null {
+    const [last, setLast] = useState(value);
+    useEffect(() => {
+        if (value !== null) setLast(value);
+    }, [value]);
+    return value ?? last;
+}

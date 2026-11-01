@@ -4,7 +4,7 @@ import { createJSONStorage, persist } from "zustand/middleware";
 /** How many recent files and chats are remembered. */
 const RECENT_LIMIT = 30;
 
-export type RecentFile = { cwd: string; path: string; at: number };
+type RecentFile = { cwd: string; path: string; at: number };
 
 type PaletteState = {
     isOpen: boolean;
@@ -63,9 +63,3 @@ export function pruneRecentChats(exists: (id: string) => boolean) {
         return chats.length === s.chats.length ? s : { chats };
     });
 }
-
-export const palette = {
-    open: () => usePaletteStore.getState().setOpen(true),
-    close: () => usePaletteStore.getState().setOpen(false),
-    toggle: () => usePaletteStore.getState().toggle()
-};

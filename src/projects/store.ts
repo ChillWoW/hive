@@ -4,7 +4,7 @@ import { createJSONStorage, persist } from "zustand/middleware";
 import { useChatsStore } from "@/chats";
 
 /** A folder the user works in. Chats run in one; a project can have none yet. */
-export type Project = {
+type Project = {
     path: string;
     /** Epoch millis of when it was first picked; decides its place in lists. */
     addedAt: number;
@@ -30,7 +30,7 @@ type ProjectsState = {
  * chosen in the new-chat view stays listed before any chat runs in it.
  * Folders that only have chats are listed too (`useProjects`).
  */
-export const useProjectsStore = create<ProjectsState>()(
+const useProjectsStore = create<ProjectsState>()(
     persist(
         (set) => ({
             projects: [],

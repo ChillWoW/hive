@@ -1,5 +1,5 @@
-import { createContext, forwardRef, useCallback, useContext, useMemo } from "react";
-import type { ComponentProps, Ref } from "react";
+import { createContext, useContext } from "react";
+import type { ComponentProps } from "react";
 import { ToggleGroup as BaseToggleGroup } from "@base-ui/react/toggle-group";
 import { Toggle as BaseToggle } from "@base-ui/react/toggle";
 import { cn } from "@/lib/cn";
@@ -20,97 +20,58 @@ const itemSizeStyles: Record<Size, string> = {
     lg: "gap-2 px-3 text-sm"
 };
 
-type BaseToggleGroupProps = ComponentProps<typeof BaseToggleGroup>;
-
 export interface SegmentedControlProps
     extends Omit<
-        BaseToggleGroupProps,
+        ComponentProps<typeof BaseToggleGroup>,
         "className" | "value" | "defaultValue" | "onValueChange" | "multiple"
     > {
     value?: string;
-    defaultValue?: string;
     onValueChange?: (value: string) => void;
     size?: Size;
     className?: string;
 }
 
-const SegmentedControlRoot = forwardRef<
-    HTMLDivElement,
-    SegmentedControlProps
->(
-    (
-        {
-            size = "md",
-            value,
-            defaultValue,
-            onValueChange,
-            className,
-            ...props
-        },
-        ref
-    ) => {
-        const groupValue = useMemo(
-            () => (value !== undefined ? [value] : undefined),
-            [value]
-        );
-        const groupDefaultValue = useMemo(
-            () => (defaultValue !== undefined ? [defaultValue] : undefined),
-            [defaultValue]
-        );
+/** A single-choice toggle group: one item always pressed (pressing it again keeps it). */
+function SegmentedControlRoot({
+    size = "md",
+    value,
+    onValueChange,
+    className,
+    ...props
+}: SegmentedControlProps) {
+    return (
+        <SegmentedControlSizeContext value={size}>
+            <BaseToggleGroup
+                value={value !== undefined ? [value] : undefined}
+                onValueChange={(next: string[]) => {
+                    const selected = next[next.length - 1];
+                    if (selected !== undefined) onValueChange?.(selected);
+                }}
+                className={cn(
+                    "inline-flex select-none items-stretch rounded-md",
+                    "border border-dark-500 bg-dark-700",
+                    "data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
+                    rootSizeStyles[size],
+                    className
+                )}
+                {...props}
+            />
+        </SegmentedControlSizeContext>
+    );
+}
 
-        const handleValueChange = useCallback(
-            (next: string[]) => {
-                const selected = next[next.length - 1];
-                if (selected === undefined) return;
-                onValueChange?.(selected);
-            },
-            [onValueChange]
-        );
-
-        return (
-            <SegmentedControlSizeContext.Provider value={size}>
-                <BaseToggleGroup
-                    ref={ref}
-                    value={groupValue}
-                    defaultValue={groupDefaultValue}
-                    onValueChange={handleValueChange}
-                    className={cn(
-                        "inline-flex select-none items-stretch rounded-md",
-                        "border border-dark-500 bg-dark-700",
-                        "data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
-                        rootSizeStyles[size],
-                        className
-                    )}
-                    {...props}
-                />
-            </SegmentedControlSizeContext.Provider>
-        );
-    }
-);
-
-SegmentedControlRoot.displayName = "SegmentedControl";
-
-type BaseToggleProps = ComponentProps<typeof BaseToggle>;
-
-export interface SegmentedControlItemProps
-    extends Omit<BaseToggleProps, "className"> {
-    size?: Size;
+interface SegmentedControlItemProps
+    extends Omit<ComponentProps<typeof BaseToggle>, "className"> {
     className?: string;
 }
 
-const SegmentedControlItem = forwardRef<
-    HTMLButtonElement,
-    SegmentedControlItemProps
->(({ size: sizeProp, className, disabled, ...props }, ref) => {
-    const contextSize = useContext(SegmentedControlSizeContext);
-    const size = sizeProp ?? contextSize;
+function SegmentedControlItem({ className, ...props }: SegmentedControlItemProps) {
+    const size = useContext(SegmentedControlSizeContext);
 
     return (
         <BaseToggle
-            ref={ref as Ref<HTMLButtonElement>}
             nativeButton
             render={<button type="button" />}
-            disabled={disabled}
             className={cn(
                 "relative inline-flex min-w-0 shrink-0 items-center justify-center rounded-sm",
                 "font-medium whitespace-nowrap text-dark-200",
@@ -125,9 +86,7 @@ const SegmentedControlItem = forwardRef<
             {...props}
         />
     );
-});
-
-SegmentedControlItem.displayName = "SegmentedControl.Item";
+}
 
 export const SegmentedControl = Object.assign(SegmentedControlRoot, {
     Item: SegmentedControlItem

@@ -18,8 +18,7 @@ const hostOf = (href: string) => {
 /** The site's favicon (DuckDuckGo's icon service), else a globe. */
 function SiteIcon({ host }: { host: string }) {
     const [failed, setFailed] = useState(() => missing.has(host));
-    const className = "mr-1 inline-block size-3.5 translate-y-[-1px] align-middle";
-    if (failed) return <GlobeIcon className={cn(className, "text-dark-200")} weight="regular" />;
+    if (failed) return <GlobeIcon className={cn(LINK_ICON_CLASS, "text-dark-200")} weight="regular" />;
     return (
         <img
             src={`https://icons.duckduckgo.com/ip3/${encodeURIComponent(host)}.ico`}
@@ -28,7 +27,7 @@ function SiteIcon({ host }: { host: string }) {
             draggable={false}
             loading="lazy"
             referrerPolicy="no-referrer"
-            className={cn(className, "rounded-[3px] object-contain select-none")}
+            className={cn(LINK_ICON_CLASS, "rounded-[3px] object-contain select-none")}
             onError={() => {
                 missing.add(host);
                 setFailed(true);
@@ -36,6 +35,9 @@ function SiteIcon({ host }: { host: string }) {
         />
     );
 }
+
+/** The icon before a link's label, sat on the text's line. */
+export const LINK_ICON_CLASS = "mr-1 inline-block size-3.5 translate-y-[-1px] align-middle";
 
 export const LINK_CLASS =
     "inline cursor-pointer text-left text-info decoration-info/50 underline-offset-2 hover:underline focus-visible:underline focus-visible:outline-none";

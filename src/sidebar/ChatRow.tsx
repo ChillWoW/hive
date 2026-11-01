@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import {
     ArchiveIcon,
     ArrowCounterClockwiseIcon,
@@ -14,12 +14,13 @@ import { useHasDraft } from "@/composer";
 import { HarnessIcon } from "@/harnesses";
 import { cn } from "@/lib/cn";
 import type { Chat } from "@/proto";
-import { ContextMenu, Menu, Tooltip } from "@/ui";
+import { ContextMenu, Menu, Tooltip, useInlineRename } from "@/ui";
 import { ChatCard } from "./ChatCard";
+import { ROW_ACTION, rowClassName, warn } from "./rows";
 import { statusOf } from "./status";
 import { StatusMark } from "./StatusMark";
 import { useSidebarStore } from "./store";
-import { timeAgo, useMinuteClock } from "./time";
+import { timeAgo, useMinuteClock } from "@/lib/time";
 
 export const UNTITLED = "New chat";
 
@@ -87,12 +88,7 @@ export function ChatRow({
                             onClick={() => chats.select(chat.id)}
                             aria-current={active ? "page" : undefined}
                             className={cn(
-                                "flex h-7 w-full items-center gap-2 rounded-md pr-1.5 pl-2 text-left text-xs outline-none",
-                                "transition-colors duration-100",
-                                "focus-visible:ring-1 focus-visible:ring-dark-400",
-                                active
-                                    ? "bg-dark-700 text-dark-50"
-                                    : "text-dark-100 hover:bg-dark-800 hover:text-dark-50",
+                                rowClassName(active),
                                 "group-has-[[data-popup-open]]/chat:bg-dark-800"
                             )}
                         >
@@ -129,19 +125,16 @@ export function ChatRow({
                             />
                         </button>
                     )}
-    
+
                     {!renaming && (
                         <Menu onOpenChange={setMenuOpen}>
                             <Menu.Trigger
                                 aria-label={`Options for ${title}`}
                                 className={cn(
+                                    ROW_ACTION,
                                     // Over the time, which hides on hover.
-                                    "absolute top-1/2 right-6 inline-flex size-5 -translate-y-1/2 items-center justify-center",
-                                    "rounded-sm text-dark-200 outline-none",
-                                    "transition-[color,background-color,opacity] duration-100",
-                                    "hover:bg-dark-600 hover:text-dark-50 focus-visible:opacity-100",
-                                    "data-[popup-open]:bg-dark-600 data-[popup-open]:text-dark-50",
-                                    "opacity-0 group-hover/chat:opacity-100 data-[popup-open]:opacity-100"
+                                    "right-6 group-hover/chat:opacity-100",
+                                    "data-[popup-open]:bg-dark-600 data-[popup-open]:text-dark-50 data-[popup-open]:opacity-100"
                                 )}
                             >
                                 <DotsThreeIcon className="size-3.5" weight="bold" />
@@ -184,7 +177,6 @@ function ChatMenuItems({
     onDelete: () => void;
 }) {
     const pinned = chat.pinnedAt != null;
-    const warn = (error: unknown) => console.warn("[sidebar]", error);
     return (
         <>
             <Menu.Item onClick={onRename}>
@@ -222,43 +214,31 @@ function ChatMenuItems({
 
 /** The title in place, editable: Enter or leaving saves, Escape cancels. */
 function RenameField({ chat, onDone }: { chat: Chat; onDone: () => void }) {
-    const input = useRef<HTMLInputElement>(null);
-    const done = useRef(false);
+    const { finish, value, inputProps } = useInlineRename({
+        onEnter: () => end(true),
+        onEscape: () => end(false),
+        onBlur: () => end(true)
+    });
 
-    useEffect(() => {
-        // After the menu's own focus handling settles.
-        const frame = requestAnimationFrame(() => {
-            input.current?.focus();
-            input.current?.select();
+    const end = (save: boolean) =>
+        finish(() => {
+            const next = value();
+            // Blank keeps the current title.
+            if (save && next && next !== chat.title) {
+                chats.rename(chat.id, next).catch(warn);
+            }
+            onDone();
         });
-        return () => cancelAnimationFrame(frame);
-    }, []);
-
-    const finish = (save: boolean) => {
-        if (done.current) return;
-        done.current = true;
-        const next = input.current?.value.trim() ?? "";
-        // Blank keeps the current title.
-        if (save && next && next !== chat.title) {
-            chats.rename(chat.id, next).catch((e) => console.warn("[sidebar]", e));
-        }
-        onDone();
-    };
 
     return (
         <div className="flex h-7 items-center gap-2 rounded-md bg-dark-800 pr-1.5 pl-2 ring-1 ring-dark-500">
             <span className="w-4 shrink-0" />
             <input
-                ref={input}
+                {...inputProps}
                 defaultValue={chat.title ?? ""}
                 placeholder={UNTITLED}
                 aria-label="Chat title"
                 spellCheck={false}
-                onKeyDown={(event) => {
-                    if (event.key === "Enter") finish(true);
-                    else if (event.key === "Escape") finish(false);
-                }}
-                onBlur={() => finish(true)}
                 className="min-w-0 flex-1 bg-transparent text-xs text-dark-50 outline-none placeholder:text-dark-250"
             />
         </div>

@@ -1,7 +1,9 @@
 import { WarningCircleIcon, XIcon } from "@phosphor-icons/react";
 import { cn } from "@/lib/cn";
 import { DotMatrixSpinner, Tooltip } from "@/ui";
+import type { Attachment } from "@/proto";
 import { FileChip } from "./FileChip";
+import { useAttachmentUrl } from "./useAttachmentUrl";
 
 type AttachmentTileProps = {
     name: string;
@@ -110,4 +112,13 @@ export function AttachmentTile({
             <Tooltip.Content side="top">{error ?? name}</Tooltip.Content>
         </Tooltip>
     );
+}
+
+/** A file already copied in: an image is read back for its thumbnail. */
+export function SavedAttachmentTile({
+    attachment,
+    ...props
+}: { attachment: Attachment } & Omit<AttachmentTileProps, "name" | "imageUrl">) {
+    const imageUrl = useAttachmentUrl(attachment);
+    return <AttachmentTile {...props} name={attachment.name} imageUrl={imageUrl} />;
 }

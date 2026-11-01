@@ -2,7 +2,7 @@ import { ArrowCircleUpIcon, WarningCircleIcon } from "@phosphor-icons/react";
 import { Ring } from "@/chat/Ring";
 import { cn } from "@/lib/cn";
 import { Tooltip } from "@/ui";
-import { install, useUpdaterStore, type UpdateState } from "./store";
+import { install, isInstalling, useUpdaterStore, type UpdateState } from "./store";
 
 function label(state: Exclude<UpdateState, { phase: "none" }>): string {
     switch (state.phase) {
@@ -33,7 +33,7 @@ export function UpdateButton() {
     const state = useUpdaterStore((s) => s.state);
     if (state.phase === "none") return null;
 
-    const working = state.phase === "downloading" || state.phase === "installing";
+    const working = isInstalling(state);
     const failed = state.phase === "failed";
     const progress = state.phase === "downloading" ? (state.progress ?? 0) : 0;
 

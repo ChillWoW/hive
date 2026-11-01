@@ -1,8 +1,7 @@
 import { useEffect, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
 import { cn } from "@/lib/cn";
-import { isTauri } from "@/lib/platform";
-import { folderName } from "./paths";
+import { backend } from "@/lib/backend";
+import { baseName } from "@/lib/paths";
 
 /**
  * Each folder's icon (`folder_icon`: its favicon or app icon as a data URL,
@@ -15,11 +14,7 @@ const settled = new Map<string, string | null>();
 function loadIcon(path: string): Promise<string | null> {
     let request = pending.get(path);
     if (!request) {
-        request = (
-            isTauri
-                ? invoke<string | null>("folder_icon", { path })
-                : Promise.resolve(null)
-        )
+        request = backend<string | null>("folder_icon", { path }, () => null)
             .catch(() => null)
             .then((icon) => {
                 settled.set(path, icon);
@@ -95,7 +90,7 @@ export function ProjectIcon({
     }
 
     const tone = toneOf(path);
-    const letter = (folderName(path).trim()[0] ?? "?").toUpperCase();
+    const letter = (baseName(path).trim()[0] ?? "?").toUpperCase();
     return (
         <span
             aria-hidden="true"

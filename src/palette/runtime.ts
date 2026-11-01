@@ -1,11 +1,11 @@
 import { useEffect } from "react";
 import { useChatsStore } from "@/chats";
 import { useShortcut } from "@/keybindings";
-import { palette, pruneRecentChats, rememberChat } from "./store";
+import { pruneRecentChats, rememberChat, usePaletteStore } from "./store";
 
 /** The palette's shortcut, and the chats it lists as recent. Mount once, in `App`. */
 export function usePaletteRuntime() {
-    useShortcut("commandPalette", palette.toggle);
+    useShortcut("commandPalette", () => usePaletteStore.getState().toggle());
 
     useEffect(() => {
         const { activeChatId } = useChatsStore.getState();

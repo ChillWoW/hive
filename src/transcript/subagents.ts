@@ -1,9 +1,10 @@
-import { useContext, useEffect, useState } from "react";
-import type { BackgroundTask, Message, MessagePart } from "@/proto";
+import { useContext } from "react";
+import type { Message, MessagePart } from "@/proto";
 import { LiveTasks } from "./context";
-import { findSpawn } from "./fold";
+import { findSpawn, type ToolPart } from "./fold";
+import { useNow } from "@/lib/time";
 
-export type SpawnPart = Extract<MessagePart, { kind: "tool" }>;
+export type SpawnPart = ToolPart;
 
 /** A spawn part anywhere in a chat's messages (nested ones included). */
 export function findSpawnIn(messages: Message[], id: string): { spawn: SpawnPart; message: Message } | null {
@@ -28,14 +29,10 @@ export function subagentState(part: SpawnPart, streaming: boolean, live = false)
     return part.resolved && !part.isError ? "done" : "stopped";
 }
 
-/** Its background task, while the session lists it. */
-export function useLiveTask(id: string): BackgroundTask | undefined {
-    return useContext(LiveTasks).find((t) => t.toolCallId === id);
-}
-
 /** A spawn's state and how long it ran, from the transcript and the live session. */
 export function useSubagent(part: SpawnPart, streaming: boolean) {
-    const task = useLiveTask(part.id);
+    // Its background task, while the session lists it.
+    const task = useContext(LiveTasks).find((t) => t.toolCallId === part.id);
     const state = subagentState(part, streaming, !!task);
     const elapsed = useSubagentElapsed(part, state === "running", task?.startedAt);
     return { state, elapsed };
@@ -84,26 +81,14 @@ const seenEnd = new Map<string, number>();
  * stamps, else its background task's start, else what this window saw;
  * null when its start isn't known.
  */
-export function useSubagentElapsed(part: SpawnPart, running: boolean, taskStartedAt?: number): number | null {
+function useSubagentElapsed(part: SpawnPart, running: boolean, taskStartedAt?: number): number | null {
     const id = part.id;
     if (running && !seenStart.has(id)) seenStart.set(id, Date.now());
     if (!running && seenStart.has(id) && !seenEnd.has(id)) seenEnd.set(id, Date.now());
-    const [now, setNow] = useState(Date.now);
-    useEffect(() => {
-        if (!running) return;
-        const tick = setInterval(() => setNow(Date.now()), 1000);
-        return () => clearInterval(tick);
-    }, [running]);
+    const now = useNow(running);
     const start = part.startedAt ?? taskStartedAt ?? seenStart.get(id);
     if (start === undefined) return null;
     if (running) return Math.max(now, start) - start;
     const end = part.endedAt ?? seenEnd.get(id);
     return end === undefined ? null : Math.max(end, start) - start;
-}
-
-export function formatElapsed(ms: number): string {
-    const s = Math.max(0, Math.floor(ms / 1000));
-    if (s < 60) return `${s}s`;
-    const m = Math.floor(s / 60);
-    return m < 60 ? `${m}m ${s % 60}s` : `${Math.floor(m / 60)}h ${m % 60}m`;
 }

@@ -7,6 +7,7 @@ import { WorktreeSetupCard } from "./WorktreeSetupCard";
 import { AssistantMessage } from "./AssistantMessage";
 import { ChatCwd, OpenSubagent } from "./context";
 import { CompactionRow } from "./parts";
+import { promptText } from "./text";
 import { UserMessage } from "./UserMessage";
 
 /** How close to the bottom still counts as following along, in px. */
@@ -37,8 +38,7 @@ type TranscriptProps = {
 /** A prompt that is `/compact` and nothing else: shown as its divider, not a bubble. */
 function isBareCompact(message: TranscriptMessage): boolean {
     if (message.role !== "user" || message.attachments?.length) return false;
-    const text = message.parts.flatMap((p) => (p.kind === "text" ? [p.text] : [])).join("");
-    return text.trim().toLowerCase() === "/compact";
+    return promptText(message).trim().toLowerCase() === "/compact";
 }
 
 const hasCompaction = (message: TranscriptMessage | undefined) =>
@@ -53,18 +53,8 @@ const compacting = (reply: TranscriptMessage | undefined) =>
     !reply || hasCompaction(reply) || (reply.role === "assistant" && reply.status === "streaming");
 
 /** The worktree made for a prompt's chat, as it was being made if that was this session. */
-function SetupSlot({
-    messageId,
-    worktree,
-    agent
-}: {
-    messageId: string;
-    worktree?: Worktree;
-    agent?: string;
-}) {
-    const setup = useWorktreeSetup(messageId);
-    if (!setup && !worktree) return null;
-    return <WorktreeSetupCard setup={setup} worktree={worktree} agent={agent} />;
+function SetupSlot({ messageId, worktree, agent }: { messageId: string; worktree?: Worktree; agent?: string }) {
+    return <WorktreeSetupCard setup={useWorktreeSetup(messageId)} worktree={worktree} agent={agent} />;
 }
 
 /** A `/compact` on its way, before its reply has said anything. */

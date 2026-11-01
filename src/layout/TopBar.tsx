@@ -1,13 +1,10 @@
-import {
-    SIDEBAR_WIDTH,
-    useLayoutStore,
-    usePanelLayout
-} from "@/stores/useLayoutStore";
+import { SIDEBAR_WIDTH, useLayoutStore, usePanelLayout } from "@/stores/useLayoutStore";
+import { BarButton } from "./BarButton";
 import { useWindowState } from "./useWindowState";
 import { WindowControls } from "./WindowControls";
 import { chats, useChatsStore } from "@/chats";
 import { composer } from "@/composer";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { openFileSearch } from "@/files";
 import {
     closeShownTab,
@@ -20,9 +17,10 @@ import { HarnessIcon } from "@/harnesses";
 import { useShortcut } from "@/keybindings";
 import { cn } from "@/lib/cn";
 import { isMac } from "@/lib/platform";
+import { useResizeObserver } from "@/lib/useResizeObserver";
 import { PaletteButton } from "@/palette";
 import type { HarnessId } from "@/proto";
-import { Button, FolderTreeIcon, Tooltip } from "@/ui";
+import { FolderTreeIcon } from "@/ui";
 import { UsageButton } from "@/usage";
 import {
     ArrowLeftIcon,
@@ -37,7 +35,6 @@ type TopBarProps = {
     subagents?: string[];
     /** The open chat's harness, marked before the title. */
     harness?: HarnessId;
-    className?: string;
 };
 
 /**
@@ -62,38 +59,28 @@ function useMouseNavigation() {
     }, []);
 }
 
-export function TopBar({ title, subagents = [], harness, className }: TopBarProps) {
+export function TopBar({ title, subagents = [], harness }: TopBarProps) {
     const { fullscreen } = useWindowState();
     const insetForTrafficLights = isMac && !fullscreen;
 
     // What's shown, not what's open: a panel hidden for room reads as closed.
     const layout = usePanelLayout();
-    const {
-        sidebar: open,
-        files: filePanelOpen,
-        right: rightOpen
-    } = layout.visible;
+    const { sidebar: open, files: filePanelOpen, right: rightOpen } = layout.visible;
     const resizing = useLayoutStore((state) => state.resizing);
+    const toggle = useLayoutStore((state) => state.toggle);
 
     // The right sidebar's tabs sit in this bar above it. The panel toggles and
     // window controls keep the corner: over the file panel while it's wide
     // enough, else they take the end of the tabs' room.
     const trailing = useRef<HTMLDivElement>(null);
     const [trailingWidth, setTrailingWidth] = useState(0);
-    useLayoutEffect(() => {
-        const el = trailing.current;
-        if (!el) return;
-        const observer = new ResizeObserver(() => setTrailingWidth(el.offsetWidth));
-        observer.observe(el);
-        return () => observer.disconnect();
-    }, []);
+    useResizeObserver(trailing, (el) => setTrailingWidth(el.offsetWidth));
     const tabsWidth = Math.max(0, layout.right - Math.max(0, trailingWidth - layout.files));
     const tabsGap = Math.max(0, layout.files - trailingWidth);
-    const toggleSidebar = useLayoutStore((state) => state.toggleSidebar);
-    const toggleFilePanel = useLayoutStore((state) => state.toggleFilePanel);
-    const toggleRightSidebar = useLayoutStore(
-        (state) => state.toggleRightSidebar
-    );
+
+    const toggleSidebar = () => toggle("sidebar");
+    const toggleFilePanel = () => toggle("files");
+    const toggleRightSidebar = () => toggle("right");
     const newChat = () => {
         composer.startNewChat();
         chats.select(null);
@@ -118,10 +105,7 @@ export function TopBar({ title, subagents = [], harness, className }: TopBarProp
     return (
         <header
             data-tauri-drag-region
-            className={cn(
-                "absolute inset-x-0 top-0 z-10 flex h-9 select-none items-center bg-transparent",
-                className
-            )}
+            className="absolute inset-x-0 top-0 z-10 flex h-9 select-none items-center bg-transparent"
         >
             <div
                 data-tauri-drag-region
@@ -129,92 +113,32 @@ export function TopBar({ title, subagents = [], harness, className }: TopBarProp
                 className="relative flex h-full min-w-fit shrink-0 items-center transition-[width]"
             >
                 {insetForTrafficLights && (
-                    <div
-                        data-tauri-drag-region
-                        className={MAC_TRAFFIC_LIGHTS}
-                    />
+                    <div data-tauri-drag-region className={MAC_TRAFFIC_LIGHTS} />
                 )}
 
-                <div
-                    data-tauri-drag-region
-                    className="flex h-full items-center gap-0.5 px-2"
-                >
-                    <Tooltip>
-                        <Tooltip.Trigger
-                            render={
-                                <Button
-                                    variant="ghost"
-                                    onClick={toggleSidebar}
-                                    aria-label="Toggle sidebar"
-                                    className="p-0 size-6"
-                                >
-                                    <SidebarSimpleIcon
-                                        weight={open ? "fill" : "regular"}
-                                        className="size-4"
-                                    />
-                                </Button>
-                            }
-                        />
-                        <Tooltip.Content side="bottom" shortcut="toggleSidebar">
-                            Toggle sidebar
-                        </Tooltip.Content>
-                    </Tooltip>
-
-                    <Tooltip>
-                        <Tooltip.Trigger
-                            render={
-                                <Button
-                                    variant="ghost"
-                                    aria-label="Back"
-                                    onClick={chats.goBack}
-                                    disabled={!canGoBack}
-                                    className="p-0 size-6"
-                                >
-                                    <ArrowLeftIcon className="size-4" />
-                                </Button>
-                            }
-                        />
-                        <Tooltip.Content side="bottom" shortcut="goBack">
-                            Back
-                        </Tooltip.Content>
-                    </Tooltip>
-
-                    <Tooltip>
-                        <Tooltip.Trigger
-                            render={
-                                <Button
-                                    variant="ghost"
-                                    aria-label="Forward"
-                                    onClick={chats.goForward}
-                                    disabled={!canGoForward}
-                                    className="p-0 size-6"
-                                >
-                                    <ArrowRightIcon className="size-4" />
-                                </Button>
-                            }
-                        />
-                        <Tooltip.Content side="bottom" shortcut="goForward">
-                            Forward
-                        </Tooltip.Content>
-                    </Tooltip>
-
-                    <Tooltip>
-                        <Tooltip.Trigger
-                            render={
-                                <Button
-                                    variant="ghost"
-                                    aria-label="New chat"
-                                    onClick={newChat}
-                                    className="p-0 size-6"
-                                >
-                                    <PlusIcon className="size-4" />
-                                </Button>
-                            }
-                        />
-                        <Tooltip.Content side="bottom" shortcut="newChat">
-                            New chat
-                        </Tooltip.Content>
-                    </Tooltip>
+                <div data-tauri-drag-region className="flex h-full items-center gap-0.5 px-2">
+                    <BarButton label="Toggle sidebar" shortcut="toggleSidebar" onClick={toggleSidebar}>
+                        <SidebarSimpleIcon weight={open ? "fill" : "regular"} className="size-4" />
+                    </BarButton>
+                    <BarButton
+                        label="Back"
+                        shortcut="goBack"
+                        onClick={chats.goBack}
+                        disabled={!canGoBack}
+                    >
+                        <ArrowLeftIcon className="size-4" />
+                    </BarButton>
+                    <BarButton
+                        label="Forward"
+                        shortcut="goForward"
+                        onClick={chats.goForward}
+                        disabled={!canGoForward}
+                    >
+                        <ArrowRightIcon className="size-4" />
+                    </BarButton>
+                    <BarButton label="New chat" shortcut="newChat" onClick={newChat}>
+                        <PlusIcon className="size-4" />
+                    </BarButton>
                 </div>
             </div>
 
@@ -226,12 +150,7 @@ export function TopBar({ title, subagents = [], harness, className }: TopBarProp
                     layout.maximized ? "overflow-hidden" : "px-3"
                 )}
             >
-                {harness && (
-                    <HarnessIcon
-                        harness={harness}
-                        className="size-3.5 shrink-0"
-                    />
-                )}
+                {harness && <HarnessIcon harness={harness} className="size-3.5 shrink-0" />}
                 {title && (
                     <span
                         className={cn(
@@ -281,52 +200,25 @@ export function TopBar({ title, subagents = [], harness, className }: TopBarProp
                 <div data-tauri-drag-region className="flex h-full items-center gap-0.5 px-2">
                     <PaletteButton />
                     <UsageButton />
-
-                    <Tooltip>
-                        <Tooltip.Trigger
-                            render={
-                                <Button
-                                    variant="ghost"
-                                    onClick={toggleFilePanel}
-                                    aria-label="Toggle file panel"
-                                    aria-pressed={filePanelOpen}
-                                    className="p-0 size-6"
-                                >
-                                    <FolderTreeIcon
-                                        weight={
-                                            filePanelOpen ? "fill" : "regular"
-                                        }
-                                        className="size-4"
-                                    />
-                                </Button>
-                            }
+                    <BarButton
+                        label="Toggle file panel"
+                        shortcut="toggleFilePanel"
+                        onClick={toggleFilePanel}
+                        pressed={filePanelOpen}
+                    >
+                        <FolderTreeIcon weight={filePanelOpen ? "fill" : "regular"} className="size-4" />
+                    </BarButton>
+                    <BarButton
+                        label="Toggle right sidebar"
+                        shortcut="toggleRightSidebar"
+                        onClick={toggleRightSidebar}
+                        pressed={rightOpen}
+                    >
+                        <SidebarSimpleIcon
+                            weight={rightOpen ? "fill" : "regular"}
+                            className="size-4 -scale-x-100"
                         />
-                        <Tooltip.Content side="bottom" shortcut="toggleFilePanel">
-                            Toggle file panel
-                        </Tooltip.Content>
-                    </Tooltip>
-
-                    <Tooltip>
-                        <Tooltip.Trigger
-                            render={
-                                <Button
-                                    variant="ghost"
-                                    onClick={toggleRightSidebar}
-                                    aria-label="Toggle right sidebar"
-                                    aria-pressed={rightOpen}
-                                    className="p-0 size-6"
-                                >
-                                    <SidebarSimpleIcon
-                                        weight={rightOpen ? "fill" : "regular"}
-                                        className="size-4 -scale-x-100"
-                                    />
-                                </Button>
-                            }
-                        />
-                        <Tooltip.Content side="bottom" shortcut="toggleRightSidebar">
-                            Toggle right sidebar
-                        </Tooltip.Content>
-                    </Tooltip>
+                    </BarButton>
                 </div>
 
                 {!isMac && <WindowControls />}

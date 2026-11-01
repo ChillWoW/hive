@@ -1,4 +1,3 @@
-import { useEffect, useState } from "react";
 import type { CommandKind, SlashCommand } from "@/proto";
 import {
     type AppCommand,
@@ -9,11 +8,15 @@ import {
     slashItems,
     type SlashItem
 } from "./slashCommands";
+import {
+    completeToken,
+    TOKEN_BOUNDARY,
+    useCompletionMenu,
+    type CompletionMenuState
+} from "./useCompletionMenu";
 
 /** What a command or skill's name is made of. */
 const NAME_CHAR = /[\p{L}\p{N}_:.-]/u;
-/** What may come right before a `/` or `$` that starts a name. */
-const BOUNDARY = /[\s([{]/;
 
 /** The `/command` or `$skill` being typed: where it sits, and what's typed of it. */
 type Token = { kind: CommandKind; start: number; end: number; query: string };
@@ -29,7 +32,7 @@ function tokenAt(draft: string, caret: number): Token | null {
     const sigil = draft[start - 1];
     if (sigil !== "/" && sigil !== "$") return null;
     const from = start - 1;
-    if (from > 0 && !BOUNDARY.test(draft[from - 1]!)) return null;
+    if (from > 0 && !TOKEN_BOUNDARY.test(draft[from - 1]!)) return null;
     let end = at;
     while (end < draft.length && NAME_CHAR.test(draft[end]!)) end++;
     // A path going on past the name (`/usr/bin`) isn't a command.
@@ -39,16 +42,7 @@ function tokenAt(draft: string, caret: number): Token | null {
     return { kind: sigil === "/" ? "command" : "skill", start: from, end, query };
 }
 
-export type SlashMenuState = {
-    open: boolean;
-    kind: CommandKind;
-    matches: SlashItem[];
-    index: number;
-    setIndex: (index: number) => void;
-    pick: (item: SlashItem) => void;
-    /** Handles the menu's keys; true when it took the event. */
-    onKeyDown: (event: KeyboardEvent) => boolean;
-};
+export type SlashMenuState = CompletionMenuState<SlashItem> & { kind: CommandKind };
 
 /**
  * Completion for `/command` and `$skill`. `/` at a word's
@@ -86,9 +80,6 @@ export function useSlashMenu({
     complete: (text: string, caret: number) => void;
     onApp: (id: AppCommandId) => void;
 }): SlashMenuState {
-    const [index, setIndex] = useState(0);
-    const [dismissed, setDismissed] = useState<string | null>(null);
-
     const token = tokenAt(draft, caret);
     const atStart = !!token && draft.slice(0, token.start).trim() === "";
     const offered = !token
@@ -108,71 +99,34 @@ export function useSlashMenu({
         !!token &&
         matches.length === 0 &&
         (token.kind === "command" ? atStart : offered.length > 0 && token.query !== "");
-    const open = enabled && (matches.length > 0 || empty) && dismissed !== draft;
     const typed = token?.query.toLowerCase();
-
-    // A new filter starts from the top.
-    useEffect(() => setIndex(0), [typed, token?.kind]);
 
     const pick = (item: SlashItem) => {
         if (!token) return;
-        const after = draft.slice(token.end);
         if (item.type === "app") {
             const before = draft.slice(0, token.start);
+            const after = draft.slice(token.end);
             const joined = before.endsWith(" ") && after.startsWith(" ") ? after.slice(1) : after;
             complete(before + joined, before.length);
             onApp(item.name);
             return;
         }
         const name = `${ITEM_PREFIX[item.type]}${item.name}`;
-        const gap = after.startsWith(" ") ? "" : " ";
-        const before = draft.slice(0, token.start) + name + gap;
-        complete(before + after, before.length + (gap ? 0 : 1));
+        complete(...completeToken(draft, token.start, token.end, name));
     };
 
-    const onKeyDown = (event: KeyboardEvent) => {
-        if (!open) return false;
-        if (event.key === "Escape") {
-            setDismissed(draft);
-            return true;
-        }
-        if (matches.length === 0) return false;
-        switch (event.key) {
-            case "ArrowDown":
-                setIndex((index + 1) % matches.length);
-                return true;
-            case "ArrowUp":
-                setIndex((index - 1 + matches.length) % matches.length);
-                return true;
-            case "Tab":
-            case "Enter": {
-                if (event.shiftKey) return false;
-                const item = matches[Math.min(index, matches.length - 1)];
-                if (!item) return false;
-                // A name typed out in full, as it would be completed, sends
-                // on Enter like any prompt.
-                if (
-                    event.key === "Enter" &&
-                    item.type === (token?.kind === "skill" ? "skill" : "command") &&
-                    item.name.toLowerCase() === typed
-                ) {
-                    return false;
-                }
-                pick(item);
-                return true;
-            }
-            default:
-                return false;
-        }
-    };
-
-    return {
-        open,
-        kind: token?.kind ?? "command",
+    const menu = useCompletionMenu({
+        draft,
+        shown: enabled && (matches.length > 0 || empty),
         matches,
-        index,
-        setIndex,
+        filter: token && `${token.kind}:${typed}`,
         pick,
-        onKeyDown
-    };
+        // A name typed out in full, as it would be completed, sends on Enter
+        // like any prompt.
+        passEnter: (item) =>
+            item.type === (token?.kind === "skill" ? "skill" : "command") &&
+            item.name.toLowerCase() === typed
+    });
+
+    return { ...menu, kind: token?.kind ?? "command" };
 }

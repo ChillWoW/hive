@@ -1,4 +1,6 @@
 import { create } from "zustand";
+import { errorMessage } from "@/lib/errors";
+import { singleFlight } from "@/lib/singleFlight";
 import type { DirectoryEntry } from "@/proto";
 import { listDirectory } from "./api";
 
@@ -16,9 +18,7 @@ export const useTreeStore = create<{ dirs: Record<string, DirListing> }>()(() =>
 export const dirKey = (cwd: string, all: boolean, dir: string) =>
     `${all ? 1 : 0}\0${cwd}\0${dir}`;
 
-const inflight = new Map<string, Promise<void>>();
-/** Asked again while a listing ran: it may predate the change, so list once more. */
-const again = new Map<string, Promise<void>>();
+const listings = singleFlight<string>();
 
 /**
  * Lists `dir`; the last listing stays shown meanwhile. With `fresh`, one
@@ -26,31 +26,17 @@ const again = new Map<string, Promise<void>>();
  */
 export function loadDir(cwd: string, all: boolean, dir: string, fresh = false): Promise<void> {
     const key = dirKey(cwd, all, dir);
-    let pending = inflight.get(key);
-    if (pending && fresh) {
-        let next = again.get(key);
-        if (!next) {
-            next = pending.then(() => {
-                again.delete(key);
-                return loadDir(cwd, all, dir);
-            });
-            again.set(key, next);
-        }
-        return next;
-    }
-    if (!pending) {
-        const save = (listing: DirListing) =>
-            useTreeStore.setState((s) => ({ dirs: { ...s.dirs, [key]: listing } }));
-        pending = listDirectory(cwd, dir, all)
-            .then(
+    const save = (listing: DirListing) =>
+        useTreeStore.setState((s) => ({ dirs: { ...s.dirs, [key]: listing } }));
+    return listings(
+        key,
+        () =>
+            listDirectory(cwd, dir, all).then(
                 (entries) => save({ entries }),
-                (error: unknown) =>
-                    save({ error: typeof error === "string" ? error : String(error) })
-            )
-            .finally(() => inflight.delete(key));
-        inflight.set(key, pending);
-    }
-    return pending;
+                (error: unknown) => save({ error: errorMessage(error) })
+            ),
+        fresh
+    );
 }
 
 /** Re-lists every folder of `cwd`'s tree listed so far (it may have changed). */
@@ -68,6 +54,3 @@ export function reloadDirs(cwd: string, all: boolean, dirs: string[]) {
         if (dirKey(cwd, all, dir) in listed) void loadDir(cwd, all, dir, true);
     }
 }
-
-/** The last part of a `/`-separated path. */
-export const nameOf = (path: string) => path.slice(path.lastIndexOf("/") + 1);

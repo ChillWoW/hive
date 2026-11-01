@@ -39,16 +39,6 @@
     --color-warning: #f0a45d;
     --color-info: #6fb3f2;
 
-    /* Skeleton's `shimmer` animation: a band swept across from its starting
-       `-translate-x-full`. */
-    --animate-skeleton-shimmer: skeleton-shimmer 1.5s ease-in-out infinite;
-
-    @keyframes skeleton-shimmer {
-        to {
-            translate: 100% 0;
-        }
-    }
-
     --animate-shimmer: shimmer 1.2s linear infinite;
 
     @keyframes shimmer {

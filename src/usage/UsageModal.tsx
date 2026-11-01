@@ -3,13 +3,21 @@ import { ArrowClockwiseIcon, InfoIcon, XIcon } from "@phosphor-icons/react";
 import { HarnessIcon } from "@/harnesses";
 import { cn } from "@/lib/cn";
 import { DARK } from "@/lib/palette";
-import type { UsageReport } from "@/proto";
-import { DotMatrixSpinner, iconButtonClassName, Modal, SegmentedControl, Tooltip } from "@/ui";
+import type { HarnessId, UsageReport } from "@/proto";
+import { onWindowFocus } from "@/lib/windowFocus";
+import {
+    DotMatrixSpinner,
+    IconButton,
+    iconButtonClassName,
+    Modal,
+    SegmentedControl,
+    Tooltip
+} from "@/ui";
 import { Breakdown } from "./Breakdown";
-import { formatAgo, formatCount, formatPercent, formatTokens, formatUsd } from "./format";
+import { formatAgo, formatCount, formatMeasure, formatPercent, formatTokens, formatUsd } from "./format";
 import { Limits } from "./Limits";
 import { ShareBar, type Share } from "./ShareBar";
-import { loadUsage, PERIODS, useUsageStore, type Metric, type Period } from "./store";
+import { loadUsage, PERIODS, useUsageStore, type Measure, type Metric, type Period } from "./store";
 import {
     HARNESS_COLOR,
     HARNESS_NAME,
@@ -21,13 +29,12 @@ import {
 import { UsageChart } from "./UsageChart";
 
 /** Token types, in reading order; colours validated as a set on the dark surface. */
-const TYPE_COLOR = {
-    input: "#9085e9",
-    cacheRead: "#c98500",
-    cacheWrite: "#d55181",
-    output: "#008300",
-    other: DARK[300]
-};
+const TYPES = [
+    { id: "input", label: "Input", color: "#9085e9" },
+    { id: "cacheRead", label: "Cache read", color: "#c98500" },
+    { id: "cacheWrite", label: "Cache write", color: "#d55181" },
+    { id: "output", label: "Output", color: "#008300" }
+] as const;
 
 /**
  * Tokens and estimated cost across every agent CLI on this machine, read
@@ -46,9 +53,7 @@ export function UsageModal() {
     useEffect(() => {
         if (!isOpen) return;
         void loadUsage();
-        const onFocus = () => void loadUsage();
-        window.addEventListener("focus", onFocus);
-        return () => window.removeEventListener("focus", onFocus);
+        return onWindowFocus(() => void loadUsage());
     }, [isOpen, period]);
 
     return (
@@ -85,22 +90,14 @@ export function UsageModal() {
                                 </SegmentedControl.Item>
                             ))}
                         </SegmentedControl>
-                        <Tooltip>
-                            <Tooltip.Trigger
-                                render={
-                                    <button
-                                        type="button"
-                                        aria-label="Refresh usage and prices"
-                                        disabled={loading}
-                                        onClick={() => void loadUsage({ refresh: true })}
-                                        className={iconButtonClassName}
-                                    />
-                                }
-                            >
-                                <ArrowClockwiseIcon className={cn("size-3.5", loading && "animate-spin")} />
-                            </Tooltip.Trigger>
-                            <Tooltip.Content>Refresh usage and prices</Tooltip.Content>
-                        </Tooltip>
+                        <IconButton
+                            label="Refresh usage and prices"
+                            side="top"
+                            disabled={loading}
+                            onClick={() => void loadUsage({ refresh: true })}
+                        >
+                            <ArrowClockwiseIcon className={cn("size-3.5", loading && "animate-spin")} />
+                        </IconButton>
                     </>
                 )}
                 <Modal.Close aria-label="Close usage" className={iconButtonClassName}>
@@ -117,14 +114,14 @@ export function UsageModal() {
     );
 }
 
-function Overview({ metric }: { metric: "cost" | "tokens" }) {
+function Overview({ metric }: { metric: Measure }) {
     const report = useUsageStore((s) => s.report);
     const query = useUsageStore((s) => s.query);
     const hidden = useUsageStore((s) => s.hidden);
     const toggleHidden = useUsageStore((s) => s.toggleHidden);
     const breakdown = useUsageStore((s) => s.breakdown);
     const setBreakdown = useUsageStore((s) => s.setBreakdown);
-    const loading = useUsageStore((s) => s.loading);
+    const stale = useUsageStore((s) => s.loading);
     const error = useUsageStore((s) => s.error);
 
     const summary = useMemo(
@@ -157,7 +154,6 @@ function Overview({ metric }: { metric: "cost" | "tokens" }) {
     }
 
     const hourly = query.buckets.length > 1 && query.buckets[1]! - query.buckets[0]! <= 3_600_000;
-    const stale = loading;
     const shownHarnesses = summary.harnesses.map((h) => h.harness).filter((h) => !hidden.includes(h));
 
     return (
@@ -206,16 +202,13 @@ function Hero({
     stale
 }: {
     summary: Summary;
-    metric: "cost" | "tokens";
-    hidden: string[];
-    onToggle: (h: Summary["harnesses"][number]["harness"]) => void;
+    metric: Measure;
+    hidden: HarnessId[];
+    onToggle: (h: HarnessId) => void;
     stale: boolean;
 }) {
     const total = valueOf(summary.all, metric);
     const unpriced = summary.all.unpriced;
-    const shownTotal = summary.harnesses
-        .filter((h) => !hidden.includes(h.harness))
-        .reduce((s, h) => s + valueOf(h, metric), 0);
     return (
         <section className={cn("flex min-w-0 flex-col gap-4 transition-opacity", stale && "opacity-60")}>
             <div className="flex flex-col gap-1">
@@ -238,7 +231,7 @@ function Hero({
                     )}
                 </span>
                 <span className="text-[40px] leading-none font-semibold tracking-tight text-dark-50">
-                    {metric === "cost" ? formatUsd(total) : formatTokens(total)}
+                    {formatMeasure(total, metric)}
                 </span>
                 <span className="text-xs text-dark-250">
                     {formatCount(summary.all.sessions)} sessions · {formatCount(summary.all.requests)} requests
@@ -277,10 +270,10 @@ function Hero({
                             </span>
                             <span className="flex flex-col items-end">
                                 <span className="text-xs font-medium tabular-nums text-dark-50">
-                                    {metric === "cost" ? formatUsd(value) : formatTokens(value)}
+                                    {formatMeasure(value, metric)}
                                 </span>
                                 <span className="text-[11px] tabular-nums text-dark-250">
-                                    {off ? "Hidden" : shownTotal ? formatPercent(value / shownTotal) : "—"}
+                                    {off ? "Hidden" : total ? formatPercent(value / total) : "—"}
                                 </span>
                             </span>
                         </button>
@@ -294,7 +287,7 @@ function Hero({
     );
 }
 
-function Stats({ summary, metric, stale }: { summary: Summary; metric: "cost" | "tokens"; stale: boolean }) {
+function Stats({ summary, metric, stale }: { summary: Summary; metric: Measure; stale: boolean }) {
     const t = summary.all.tokens;
     const input = t.input + t.cacheRead + t.cacheWrite;
     const tiles = [
@@ -345,24 +338,14 @@ function Stats({ summary, metric, stale }: { summary: Summary; metric: "cost" | 
 
 function tokenShares(summary: Summary): Share[] {
     const t = summary.all.tokens;
-    return [
-        { id: "input", label: "Input", value: t.input, color: TYPE_COLOR.input, display: formatTokens(t.input) },
-        { id: "cacheRead", label: "Cache read", value: t.cacheRead, color: TYPE_COLOR.cacheRead, display: formatTokens(t.cacheRead) },
-        { id: "cacheWrite", label: "Cache write", value: t.cacheWrite, color: TYPE_COLOR.cacheWrite, display: formatTokens(t.cacheWrite) },
-        { id: "output", label: "Output", value: t.output, color: TYPE_COLOR.output, display: formatTokens(t.output) }
-    ];
+    return TYPES.map((type) => ({ ...type, value: t[type.id], display: formatTokens(t[type.id]) }));
 }
 
 function costShares(summary: Summary): Share[] {
     const c = summary.all.cost;
-    const parts: Share[] = [
-        { id: "input", label: "Input", value: c.input, color: TYPE_COLOR.input, display: formatUsd(c.input) },
-        { id: "cacheRead", label: "Cache read", value: c.cacheRead, color: TYPE_COLOR.cacheRead, display: formatUsd(c.cacheRead) },
-        { id: "cacheWrite", label: "Cache write", value: c.cacheWrite, color: TYPE_COLOR.cacheWrite, display: formatUsd(c.cacheWrite) },
-        { id: "output", label: "Output", value: c.output, color: TYPE_COLOR.output, display: formatUsd(c.output) }
-    ];
+    const parts: Share[] = TYPES.map((type) => ({ ...type, value: c[type.id], display: formatUsd(c[type.id]) }));
     if (c.other > 0) {
-        parts.push({ id: "other", label: "Reported, unsplit", value: c.other, color: TYPE_COLOR.other, display: formatUsd(c.other) });
+        parts.push({ id: "other", label: "Reported, unsplit", value: c.other, color: DARK[300], display: formatUsd(c.other) });
     }
     return parts;
 }

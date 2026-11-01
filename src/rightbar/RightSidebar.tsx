@@ -1,13 +1,14 @@
 import type { ComponentType } from "react";
-import { ShortcutKeys, useBinding, type ActionId } from "@/keybindings";
+import type { ActionId } from "@/keybindings";
 import { useLayoutStore } from "@/stores/useLayoutStore";
 import { FolderTreeIcon } from "@/ui";
 import { HistoryTab } from "@/history/HistoryTab";
+import { TerminalView } from "@/terminal";
 import { CommitTab } from "./CommitTab";
 import { DiffTab } from "./DiffTab";
 import { FileTab } from "./FileTab";
 import { NEW_TABS } from "./kinds";
-import { TerminalTab } from "./TerminalTab";
+import { ActionKeys } from "./parts";
 import { useDiskChecks } from "./useDiskChecks";
 import { useRightbarStore } from "./store";
 
@@ -21,7 +22,7 @@ export function RightSidebar() {
             {tab?.kind === "file" ? (
                 <FileTab key={tab.id} tab={tab} />
             ) : tab?.kind === "terminal" ? (
-                <TerminalTab key={tab.id} tab={tab} />
+                <TerminalView key={tab.id} id={tab.id} />
             ) : tab?.kind === "diff" ? (
                 <DiffTab key={tab.id} />
             ) : tab?.kind === "history" ? (
@@ -85,11 +86,7 @@ function Choice({
                 <span className="text-[12.5px] text-dark-100">{label}</span>
                 <span className="truncate text-[11px] text-dark-250">{hint}</span>
             </span>
-            {shortcut && <Shortcut id={shortcut} />}
+            {shortcut && <ActionKeys id={shortcut} className="shrink-0" />}
         </button>
     );
-}
-
-function Shortcut({ id }: { id: ActionId }) {
-    return <ShortcutKeys shortcut={useBinding(id)} variant="plain" className="shrink-0" />;
 }

@@ -1,6 +1,6 @@
-import { invoke } from "@tauri-apps/api/core";
 import type { DirectoryEntry, WorkspaceEntry } from "@/proto";
-import { isTauri } from "@/lib/platform";
+import { backend } from "@/lib/backend";
+import { baseName } from "@/lib/paths";
 
 /** A made-up project for plain `bun run dev`, where there's no backend. */
 let FAKE: WorkspaceEntry[] = [
@@ -35,11 +35,10 @@ const FAKE_IGNORED: WorkspaceEntry[] = [
  * them with `all`), shallowest first (`src-tauri/src/files.rs`).
  */
 export function listFiles(cwd: string, all = false): Promise<WorkspaceEntry[]> {
-    if (!isTauri) return Promise.resolve(all ? [...FAKE, ...FAKE_IGNORED] : FAKE);
-    return invoke<WorkspaceEntry[]>("list_files", { cwd, all });
+    return backend("list_files", { cwd, all }, () =>
+        all ? [...FAKE, ...FAKE_IGNORED] : FAKE
+    );
 }
-
-const nameOf = (path: string) => path.slice(path.lastIndexOf("/") + 1);
 
 /** `path` is `ancestor` or inside it. */
 export const containsPath = (ancestor: string, path: string) =>
@@ -49,26 +48,27 @@ export const containsPath = (ancestor: string, path: string) =>
  * Renames `path` under `cwd` to `name` in the same folder; the new path. Refused when `name` is taken or isn't one name.
  */
 export function renameEntry(cwd: string, path: string, name: string): Promise<string> {
-    if (isTauri) return invoke<string>("rename_entry", { cwd, path, name });
-    const slash = path.lastIndexOf("/");
-    const to = slash === -1 ? name : `${path.slice(0, slash)}/${name}`;
-    if (!name || /[/\\:]/.test(name)) {
-        return Promise.reject("Enter a single file name without path separators");
-    }
-    if (to !== path && FAKE.some((e) => e.path === to)) {
-        return Promise.reject(`${name} already exists`);
-    }
-    FAKE = FAKE.map((e) =>
-        containsPath(path, e.path) ? { ...e, path: to + e.path.slice(path.length) } : e
-    );
-    return Promise.resolve(to);
+    return backend("rename_entry", { cwd, path, name }, () => {
+        const slash = path.lastIndexOf("/");
+        const to = slash === -1 ? name : `${path.slice(0, slash)}/${name}`;
+        if (!name || /[/\\:]/.test(name)) {
+            return Promise.reject("Enter a single file name without path separators");
+        }
+        if (to !== path && FAKE.some((e) => e.path === to)) {
+            return Promise.reject(`${name} already exists`);
+        }
+        FAKE = FAKE.map((e) =>
+            containsPath(path, e.path) ? { ...e, path: to + e.path.slice(path.length) } : e
+        );
+        return to;
+    });
 }
 
 /** Deletes `path` under `cwd` for good, a folder with everything in it. */
 export function deleteEntry(cwd: string, path: string): Promise<void> {
-    if (isTauri) return invoke<void>("delete_entry", { cwd, path });
-    FAKE = FAKE.filter((e) => !containsPath(path, e.path));
-    return Promise.resolve();
+    return backend("delete_entry", { cwd, path }, () => {
+        FAKE = FAKE.filter((e) => !containsPath(path, e.path));
+    });
 }
 
 /**
@@ -80,18 +80,17 @@ export function listDirectory(
     dir: string,
     all: boolean
 ): Promise<DirectoryEntry[]> {
-    if (isTauri) return invoke<DirectoryEntry[]>("list_directory", { cwd, dir, all });
-    const inDir = (entry: WorkspaceEntry) =>
-        entry.path.slice(0, Math.max(0, entry.path.lastIndexOf("/"))) === dir;
-    const entries = [
-        ...FAKE.filter(inDir).map((e) => ({ ...e, ignored: false })),
-        ...(all ? FAKE_IGNORED.filter(inDir).map((e) => ({ ...e, ignored: true })) : [])
-    ];
-    return Promise.resolve(
-        entries.sort(
+    return backend("list_directory", { cwd, dir, all }, () => {
+        const inDir = (entry: WorkspaceEntry) =>
+            entry.path.slice(0, Math.max(0, entry.path.lastIndexOf("/"))) === dir;
+        const entries = [
+            ...FAKE.filter(inDir).map((e) => ({ ...e, ignored: false })),
+            ...(all ? FAKE_IGNORED.filter(inDir).map((e) => ({ ...e, ignored: true })) : [])
+        ];
+        return entries.sort(
             (a, b) =>
                 Number(b.dir) - Number(a.dir) ||
-                nameOf(a.path).toLowerCase().localeCompare(nameOf(b.path).toLowerCase())
-        )
-    );
+                baseName(a.path).toLowerCase().localeCompare(baseName(b.path).toLowerCase())
+        );
+    });
 }

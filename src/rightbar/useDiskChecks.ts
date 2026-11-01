@@ -1,9 +1,8 @@
 import { useEffect } from "react";
-import { useChatsStore, workDir } from "@/chats";
+import { isBusy, useChatsStore, workDir } from "@/chats";
 import { checkAllOnDisk, checkDisk, useDocsStore } from "@/editor";
 import { watchFolder, type FolderChange } from "@/lib/folderWatch";
-
-const busy = (status: string | undefined) => status === "working" || status === "awaitingInput";
+import { onWindowFocus } from "@/lib/windowFocus";
 
 /** The folder `path` (relative to `cwd`, `/`-separated) is directly in, and its name. */
 function splitPath(cwd: string, path: string): [folder: string, name: string] {
@@ -20,17 +19,16 @@ function splitPath(cwd: string, path: string): [folder: string, name: string] {
  */
 export function useDiskChecks() {
     useEffect(() => {
-        const onFocus = () => checkAllOnDisk();
-        window.addEventListener("focus", onFocus);
+        const stopFocus = onWindowFocus(() => checkAllOnDisk());
         const unsubscribe = useChatsStore.subscribe((state, previous) => {
             for (const chat of state.chats) {
                 const was = previous.sessions[chat.id]?.status;
                 const now = state.sessions[chat.id]?.status;
-                if (busy(was) && !busy(now)) checkAllOnDisk(workDir(chat));
+                if (isBusy(was) && !isBusy(now)) checkAllOnDisk(workDir(chat));
             }
         });
         return () => {
-            window.removeEventListener("focus", onFocus);
+            stopFocus();
             unsubscribe();
         };
     }, []);

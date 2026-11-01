@@ -1,8 +1,8 @@
 import type { ReactNode } from "react";
 import { GitBranchIcon, GitForkIcon } from "@phosphor-icons/react";
 import { activity, workDir } from "@/chats";
-import { folderName } from "@/composer";
-import { ProjectIcon } from "@/composer/ProjectIcon";
+import { baseName } from "@/lib/paths";
+import { ProjectIcon } from "@/projects/ProjectIcon";
 import { useGitRepo } from "@/git";
 import {
     HarnessIcon,
@@ -14,13 +14,7 @@ import {
 import type { Chat, Session } from "@/proto";
 import { STATUS, statusOf } from "./status";
 import { StatusMark } from "./StatusMark";
-import { timeAgo, useMinuteClock } from "./time";
-
-/** "21h ago"; "just now" under a minute. */
-function agoLabel(at: number, now: number) {
-    const ago = timeAgo(at, now);
-    return ago === "now" ? "just now" : `${ago} ago`;
-}
+import { agoLabel, useMinuteClock } from "@/lib/time";
 
 /**
  * What a sidebar row has no room for, shown in its hover card: the whole
@@ -61,7 +55,7 @@ export function ChatCard({
 
             <div className="flex flex-col gap-1.5 border-t border-dark-600 pt-2.5">
                 <Meta icon={<ProjectIcon path={chat.cwd} className="size-3.5" />}>
-                    <span className="text-dark-100">{folderName(chat.cwd)}</span>
+                    <span className="text-dark-100">{baseName(chat.cwd)}</span>
                 </Meta>
                 {branch && (
                     <Meta

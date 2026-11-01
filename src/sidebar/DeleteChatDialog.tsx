@@ -1,9 +1,8 @@
-import { useEffect, useState } from "react";
 import { chats, useSession } from "@/chats";
 import { useGitRepo } from "@/git";
 import type { Chat } from "@/proto";
 import { useSetting } from "@/settings/store";
-import { Button, Modal } from "@/ui";
+import { ConfirmDialog, useLastNonNull } from "@/ui";
 import { UNTITLED } from "./ChatRow";
 
 /** Asks before deleting `chat`, since it can't be undone. Closed while null. */
@@ -14,39 +13,21 @@ export function DeleteChatDialog({
     chat: Chat | null;
     onClose: () => void;
 }) {
-    // Kept while the dialog animates out.
-    const [shown, setShown] = useState(chat);
-    useEffect(() => {
-        if (chat) setShown(chat);
-    }, [chat]);
+    const shown = useLastNonNull(chat);
     const running = useSession(shown?.id ?? null) !== undefined;
     const worktree = shown?.worktree;
     const changes = useGitRepo(worktree?.path)?.repo?.changes ?? 0;
     const deleteBranch = useSetting("worktrees", "deleteBranch").value;
-    const [error, setError] = useState<string | null>(null);
-    const [busy, setBusy] = useState(false);
-
-    useEffect(() => setError(null), [chat]);
-
-    const confirm = async () => {
-        if (!shown) return;
-        setBusy(true);
-        try {
-            await chats.remove(shown.id);
-            onClose();
-        } catch (e) {
-            setError(e instanceof Error ? e.message : String(e));
-        } finally {
-            setBusy(false);
-        }
-    };
 
     return (
-        <Modal
+        <ConfirmDialog
             open={chat !== null}
-            onOpenChange={(open) => !open && onClose()}
             title="Delete chat?"
-            size="sm"
+            confirmLabel="Delete"
+            onConfirm={async () => {
+                if (shown) await chats.remove(shown.id);
+            }}
+            onClose={onClose}
         >
             <p>
                 <span className="font-medium text-dark-50">
@@ -73,21 +54,6 @@ export function DeleteChatDialog({
                     )}
                 </p>
             )}
-            {error && <p className="mt-2 text-xs text-danger">{error}</p>}
-            <div className="mt-4 flex justify-end gap-2">
-                <Modal.Close render={<Button size="sm" variant="ghost" />}>
-                    Cancel
-                </Modal.Close>
-                <Button
-                    size="sm"
-                    variant="destructive"
-                    loading={busy}
-                    onClick={() => void confirm()}
-                    autoFocus
-                >
-                    Delete
-                </Button>
-            </div>
-        </Modal>
+        </ConfirmDialog>
     );
 }

@@ -1,5 +1,5 @@
 import { MENTION } from "@/files/mentions";
-import { commentTokens } from "@/review/comments";
+import { commentTokens, sentCommentRefs } from "@/review/comments";
 
 /**
  * What the composer draws as a tag, and the sent prompt the same way: an
@@ -19,7 +19,6 @@ export type FoundTag = { from: number; to: number; tag: Tag };
 const NAME = String.raw`[\p{L}_](?:[\p{L}\p{N}_:.-]*[\p{L}\p{N}_])?`;
 const SKILL = new RegExp(String.raw`(?<![^\s([{])\$(${NAME})(?=[.,;:!?)\]}]*(?:\s|$))`, "gu");
 const COMMAND = new RegExp(String.raw`^\s*(\/(${NAME}))(?=\s|$)`, "u");
-const SENT_COMMENT = /\[comment (\d+)\]/g;
 
 /**
  * Every tag in `text`, in order, none overlapping. `sent` reads comments as
@@ -42,14 +41,11 @@ export function findTags(text: string, { sent = false } = {}): FoundTag[] {
         const to = command[0].length;
         found.push({ from: to - command[1]!.length, to, tag: { kind: "command", name: command[2]! } });
     }
-    if (sent) {
-        for (const m of text.matchAll(SENT_COMMENT)) {
-            found.push({ from: m.index, to: m.index + m[0].length, tag: { kind: "comment", ref: m[1]! } });
-        }
-    } else {
-        for (const t of commentTokens(text)) {
-            found.push({ from: t.from, to: t.to, tag: { kind: "comment", ref: t.id } });
-        }
+    const comments = sent
+        ? sentCommentRefs(text).map(({ n, from, to }) => ({ ref: n, from, to }))
+        : commentTokens(text).map(({ id, from, to }) => ({ ref: id, from, to }));
+    for (const { ref, from, to } of comments) {
+        found.push({ from, to, tag: { kind: "comment", ref } });
     }
     found.sort((a, b) => a.from - b.from || b.to - a.to);
     const kept: FoundTag[] = [];
@@ -60,7 +56,7 @@ export function findTags(text: string, { sent = false } = {}): FoundTag[] {
     return kept;
 }
 
-export type TagPiece = { text: string } | { tag: Tag; raw: string };
+type TagPiece = { text: string } | { tag: Tag; raw: string };
 
 /** `text` as plain runs and the tags `tags` (from `findTags`) pick out of it. */
 export function tagPieces(text: string, tags: FoundTag[]): TagPiece[] {
@@ -74,5 +70,3 @@ export function tagPieces(text: string, tags: FoundTag[]): TagPiece[] {
     if (last < text.length) pieces.push({ text: text.slice(last) });
     return pieces;
 }
-
-export const sameTag = (a: Tag, b: Tag) => JSON.stringify(a) === JSON.stringify(b);

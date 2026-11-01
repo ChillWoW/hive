@@ -1,7 +1,7 @@
 import { ChartBarIcon, GaugeIcon, XIcon } from "@phosphor-icons/react";
 import { create } from "zustand";
 import { cn } from "@/lib/cn";
-import { trayClassName } from "./tray";
+import { trayActionsClassName, trayButtonClassName, trayClassName, trayHeaderClassName } from "./tray";
 import type { HarnessId } from "@/proto";
 import {
     formatReset,
@@ -34,11 +34,6 @@ function warningKey(harness: HarnessId, warning: UsageLimitWarning): string {
     return [harness, warning.window.label, warning.level, warning.window.resetsAt ?? ""].join("|");
 }
 
-const buttonClassName = cn(
-    "inline-flex h-5 shrink-0 items-center gap-1 rounded-md px-1.5 text-dark-200 outline-none",
-    "transition-colors hover:bg-dark-700 hover:text-dark-50 focus-visible:bg-dark-700"
-);
-
 /**
  * One line above the composer while the harness's plan usage is at 80% or
  * more of a window (as t3code's composer banners do): which window, how much
@@ -59,7 +54,7 @@ export function UsageLimitTray({ harness }: { harness: HarnessId }) {
 
     return (
         <div role="status" className={cn(trayClassName, "pt-0.5 pb-0.5")}>
-            <div className="flex h-6 min-w-0 items-center gap-1.5 px-2.5 text-xs">
+            <div className={trayHeaderClassName}>
                 <GaugeIcon className={cn("size-3.5 shrink-0", tone)} weight="bold" />
                 <span className="shrink-0 font-medium text-dark-100">{TITLE[warning.level]}</span>
                 <span className="min-w-0 truncate text-dark-250 tabular-nums">
@@ -69,7 +64,7 @@ export function UsageLimitTray({ harness }: { harness: HarnessId }) {
                     )}
                     {reset && ` · ${reset}`}
                 </span>
-                <span className="ml-auto flex shrink-0 items-center gap-0.5 -mr-1.5">
+                <span className={trayActionsClassName}>
                     <button
                         type="button"
                         onClick={() => {
@@ -77,7 +72,7 @@ export function UsageLimitTray({ harness }: { harness: HarnessId }) {
                             usageStore.setMetric("limits");
                             usageStore.setOpen(true);
                         }}
-                        className={buttonClassName}
+                        className={trayButtonClassName}
                     >
                         <ChartBarIcon className="size-3" />
                         Limits
@@ -86,7 +81,7 @@ export function UsageLimitTray({ harness }: { harness: HarnessId }) {
                         type="button"
                         aria-label="Dismiss usage warning"
                         onClick={() => useDismissed.setState((s) => ({ keys: [...s.keys, key] }))}
-                        className={cn(buttonClassName, "px-1")}
+                        className={cn(trayButtonClassName, "px-1")}
                     >
                         <XIcon className="size-3" />
                     </button>

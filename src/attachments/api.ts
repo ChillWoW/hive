@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { Attachment } from "@/proto";
+import { backend } from "@/lib/backend";
 import { isTauri } from "@/lib/platform";
 
 /**
@@ -9,7 +10,7 @@ import { isTauri } from "@/lib/platform";
  */
 
 /** Matches `MAX_ATTACHMENT_BYTES` in `hive-store`. */
-export const MAX_ATTACHMENT_BYTES = 32 * 1024 * 1024;
+const MAX_ATTACHMENT_BYTES = 32 * 1024 * 1024;
 
 const NO_BACKEND = "Attachments need the Hive app.";
 
@@ -25,10 +26,12 @@ export async function saveAttachment(file: File): Promise<Attachment> {
     });
 }
 
+/** Stands in for the backend under `bun run dev`: attachments need the app. */
+const noBackend = () => Promise.reject(new Error(NO_BACKEND));
+
 /** Opens the attachment in its default app. */
 export function openAttachment(attachment: Attachment): Promise<void> {
-    if (!isTauri) return Promise.reject(new Error(NO_BACKEND));
-    return invoke<void>("open_attachment", { path: attachment.path });
+    return backend<void>("open_attachment", { path: attachment.path }, noBackend);
 }
 
 /** Object URLs of attachments read back, by path; files never change. */
@@ -38,11 +41,9 @@ const urls = new Map<string, Promise<string>>();
 export function attachmentUrl(attachment: Attachment): Promise<string> {
     let url = urls.get(attachment.path);
     if (!url) {
-        url = isTauri
-            ? invoke<ArrayBuffer>("attachment_bytes", { path: attachment.path }).then((bytes) =>
-                  URL.createObjectURL(new Blob([bytes], { type: attachment.mimeType }))
-              )
-            : Promise.reject(new Error(NO_BACKEND));
+        url = backend<ArrayBuffer>("attachment_bytes", { path: attachment.path }, noBackend).then(
+            (bytes) => URL.createObjectURL(new Blob([bytes], { type: attachment.mimeType }))
+        );
         // A failed read can be tried again later.
         url.catch(() => urls.delete(attachment.path));
         urls.set(attachment.path, url);

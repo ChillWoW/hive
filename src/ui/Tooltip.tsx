@@ -1,24 +1,12 @@
-import { forwardRef } from "react";
-import type { ComponentProps, FC, ReactNode } from "react";
+import type { ComponentProps, ReactNode } from "react";
 import { Tooltip as BaseTooltip } from "@base-ui/react/tooltip";
 import { usePortalContainer } from "./PortalContainer";
 import { useBinding, type ShortcutRef } from "@/keybindings/runtime";
 import { ShortcutKeys } from "@/keybindings/ShortcutKeys";
 import { cn } from "@/lib/cn";
 
-type BaseTooltipProviderProps = ComponentProps<
-    typeof BaseTooltip.Provider
->;
-type BaseTooltipRootProps = ComponentProps<typeof BaseTooltip.Root>;
-type BaseTooltipTriggerProps = ComponentProps<typeof BaseTooltip.Trigger>;
-type BaseTooltipPortalProps = ComponentProps<typeof BaseTooltip.Portal>;
-type BaseTooltipPositionerProps = ComponentProps<
-    typeof BaseTooltip.Positioner
->;
+type BaseTooltipPositionerProps = ComponentProps<typeof BaseTooltip.Positioner>;
 type BaseTooltipPopupProps = ComponentProps<typeof BaseTooltip.Popup>;
-type BaseTooltipViewportProps = ComponentProps<
-    typeof BaseTooltip.Viewport
->;
 
 const popupBaseClassName = cn(
     "max-w-xs outline-none",
@@ -32,91 +20,29 @@ const popupBaseClassName = cn(
     "data-[instant]:transition-none"
 );
 
-export interface TooltipProviderProps extends BaseTooltipProviderProps {}
-
-const TooltipProvider: FC<TooltipProviderProps> = ({
+function TooltipProvider({
     delay = 150,
     closeDelay = 0,
     ...props
-}) => <BaseTooltip.Provider delay={delay} closeDelay={closeDelay} {...props} />;
-TooltipProvider.displayName = "Tooltip.Provider";
+}: ComponentProps<typeof BaseTooltip.Provider>) {
+    return <BaseTooltip.Provider delay={delay} closeDelay={closeDelay} {...props} />;
+}
 
-export interface TooltipProps extends BaseTooltipRootProps {}
-
-const TooltipRoot = BaseTooltip.Root as FC<TooltipProps>;
-(TooltipRoot as { displayName?: string }).displayName = "Tooltip";
-
-export interface TooltipTriggerProps extends BaseTooltipTriggerProps {}
-
-const TooltipTrigger: FC<TooltipTriggerProps> = ({
+function TooltipTrigger({
     delay = 150,
     closeDelay = 0,
     closeOnClick = false,
     ...props
-}) => (
-    <BaseTooltip.Trigger
-        delay={delay}
-        closeDelay={closeDelay}
-        closeOnClick={closeOnClick}
-        {...props}
-    />
-);
-TooltipTrigger.displayName = "Tooltip.Trigger";
-
-export interface TooltipPortalProps extends BaseTooltipPortalProps {}
-
-const TooltipPortal = BaseTooltip.Portal as FC<TooltipPortalProps>;
-(TooltipPortal as { displayName?: string }).displayName = "Tooltip.Portal";
-
-export interface TooltipPositionerProps
-    extends Omit<BaseTooltipPositionerProps, "className"> {
-    className?: string;
-}
-
-const TooltipPositioner = forwardRef<
-    HTMLDivElement,
-    TooltipPositionerProps
->(({ className, sideOffset = 6, ...props }, ref) => (
-    <BaseTooltip.Positioner
-        ref={ref}
-        sideOffset={sideOffset}
-        className={cn("z-50 outline-none", className)}
-        {...props}
-    />
-));
-TooltipPositioner.displayName = "Tooltip.Positioner";
-
-export interface TooltipPopupProps
-    extends Omit<BaseTooltipPopupProps, "className"> {
-    className?: string;
-}
-
-const TooltipPopup = forwardRef<HTMLDivElement, TooltipPopupProps>(
-    ({ className, ...props }, ref) => (
-        <BaseTooltip.Popup
-            ref={ref}
-            className={cn(popupBaseClassName, className)}
+}: ComponentProps<typeof BaseTooltip.Trigger>) {
+    return (
+        <BaseTooltip.Trigger
+            delay={delay}
+            closeDelay={closeDelay}
+            closeOnClick={closeOnClick}
             {...props}
         />
-    )
-);
-TooltipPopup.displayName = "Tooltip.Popup";
-
-export interface TooltipViewportProps
-    extends Omit<BaseTooltipViewportProps, "className"> {
-    className?: string;
+    );
 }
-
-const TooltipViewport = forwardRef<HTMLDivElement, TooltipViewportProps>(
-    ({ className, ...props }, ref) => (
-        <BaseTooltip.Viewport
-            ref={ref}
-            className={cn("relative outline-none", className)}
-            {...props}
-        />
-    )
-);
-TooltipViewport.displayName = "Tooltip.Viewport";
 
 export interface TooltipContentProps
     extends Omit<BaseTooltipPopupProps, "className" | "children"> {
@@ -126,11 +52,7 @@ export interface TooltipContentProps
     sideOffset?: BaseTooltipPositionerProps["sideOffset"];
     alignOffset?: BaseTooltipPositionerProps["alignOffset"];
     collisionPadding?: BaseTooltipPositionerProps["collisionPadding"];
-    container?: BaseTooltipPortalProps["container"];
-    keepMounted?: BaseTooltipPortalProps["keepMounted"];
     className?: string;
-    positionerClassName?: string;
-    arrowClassName?: string;
     /**
      * Shown as muted text right of the label: an action id (its current
      * binding, nothing while unbound) or a fixed combo like `Escape`.
@@ -143,71 +65,55 @@ function TooltipShortcut({ shortcut }: { shortcut: ShortcutRef }) {
     return <ShortcutKeys shortcut={binding} variant="plain" className="shrink-0 text-dark-250" />;
 }
 
-const TooltipContent = forwardRef<HTMLDivElement, TooltipContentProps>(
-    (
-        {
-            children,
-            side,
-            align,
-            sideOffset = 6,
-            alignOffset,
-            collisionPadding,
-            container,
-            keepMounted,
-            className,
-            positionerClassName,
-            arrowClassName,
-            shortcut,
-            ...popupProps
-        },
-        ref
-    ) => {
-        // Same fallback as Modal: mount into the shell's overlay layer when one is
-        // provided. Base UI reads an explicit `null` as "not resolved yet" and renders
-        // nothing, so fall through to `undefined` when there is no provider.
-        const portalContainer = usePortalContainer();
+/** Portal, positioner and popup in one. */
+function TooltipContent({
+    children,
+    side,
+    align,
+    sideOffset = 6,
+    alignOffset,
+    collisionPadding,
+    className,
+    shortcut,
+    ...popupProps
+}: TooltipContentProps) {
+    // Mounts into the shell's overlay layer when one is provided. Base UI reads an explicit
+    // `null` as "not resolved yet" and renders nothing, so fall through to `undefined`.
+    const portalContainer = usePortalContainer();
 
-        return (
-            <BaseTooltip.Portal
-                container={container ?? portalContainer ?? undefined}
-                keepMounted={keepMounted}
+    return (
+        <BaseTooltip.Portal container={portalContainer ?? undefined}>
+            <BaseTooltip.Positioner
+                side={side}
+                align={align}
+                sideOffset={sideOffset}
+                alignOffset={alignOffset}
+                collisionPadding={collisionPadding}
+                className="z-50 outline-none"
             >
-                <BaseTooltip.Positioner
-                    side={side}
-                    align={align}
-                    sideOffset={sideOffset}
-                    alignOffset={alignOffset}
-                    collisionPadding={collisionPadding}
-                    className={cn("z-50 outline-none", positionerClassName)}
-                >
-                    <BaseTooltip.Popup
-                        ref={ref}
-                        className={cn(popupBaseClassName, className)}
-                        {...popupProps}
-                    >
-                        {shortcut ? (
-                            <span className="flex items-center gap-2">
-                                <span className="min-w-0">{children}</span>
-                                <TooltipShortcut shortcut={shortcut} />
-                            </span>
-                        ) : (
-                            children
-                        )}
-                    </BaseTooltip.Popup>
-                </BaseTooltip.Positioner>
-            </BaseTooltip.Portal>
-        );
-    }
-);
-TooltipContent.displayName = "Tooltip.Content";
+                <BaseTooltip.Popup className={cn(popupBaseClassName, className)} {...popupProps}>
+                    {shortcut ? (
+                        <span className="flex items-center gap-2">
+                            <span className="min-w-0">{children}</span>
+                            <TooltipShortcut shortcut={shortcut} />
+                        </span>
+                    ) : (
+                        children
+                    )}
+                </BaseTooltip.Popup>
+            </BaseTooltip.Positioner>
+        </BaseTooltip.Portal>
+    );
+}
+
+/** Own function rather than `BaseTooltip.Root` itself, so `Object.assign` below attaches the parts
+ *  to this wrapper instead of mutating Base UI's shared export. */
+function TooltipRoot(props: ComponentProps<typeof BaseTooltip.Root>) {
+    return <BaseTooltip.Root {...props} />;
+}
 
 export const Tooltip = Object.assign(TooltipRoot, {
     Provider: TooltipProvider,
     Trigger: TooltipTrigger,
-    Portal: TooltipPortal,
-    Positioner: TooltipPositioner,
-    Popup: TooltipPopup,
-    Viewport: TooltipViewport,
-    Content: TooltipContent,
-    createHandle: BaseTooltip.createHandle
+    Content: TooltipContent
 });

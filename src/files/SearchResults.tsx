@@ -1,10 +1,10 @@
 import { useMemo } from "react";
+import { baseName } from "@/lib/paths";
 import { openFileTab } from "@/rightbar/actions";
 import { FileIcon } from "@/ui";
 import { useFilesPanelStore } from "./panel";
 import { rankEntries } from "./rank";
 import { useWorkspaceFiles } from "./store";
-import { nameOf } from "./tree";
 
 /** Rows the search shows at most. */
 const LIMIT = 200;
@@ -44,7 +44,7 @@ export function SearchResults({
             className="min-h-0 flex-1 overflow-y-auto overscroll-contain py-1"
         >
             {matches.map((entry) => {
-                const name = nameOf(entry.path);
+                const name = baseName(entry.path);
                 const parent = entry.path.slice(0, entry.path.length - name.length - 1);
                 return (
                     <button

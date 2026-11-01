@@ -6,6 +6,7 @@ import {
 } from "@phosphor-icons/react";
 import type { SecretRequest } from "@/proto";
 import { cn } from "@/lib/cn";
+import { errorMessage } from "@/lib/errors";
 import { Markdown } from "@/transcript/Markdown";
 import { Button, Input } from "@/ui";
 
@@ -17,13 +18,11 @@ import { Button, Input } from "@/ui";
  */
 export function SecretRequestCard({
     request,
-    onAnswer,
-    className
+    onAnswer
 }: {
     request: SecretRequest;
     /** `null` declines. */
     onAnswer: (value: string | null) => Promise<void>;
-    className?: string;
 }) {
     const [value, setValue] = useState("");
     const [shown, setShown] = useState(false);
@@ -44,7 +43,7 @@ export function SecretRequestCard({
             () => setValue(""),
             (e: unknown) => {
                 setSending(undefined);
-                setError(e instanceof Error ? e.message : String(e));
+                setError(errorMessage(e));
             }
         );
     };
@@ -60,8 +59,7 @@ export function SecretRequestCard({
             }}
             className={cn(
                 "flex w-full flex-col gap-3 rounded-[22px] border border-dark-600 bg-dark-850 p-4",
-                "transition-[opacity,translate] duration-200 ease-out starting:translate-y-1 starting:opacity-0",
-                className
+                "transition-[opacity,translate] duration-200 ease-out starting:translate-y-1 starting:opacity-0"
             )}
         >
             <div className="flex min-w-0 flex-col gap-1">

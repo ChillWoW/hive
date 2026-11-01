@@ -20,37 +20,34 @@ import {
     type Icon
 } from "@phosphor-icons/react";
 import { chats, type TranscriptMessage } from "@/chats";
-import { chipTriggerClassName, popupClassName } from "@/composer/chip";
-import { HarnessIcon } from "@/harnesses";
+import { useCopy } from "@/lib/clipboard";
 import { cn } from "@/lib/cn";
+import { errorMessage } from "@/lib/errors";
+import { formatElapsed, useNow } from "@/lib/time";
 import type { BackgroundTask, BackgroundTaskKind, HarnessId, TaskOutput, ToolCall } from "@/proto";
-import { findSpawnIn, progressLine, type SpawnPart } from "@/transcript/subagents";
-import { DotMatrixSpinner, Popover, usePortalContainer } from "@/ui";
+import {
+    AgentMark,
+    findSpawnIn,
+    progressLine,
+    RoundAvatar,
+    type SpawnPart
+} from "@/transcript";
+import { DotMatrixSpinner } from "@/ui";
+import { ChipPopover } from "@/ui/ChipPopover";
 
-const ICON: Record<BackgroundTaskKind, Icon> = {
-    agent: RobotIcon,
-    shell: TerminalWindowIcon,
-    monitor: EyeIcon,
-    workflow: FlowArrowIcon,
-    other: GearSixIcon
+/**
+ * Each kind: its glyph, what one and many are called, its section's title
+ * (the list's sections go in this order) and the row's second line.
+ */
+const KINDS: Record<BackgroundTaskKind, { icon: Icon; noun: [string, string]; title: string; detail?: string }> = {
+    agent: { icon: RobotIcon, noun: ["agent", "agents"], title: "Agents" },
+    shell: { icon: TerminalWindowIcon, noun: ["shell", "shells"], title: "Shells", detail: "Shell" },
+    monitor: { icon: EyeIcon, noun: ["monitor", "monitors"], title: "Monitors", detail: "Monitor" },
+    workflow: { icon: FlowArrowIcon, noun: ["workflow", "workflows"], title: "Workflows", detail: "Workflow" },
+    other: { icon: GearSixIcon, noun: ["task", "tasks"], title: "Other" }
 };
 
-const NOUN: Record<BackgroundTaskKind, [string, string]> = {
-    agent: ["agent", "agents"],
-    shell: ["shell", "shells"],
-    monitor: ["monitor", "monitors"],
-    workflow: ["workflow", "workflows"],
-    other: ["task", "tasks"]
-};
-
-/** The list's sections, in order. */
-const SECTIONS: { kind: BackgroundTaskKind; title: string }[] = [
-    { kind: "agent", title: "Agents" },
-    { kind: "shell", title: "Shells" },
-    { kind: "monitor", title: "Monitors" },
-    { kind: "workflow", title: "Workflows" },
-    { kind: "other", title: "Other" }
-];
+const ORDER = Object.keys(KINDS) as BackgroundTaskKind[];
 
 /** How often an open shell's output is read again. */
 const OUTPUT_POLL_MS = 1500;
@@ -58,7 +55,7 @@ const OUTPUT_POLL_MS = 1500;
 /** "2 shells", "1 agent", or "3 tasks" for a mix. */
 function summary(tasks: BackgroundTask[]): string {
     const mixed = new Set(tasks.map((t) => t.kind)).size > 1;
-    const [one, many] = NOUN[mixed ? "other" : tasks[0].kind];
+    const [one, many] = KINDS[mixed ? "other" : tasks[0].kind].noun;
     return `${tasks.length} ${tasks.length === 1 ? one : many}`;
 }
 
@@ -73,26 +70,6 @@ function nest(tasks: BackgroundTask[]): { task: BackgroundTask; depth: number }[
     };
     for (const task of tasks) if (!task.parentId || !ids.has(task.parentId)) visit(task, 0);
     return out;
-}
-
-function elapsed(since: number | undefined, now: number): string {
-    if (since == null) return "";
-    const s = Math.max(0, Math.floor((now - since) / 1000));
-    if (s < 60) return `${s}s`;
-    const m = Math.floor(s / 60);
-    if (m < 60) return `${m}m ${String(s % 60).padStart(2, "0")}s`;
-    return `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, "0")}m`;
-}
-
-function useNow(enabled: boolean, interval = 1000): number {
-    const [now, setNow] = useState(Date.now);
-    useEffect(() => {
-        if (!enabled) return;
-        setNow(Date.now());
-        const id = setInterval(() => setNow(Date.now()), interval);
-        return () => clearInterval(id);
-    }, [enabled, interval]);
-    return now;
 }
 
 /* eslint-disable no-control-regex -- terminal escape sequences, on purpose */
@@ -112,8 +89,6 @@ function plainText(output: string): string {
         .join("\n")
         .trimEnd();
 }
-
-const errorText = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 /**
  * Work the agent left running between turns — subagents, shells, monitors —
@@ -135,7 +110,6 @@ export function BackgroundTasks({
     tasks: BackgroundTask[] | undefined;
     messages: TranscriptMessage[];
 }) {
-    const container = usePortalContainer();
     const [open, setOpen] = useState(false);
     // Tool calls by id, for the command a shell runs.
     const calls = useMemo(() => {
@@ -147,41 +121,34 @@ export function BackgroundTasks({
 
     if (!tasks?.length) return null;
 
+    const label = summary(tasks);
     return (
-        <Popover open={open} onOpenChange={setOpen}>
-            <Popover.Trigger
-                aria-label={`Background: ${summary(tasks)}`}
-                className={cn(chipTriggerClassName, "shrink-0 gap-1.5 px-1.5 text-info")}
-            >
-                <DotMatrixSpinner interval={400} className="size-2.5" />
-                <span className="tabular-nums">{summary(tasks)}</span>
-            </Popover.Trigger>
-            <Popover.Portal container={container ?? undefined}>
-                <Popover.Positioner
-                    side="top"
-                    align="end"
-                    sideOffset={10}
-                    collisionPadding={{ top: 48, right: 12, bottom: 12, left: 12 }}
-                >
-                    <Popover.Popup
-                        aria-label="Background tasks"
-                        className={cn(popupClassName, "w-[22.5rem] min-w-0 rounded-xl p-0")}
-                    >
-                        <TaskList
-                            chatId={chatId}
-                            harness={harness}
-                            tasks={tasks}
-                            calls={calls}
-                            messages={messages}
-                            onOpenAgent={(id) => {
-                                setOpen(false);
-                                chats.openSubagent(chatId, id);
-                            }}
-                        />
-                    </Popover.Popup>
-                </Popover.Positioner>
-            </Popover.Portal>
-        </Popover>
+        <ChipPopover
+            open={open}
+            onOpenChange={setOpen}
+            label="Background tasks"
+            triggerLabel={`Background: ${label}`}
+            triggerClassName="text-info"
+            trigger={
+                <>
+                    <DotMatrixSpinner interval={400} className="size-2.5" />
+                    <span className="tabular-nums">{label}</span>
+                </>
+            }
+            className="w-[22.5rem]"
+        >
+            <TaskList
+                chatId={chatId}
+                harness={harness}
+                tasks={tasks}
+                calls={calls}
+                messages={messages}
+                onOpenAgent={(id) => {
+                    setOpen(false);
+                    chats.openSubagent(chatId, id);
+                }}
+            />
+        </ChipPopover>
     );
 }
 
@@ -215,13 +182,15 @@ function TaskList({
                 next.delete(taskId);
                 return next;
             });
-            setErrors((errs) => ({ ...errs, [taskId]: errorText(e) }));
+            setErrors((errs) => ({ ...errs, [taskId]: errorMessage(e) }));
         });
     };
     const live = tasks.filter((t) => !stopping.has(t.id));
-    const sections = SECTIONS.map((s) => ({ ...s, tasks: tasks.filter((t) => t.kind === s.kind) })).filter(
-        (s) => s.tasks.length
-    );
+    const sections = ORDER.map((kind) => ({
+        kind,
+        title: KINDS[kind].title,
+        tasks: tasks.filter((t) => t.kind === kind)
+    })).filter((s) => s.tasks.length);
 
     // ↑↓ move between rows, Backspace/Delete stops the focused one.
     const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
@@ -293,23 +262,14 @@ function TaskList({
 /** A shell's command as the title, else the task's own description. */
 function titleOf(task: BackgroundTask, call: ToolCall | undefined): { text: string; mono: boolean } {
     if (task.kind !== "agent" && call?.kind === "exec") return { text: call.command, mono: true };
-    return { text: task.description || NOUN[task.kind][0], mono: false };
+    return { text: task.description || KINDS[task.kind].noun[0], mono: false };
 }
 
 /** The row's second line for anything but an agent. */
 function detailOf(task: BackgroundTask, call: ToolCall | undefined): string | undefined {
     // A shell titled by its command keeps its description under it.
     if (call?.kind === "exec") return task.description && task.description !== call.command ? task.description : undefined;
-    switch (task.kind) {
-        case "shell":
-            return "Shell";
-        case "monitor":
-            return "Monitor";
-        case "workflow":
-            return "Workflow";
-        default:
-            return undefined;
-    }
+    return KINDS[task.kind].detail;
 }
 
 /** The tool calls a subagent has made so far. */
@@ -402,7 +362,9 @@ function TaskRow({
                 </span>
                 <span className="pointer-events-none relative z-10 flex shrink-0 items-center gap-0.5">
                     <span className="px-1 text-[11px] text-dark-200 tabular-nums">
-                        {stopping ? "Stopping…" : elapsed(task.startedAt, now)}
+                        {stopping
+                            ? "Stopping…"
+                            : task.startedAt != null && formatElapsed(now - task.startedAt, { pad: true })}
                     </span>
                     <button
                         type="button"
@@ -433,18 +395,18 @@ function TaskRow({
 
 /** A round avatar as the transcript's subagents have, a live dot matrix on its corner. */
 function TaskAvatar({ task, harness }: { task: BackgroundTask; harness: HarnessId }) {
-    const Glyph = ICON[task.kind];
+    const Glyph = KINDS[task.kind].icon;
     return (
-        <span className="pointer-events-none relative inline-flex size-6 shrink-0 items-center justify-center rounded-full border border-dark-600 bg-dark-800">
+        <RoundAvatar className="pointer-events-none">
             {task.kind === "agent" ? (
-                <HarnessIcon harness={harness} className="size-3.5" />
+                <AgentMark harness={harness} />
             ) : (
                 <Glyph className="size-3.5 text-dark-200" />
             )}
             <span className="absolute -right-1 -bottom-1 grid size-3 place-items-center rounded-full bg-dark-850 text-info">
                 <DotMatrixSpinner interval={400} label="Running" className="size-[7px] gap-[0.5px]" />
             </span>
-        </span>
+        </RoundAvatar>
     );
 }
 
@@ -452,7 +414,7 @@ function TaskAvatar({ task, harness }: { task: BackgroundTask; harness: HarnessI
 function OutputTail({ chatId, taskId, indent }: { chatId: string; taskId: string; indent: number }) {
     const [output, setOutput] = useState<TaskOutput | null>(null);
     const [error, setError] = useState<string | null>(null);
-    const [copied, setCopied] = useState(false);
+    const [copied, copy] = useCopy();
     const ref = useRef<HTMLPreElement>(null);
     const pinned = useRef(true);
 
@@ -468,7 +430,7 @@ function OutputTail({ chatId, taskId, indent }: { chatId: string; taskId: string
                         setOutput(next);
                         setError(null);
                     },
-                    (e) => alive && setError(errorText(e))
+                    (e) => alive && setError(errorMessage(e))
                 )
                 .finally(() => {
                     if (alive) timer = setTimeout(read, OUTPUT_POLL_MS);
@@ -480,12 +442,6 @@ function OutputTail({ chatId, taskId, indent }: { chatId: string; taskId: string
             clearTimeout(timer);
         };
     }, [chatId, taskId]);
-
-    useEffect(() => {
-        if (!copied) return;
-        const t = setTimeout(() => setCopied(false), 1500);
-        return () => clearTimeout(t);
-    }, [copied]);
 
     const text = useMemo(() => (output ? plainText(output.output) : ""), [output]);
 
@@ -524,7 +480,7 @@ function OutputTail({ chatId, taskId, indent }: { chatId: string; taskId: string
                     <button
                         type="button"
                         disabled={!text}
-                        onClick={() => void navigator.clipboard.writeText(text).then(() => setCopied(true))}
+                        onClick={() => copy(text)}
                         className="inline-flex h-5 items-center gap-1 rounded px-1.5 text-dark-200 outline-none transition-colors hover:bg-dark-700 hover:text-dark-50 focus-visible:bg-dark-700 disabled:pointer-events-none disabled:opacity-50"
                     >
                         {copied ? <CheckIcon className="size-3" /> : <CopyIcon className="size-3" />}

@@ -23,12 +23,13 @@ import {
     XIcon
 } from "@phosphor-icons/react";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
-import { chats, useChatsStore, workDir } from "@/chats";
-import { folderName } from "@/composer";
+import { activity, chats, chatTitle, isBusy, useChatsStore, workDir } from "@/chats";
+import { baseName } from "@/lib/paths";
 import { useWorkspaceFiles } from "@/files";
 import { scoreEntry } from "@/files/rank";
 import { HarnessIcon } from "@/harnesses";
 import { ACTIONS, canRunAction, runAction, type ActionId } from "@/keybindings";
+import { copyText } from "@/lib/clipboard";
 import { fuzzyScore, rankBy } from "@/lib/fuzzy";
 import type { Chat, Session } from "@/proto";
 import { openFileTab, useActiveFolder } from "@/rightbar";
@@ -38,7 +39,7 @@ import { statusOf, type ChatStatus } from "@/sidebar/status";
 import { FileIcon, FolderTreeIcon } from "@/ui";
 import { usePaletteStore } from "./store";
 
-export type SectionId = "chats" | "files" | "actions" | "settings";
+type SectionId = "chats" | "files" | "actions" | "settings";
 
 export type PaletteItem = {
     id: string;
@@ -53,7 +54,7 @@ export type PaletteItem = {
     run: () => void;
 };
 
-export type PaletteSection = { id: SectionId; title: string; items: PaletteItem[] };
+type PaletteSection = { id: SectionId; title: string; items: PaletteItem[] };
 
 /** What a leading character narrows the search to. */
 export const PREFIXES = [
@@ -64,7 +65,7 @@ export const PREFIXES = [
 
 type Scope = "all" | "actions" | "chats" | "files";
 
-export function parseQuery(raw: string): { scope: Scope; query: string } {
+function parseQuery(raw: string): { scope: Scope; query: string } {
     const prefix = PREFIXES.find((p) => raw.startsWith(p.char));
     return prefix
         ? { scope: prefix.section, query: raw.slice(1).trim() }
@@ -138,21 +139,17 @@ const ACTION_ICONS: Partial<Record<ActionId, ReactNode>> = {
  */
 const UNLISTED = new Set<ActionId>(["commandPalette", "archiveChat"]);
 
-const chatTitle = (chat: Chat) => chat.title ?? folderName(chat.cwd);
-
-const copy = (text: string) => void navigator.clipboard.writeText(text).catch(() => {});
-
 function chatItem(chat: Chat, session: Session | undefined): PaletteItem {
     return {
         id: `chat:${chat.id}`,
         label: chatTitle(chat),
         detail: chat.worktree
-            ? `${folderName(chat.cwd)} · ${chat.worktree.branch}`
-            : folderName(chat.cwd),
+            ? `${baseName(chat.cwd)} · ${chat.worktree.branch}`
+            : baseName(chat.cwd),
         icon: <HarnessIcon harness={chat.config.harness} />,
         chat: {
             status: statusOf(chat, session),
-            at: chat.lastMessageAt ?? chat.createdAt,
+            at: activity(chat),
             archived: chat.archived
         },
         run: () => chats.select(chat.id)
@@ -165,7 +162,7 @@ function fileItem(cwd: string, path: string, showFolder: boolean): PaletteItem {
     return {
         id: `file:${cwd}\0${path}`,
         label: path.slice(slash + 1),
-        detail: showFolder ? [folderName(cwd), dir].filter(Boolean).join("/") : dir,
+        detail: showFolder ? [baseName(cwd), dir].filter(Boolean).join("/") : dir,
         icon: <FileIcon name={path} />,
         run: () => openFileTab(cwd, path)
     };
@@ -175,7 +172,7 @@ function fileItem(cwd: string, path: string, showFolder: boolean): PaletteItem {
 function chatActions(chat: Chat | undefined, session: Session | undefined): PaletteItem[] {
     if (!chat) return [];
     const items: PaletteItem[] = [];
-    if (session?.status === "working" || session?.status === "awaitingInput") {
+    if (isBusy(session?.status)) {
         items.push({
             id: "chat-stop",
             label: "Stop the turn",
@@ -204,14 +201,14 @@ function chatActions(chat: Chat | undefined, session: Session | undefined): Pale
         {
             id: "chat-copy-path",
             label: "Copy folder path",
-            detail: folderName(workDir(chat)),
+            detail: baseName(workDir(chat)),
             icon: <ClipboardTextIcon />,
-            run: () => copy(workDir(chat))
+            run: () => void copyText(workDir(chat))
         },
         {
             id: "chat-reveal",
             label: "Reveal folder",
-            detail: folderName(workDir(chat)),
+            detail: baseName(workDir(chat)),
             icon: <FolderOpenIcon />,
             run: () => void revealItemInDir(workDir(chat)).catch(() => {})
         }
@@ -308,7 +305,7 @@ export function usePaletteSections(raw: string): PaletteSection[] {
                 (chat) => {
                     const s = scoreWords(query, [
                         { text: chatTitle(chat), bonus: 10, fuzzy: true },
-                        { text: folderName(chat.cwd), bonus: 0, fuzzy: true },
+                        { text: baseName(chat.cwd), bonus: 0, fuzzy: true },
                         { text: chat.worktree?.branch ?? "", bonus: 0 }
                     ]);
                     return s === null ? null : s - (chat.archived ? 5 : 0);

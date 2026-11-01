@@ -1,12 +1,19 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { errorText, git } from "@/git/store";
+import { git } from "@/git/store";
+import { errorMessage } from "@/lib/errors";
 import type { GitHistoryComparison, GitHistoryCommit, GitHistoryPage } from "@/proto";
-import { historyApi } from "./api";
+import { historyApi, PAGE_SIZE } from "./api";
 
 export type HistoryColumn = "author" | "date" | "sha";
 export const HISTORY_COLUMNS: readonly HistoryColumn[] = ["author", "date", "sha"];
 export type AuthorDisplay = "avatar" | "name";
+
+/** A column's width in the history tab. */
+export function columnWidth(column: HistoryColumn, display: AuthorDisplay) {
+    if (column === "author") return display === "avatar" ? 48 : 104;
+    return column === "date" ? 88 : 74;
+}
 
 type Prefs = {
     columns: Record<HistoryColumn, boolean>;
@@ -36,7 +43,7 @@ export const useHistoryPrefs = create<Prefs>()(
     )
 );
 
-export type HistoryData = {
+type HistoryData = {
     commits: GitHistoryCommit[];
     branchTips: GitHistoryCommit[];
     headSha?: string;
@@ -45,7 +52,7 @@ export type HistoryData = {
     comparison?: GitHistoryComparison;
 };
 
-export type HistorySearch = {
+type HistorySearch = {
     query: string;
     /** The whole history's matches so far; until they come, the loaded rows are filtered. */
     results?: GitHistoryCommit[];
@@ -71,9 +78,13 @@ const EMPTY_SEARCH: HistorySearch = { query: "", loading: false };
 const EMPTY: HistoryEntry = { loading: false, fetching: false, search: EMPTY_SEARCH, avatars: {} };
 
 /** Each folder's history, by folder. */
-export const useHistoryStore = create<{ entries: Record<string, HistoryEntry> }>()(() => ({
+const useHistoryStore = create<{ entries: Record<string, HistoryEntry> }>()(() => ({
     entries: {}
 }));
+
+/** `cwd`'s history (an empty entry before the first read). */
+export const useHistoryEntry = (cwd: string | null) =>
+    useHistoryStore((s) => (cwd ? s.entries[cwd] : undefined)) ?? EMPTY;
 
 const entryOf = (cwd: string) => useHistoryStore.getState().entries[cwd] ?? EMPTY;
 
@@ -122,7 +133,7 @@ export function loadHistory(cwd: string, reset = false): Promise<void> {
             },
             (error) => {
                 if (pageRequests.get(cwd) !== request) return;
-                update(cwd, () => ({ loading: false, error: errorText(error) }));
+                update(cwd, () => ({ loading: false, error: errorMessage(error, "Git failed.") }));
             }
         )
         .finally(() => {
@@ -168,7 +179,8 @@ export function loadOlder(cwd: string) {
             });
             if (page) resolveAvatars(cwd, page.commits, cursor);
         },
-        (error) => update(cwd, () => ({ loading: false, error: errorText(error) }))
+        (error) =>
+            update(cwd, () => ({ loading: false, error: errorMessage(error, "Git failed.") }))
     );
 }
 
@@ -213,7 +225,10 @@ function requestSearch(cwd: string, query: string, cursor: number, wait: number)
             (error) => {
                 if (searchGeneration.get(cwd) !== generation) return;
                 // The loaded rows' matches stay useful.
-                updateSearch(cwd, () => ({ loading: false, error: errorText(error) }));
+                updateSearch(cwd, () => ({
+                    loading: false,
+                    error: errorMessage(error, "Git failed.")
+                }));
             }
         );
     if (wait > 0) searchTimers.set(cwd, window.setTimeout(run, wait));
@@ -233,7 +248,7 @@ export async function fetchAll(cwd: string) {
         void git.refresh(cwd);
         await loadHistory(cwd, true);
     } catch (error) {
-        update(cwd, () => ({ fetching: false, fetchError: errorText(error) }));
+        update(cwd, () => ({ fetching: false, fetchError: errorMessage(error, "Git failed.") }));
     }
 }
 
@@ -263,7 +278,7 @@ function resolveAvatars(cwd: string, commits: readonly GitHistoryCommit[], curso
 /** The loaded pages' authors again, after the author column starts showing pictures. */
 export function resolveLoadedAvatars(cwd: string) {
     const commits = entryOf(cwd).data?.commits ?? [];
-    for (let cursor = 0; cursor < commits.length; cursor += 100) {
-        resolveAvatars(cwd, commits.slice(cursor, cursor + 100), cursor);
+    for (let cursor = 0; cursor < commits.length; cursor += PAGE_SIZE) {
+        resolveAvatars(cwd, commits.slice(cursor, cursor + PAGE_SIZE), cursor);
     }
 }

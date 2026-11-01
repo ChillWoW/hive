@@ -18,6 +18,5 @@ export {
     useDocsStore,
     useEditorPrefs,
     type Doc,
-    type DocStatus,
     type LinePosition
 } from "./documents";

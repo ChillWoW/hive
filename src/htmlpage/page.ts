@@ -11,7 +11,7 @@
 export const PAGE_SANDBOX = "allow-scripts allow-forms";
 
 /** What a page tells the host. */
-export type PageMessage =
+type PageMessage =
     | { type: "size"; height: number }
     | { type: "console"; level: "log" | "info" | "warn" | "error" | "debug"; text: string }
     | { type: "loaded"; text: string }

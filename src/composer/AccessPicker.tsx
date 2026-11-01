@@ -3,7 +3,7 @@ import type { ChatConfig } from "@/proto";
 import { ACCESS_LABELS, resolveAccess, useCatalog } from "@/harnesses";
 import { cn } from "@/lib/cn";
 import { Menu, Switch } from "@/ui";
-import { pickerTriggerClassName } from "./chip";
+import { pickerTriggerClassName } from "@/ui/chip";
 
 /**
  * What the agent may do without asking, beside the model picker: the access

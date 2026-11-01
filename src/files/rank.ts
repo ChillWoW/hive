@@ -1,5 +1,6 @@
 import type { WorkspaceEntry } from "@/proto";
 import { fuzzyScore, rankBy } from "@/lib/fuzzy";
+import { baseName } from "@/lib/paths";
 
 /**
  * How well a path matches: by the whole path, a path that starts with the
@@ -12,7 +13,7 @@ export function scoreEntry(query: string, entry: WorkspaceEntry): number | null 
     if (byPath === null) return null;
     const depth = path.split("/").length - 1;
     if (path.toLowerCase().startsWith(query.toLowerCase())) return byPath + 100 - depth;
-    const byName = fuzzyScore(query, path.slice(path.lastIndexOf("/") + 1));
+    const byName = fuzzyScore(query, baseName(path));
     return (byName === null ? byPath : Math.max(byPath, byName + 20)) - depth * 0.5;
 }
 

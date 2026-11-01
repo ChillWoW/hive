@@ -1,7 +1,6 @@
-import { useEffect, useState } from "react";
-import { Button, Modal } from "@/ui";
+import { baseName } from "@/lib/paths";
+import { ConfirmDialog, useLastNonNull } from "@/ui";
 import { deleteTreeEntry } from "./actions";
-import { nameOf } from "./tree";
 
 export type DeleteTarget = { cwd: string; path: string; dir: boolean };
 
@@ -13,40 +12,23 @@ export function DeleteEntryDialog({
     target: DeleteTarget | null;
     onClose: () => void;
 }) {
-    // Kept while the dialog animates out.
-    const [shown, setShown] = useState(target);
-    useEffect(() => {
-        if (target) setShown(target);
-    }, [target]);
-    const [error, setError] = useState<string | null>(null);
-    const [busy, setBusy] = useState(false);
-
-    useEffect(() => setError(null), [target]);
-
-    const confirm = async () => {
-        if (!shown) return;
-        setBusy(true);
-        try {
-            await deleteTreeEntry(shown.cwd, shown.path);
-            onClose();
-        } catch (e) {
-            setError(e instanceof Error ? e.message : String(e));
-        } finally {
-            setBusy(false);
-        }
-    };
-
+    const shown = useLastNonNull(target);
     return (
-        <Modal
+        <ConfirmDialog
             open={target !== null}
-            onOpenChange={(open) => !open && onClose()}
             title="Delete permanently?"
-            size="sm"
+            confirmLabel="Delete"
+            onConfirm={async () => {
+                if (shown) await deleteTreeEntry(shown.cwd, shown.path);
+            }}
+            onClose={onClose}
+            // Delete then Enter mustn't erase a folder.
+            focusCancel
         >
             <p>
                 Permanently delete{" "}
                 <span className="font-medium break-all text-dark-50">
-                    {shown ? nameOf(shown.path) : ""}
+                    {shown ? baseName(shown.path) : ""}
                 </span>
                 ?{" "}
                 {shown?.dir
@@ -54,21 +36,6 @@ export function DeleteEntryDialog({
                     : "This can't be undone."}{" "}
                 Open tabs keep their text.
             </p>
-            {error && <p className="mt-2 text-xs text-danger">{error}</p>}
-            <div className="mt-4 flex justify-end gap-2">
-                {/* Cancel has focus: Delete then Enter mustn't erase a folder. */}
-                <Modal.Close render={<Button size="sm" variant="ghost" autoFocus />}>
-                    Cancel
-                </Modal.Close>
-                <Button
-                    size="sm"
-                    variant="destructive"
-                    loading={busy}
-                    onClick={() => void confirm()}
-                >
-                    Delete
-                </Button>
-            </div>
-        </Modal>
+        </ConfirmDialog>
     );
 }

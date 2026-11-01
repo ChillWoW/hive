@@ -1,12 +1,10 @@
 import { useEffect, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import type { UnlistenFn } from "@tauri-apps/api/event";
 import { isTauri } from "@/lib/platform";
 
-export type WindowState = {
+type WindowState = {
     maximized: boolean;
     fullscreen: boolean;
-    focused: boolean;
 };
 
 /**
@@ -18,47 +16,28 @@ export type WindowState = {
  * are what a browser tab looks like anyway.
  */
 export function useWindowState(): WindowState {
-    const [state, setState] = useState<WindowState>({
-        maximized: false,
-        fullscreen: false,
-        focused: true
-    });
+    const [state, setState] = useState<WindowState>({ maximized: false, fullscreen: false });
 
     useEffect(() => {
         if (!isTauri) return;
 
         const appWindow = getCurrentWindow();
-        const unlisteners: UnlistenFn[] = [];
         let disposed = false;
 
-        const track = (promise: Promise<UnlistenFn>) => {
-            void promise.then((fn) => {
-                if (disposed) fn();
-                else unlisteners.push(fn);
-            });
+        const sync = () => {
+            void Promise.all([appWindow.isMaximized(), appWindow.isFullscreen()]).then(
+                ([maximized, fullscreen]) => {
+                    if (!disposed) setState({ maximized, fullscreen });
+                }
+            );
         };
 
-        const syncSize = () => {
-            void Promise.all([
-                appWindow.isMaximized(),
-                appWindow.isFullscreen()
-            ]).then(([maximized, fullscreen]) => {
-                if (!disposed)
-                    setState((s) => ({ ...s, maximized, fullscreen }));
-            });
-        };
-
-        syncSize();
-        track(appWindow.onResized(syncSize));
-        track(
-            appWindow.onFocusChanged(({ payload: focused }) => {
-                if (!disposed) setState((s) => ({ ...s, focused }));
-            })
-        );
+        sync();
+        const unlisten = appWindow.onResized(sync);
 
         return () => {
             disposed = true;
-            for (const fn of unlisteners) fn();
+            void unlisten.then((fn) => fn());
         };
     }, []);
 

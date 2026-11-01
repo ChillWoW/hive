@@ -24,10 +24,11 @@ import {
 } from "@/providers";
 import type { HarnessCatalog, ProviderAccount, ProvidersSettings } from "@/proto";
 import { DEFAULT_SETTINGS } from "@/proto";
-import { Button, iconButtonClassName, Skeleton, Switch, Tooltip } from "@/ui";
+import { Button, IconButton, iconButtonClassName, Skeleton, Switch, Tooltip } from "@/ui";
 import { CopyButton } from "../CopyButton";
+import { useConfirmPress } from "../hooks";
 import { matchesQuery, useSettingsQuery } from "../search";
-import { SettingsSection } from "../SettingsSection";
+import { ROW_DIVIDER, SettingsSection } from "../SettingsSection";
 import { useSettingsStore } from "../store";
 import { SignInDialog } from "./SignInDialog";
 
@@ -110,22 +111,14 @@ function RefreshButton({ ids }: { ids: HarnessCatalog["id"][] }) {
     };
 
     return (
-        <Tooltip>
-            <Tooltip.Trigger
-                render={
-                    <button
-                        type="button"
-                        aria-label="Check for agents and updates"
-                        disabled={busy}
-                        onClick={() => void refresh()}
-                        className={iconButtonClassName}
-                    >
-                        <ArrowClockwiseIcon className={cn("size-3.5", busy && "animate-spin")} />
-                    </button>
-                }
-            />
-            <Tooltip.Content side="left">Check for agents and updates</Tooltip.Content>
-        </Tooltip>
+        <IconButton
+            label="Check for agents and updates"
+            side="left"
+            disabled={busy}
+            onClick={() => void refresh()}
+        >
+            <ArrowClockwiseIcon className={cn("size-3.5", busy && "animate-spin")} />
+        </IconButton>
     );
 }
 
@@ -222,7 +215,7 @@ function ProviderRow({
     return (
         <div
             data-setting-row
-            className="relative not-first:before:absolute not-first:before:inset-x-4 not-first:before:top-0 not-first:before:h-px not-first:before:bg-dark-600"
+            className={cn("relative", ROW_DIVIDER)}
         >
             <div className="flex items-center gap-3 px-4 py-3">
                 <button
@@ -595,27 +588,16 @@ function DetailRow({
     );
 }
 
-/** Two-step, like Reset: the first press arms it, a second within a few seconds signs out. */
+/** Two-step, like Reset. */
 function SignOutButton({ busy, onConfirm }: { busy: boolean; onConfirm: () => void }) {
-    const [armed, setArmed] = useState(false);
-
-    useEffect(() => {
-        if (!armed) return;
-        const timer = setTimeout(() => setArmed(false), 4000);
-        return () => clearTimeout(timer);
-    }, [armed]);
-
+    const { armed, onClick, onBlur } = useConfirmPress(onConfirm);
     return (
         <Button
             size="sm"
             variant={armed ? "destructive" : "ghost"}
             loading={busy}
-            onClick={() => {
-                if (!armed) return setArmed(true);
-                setArmed(false);
-                onConfirm();
-            }}
-            onBlur={() => setArmed(false)}
+            onClick={onClick}
+            onBlur={onBlur}
         >
             {armed ? "Click to confirm" : "Sign out"}
         </Button>

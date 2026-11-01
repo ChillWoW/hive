@@ -1,16 +1,17 @@
-import { useLayoutEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import type { HarnessId } from "@/proto";
 import { cn } from "@/lib/cn";
+import { useResizeObserver } from "@/lib/useResizeObserver";
 import {
-    formatHour,
-    formatTokens,
-    formatTokensTick,
-    formatUsd,
-    formatUsdTick,
+    formatBucket,
     formatDay,
-    formatWeekday
+    formatHour,
+    formatMeasure,
+    formatTokensTick,
+    formatUsdTick
 } from "./format";
-import { HARNESS_COLOR, HARNESS_NAME, HARNESS_ORDER, type BucketTotals } from "./summary";
+import type { Measure } from "./store";
+import { HARNESS_COLOR, HARNESS_NAME, type BucketTotals } from "./summary";
 
 const HEIGHT = 196;
 const PAD = { top: 8, right: 4, bottom: 22, left: 44 };
@@ -19,7 +20,7 @@ const RADIUS = 4;
 
 type Props = {
     buckets: BucketTotals[];
-    metric: "cost" | "tokens";
+    metric: Measure;
     hourly: boolean;
     /** Harnesses to draw, in stack order (bottom first). */
     harnesses: HarnessId[];
@@ -38,16 +39,10 @@ export function UsageChart({ buckets, metric, hourly, harnesses, stale }: Props)
     const [width, setWidth] = useState(0);
     const [hover, setHover] = useState<number | null>(null);
 
-    useLayoutEffect(() => {
-        const el = box.current;
-        if (!el) return;
-        const observer = new ResizeObserver(([entry]) => setWidth(entry!.contentRect.width));
-        observer.observe(el);
-        setWidth(el.clientWidth);
-        return () => observer.disconnect();
-    }, []);
+    useResizeObserver(box, (el, entry) =>
+        setWidth(entry ? entry.contentRect.width : el.clientWidth)
+    );
 
-    const order = HARNESS_ORDER.filter((h) => harnesses.includes(h));
     const value = (b: BucketTotals, h?: HarnessId) =>
         h ? (b.by[h]?.[metric] ?? 0) : b[metric];
     const max = Math.max(0, ...buckets.map((b) => value(b)));
@@ -61,8 +56,6 @@ export function UsageChart({ buckets, metric, hourly, harnesses, stale }: Props)
     const y = (v: number) => PAD.top + plotH - (v / top) * plotH;
     const format = metric === "cost" ? formatUsdTick : formatTokensTick;
     const every = labelEvery(buckets.length, plotW, hourly);
-
-    const hovered = hover == null ? null : buckets[hover];
 
     return (
         <div ref={box} className={cn("relative w-full transition-opacity", stale && "opacity-60")}>
@@ -101,7 +94,7 @@ export function UsageChart({ buckets, metric, hourly, harnesses, stale }: Props)
                     {buckets.map((b, i) => {
                         const x = PAD.left + i * slot + (slot - barW) / 2;
                         let base = y(0);
-                        const drawn = order.filter((h) => value(b, h) > 0);
+                        const drawn = harnesses.filter((h) => value(b, h) > 0);
                         return (
                             <g
                                 key={b.start}
@@ -132,7 +125,7 @@ export function UsageChart({ buckets, metric, hourly, harnesses, stale }: Props)
                                     height={plotH}
                                     fill="transparent"
                                     tabIndex={0}
-                                    aria-label={`${label(b.start, hourly)}: ${metric === "cost" ? formatUsd(b.cost) : formatTokens(b.tokens)}`}
+                                    aria-label={`${formatBucket(b.start, hourly)}: ${formatMeasure(b[metric], metric)}`}
                                     onPointerEnter={() => setHover(i)}
                                     onFocus={() => setHover(i)}
                                     onBlur={() => setHover(null)}
@@ -164,12 +157,12 @@ export function UsageChart({ buckets, metric, hourly, harnesses, stale }: Props)
                 </svg>
             )}
 
-            {hovered && hover != null && (
+            {hover != null && buckets[hover] && (
                 <Tip
-                    bucket={hovered}
+                    bucket={buckets[hover]}
                     metric={metric}
                     hourly={hourly}
-                    harnesses={order}
+                    harnesses={harnesses}
                     left={PAD.left + hover * slot + slot / 2}
                     width={width}
                 />
@@ -187,13 +180,13 @@ function Tip({
     width
 }: {
     bucket: BucketTotals;
-    metric: "cost" | "tokens";
+    metric: Measure;
     hourly: boolean;
     harnesses: HarnessId[];
     left: number;
     width: number;
 }) {
-    const fmt = (v: number) => (metric === "cost" ? formatUsd(v, { exact: true }) : formatTokens(v));
+    const fmt = (v: number) => formatMeasure(v, metric, { exact: true });
     const flip = left > width * 0.62;
     const rows = harnesses.filter((h) => bucket.by[h]);
     return (
@@ -205,7 +198,7 @@ function Tip({
             }}
             className="pointer-events-none absolute top-1 z-10 min-w-40 rounded-md border border-dark-600 bg-dark-850 px-2.5 py-2 text-xs shadow-lg shadow-black/40"
         >
-            <div className="mb-1.5 text-[11px] text-dark-250">{label(bucket.start, hourly)}</div>
+            <div className="mb-1.5 text-[11px] text-dark-250">{formatBucket(bucket.start, hourly)}</div>
             <div className="flex flex-col gap-1">
                 {rows.map((h) => (
                     <div key={h} className="flex items-center gap-2">
@@ -232,11 +225,6 @@ function Tip({
             </div>
         </div>
     );
-}
-
-function label(start: number, hourly: boolean) {
-    if (!hourly) return formatWeekday(start);
-    return `${formatWeekday(start)}, ${formatHour(start)}`;
 }
 
 /** A column with its top corners rounded by `r`, square at the baseline. */

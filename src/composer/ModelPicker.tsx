@@ -6,7 +6,7 @@ import {
     MagnifyingGlassIcon,
     StarIcon
 } from "@phosphor-icons/react";
-import type { ChatConfig, HarnessCatalog, Model } from "@/proto";
+import type { ChatConfig, HarnessCatalog, Model, ReasoningLevel } from "@/proto";
 import {
     fitConfig,
     hasFastMode,
@@ -22,13 +22,13 @@ import {
 } from "@/harnesses";
 import { cn } from "@/lib/cn";
 import { settings } from "@/settings/store";
-import { Popover, Tooltip, usePortalContainer } from "@/ui";
+import { Popover, Tooltip } from "@/ui";
 import {
     footerButtonClassName,
     pickerTriggerClassName,
     popupClassName,
     searchInputClassName
-} from "./chip";
+} from "@/ui/chip";
 import { useComposerStore } from "./store";
 
 /** A row is 32px plus the list's 2px gap; tabs and scrolling count in rows. */
@@ -92,7 +92,7 @@ export function ModelPicker({
     const model = config ? resolveModel(current, config) : undefined;
     const reasoning = config ? resolveReasoning(model, config) : undefined;
     const fast = fastMode && !!config && isFastMode(model, config);
-    const container = usePortalContainer();
+    const showFast = fastMode && hasFastMode(model);
     const [ownOpen, setOwnOpen] = useState(false);
     const open = openProp ?? ownOpen;
     const setOpen = (next: boolean) => {
@@ -143,7 +143,7 @@ export function ModelPicker({
                     </span>
                 )}
             </Popover.Trigger>
-            <Popover.Portal container={container ?? undefined}>
+            <Popover.Portal>
                 <Popover.Positioner
                     side={placement}
                     align="end"
@@ -162,7 +162,9 @@ export function ModelPicker({
                             config={config}
                             current={current}
                             model={model}
-                            fastMode={fastMode}
+                            reasoning={reasoning}
+                            fast={fast}
+                            showFast={showFast}
                             onChange={onChange}
                             side={side}
                             onToggleSide={(next) => setSide((s) => (s === next ? null : next))}
@@ -170,7 +172,7 @@ export function ModelPicker({
                     </Popover.Popup>
                     {/* Siblings of the popup, which clips its overflow; the
                         positioner is what they're placed against. */}
-                    {side === "fast" && config && model && fastMode && hasFastMode(model) && (
+                    {side === "fast" && config && model && showFast && (
                         <SideCard
                             label="Fast mode"
                             options={FAST_CHOICES}
@@ -226,7 +228,9 @@ function ModelCard({
     config,
     current,
     model,
-    fastMode,
+    reasoning,
+    fast,
+    showFast,
     onChange,
     side,
     onToggleSide
@@ -235,14 +239,13 @@ function ModelCard({
     config: ChatConfig | null;
     current: HarnessCatalog | undefined;
     model: Model | undefined;
-    fastMode: boolean;
+    reasoning: ReasoningLevel | undefined;
+    fast: boolean;
+    showFast: boolean;
     onChange: (config: ChatConfig) => void;
     side: Side | null;
     onToggleSide: (side: Side) => void;
 }) {
-    const reasoning = config ? resolveReasoning(model, config) : undefined;
-    const fast = !!config && isFastMode(model, config);
-    const showFast = fastMode && hasFastMode(model);
     const favorites = useComposerStore((s) => s.favorites);
     const toggleFavorite = useComposerStore((s) => s.toggleFavorite);
     const [query, setQuery] = useState("");
@@ -438,40 +441,53 @@ function ModelCard({
             {model && (showFast || model.reasoningLevels.length > 0) && (
                 <div className="mt-1 flex flex-col gap-0.5 border-t border-dark-600 pt-1">
                     {showFast && (
-                        <button
-                            type="button"
-                            aria-expanded={side === "fast"}
+                        <FooterRow
+                            label="Fast mode"
+                            value={fast ? "On" : "Off"}
+                            expanded={side === "fast"}
                             onClick={() => onToggleSide("fast")}
-                            className={cn(
-                                footerButtonClassName,
-                                "h-8 rounded-[7px] px-2 text-sm text-dark-50 hover:bg-dark-800 aria-expanded:bg-dark-700"
-                            )}
-                        >
-                            <span>Fast mode</span>
-                            <span className="ml-auto text-dark-250">{fast ? "On" : "Off"}</span>
-                            <CaretRightIcon className="size-3 text-dark-250" weight="bold" />
-                        </button>
+                        />
                     )}
                     {model.reasoningLevels.length > 0 && (
-                        <button
-                            type="button"
-                            aria-expanded={side === "effort"}
+                        <FooterRow
+                            label="Reasoning"
+                            value={reasoning && REASONING_LABELS[reasoning]}
+                            expanded={side === "effort"}
                             onClick={() => onToggleSide("effort")}
-                            className={cn(
-                                footerButtonClassName,
-                                "h-8 rounded-[7px] px-2 text-sm text-dark-50 hover:bg-dark-800 aria-expanded:bg-dark-700"
-                            )}
-                        >
-                            <span>Reasoning</span>
-                            <span className="ml-auto text-dark-250">
-                                {reasoning && REASONING_LABELS[reasoning]}
-                            </span>
-                            <CaretRightIcon className="size-3 text-dark-250" weight="bold" />
-                        </button>
+                        />
                     )}
                 </div>
             )}
         </div>
+    );
+}
+
+/** A footer row: its setting and value, opening its choices beside the card. */
+function FooterRow({
+    label,
+    value,
+    expanded,
+    onClick
+}: {
+    label: string;
+    value: string | undefined;
+    expanded: boolean;
+    onClick: () => void;
+}) {
+    return (
+        <button
+            type="button"
+            aria-expanded={expanded}
+            onClick={onClick}
+            className={cn(
+                footerButtonClassName,
+                "h-8 rounded-[7px] px-2 text-sm text-dark-50 hover:bg-dark-800 aria-expanded:bg-dark-700"
+            )}
+        >
+            <span>{label}</span>
+            <span className="ml-auto text-dark-250">{value}</span>
+            <CaretRightIcon className="size-3 text-dark-250" weight="bold" />
+        </button>
     );
 }
 

@@ -1,56 +1,37 @@
-import {
-    EyeIcon,
-    EyeSlashIcon,
-    MagnifyingGlassIcon
-} from "@phosphor-icons/react";
+import { EyeIcon, EyeSlashIcon, MagnifyingGlassIcon } from "@phosphor-icons/react";
 import { useEffect, useRef } from "react";
-import { useChat, useChatsStore, workDir } from "@/chats";
-import { useComposerStore } from "@/composer/store";
-import { useFolderBusy } from "@/git/store";
-import { cn } from "@/lib/cn";
+import { useTurnEnded } from "@/git/store";
 import { useFolderWatch } from "@/lib/folderWatch";
-import { iconButtonClassName, Tooltip } from "@/ui";
+import { onWindowFocus } from "@/lib/windowFocus";
+import { useActiveFolder } from "@/rightbar/folders";
+import { IconButton } from "@/ui";
 import { FileTree } from "./FileTree";
 import { useFilesPanelStore } from "./panel";
 import { SearchResults } from "./SearchResults";
 import { refreshFiles } from "./store";
 import { reloadDirs, reloadTree } from "./tree";
 
-/** The folder the open chat works in, or the new-chat view's folder. */
-function useActiveFolder() {
-    const chat = useChat(useChatsStore((s) => s.activeChatId));
-    const newChatCwd = useComposerStore((s) => s.newChat.cwd);
-    return chat ? workDir(chat) : newChatCwd;
-}
-
 /**
  * Re-lists `cwd`'s tree (and its search listing) as entries appear, go or
  * are renamed in its listed folders (a folder watch), and, in case the watch
  * missed something, when the window regains focus or an agent's turn there ends.
  */
-function useRefreshOnChange(cwd: string | null | undefined, all: boolean) {
+function useRefreshOnChange(cwd: string | null, all: boolean) {
     useFolderWatch(cwd, (change) => {
         if (!cwd) return;
         if (change.overflow || change.dirsOverflow) reloadTree(cwd, all, true);
         else if (change.dirs.length > 0) reloadDirs(cwd, all, change.dirs);
     });
 
-    const busy = useFolderBusy(cwd);
-    const wasBusy = useRef(busy);
-
-    useEffect(() => {
-        const turnEnded = wasBusy.current && !busy;
-        wasBusy.current = busy;
-        if (!cwd || !turnEnded) return;
+    useTurnEnded(cwd, () => {
+        if (!cwd) return;
         reloadTree(cwd, all);
         void refreshFiles(cwd, all, true);
-    }, [cwd, all, busy]);
+    });
 
     useEffect(() => {
         if (!cwd) return;
-        const onFocus = () => reloadTree(cwd, all);
-        window.addEventListener("focus", onFocus);
-        return () => window.removeEventListener("focus", onFocus);
+        return onWindowFocus(() => reloadTree(cwd, all));
     }, [cwd, all]);
 }
 
@@ -90,9 +71,7 @@ function FilesHeader() {
         input.current?.focus();
         input.current?.select();
     }, [searchFocus]);
-    const label = showAll
-        ? "Hide hidden and ignored files"
-        : "Show all files (even hidden)";
+    const label = showAll ? "Hide hidden and ignored files" : "Show all files (even hidden)";
 
     return (
         <div className="flex h-9 shrink-0 items-center gap-1 border-y border-dark-600 px-2">
@@ -117,29 +96,18 @@ function FilesHeader() {
                 />
             </label>
 
-            <Tooltip>
-                <Tooltip.Trigger
-                    render={
-                        <button
-                            type="button"
-                            onClick={toggleShowAll}
-                            aria-label={label}
-                            aria-pressed={showAll}
-                            className={cn(
-                                iconButtonClassName,
-                                showAll && "bg-white/10 text-dark-50"
-                            )}
-                        >
-                            {showAll ? (
-                                <EyeIcon className="size-3.5" />
-                            ) : (
-                                <EyeSlashIcon className="size-3.5" />
-                            )}
-                        </button>
-                    }
-                />
-                <Tooltip.Content side="bottom">{label}</Tooltip.Content>
-            </Tooltip>
+            <IconButton
+                label={label}
+                onClick={toggleShowAll}
+                aria-pressed={showAll}
+                className={showAll ? "bg-white/10 text-dark-50" : undefined}
+            >
+                {showAll ? (
+                    <EyeIcon className="size-3.5" />
+                ) : (
+                    <EyeSlashIcon className="size-3.5" />
+                )}
+            </IconButton>
         </div>
     );
 }

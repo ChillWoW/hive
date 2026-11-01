@@ -2,6 +2,7 @@ import { ChatTextIcon, PuzzlePieceIcon } from "@phosphor-icons/react";
 import { cn } from "@/lib/cn";
 import { labelTitle } from "@/review/comments";
 import { FileIcon, Tooltip } from "@/ui";
+import { baseName } from "@/lib/paths";
 import type { Tag } from "./tags";
 
 /** What a comment tag shows: the file, its lines (`linesLabel`) and the comment. */
@@ -9,11 +10,6 @@ export type TagComment = { path: string; lines: string; body: string };
 
 const chipClassName =
     "mx-px inline-flex h-5 max-w-64 translate-y-[-1px] items-center gap-1 rounded-md bg-dark-600 pr-1.5 pl-1 align-middle text-xs leading-none text-dark-50 select-none";
-
-const nameOf = (path: string) => {
-    const trimmed = path.replace(/\\/g, "/").replace(/\/$/, "");
-    return trimmed.slice(trimmed.lastIndexOf("/") + 1) || trimmed;
-};
 
 /**
  * A tag as drawn in the composer and in a sent prompt alike: a file or
@@ -25,7 +21,7 @@ export function TagFace({ tag, comment }: { tag: Tag; comment?: TagComment }) {
     switch (tag.kind) {
         case "file": {
             const folder = tag.path.endsWith("/");
-            const name = nameOf(tag.path);
+            const name = baseName(tag.path);
             return (
                 <span className={chipClassName}>
                     <FileIcon name={name} folder={folder} className="size-3.5" />
@@ -56,7 +52,7 @@ export function TagFace({ tag, comment }: { tag: Tag; comment?: TagComment }) {
                     </span>
                 );
             }
-            const name = nameOf(comment.path);
+            const name = baseName(comment.path);
             return (
                 <span className={cn(chipClassName, "max-w-72")}>
                     <ChatTextIcon className="size-3.5 shrink-0 text-info" />

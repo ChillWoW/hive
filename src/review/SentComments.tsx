@@ -1,10 +1,9 @@
 import { useState } from "react";
 import { CaretRightIcon, ChatTextIcon } from "@phosphor-icons/react";
 import { cn } from "@/lib/cn";
+import { baseName } from "@/lib/paths";
 import { FileIcon } from "@/ui";
 import { labelTitle, type SentDiffComment } from "./comments";
-
-const nameOf = (path: string) => path.slice(path.replace(/\\/g, "/").lastIndexOf("/") + 1);
 
 /** The diff comments a prompt carried, under its bubble; each opens to its lines. */
 export function SentComments({ comments }: { comments: SentDiffComment[] }) {
@@ -19,6 +18,7 @@ export function SentComments({ comments }: { comments: SentDiffComment[] }) {
 
 function SentComment({ comment }: { comment: SentDiffComment }) {
     const [open, setOpen] = useState(false);
+    const name = baseName(comment.file);
     return (
         <div className="w-full max-w-md rounded-xl border border-dark-700 bg-dark-850 text-xs">
             <button
@@ -28,9 +28,9 @@ function SentComment({ comment }: { comment: SentDiffComment }) {
                 className="flex w-full min-w-0 items-center gap-1.5 px-2.5 pt-1.5 text-left outline-none"
             >
                 <ChatTextIcon className="size-3.5 shrink-0 text-info" />
-                <FileIcon name={nameOf(comment.file)} className="size-3.5" />
+                <FileIcon name={name} className="size-3.5" />
                 <span className="min-w-0 truncate text-dark-100" title={comment.file}>
-                    {nameOf(comment.file)}
+                    {name}
                 </span>
                 <span className="shrink-0 text-dark-250">{labelTitle(comment.lines)}</span>
                 <span className="flex-1" />

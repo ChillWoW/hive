@@ -1,4 +1,4 @@
-import { useState, type KeyboardEvent, type PointerEvent, type ReactNode } from "react";
+import { useState, type KeyboardEvent, type PointerEvent } from "react";
 import {
     ArrowBendDownRightIcon,
     ArrowUpIcon,
@@ -11,20 +11,15 @@ import {
 import { chats, type TranscriptMessage } from "@/chats";
 import { composer } from "@/composer";
 import { cn } from "@/lib/cn";
-import { trayClassName } from "./tray";
 import { restoreDraft, splitDiffComments } from "@/review/comments";
-import { iconButtonClassName, Tooltip } from "@/ui";
+import { promptText } from "@/transcript";
+import { IconButton } from "@/ui";
+import { trayButtonClassName, trayClassName, trayHeaderClassName } from "./tray";
 
 /** Every row is one line tall, so a drag can count rows by distance. */
 const ROW = 28;
 
 type Drag = { id: string; from: number; startY: number; dy: number };
-
-function promptText(message: TranscriptMessage) {
-    return message.parts
-        .flatMap((p) => (p.kind === "text" ? [p.text] : []))
-        .join("\n\n");
-}
 
 /**
  * Prompts waiting for the running turn to end, tucked behind the composer's
@@ -79,17 +74,14 @@ export function QueuedTray({
 
     return (
         <div className={trayClassName}>
-            <div className="flex h-6 items-center gap-1.5 px-2.5 text-xs">
+            <div className={trayHeaderClassName}>
                 <span className="font-medium text-dark-200">Queued</span>
                 {!running && <span className="text-dark-250">· paused after stop</span>}
                 {!running && (
                     <button
                         type="button"
                         onClick={() => void chats.sendNow(messages[0].id).catch(() => {})}
-                        className={cn(
-                            "ml-auto -mr-1.5 inline-flex h-5 items-center gap-1 rounded-md px-1.5 text-dark-200 outline-none",
-                            "transition-colors hover:bg-dark-700 hover:text-dark-50 focus-visible:bg-dark-700"
-                        )}
+                        className={cn("ml-auto -mr-1.5", trayButtonClassName)}
                     >
                         <PlayIcon className="size-3" weight="fill" />
                         Resume
@@ -166,21 +158,23 @@ export function QueuedTray({
                                     drag && "pointer-events-none opacity-0!"
                                 )}
                             >
-                                <Action label="Edit" onClick={() => void edit(m)}>
+                                <IconButton side="top" label="Edit" onClick={() => void edit(m)}>
                                     <PencilSimpleIcon className="size-3.5" />
-                                </Action>
-                                <Action
+                                </IconButton>
+                                <IconButton
+                                    side="top"
                                     label={running ? "Send now — stops the current turn" : "Send now"}
                                     onClick={() => void chats.sendNow(m.id).catch(() => {})}
                                 >
                                     <ArrowUpIcon className="size-3.5" weight="bold" />
-                                </Action>
-                                <Action
+                                </IconButton>
+                                <IconButton
+                                    side="top"
                                     label="Remove"
                                     onClick={() => void chats.cancelQueued(m.id).catch(() => {})}
                                 >
                                     <XIcon className="size-3.5" />
-                                </Action>
+                                </IconButton>
                             </div>
                         </li>
                     );
@@ -236,28 +230,5 @@ function Handle({
                 )}
             />
         </button>
-    );
-}
-
-function Action({
-    label,
-    onClick,
-    children
-}: {
-    label: string;
-    onClick: () => void;
-    children: ReactNode;
-}) {
-    return (
-        <Tooltip>
-            <Tooltip.Trigger
-                render={
-                    <button type="button" aria-label={label} onClick={onClick} className={iconButtonClassName}>
-                        {children}
-                    </button>
-                }
-            />
-            <Tooltip.Content side="top">{label}</Tooltip.Content>
-        </Tooltip>
     );
 }

@@ -4,15 +4,15 @@ import { cn } from "@/lib/cn";
 import type { HarnessId } from "@/proto";
 import { SegmentedControl, Tooltip } from "@/ui";
 import {
+    formatBucket,
     formatCount,
-    formatHour,
+    formatMeasure,
     formatPercent,
     formatTokens,
     formatUsd,
-    formatWeekday,
     shortPath
 } from "./format";
-import type { Breakdown as BreakdownId } from "./store";
+import type { Breakdown as BreakdownId, Measure } from "./store";
 import {
     HARNESS_COLOR,
     HARNESS_NAME,
@@ -25,7 +25,7 @@ import {
 
 type Props = {
     summary: Summary;
-    metric: "cost" | "tokens";
+    metric: Measure;
     hourly: boolean;
     view: BreakdownId;
     onView: (view: BreakdownId) => void;
@@ -75,7 +75,7 @@ function Table({ head, children, empty }: { head: ReactNode; children: ReactNode
     );
 }
 
-function ByModel({ summary, metric }: { summary: Summary; metric: "cost" | "tokens" }) {
+function ByModel({ summary, metric }: { summary: Summary; metric: Measure }) {
     const rows = [...summary.models].sort(
         (a, b) => valueOf(b, metric) - valueOf(a, metric) || processed(b.tokens) - processed(a.tokens)
     );
@@ -154,10 +154,9 @@ function ByBucket({
     hourly
 }: {
     summary: Summary;
-    metric: "cost" | "tokens";
+    metric: Measure;
     hourly: boolean;
 }) {
-    const fmt = (v: number) => (metric === "cost" ? formatUsd(v) : formatTokens(v));
     const columns = HARNESS_ORDER.filter((h) =>
         summary.buckets.some((b) => (b.by[h]?.[metric] ?? 0) > 0)
     );
@@ -184,14 +183,14 @@ function ByBucket({
             {rows.map((b) => (
                 <tr key={b.start} className="text-right text-dark-100">
                     <td className={cn(td, "text-left text-dark-50")}>
-                        {hourly ? `${formatWeekday(b.start)}, ${formatHour(b.start)}` : formatWeekday(b.start)}
+                        {formatBucket(b.start, hourly)}
                     </td>
                     {columns.map((h) => (
                         <td key={h} className={td}>
-                            {b.by[h] ? fmt(b.by[h]![metric]) : <span className="text-dark-400">—</span>}
+                            {b.by[h] ? formatMeasure(b.by[h]![metric], metric) : <span className="text-dark-400">—</span>}
                         </td>
                     ))}
-                    <td className={cn(td, "font-medium text-dark-50")}>{fmt(b[metric])}</td>
+                    <td className={cn(td, "font-medium text-dark-50")}>{formatMeasure(b[metric], metric)}</td>
                     <td className={cn(td, "text-dark-200")}>
                         {metric === "cost" ? formatTokens(b.tokens) : formatUsd(b.cost)}
                     </td>
@@ -201,7 +200,7 @@ function ByBucket({
     );
 }
 
-function ByProject({ summary, metric }: { summary: Summary; metric: "cost" | "tokens" }) {
+function ByProject({ summary, metric }: { summary: Summary; metric: Measure }) {
     const value = (p: Summary["projects"][number]) => (metric === "cost" ? p.cost : p.tokens);
     const rows = [...summary.projects].sort((a, b) => value(b) - value(a));
     const total = rows.reduce((s, p) => s + value(p), 0);

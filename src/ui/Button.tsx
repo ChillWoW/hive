@@ -14,16 +14,15 @@ const variantStyles = {
 
 const sizeStyles = {
     sm: "h-6 px-2.5 text-xs gap-1",
-    md: "h-8 px-3.5 text-sm gap-2",
-    lg: "h-10 px-5 text-base gap-2.5"
+    md: "h-8 px-3.5 text-sm gap-2"
 } as const;
 
 type ButtonProps = ComponentProps<typeof BaseButton> & {
     variant?: keyof typeof variantStyles;
     size?: keyof typeof sizeStyles;
+    /** Disables the button and puts a spinner in `leftIcon`'s place. */
     loading?: boolean;
     leftIcon?: ReactNode;
-    rightIcon?: ReactNode;
     className?: string;
 };
 
@@ -34,12 +33,9 @@ export function Button({
     loading = false,
     children,
     leftIcon,
-    rightIcon,
     className,
     ...props
 }: ButtonProps) {
-    const isDisabled = disabled || loading;
-
     return (
         <BaseButton
             className={cn(
@@ -50,27 +46,15 @@ export function Button({
                 sizeStyles[size],
                 className
             )}
-            disabled={isDisabled}
+            disabled={disabled || loading}
             {...props}
         >
             {loading ? (
-                <CircleNotchIcon
-                    className="size-3 animate-spin"
-                    weight="bold"
-                />
+                <CircleNotchIcon className="size-3 animate-spin" weight="bold" />
             ) : (
-                leftIcon && (
-                    <span className="-ml-0.5 inline-flex shrink-0">
-                        {leftIcon}
-                    </span>
-                )
+                leftIcon && <span className="-ml-0.5 inline-flex shrink-0">{leftIcon}</span>
             )}
             {children}
-            {!loading && rightIcon && (
-                <span className="-mr-0.5 inline-flex shrink-0">
-                    {rightIcon}
-                </span>
-            )}
         </BaseButton>
     );
 }

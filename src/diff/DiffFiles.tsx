@@ -7,16 +7,9 @@ import {
 } from "@phosphor-icons/react";
 import { cn } from "@/lib/cn";
 import { lineRef, refKey } from "@/review/comments";
-import { FileIcon, iconButtonClassName, Tooltip } from "@/ui";
-import {
-    itemsAfter,
-    MeasuredSlot,
-    SlotSpacer,
-    SlotView,
-    useFileSlots,
-    type FileSlots,
-    type SlotItem
-} from "./comments";
+import { FileIcon, IconButton } from "@/ui";
+import { itemsAfter, useFileSlots, type FileSlots, type SlotItem } from "./commenting";
+import { MeasuredSlot, SlotSpacer, SlotView } from "./comments";
 import { highlightFile, type Span } from "./highlight";
 import { fileNotices, splitPairs, type FileDiff, type Hunk, type PatchLine } from "./patch";
 
@@ -53,7 +46,7 @@ const ROW: Record<PatchLine["kind"], { row: string; accent: string; marker: stri
 const gutterWidth = (file: FileDiff) =>
     file.maxLine ? Math.max(String(file.maxLine).length * 7 + 14, 36) : 0;
 
-export type FileSectionProps = {
+type FileSectionProps = {
     file: FileDiff;
     first: boolean;
     folded: boolean;
@@ -160,59 +153,68 @@ function FileHeader({
                 <span className="shrink-0 text-dark-100">{name}</span>
             </span>
             {file.binary && <span className="shrink-0 text-[10px] text-dark-250">BIN</span>}
-            {(file.additions > 0 || !file.binary) && (
-                <span className="shrink-0 text-[11px] tabular-nums text-[#34d399]">
-                    +{file.additions}
-                </span>
-            )}
-            {(file.deletions > 0 || !file.binary) && (
-                <span className="shrink-0 text-[11px] tabular-nums text-[#f87171]">
-                    −{file.deletions}
-                </span>
-            )}
+            <LineCounts
+                additions={file.additions > 0 || !file.binary ? file.additions : undefined}
+                deletions={file.deletions > 0 || !file.binary ? file.deletions : undefined}
+                className="shrink-0 text-[11px]"
+            />
             {onRevert && (
-                <Tooltip>
-                    <Tooltip.Trigger
-                        render={
-                            <button
-                                type="button"
-                                aria-label="Undo this file's changes"
-                                onClick={(event) => {
-                                    event.stopPropagation();
-                                    onRevert(file);
-                                }}
-                                onKeyDown={(event) => event.stopPropagation()}
-                                className={iconButtonClassName}
-                            >
-                                <ArrowCounterClockwiseIcon className="size-3.5" />
-                            </button>
-                        }
-                    />
-                    <Tooltip.Content side="bottom">Undo this file's changes</Tooltip.Content>
-                </Tooltip>
+                <HeaderButton label="Undo this file's changes" onClick={() => onRevert(file)}>
+                    <ArrowCounterClockwiseIcon className="size-3.5" />
+                </HeaderButton>
             )}
             {onOpen && (
-                <Tooltip>
-                    <Tooltip.Trigger
-                        render={
-                            <button
-                                type="button"
-                                aria-label="Open file"
-                                onClick={(event) => {
-                                    event.stopPropagation();
-                                    onOpen(file.path);
-                                }}
-                                onKeyDown={(event) => event.stopPropagation()}
-                                className={iconButtonClassName}
-                            >
-                                <ArrowSquareOutIcon className="size-3.5" />
-                            </button>
-                        }
-                    />
-                    <Tooltip.Content side="bottom">Open file</Tooltip.Content>
-                </Tooltip>
+                <HeaderButton label="Open file" onClick={() => onOpen(file.path)}>
+                    <ArrowSquareOutIcon className="size-3.5" />
+                </HeaderButton>
             )}
         </div>
+    );
+}
+
+/** A button in a file's header, which doesn't fold or unfold the file. */
+function HeaderButton({
+    label,
+    onClick,
+    children
+}: {
+    label: string;
+    onClick: () => void;
+    children: ReactNode;
+}) {
+    return (
+        <IconButton
+            label={label}
+            onClick={(event) => {
+                event.stopPropagation();
+                onClick();
+            }}
+            onKeyDown={(event) => event.stopPropagation()}
+        >
+            {children}
+        </IconButton>
+    );
+}
+
+/** "+N −N" in the diff's green and red; a count left out isn't shown. */
+export function LineCounts({
+    additions,
+    deletions,
+    className
+}: {
+    additions?: number;
+    deletions?: number;
+    className?: string;
+}) {
+    return (
+        <>
+            {additions !== undefined && (
+                <span className={cn("tabular-nums text-[#34d399]", className)}>+{additions}</span>
+            )}
+            {deletions !== undefined && (
+                <span className={cn("tabular-nums text-[#f87171]", className)}>−{deletions}</span>
+            )}
+        </>
     );
 }
 
@@ -438,21 +440,45 @@ const TAB: CSSProperties = { tabSize: 4, lineHeight: `${LINE_HEIGHT}px` };
 
 function UnifiedRow({
     line,
-    spans,
-    gutter,
-    wrap,
-    onComment,
-    picked
+    ...props
 }: {
     line: PatchLine;
     spans: Span[] | undefined;
     gutter: number;
     wrap: boolean;
 } & CommentProps) {
-    const tone = ROW[line.kind];
     if (line.kind === "meta") return <MetaRow text={line.text} />;
+    return <LineRow line={line} numbers={[line.oldNo, line.newNo]} {...props} />;
+}
+
+/** A line (not a meta one): its gutter (numbers, marker; the comment button) and its code. */
+function LineRow({
+    line,
+    numbers,
+    narrow,
+    spans,
+    gutter,
+    wrap,
+    className,
+    onComment,
+    picked
+}: {
+    line: PatchLine;
+    /** The line numbers to show: both sides' (unified) or one side's (split). */
+    numbers: (number | undefined)[];
+    /** A split column's narrower marker. */
+    narrow?: boolean;
+    spans: Span[] | undefined;
+    gutter: number;
+    wrap: boolean;
+    className?: string;
+} & CommentProps) {
+    const tone = ROW[line.kind];
     return (
-        <div className={cn("group/row relative flex", tone.row)} style={{ minHeight: LINE_HEIGHT }}>
+        <div
+            className={cn("group/row relative flex", tone.row, className)}
+            style={{ minHeight: LINE_HEIGHT }}
+        >
             {picked && <Picked />}
             {/* The numbers stay put while the code scrolls sideways. */}
             <div
@@ -465,13 +491,11 @@ function UnifiedRow({
                 <span className={cn("absolute inset-0", tone.row)} />
                 {picked && <Picked />}
                 {tone.accent && <span className={cn("absolute inset-y-0 left-0 w-[3px]", tone.accent)} />}
-                {gutter > 0 && (
-                    <>
-                        <LineNo no={line.oldNo} width={gutter} className={tone.no} />
-                        <LineNo no={line.newNo} width={gutter} className={tone.no} />
-                    </>
-                )}
-                <Marker kind={line.kind} commentable={!!onComment} />
+                {gutter > 0 &&
+                    numbers.map((no, i) => (
+                        <LineNo key={i} no={no} width={gutter} className={tone.no} />
+                    ))}
+                <Marker kind={line.kind} narrow={narrow} commentable={!!onComment} />
             </div>
             <Code text={line.text} spans={spans} wrap={wrap} />
         </div>
@@ -507,34 +531,18 @@ function SplitCell({
             </div>
         );
     }
-    const tone = ROW[line.kind];
     return (
-        <div
-            className={cn("group/row relative flex min-w-0", tone.row, border)}
-            style={{ minHeight: LINE_HEIGHT }}
-        >
-            {picked && <Picked />}
-            <div
-                {...gutterProps(line, onComment)}
-                className={cn(
-                    "sticky left-0 z-[2] flex shrink-0 bg-dark-850",
-                    onComment && "cursor-pointer"
-                )}
-            >
-                <span className={cn("absolute inset-0", tone.row)} />
-                {picked && <Picked />}
-                {tone.accent && <span className={cn("absolute inset-y-0 left-0 w-[3px]", tone.accent)} />}
-                {gutter > 0 && (
-                    <LineNo
-                        no={side === "old" ? line.oldNo : line.newNo}
-                        width={gutter}
-                        className={tone.no}
-                    />
-                )}
-                <Marker kind={line.kind} narrow commentable={!!onComment} />
-            </div>
-            <Code text={line.text} spans={spans?.get(line)} wrap={wrap} />
-        </div>
+        <LineRow
+            line={line}
+            numbers={[side === "old" ? line.oldNo : line.newNo]}
+            narrow
+            spans={spans?.get(line)}
+            gutter={gutter}
+            wrap={wrap}
+            className={cn("min-w-0", border)}
+            onComment={onComment}
+            picked={picked}
+        />
     );
 }
 

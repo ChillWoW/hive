@@ -1,7 +1,6 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Collapsible } from "@base-ui/react/collapsible";
 import {
-    CaretDownIcon,
     CheckIcon,
     CircleIcon,
     CircleNotchIcon,
@@ -13,11 +12,13 @@ import {
 } from "@phosphor-icons/react";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import type { SetupStage, SetupStatus, WorktreeSetup } from "@/chats";
+import { copyText } from "@/lib/clipboard";
 import { cn } from "@/lib/cn";
 import { isTauri, REVEAL_LABEL } from "@/lib/platform";
 import type { Worktree } from "@/proto";
 import { openTerminalTab } from "@/rightbar";
-import { panelTransition, Rail } from "./ToolGroup";
+import { useNow } from "@/lib/time";
+import { Badge, FoldHeader, panelTransition, Rail } from "./ToolGroup";
 import type { ToolIcon } from "./tools";
 
 const STAGE_LABELS: Record<SetupStage["id"], string> = {
@@ -35,17 +36,6 @@ function formatDuration(ms: number) {
     return `${m}m ${String(Math.round(s % 60)).padStart(2, "0")}s`;
 }
 
-/** Now, re-read every `ms` while `live`. */
-function useNow(live: boolean, ms = 100) {
-    const [now, setNow] = useState(Date.now);
-    useEffect(() => {
-        if (!live) return;
-        const id = setInterval(() => setNow(Date.now()), ms);
-        return () => clearInterval(id);
-    }, [live, ms]);
-    return live ? now : Date.now();
-}
-
 const Spinner: ToolIcon = ({ className }) => (
     <CircleNotchIcon weight="bold" className={cn(className, "animate-spin")} />
 );
@@ -60,12 +50,9 @@ const STATUS_ICONS: Record<SetupStatus, ToolIcon> = {
 
 function BranchBadge({ branch }: { branch: string }) {
     return (
-        <span className="flex h-[22px] min-w-0 items-center gap-1.5 rounded-[5px] bg-white/[0.06] pr-1.5 pl-px text-dark-100">
-            <span className="flex size-5 shrink-0 items-center justify-center rounded-[4px] bg-white/[0.05]">
-                <GitBranchIcon className="size-3.5" />
-            </span>
+        <Badge icon={<GitBranchIcon className="size-3.5" />} className="text-dark-100">
             <span className="min-w-0 truncate font-mono text-[11px]">{branch}</span>
-        </span>
+        </Badge>
     );
 }
 
@@ -139,8 +126,6 @@ function ActionButton({
     );
 }
 
-const copy = (text: string) => void navigator.clipboard.writeText(text).catch(() => {});
-
 /** Where the worktree is, and what to do with it. */
 function Details({ worktree }: { worktree: Worktree }) {
     return (
@@ -169,7 +154,7 @@ function Details({ worktree }: { worktree: Worktree }) {
                 >
                     {REVEAL_LABEL}
                 </ActionButton>
-                <ActionButton icon={<CopyIcon className="size-3.5" />} onClick={() => copy(worktree.path)}>
+                <ActionButton icon={<CopyIcon className="size-3.5" />} onClick={() => void copyText(worktree.path)}>
                     Copy path
                 </ActionButton>
             </div>
@@ -197,7 +182,7 @@ export function WorktreeSetupCard({
 }) {
     const running = !!setup && !setup.endedAt;
     const failed = !!setup?.error;
-    const now = useNow(running);
+    const now = useNow(running, 100);
     const made = setup?.worktree ?? worktree;
     const [userOpen, setUserOpen] = useState<boolean>();
     const open = userOpen ?? (running || failed);
@@ -215,13 +200,7 @@ export function WorktreeSetupCard({
 
     return (
         <Collapsible.Root open={open} onOpenChange={setUserOpen}>
-            <Collapsible.Trigger className="group/header flex h-[26px] max-w-full min-w-0 items-center gap-1.5 pr-1 text-left text-xs text-dark-200 transition-colors hover:text-dark-50">
-                <span className="relative h-[18px] w-[22px] shrink-0">
-                    <CaretDownIcon
-                        weight="bold"
-                        className="absolute top-0.5 left-[5.5px] size-3.5 -rotate-90 transition-transform duration-200 group-data-panel-open/header:rotate-0"
-                    />
-                </span>
+            <FoldHeader className="min-w-0">
                 <span className={cn("shrink-0", failed && "text-danger", running && "shimmer")}>
                     {label}
                 </span>
@@ -235,7 +214,7 @@ export function WorktreeSetupCard({
                         · {formatDuration(total)}
                     </span>
                 )}
-            </Collapsible.Trigger>
+            </FoldHeader>
             <Collapsible.Panel className={panelTransition}>
                 <div className="flex flex-col pt-0.5">
                     {setup?.stages.map((stage, i) => (

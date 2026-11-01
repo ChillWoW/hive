@@ -39,7 +39,7 @@ type Chunk = { fromA: number; toA: number; fromB: number; toB: number };
 const MAX_EDITS = 1500;
 
 /** The changed blocks of `a` → `b` (Myers' diff on whole lines). */
-export function lineChunks(a: string[], b: string[]): Chunk[] {
+function lineChunks(a: string[], b: string[]): Chunk[] {
     let head = 0;
     while (head < a.length && head < b.length && a[head] === b[head]) head++;
     let tail = 0;

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import {
     chats,
+    isBusy,
     useChat,
     useChatMessages,
     useChatsStore,
@@ -23,7 +24,7 @@ import {
 import { BranchPicker, useGitRepo, WorkspaceChip, WorkspacePicker } from "@/git";
 import { useShortcut } from "@/keybindings";
 import type { Attachment, BackgroundTask, ChatConfig, MessagePart } from "@/proto";
-import { LiveTasks, Transcript } from "@/transcript";
+import { LiveTasks, promptText, Transcript } from "@/transcript";
 import { MorphHeight } from "@/ui";
 import { AgentUpdates } from "./AgentUpdates";
 import { BackgroundTasks } from "./BackgroundTasks";
@@ -78,7 +79,9 @@ export function ChatView() {
     const newCatalog =
         visible.find((c) => c.id === newChat.config.harness) ?? visible[0];
     const catalog = chat ? chatCatalog : newCatalog;
-    const commands = useCommands(catalog, chat ? workDir(chat) : newChat.cwd, session?.commands);
+    // Where the agent runs: a started chat's worktree or folder, else the new chat's.
+    const folder = chat ? workDir(chat) : newChat.cwd;
+    const commands = useCommands(catalog, folder, session?.commands);
     // New chats always get workspace-write; nothing in the UI picks it.
     const remembered: ChatConfig = { ...newChat.config, sandbox: "workspace-write" };
     const config: ChatConfig = chat
@@ -105,8 +108,7 @@ export function ChatView() {
     const streaming = shown.findLast((m) => m.role === "assistant")?.status === "streaming";
     const busy =
         streaming ||
-        session?.status === "working" ||
-        session?.status === "awaitingInput" ||
+        isBusy(session?.status) ||
         messages.some((m) => m.delivery?.state === "sending");
     const input = pendingInput(shown);
     // A question first; secrets wait their turn, oldest first.
@@ -134,11 +136,8 @@ export function ChatView() {
     };
 
     const retry = (message: TranscriptMessage) => {
-        const text = message.parts
-            .flatMap((p) => (p.kind === "text" ? [p.text] : []))
-            .join("\n\n");
         chats.discard(message.id);
-        sendTo(text, message.attachments ?? []);
+        sendTo(promptText(message), message.attachments ?? []);
     };
 
     // The goal tray's Clear, mid-turn: sent once the stopped turn has ended.
@@ -224,7 +223,7 @@ export function ChatView() {
                             steering={!!catalog?.capabilities.steering}
                             canAttach={!!catalog?.capabilities.attachments}
                             commands={commands}
-                            cwd={chat ? workDir(chat) : newChat.cwd}
+                            cwd={folder}
                             onSend={sendTo}
                             onStop={chat ? () => void chats.interrupt(chat.id).catch(() => {}) : undefined}
                             placeholder={hero ? "What should we work on?" : "Reply…"}
@@ -288,7 +287,7 @@ export function ChatView() {
                 id={subagent}
                 messages={shown}
                 tasks={session?.background}
-                cwd={workDir(chat)}
+                cwd={folder ?? undefined}
                 harness={chat.config.harness}
             />
         );
@@ -315,7 +314,7 @@ export function ChatView() {
                     <Transcript
                         key={chatId ?? "new"}
                         messages={shown}
-                        cwd={chat ? workDir(chat) : (newChat.cwd ?? undefined)}
+                        cwd={folder ?? undefined}
                         waiting={!!input || !!secret}
                         error={error}
                         onRetry={retry}

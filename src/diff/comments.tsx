@@ -1,204 +1,30 @@
-import {
-    createContext,
-    useCallback,
-    useContext,
-    useEffect,
-    useLayoutEffect,
-    useMemo,
-    useRef,
-    useState,
-    useSyncExternalStore,
-    type ReactNode,
-    type RefObject
-} from "react";
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import TextareaAutosize from "react-textarea-autosize";
 import { PencilSimpleIcon, TrashIcon } from "@phosphor-icons/react";
-import { composer, useComposerStore } from "@/composer/store";
 import { cn } from "@/lib/cn";
 import { isMac } from "@/lib/platform";
-import {
-    lineRef,
-    linesTitle,
-    rangeOf,
-    refKey,
-    sameRef,
-    type DiffComment,
-    type LineRef
-} from "@/review/comments";
+import { useResizeObserver } from "@/lib/useResizeObserver";
+import { linesTitle, type DiffComment } from "@/review/comments";
 import { useSettingsStore } from "@/settings/store";
-import { Button, iconButtonClassName, Tooltip } from "@/ui";
-import type { FileDiff, PatchLine } from "./patch";
+import { Button, IconButton } from "@/ui";
+import {
+    CommentingContext,
+    useCommentingContext,
+    type Commenting,
+    type Editing,
+    type SlotItem
+} from "./commenting";
+import type { FileDiff } from "./patch";
 
-/**
- * Commenting on the diff tab's lines: the gutter's `+` (Shift+click to
- * stretch it over a range) opens a box under the line; a saved comment goes
- * into the open chat's draft (or the new chat's) and rides its next prompt.
- */
-
-/** The comment box that's open: a new comment, or a saved one being edited. */
-type Editing = {
-    path: string;
-    /** Where the first click was; Shift+click stretches from here. */
-    anchor: LineRef;
-    start: LineRef;
-    end: LineRef;
-    /** The saved comment it edits. */
-    id?: string;
-    body: string;
-};
-
-type Commenting = {
-    /** The draft's comments on this checkout's files. */
-    comments: DiffComment[];
-    editing: Editing | null;
-    /** The open box's text as typed. */
-    body: RefObject<string>;
-    begin: (file: FileDiff, line: PatchLine, extend: boolean) => void;
-    edit: (comment: DiffComment) => void;
-    cancel: () => void;
-    /** Saves the box's text (empty deletes an edited comment). */
-    save: (file: FileDiff) => void;
-    remove: (id: string) => void;
-};
-
-const CommentingContext = createContext<Commenting | null>(null);
-
-export function CommentingProvider({ value, children }: { value: Commenting; children: ReactNode }) {
+/** Makes the lines under it commentable; with a null `value`, not. */
+export function CommentingProvider({
+    value,
+    children
+}: {
+    value: Commenting | null;
+    children: ReactNode;
+}) {
     return <CommentingContext.Provider value={value}>{children}</CommentingContext.Provider>;
-}
-
-const NO_COMMENTS: DiffComment[] = [];
-
-/** The diff tab's commenting, on the draft of `chatId` (null: the new chat's). */
-export function useCommenting(
-    chatId: string | null,
-    folder: string | null,
-    root: string | undefined
-): Commenting | null {
-    const all = useComposerStore((s) => s.comments[chatId ?? s.newDraftId] ?? NO_COMMENTS);
-    const comments = useMemo(
-        () => (root ? all.filter((c) => c.root === root) : NO_COMMENTS),
-        [all, root]
-    );
-    const [editing, setEditing] = useState<Editing | null>(null);
-    /** The open box's text, kept here (not in state) so typing re-renders nothing else. */
-    const body = useRef("");
-    // Another chat's draft, another box.
-    useEffect(() => setEditing(null), [chatId, root]);
-
-    const begin = useCallback((file: FileDiff, line: PatchLine, extend: boolean) => {
-        const ref = lineRef(line);
-        if (!ref) return;
-        setEditing((open) => {
-            if (extend && open && open.path === file.path && !open.id) {
-                const range = rangeOf(file, open.anchor, ref);
-                if (range) return { ...open, start: range[0], end: range[1], body: body.current };
-            }
-            // A new comment's unsaved text moves with the box.
-            const text = open && !open.id ? body.current : "";
-            return { path: file.path, anchor: ref, start: ref, end: ref, body: text };
-        });
-    }, []);
-    const edit = useCallback(
-        (c: DiffComment) =>
-            setEditing({
-                path: c.path,
-                anchor: c.start,
-                start: c.start,
-                end: c.end,
-                id: c.id,
-                body: c.body
-            }),
-        []
-    );
-    const cancel = useCallback(() => setEditing(null), []);
-    const save = useCallback(
-        (file: FileDiff) => {
-            const open = editing;
-            setEditing(null);
-            if (!open || !root || !folder) return;
-            const text = body.current.trim();
-            if (!text) {
-                if (open.id) composer.removeComment(chatId, open.id);
-                return;
-            }
-            const range = rangeOf(file, open.start, open.end);
-            const saved = open.id ? comments.find((c) => c.id === open.id) : undefined;
-            composer.putComment(chatId, {
-                id: open.id ?? crypto.randomUUID(),
-                root,
-                folder,
-                path: file.path,
-                start: open.start,
-                end: open.end,
-                code: range?.[2] ?? saved?.code ?? "",
-                body: text
-            });
-        },
-        [chatId, folder, root, comments, editing]
-    );
-    const remove = useCallback((id: string) => composer.removeComment(chatId, id), [chatId]);
-
-    return useMemo(
-        () =>
-            root && folder
-                ? { comments, editing, body, begin, edit, cancel, save, remove }
-                : null,
-        [root, folder, comments, editing, begin, edit, cancel, save, remove]
-    );
-}
-
-export const useCommentingContext = () => useContext(CommentingContext);
-
-/** What sits under a line: comments ending on it, and the box if it ends there. */
-export type SlotItem =
-    | { key: string; kind: "comment"; side: LineRef["side"]; comment: DiffComment }
-    | { key: string; kind: "editor"; side: LineRef["side"]; editing: Editing };
-
-/** A file's comment slots by the line they sit under, and the box's lines. */
-export function useFileSlots(file: FileDiff) {
-    const ctx = useCommentingContext();
-    return useMemo(() => {
-        if (!ctx) return null;
-        const slots = new Map<string, SlotItem[]>();
-        const push = (ref: LineRef, item: SlotItem) => {
-            const key = refKey(ref);
-            slots.set(key, [...(slots.get(key) ?? []), item]);
-        };
-        for (const c of ctx.comments) {
-            if (c.path !== file.path || (ctx.editing?.id === c.id)) continue;
-            push(c.end, { key: c.id, kind: "comment", side: c.end.side, comment: c });
-        }
-        const editing = ctx.editing?.path === file.path ? ctx.editing : null;
-        let picked: Set<string> | null = null;
-        if (editing) {
-            push(editing.end, { key: "editor", kind: "editor", side: editing.end.side, editing });
-            picked = new Set();
-            const lines = file.hunks.flatMap((h) => h.lines);
-            let inside = false;
-            for (const line of lines) {
-                const r = lineRef(line);
-                if (!r) continue;
-                if (sameRef(r, editing.start)) inside = true;
-                if (inside) picked.add(refKey(r));
-                if (sameRef(r, editing.end)) break;
-            }
-        }
-        return { slots, picked, begin: ctx.begin };
-    }, [ctx, file]);
-}
-
-export type FileSlots = NonNullable<ReturnType<typeof useFileSlots>>;
-
-/** The items under `lines` (a split row's two sides), each once. */
-export function itemsAfter(slots: FileSlots | null, lines: (PatchLine | undefined)[]): SlotItem[] {
-    if (!slots) return [];
-    const keys = new Set<string>();
-    for (const line of lines) {
-        const r = line && lineRef(line);
-        if (r) keys.add(refKey(r));
-    }
-    return [...keys].flatMap((k) => slots.slots.get(k) ?? []);
 }
 
 /** A comment or the box, as wide as the visible column (its scroller is the container). */
@@ -227,17 +53,13 @@ function setHeight(key: string, h: number) {
 /** The item in its column, its height published for the other column's spacer. */
 export function MeasuredSlot({ id, children }: { id: string; children: ReactNode }) {
     const ref = useRef<HTMLDivElement>(null);
-    useLayoutEffect(() => {
-        const el = ref.current;
-        if (!el) return;
-        const observer = new ResizeObserver(() => setHeight(id, el.offsetHeight));
-        observer.observe(el);
-        setHeight(id, el.offsetHeight);
-        return () => {
-            observer.disconnect();
+    useResizeObserver(ref, (el) => setHeight(id, el.offsetHeight));
+    useLayoutEffect(
+        () => () => {
             heights.delete(id);
-        };
-    }, [id]);
+        },
+        [id]
+    );
     return <div ref={ref}>{children}</div>;
 }
 
@@ -276,36 +98,22 @@ function CommentCard({ comment }: { comment: DiffComment }) {
                 </div>
             </div>
             <div className="flex shrink-0 items-start gap-0.5 opacity-0 transition-opacity group-hover/comment:opacity-100 group-focus-within/comment:opacity-100">
-                <Tooltip>
-                    <Tooltip.Trigger
-                        render={
-                            <button
-                                type="button"
-                                aria-label="Edit comment"
-                                onClick={() => ctx?.edit(comment)}
-                                className={iconButtonClassName}
-                            >
-                                <PencilSimpleIcon className="size-3.5" />
-                            </button>
-                        }
-                    />
-                    <Tooltip.Content side="top">Edit</Tooltip.Content>
-                </Tooltip>
-                <Tooltip>
-                    <Tooltip.Trigger
-                        render={
-                            <button
-                                type="button"
-                                aria-label="Delete comment"
-                                onClick={() => ctx?.remove(comment.id)}
-                                className={iconButtonClassName}
-                            >
-                                <TrashIcon className="size-3.5" />
-                            </button>
-                        }
-                    />
-                    <Tooltip.Content side="top">Delete</Tooltip.Content>
-                </Tooltip>
+                <IconButton
+                    label="Edit comment"
+                    tooltip="Edit"
+                    side="top"
+                    onClick={() => ctx?.edit(comment)}
+                >
+                    <PencilSimpleIcon className="size-3.5" />
+                </IconButton>
+                <IconButton
+                    label="Delete comment"
+                    tooltip="Delete"
+                    side="top"
+                    onClick={() => ctx?.remove(comment.id)}
+                >
+                    <TrashIcon className="size-3.5" />
+                </IconButton>
             </div>
         </div>
     );

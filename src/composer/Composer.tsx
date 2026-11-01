@@ -7,15 +7,16 @@ import {
     StopIcon
 } from "@phosphor-icons/react";
 import type { Attachment, ChatConfig, SlashCommand } from "@/proto";
-import { AttachmentTile, useAttachmentUrl } from "@/attachments";
+import { AttachmentTile, SavedAttachmentTile } from "@/attachments";
 import { COMPOSER_SCOPE, useShortcut } from "@/keybindings/runtime";
 import { cn } from "@/lib/cn";
 import { isMac } from "@/lib/platform";
+import { useResizeObserver } from "@/lib/useResizeObserver";
 import { useSettingsStore } from "@/settings/store";
 import { useWorkspaceFiles } from "@/files";
 import { refreshCatalogs, useCatalog } from "@/harnesses";
 import { useUsageStore } from "@/usage/store";
-import { iconButtonClassName, Tooltip } from "@/ui";
+import { IconButton, Tooltip } from "@/ui";
 import { ModelPicker } from "./ModelPicker";
 import { AccessPicker } from "./AccessPicker";
 import { MentionMenu } from "./MentionMenu";
@@ -175,19 +176,17 @@ export function Composer({
         recallRef.current = null;
     }, [chatId]);
 
-    /** Sets the field's text from a menu, the caret at `at` (a name ending there is still being typed). */
-    const complete = (text: string, at: number) => {
-        fieldRef.current?.setText(text, { caret: at, open: at });
+    /**
+     * Puts `text` in the field, the caret at `at` (its end by default). A
+     * menu's completion passes `open`: a name ending there is still being typed.
+     */
+    const fill = (text: string, at = text.length, open?: number) => {
+        fieldRef.current?.setText(text, { caret: at, open });
         setDraft(text);
         setCaret(at);
     };
 
-    /** Puts a whole prompt in the field (one from history), the caret at its end. */
-    const fill = (text: string) => {
-        fieldRef.current?.setText(text, { caret: text.length });
-        setDraft(text);
-        setCaret(text.length);
-    };
+    const complete = (text: string, at: number) => fill(text, at, at);
 
     // A comment's tag undone back in after the comment was deleted.
     useEffect(() => {
@@ -350,17 +349,12 @@ export function Composer({
     // the observer runs before paint, whereas a state update would clip the
     // new line for a frame. Width goes through state so resizing the window
     // re-renders and re-runs `measure` against the new room.
-    useLayoutEffect(() => {
+    useResizeObserver(deckRef, (deck) => {
         const frame = frameRef.current;
-        const deck = deckRef.current;
-        if (!frame || !deck) return;
-        const observer = new ResizeObserver(() => {
-            frame.style.height = `${deck.offsetHeight}px`;
-            setWidth(deck.clientWidth);
-        });
-        observer.observe(deck);
-        return () => observer.disconnect();
-    }, []);
+        if (!frame) return;
+        frame.style.height = `${deck.offsetHeight}px`;
+        setWidth(deck.clientWidth);
+    });
 
     const prompt = draft.trim();
     const content = prompt !== "" || attachments.length > 0 || comments.length > 0;
@@ -399,8 +393,8 @@ export function Composer({
             runApp(standalone);
             return;
         }
-        const files = attachments.flatMap((a) => (a.attachment ? [a.attachment] : []));
-        if (onSend(withDiffComments(prompt, comments), files) !== false) {
+        const sent = attachments.flatMap((a) => (a.attachment ? [a.attachment] : []));
+        if (onSend(withDiffComments(prompt, comments), sent) !== false) {
             fill("");
             takeAttachments(chatId);
             takeComments(chatId);
@@ -571,7 +565,7 @@ export function Composer({
                 <div className="flex flex-wrap items-end gap-2 px-1 pt-1">
                     {attachments.map((a) =>
                         !a.previewUrl && a.attachment ? (
-                            <SavedTile
+                            <SavedAttachmentTile
                                 key={a.id}
                                 attachment={a.attachment}
                                 onRemove={() => removeAttachment(chatId, a.id)}
@@ -639,24 +633,14 @@ export function Composer({
                     </span>
 
                     {canAttach && (
-                        <Tooltip>
-                            <Tooltip.Trigger
-                                render={
-                                    <button
-                                        type="button"
-                                        aria-label="Attach files"
-                                        onClick={() => fileInputRef.current?.click()}
-                                        className={cn(
-                                            iconButtonClassName,
-                                            "col-start-1 row-start-1 size-8 rounded-full group-data-tall/deck:row-start-2"
-                                        )}
-                                    >
-                                        <PaperclipIcon className="size-4" />
-                                    </button>
-                                }
-                            />
-                            <Tooltip.Content side="top">Attach files</Tooltip.Content>
-                        </Tooltip>
+                        <IconButton
+                            label="Attach files"
+                            side="top"
+                            onClick={() => fileInputRef.current?.click()}
+                            className="col-start-1 row-start-1 size-8 rounded-full group-data-tall/deck:row-start-2"
+                        >
+                            <PaperclipIcon className="size-4" />
+                        </IconButton>
                     )}
                     <input
                         ref={fileInputRef}
@@ -750,10 +734,4 @@ export function Composer({
             </div>
         </form>
     );
-}
-
-/** A file already copied in without a preview (a restored draft): images read back. */
-function SavedTile({ attachment, onRemove }: { attachment: Attachment; onRemove: () => void }) {
-    const imageUrl = useAttachmentUrl(attachment);
-    return <AttachmentTile name={attachment.name} imageUrl={imageUrl} onRemove={onRemove} />;
 }

@@ -1,10 +1,12 @@
 import { create } from "zustand";
 import type { HarnessId, ProviderStatus } from "@/proto";
 import { refreshCatalogs } from "@/harnesses";
+import { errorMessage } from "@/lib/errors";
+import { singleFlight } from "@/lib/singleFlight";
 import { isNewer, latestRelease, providersApi } from "./api";
 
 /** A long-running action on a provider's CLI. */
-export type ProviderAction = "installing" | "updating" | "signing-out";
+type ProviderAction = "installing" | "updating" | "signing-out";
 
 export type ProviderEntry = {
     status?: ProviderStatus;
@@ -48,7 +50,7 @@ const entry = (harness: HarnessId) =>
 
 /** The release check hits npm; once per this long unless forced. */
 const LATEST_TTL = 10 * 60 * 1000;
-const probes = new Map<HarnessId, Promise<void>>();
+const probes = singleFlight<HarnessId>();
 
 /**
  * Probes `harness`'s CLI and, when it's installed, looks up its newest
@@ -59,14 +61,11 @@ export function refreshProvider(
     harness: HarnessId,
     { force = false, maxAge }: { force?: boolean; maxAge?: number } = {}
 ): Promise<void> {
-    const running = probes.get(harness);
-    if (running) return running;
-    const { checkedAt } = entry(harness);
-    if (!force && maxAge !== undefined && checkedAt && Date.now() - checkedAt < maxAge) {
-        return Promise.resolve();
-    }
-
-    const probe = (async () => {
+    return probes(harness, async () => {
+        const { checkedAt } = entry(harness);
+        if (!force && maxAge !== undefined && checkedAt && Date.now() - checkedAt < maxAge) {
+            return;
+        }
         patch(harness, { probing: true });
         try {
             const status = await providersApi.status(harness);
@@ -76,11 +75,8 @@ export function refreshProvider(
             console.warn("[providers] status failed", harness, error);
         } finally {
             patch(harness, { probing: false, checkedAt: Date.now() });
-            probes.delete(harness);
         }
-    })();
-    probes.set(harness, probe);
-    return probe;
+    });
 }
 
 async function checkLatest(harness: HarnessId, status: ProviderStatus, force: boolean) {
@@ -114,7 +110,7 @@ async function act(
     try {
         await run();
     } catch (error) {
-        patch(harness, { error: error instanceof Error ? error.message : String(error) });
+        patch(harness, { error: errorMessage(error) });
     } finally {
         patch(harness, { action: undefined });
         await afterChange(harness);

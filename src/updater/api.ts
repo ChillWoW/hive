@@ -1,4 +1,5 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
+import { backend } from "@/lib/backend";
 import { isTauri } from "@/lib/platform";
 import { useSettingsStore } from "@/settings/store";
 
@@ -24,7 +25,7 @@ export type UpdateProgress =
  * date (always null in dev builds).
  */
 export function checkForUpdate(): Promise<UpdateInfo | null> {
-    if (!isTauri) {
+    return backend<UpdateInfo | null>("update_check", undefined, () => {
         const pre = useSettingsStore.getState().settings.updates.channel === "prerelease";
         return new Promise((resolve) =>
             setTimeout(
@@ -32,8 +33,7 @@ export function checkForUpdate(): Promise<UpdateInfo | null> {
                 400
             )
         );
-    }
-    return invoke<UpdateInfo | null>("update_check");
+    });
 }
 
 /**

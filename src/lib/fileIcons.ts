@@ -8,6 +8,7 @@ import {
     folderNamesExpanded,
     iconDefinitions
 } from "material-icon-theme/dist/material-icons.json";
+import { baseName } from "./paths";
 
 /**
  * File and folder icons from `material-icon-theme`, resolved the way VS Code
@@ -41,16 +42,11 @@ function lookup(table: Record<string, string>, key: string): string | undefined 
 }
 
 /** The last segment of a name or path, lowercased as the manifest's keys are. */
-function baseName(name: string): string {
-    const trimmed = name.replace(/[\\/]+$/, "");
-    return trimmed
-        .slice(Math.max(trimmed.lastIndexOf("/"), trimmed.lastIndexOf("\\")) + 1)
-        .toLowerCase();
-}
+const keyOf = (name: string) => baseName(name).toLowerCase();
 
 /** The icon's name in the theme for a file. */
 function fileIcon(name: string): string {
-    const base = baseName(name);
+    const base = keyOf(name);
     const exact = lookup(fileNames, base);
     if (exact) return exact;
     // `a.test.ts` tries `test.ts`, then `ts`: longest extension first.
@@ -63,7 +59,7 @@ function fileIcon(name: string): string {
 
 function folderIcon(name: string, open: boolean): string {
     return (
-        lookup(open ? folderNamesExpanded : folderNames, baseName(name)) ??
+        lookup(open ? folderNamesExpanded : folderNames, keyOf(name)) ??
         (open ? defaultFolderExpanded : defaultFolder)
     );
 }

@@ -1,7 +1,6 @@
 import { closeBrackets, closeBracketsKeymap } from "@codemirror/autocomplete";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
-import { bracketMatching, indentOnInput, LanguageDescription } from "@codemirror/language";
-import { languages } from "@codemirror/language-data";
+import { bracketMatching, indentOnInput } from "@codemirror/language";
 import { highlightSelectionMatches, searchKeymap } from "@codemirror/search";
 import {
     Compartment,
@@ -23,14 +22,16 @@ import {
     rectangularSelection
 } from "@codemirror/view";
 import { create } from "zustand";
-import { createJSONStorage, persist } from "zustand/middleware";
+import { persist } from "zustand/middleware";
+import { errorMessage } from "@/lib/errors";
 import type { FileText } from "@/proto";
 import { headText, readFile, writeFile } from "./api";
 import { gitGutter, setGitBase } from "./gitGutter";
+import { languageOf } from "./language";
 import { editorTheme } from "./theme";
 
 /** What's wrong with an open file now. */
-export type DocStatus =
+type DocStatus =
     | { kind: "saveFailed"; message: string }
     /** A save found the file changed since it was read. */
     | { kind: "conflict" }
@@ -72,11 +73,7 @@ export const useEditorPrefs = create<{ wrap: boolean; toggleWrap: () => void }>(
                 }
             }
         }),
-        {
-            name: "hive.editor",
-            storage: createJSONStorage(() => localStorage),
-            partialize: (s) => ({ wrap: s.wrap })
-        }
+        { name: "hive.editor", partialize: (s) => ({ wrap: s.wrap }) }
     )
 );
 
@@ -102,9 +99,6 @@ export type LinePosition = { line: number; column?: number };
 
 const MARKDOWN = /\.(md|markdown|mdx)$/i;
 export const isMarkdown = (path: string) => MARKDOWN.test(path);
-
-const message = (error: unknown) =>
-    error instanceof Error ? error.message : typeof error === "string" ? error : "Something went wrong.";
 
 const getDoc = (id: string) => useDocsStore.getState().docs[id];
 
@@ -182,6 +176,19 @@ function extensions(id: string, file: FileText): Extension[] {
     ];
 }
 
+/**
+ * Starts the tab `id`'s editor state on `text` (as what's on disk), then
+ * loads its language and its gutter's HEAD text.
+ */
+function startEditor(id: string, file: FileText, text: string, path: string) {
+    const state = EditorState.create({ doc: text, extensions: extensions(id, file) });
+    states.set(id, state);
+    saved.set(id, state.doc);
+    gitBases.delete(id);
+    void loadLanguage(id, path);
+    void refreshGitBase(id);
+}
+
 /** Reads the doc's file at HEAD again for its gutter's change markers. */
 async function refreshGitBase(id: string) {
     const doc = getDoc(id);
@@ -199,11 +206,8 @@ async function refreshGitBase(id: string) {
 }
 
 async function loadLanguage(id: string, path: string) {
-    const name = path.slice(path.lastIndexOf("/") + 1);
-    const description = LanguageDescription.matchFilename(languages, name);
-    if (!description) return dispatchTo(id, { effects: language.reconfigure([]) });
-    const support = await description.load();
-    dispatchTo(id, { effects: language.reconfigure(support) });
+    const support = await languageOf(path);
+    dispatchTo(id, { effects: language.reconfigure(support ?? []) });
 }
 
 /** The tab `id`'s file was renamed (moved) to `path`; unsaved changes stay. */
@@ -239,19 +243,13 @@ export async function openDoc(id: string, cwd: string, path: string) {
     try {
         const file = await readFile(cwd, path);
         if (!getDoc(id)) return;
-        if (file.text !== null) {
-            const state = EditorState.create({ doc: file.text, extensions: extensions(id, file) });
-            states.set(id, state);
-            saved.set(id, state.doc);
-            void loadLanguage(id, path);
-            void refreshGitBase(id);
-        }
+        if (file.text !== null) startEditor(id, file, file.text, path);
         setDoc(id, { phase: "ready", file });
         const at = pendingReveal.get(id);
         pendingReveal.delete(id);
         if (at) revealLine(id, at);
     } catch (error) {
-        setDoc(id, { phase: "error", error: message(error) });
+        setDoc(id, { phase: "error", error: errorMessage(error, "Something went wrong.") });
     }
 }
 
@@ -353,7 +351,10 @@ export async function save(id: string): Promise<boolean> {
         }
         setDoc(id, { saving: false, status: { kind: outcome.deleted ? "deleted" : "conflict" } });
     } catch (error) {
-        setDoc(id, { saving: false, status: { kind: "saveFailed", message: message(error) } });
+        setDoc(id, {
+            saving: false,
+            status: { kind: "saveFailed", message: errorMessage(error, "Something went wrong.") }
+        });
     }
     return false;
 }
@@ -450,12 +451,7 @@ export async function checkDisk(id: string) {
     }
     if (file.text !== null && !states.has(id) && !views.has(id)) {
         // It was unreadable before and is text now: start an editor for it.
-        const state = EditorState.create({ doc: file.text, extensions: extensions(id, file) });
-        states.set(id, state);
-        saved.set(id, state.doc);
-        void loadLanguage(id, now.path);
-        gitBases.delete(id);
-        void refreshGitBase(id);
+        startEditor(id, file, file.text, now.path);
     }
     applyFromDisk(id, file);
 }

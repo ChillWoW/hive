@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { create } from "zustand";
 import { save, useDocsStore } from "@/editor/documents";
+import { errorMessage } from "@/lib/errors";
+import { onWindowFocus } from "@/lib/windowFocus";
 import { hydrateSettings, useSettingsStore } from "@/settings/store";
 import { checkForUpdate, installUpdate, type UpdateInfo } from "./api";
 
@@ -32,10 +34,11 @@ export const useUpdaterStore = create<{
 
 const set = (state: UpdateState) => useUpdaterStore.setState({ state });
 
-const busy = () => {
-    const { phase } = useUpdaterStore.getState().state;
-    return phase === "downloading" || phase === "installing";
-};
+/** Downloading or installing: nothing else can start. */
+export const isInstalling = ({ phase }: UpdateState) =>
+    phase === "downloading" || phase === "installing";
+
+const busy = () => isInstalling(useUpdaterStore.getState().state);
 
 /** Only the newest check's answer counts (a channel switch starts another). */
 let latestCheck = 0;
@@ -54,10 +57,7 @@ export async function checkNow() {
     } catch (e) {
         if (id !== latestCheck) return;
         console.warn("update check failed:", e);
-        useUpdaterStore.setState({
-            checking: false,
-            error: e instanceof Error ? e.message : String(e)
-        });
+        useUpdaterStore.setState({ checking: false, error: errorMessage(e) });
     }
 }
 
@@ -87,7 +87,7 @@ export async function install() {
             else if (p.total) set({ phase: "downloading", update, progress: p.downloaded / p.total });
         });
     } catch (e) {
-        set({ phase: "failed", update, error: e instanceof Error ? e.message : String(e) });
+        set({ phase: "failed", update, error: errorMessage(e) });
     }
 }
 
@@ -116,15 +116,14 @@ export function useUpdaterRuntime() {
         if (!ready || !autoCheck) return;
         void checkNow();
         const timer = window.setInterval(() => void checkNow(), CHECK_EVERY_MS);
-        const onFocus = () => {
+        const offFocus = onWindowFocus(() => {
             if (Date.now() - useUpdaterStore.getState().checkedAt > FOCUS_STALE_MS) {
                 void checkNow();
             }
-        };
-        window.addEventListener("focus", onFocus);
+        });
         return () => {
             window.clearInterval(timer);
-            window.removeEventListener("focus", onFocus);
+            offFocus();
         };
     }, [ready, autoCheck]);
 

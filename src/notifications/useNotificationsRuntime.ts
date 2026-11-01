@@ -4,8 +4,7 @@ import {
     requestPermission,
     sendNotification
 } from "@tauri-apps/plugin-notification";
-import { isUnseen, useChatsStore } from "@/chats";
-import { folderName } from "@/composer";
+import { chatTitle, isUnseen, useChatsStore } from "@/chats";
 import { isTauri } from "@/lib/platform";
 import type { SessionStatus } from "@/proto";
 import { settings, useSettingsStore } from "@/settings";
@@ -79,7 +78,7 @@ async function announce(chatId: string, what: Change) {
             return;
         }
         sendNotification({
-            title: chat.title ?? folderName(chat.cwd),
+            title: chatTitle(chat),
             body: BODY[what]
         });
     } catch (error) {

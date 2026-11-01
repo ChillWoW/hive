@@ -24,12 +24,13 @@ import {
 import { useFilesPanelStore } from "@/files/panel";
 import type { ReadOnlyReason } from "@/proto";
 import { cn } from "@/lib/cn";
+import { errorMessage } from "@/lib/errors";
 import { useLayoutStore } from "@/stores/useLayoutStore";
 import { Markdown } from "@/transcript/Markdown";
 import { Button, FileIcon, Tooltip } from "@/ui";
 import { discardTab } from "./actions";
 import type { RightTab } from "./store";
-import { ToolButton } from "./ToolButton";
+import { TabToolbar, ToolButton } from "./parts";
 
 const IMAGE_TYPES: Record<string, string> = {
     png: "image/png",
@@ -44,6 +45,10 @@ const IMAGE_TYPES: Record<string, string> = {
 };
 const imageType = (path: string) =>
     IMAGE_TYPES[path.slice(path.lastIndexOf(".") + 1).toLowerCase()];
+
+/** Opens the file in its default app. */
+const openElsewhere = (cwd: string, path: string) =>
+    openFile(cwd, path).catch((error: unknown) => console.warn("[editor] open failed", error));
 
 const READ_ONLY: Record<ReadOnlyReason, string> = {
     tooLarge: "Too large to edit here (over 1 MB).",
@@ -96,7 +101,7 @@ function Toolbar({
     const editable = !image && doc?.file?.text != null;
 
     return (
-        <div className="flex h-9 shrink-0 items-center gap-1 border-b border-dark-600 px-2">
+        <TabToolbar>
             <FileIcon name={tab.title} className="size-3.5" />
             <Tooltip>
                 <Tooltip.Trigger
@@ -142,14 +147,7 @@ function Toolbar({
             >
                 <CrosshairIcon className="size-3.5" />
             </ToolButton>
-            <ToolButton
-                label="Open in default app"
-                onClick={() =>
-                    openFile(tab.cwd, tab.path).catch((error: unknown) =>
-                        console.warn("[editor] open failed", error)
-                    )
-                }
-            >
+            <ToolButton label="Open in default app" onClick={() => void openElsewhere(tab.cwd, tab.path)}>
                 <ArrowSquareOutIcon className="size-3.5" />
             </ToolButton>
             {editable && (
@@ -161,7 +159,7 @@ function Toolbar({
                     <TextAlignLeftIcon className="size-3.5" />
                 </ToolButton>
             )}
-        </div>
+        </TabToolbar>
     );
 }
 
@@ -281,14 +279,7 @@ function Notice({ children, action }: { children: ReactNode; action?: ReactNode 
 
 function OpenElsewhere({ cwd, path }: { cwd: string; path: string }) {
     return (
-        <Button
-            size="sm"
-            onClick={() =>
-                openFile(cwd, path).catch((error: unknown) =>
-                    console.warn("[editor] open failed", error)
-                )
-            }
-        >
+        <Button size="sm" onClick={() => void openElsewhere(cwd, path)}>
             Open in default app
         </Button>
     );
@@ -320,7 +311,7 @@ function ImagePreview({ cwd, path, type }: { cwd: string; path: string; type: st
                 else URL.revokeObjectURL(u);
             },
             (error: unknown) =>
-                live && setState({ error: error instanceof Error ? error.message : String(error) })
+                live && setState({ error: errorMessage(error) })
         );
         return () => {
             live = false;

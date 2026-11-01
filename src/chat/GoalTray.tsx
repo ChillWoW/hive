@@ -1,8 +1,8 @@
 import { PlayIcon, TargetIcon, XIcon } from "@phosphor-icons/react";
 import type { Goal, GoalStatus } from "@/proto";
 import { cn } from "@/lib/cn";
-import { trayClassName } from "./tray";
-import { formatTokens } from "@/usage/format";
+import { trayActionsClassName, trayButtonClassName, trayClassName, trayHeaderClassName } from "./tray";
+import { formatTokens } from "@/lib/format";
 
 const TITLE: Record<GoalStatus, string> = {
     active: "Goal set",
@@ -32,11 +32,6 @@ function usage(goal: Goal): string {
         .join(" · ");
 }
 
-const buttonClassName = cn(
-    "inline-flex h-5 shrink-0 items-center gap-1 rounded-md px-1.5 text-dark-200 outline-none",
-    "transition-colors hover:bg-dark-700 hover:text-dark-50 focus-visible:bg-dark-700"
-);
-
 /**
  * The goal the agent keeps working toward (Codex's `/goal`): above the
  * composer, its state ("Pursuing goal" while a turn
@@ -59,7 +54,7 @@ export function GoalTray({
     const resumable = goal.status !== "active" && goal.status !== "complete" && !working;
     return (
         <div className={trayClassName}>
-            <div className="flex h-6 min-w-0 items-center gap-1.5 px-2.5 text-xs">
+            <div className={trayHeaderClassName}>
                 <TargetIcon
                     className={cn(
                         "size-3.5 shrink-0",
@@ -75,14 +70,14 @@ export function GoalTray({
                     {title}
                 </span>
                 {spent && <span className="min-w-0 truncate text-dark-250 tabular-nums">· {spent}</span>}
-                <span className="ml-auto flex shrink-0 items-center gap-0.5 -mr-1.5">
+                <span className={trayActionsClassName}>
                     {resumable && (
-                        <button type="button" onClick={() => onCommand("resume")} className={buttonClassName}>
+                        <button type="button" onClick={() => onCommand("resume")} className={trayButtonClassName}>
                             <PlayIcon className="size-3" weight="fill" />
                             Resume
                         </button>
                     )}
-                    <button type="button" onClick={() => onCommand("clear")} className={buttonClassName}>
+                    <button type="button" onClick={() => onCommand("clear")} className={trayButtonClassName}>
                         <XIcon className="size-3" />
                         Clear
                     </button>

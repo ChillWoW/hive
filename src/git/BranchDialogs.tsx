@@ -1,16 +1,7 @@
 import { useEffect, useState } from "react";
 import type { GitBranch } from "@/proto";
-import { Button, Input, Modal } from "@/ui";
-import { errorText, git } from "./store";
-
-/** Keeps the last non-null value while a dialog animates out. */
-function useShown<T>(value: T | null): T | null {
-    const [shown, setShown] = useState(value);
-    useEffect(() => {
-        if (value !== null) setShown(value);
-    }, [value]);
-    return value ?? shown;
-}
+import { Button, ConfirmDialog, Input, Modal, useLastNonNull } from "@/ui";
+import { git, useGitAction } from "./store";
 
 /** Names a branch off `from` and switches to it. Closed while `from` is null. */
 export function NewBranchDialog({
@@ -22,39 +13,24 @@ export function NewBranchDialog({
     from: string | null;
     onClose: () => void;
 }) {
-    const shown = useShown(from);
+    const shown = useLastNonNull(from);
     const [name, setName] = useState("");
-    const [error, setError] = useState<string | null>(null);
-    const [busy, setBusy] = useState(false);
+    const { busy, error, setError, run } = useGitAction();
 
     useEffect(() => {
         if (from === null) return;
         setName("");
         setError(null);
-    }, [from]);
+    }, [from, setError]);
 
     const create = async () => {
         const trimmed = name.trim();
         if (!shown || !trimmed) return;
-        setBusy(true);
-        setError(null);
-        try {
-            await git.createBranch(cwd, trimmed, shown);
-            onClose();
-        } catch (e) {
-            setError(errorText(e));
-        } finally {
-            setBusy(false);
-        }
+        if (await run(() => git.createBranch(cwd, trimmed, shown))) onClose();
     };
 
     return (
-        <Modal
-            open={from !== null}
-            onOpenChange={(open) => !open && onClose()}
-            title="New branch"
-            size="sm"
-        >
+        <Modal open={from !== null} onClose={onClose} title="New branch" size="sm">
             <form
                 onSubmit={(event) => {
                     event.preventDefault();
@@ -119,34 +95,16 @@ export function DeleteBranchDialog({
     into: string;
     onClose: () => void;
 }) {
-    const shown = useShown(branch);
-    const [error, setError] = useState<string | null>(null);
-    const [busy, setBusy] = useState(false);
-
-    useEffect(() => {
-        if (branch) setError(null);
-    }, [branch]);
-
-    const confirm = async () => {
-        if (!shown) return;
-        setBusy(true);
-        setError(null);
-        try {
-            await git.deleteBranch(cwd, shown.name);
-            onClose();
-        } catch (e) {
-            setError(errorText(e));
-        } finally {
-            setBusy(false);
-        }
-    };
-
+    const shown = useLastNonNull(branch);
     return (
-        <Modal
+        <ConfirmDialog
             open={branch !== null}
-            onOpenChange={(open) => !open && onClose()}
             title="Delete branch?"
-            size="sm"
+            confirmLabel="Delete"
+            onConfirm={async () => {
+                if (shown) await git.deleteBranch(cwd, shown.name);
+            }}
+            onClose={onClose}
         >
             <p>
                 <span className="font-medium break-all text-dark-50">{shown?.name}</span> will
@@ -161,23 +119,6 @@ export function DeleteBranchDialog({
                 )}{" "}
                 This can't be undone.
             </p>
-            {error && (
-                <p className="mt-2 text-xs break-words whitespace-pre-wrap text-danger">
-                    {error}
-                </p>
-            )}
-            <div className="mt-4 flex justify-end gap-2">
-                <Modal.Close render={<Button size="sm" variant="ghost" />}>Cancel</Modal.Close>
-                <Button
-                    size="sm"
-                    variant="destructive"
-                    loading={busy}
-                    onClick={() => void confirm()}
-                    autoFocus
-                >
-                    Delete
-                </Button>
-            </div>
-        </Modal>
+        </ConfirmDialog>
     );
 }

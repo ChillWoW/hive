@@ -2,17 +2,19 @@ import { useChatsStore } from "@/chats";
 import { composer } from "@/composer/store";
 import { checkAllOnDisk, moveDoc } from "@/editor";
 import { useRightbarStore } from "@/rightbar/store";
+import { copyText } from "@/lib/clipboard";
+import { baseName } from "@/lib/paths";
 import { containsPath, deleteEntry, renameEntry } from "./api";
 import { fileMention } from "./mentions";
 import { useFilesPanelStore } from "./panel";
 import { refreshFiles } from "./store";
-import { nameOf, reloadTree } from "./tree";
+import { reloadTree } from "./tree";
 
 /**
  * `relative` under `root` as a full path in the root's own form: a Windows
  * root gets `\`s.
  */
-export function absolutePath(root: string, relative: string): string {
+function absolutePath(root: string, relative: string): string {
     const windows = root.startsWith("\\\\") || /^[a-z]:[\\/]/i.test(root);
     if (windows) {
         return `${root.replace(/[\\/]+$/, "").replaceAll("/", "\\")}\\${relative.replaceAll("/", "\\")}`;
@@ -22,7 +24,7 @@ export function absolutePath(root: string, relative: string): string {
 
 /** Copies `path`'s full path to the clipboard. */
 export function copyEntryPath(cwd: string, path: string) {
-    void navigator.clipboard.writeText(absolutePath(cwd, path)).catch(() => {});
+    void copyText(absolutePath(cwd, path));
 }
 
 /**
@@ -47,24 +49,30 @@ function relist(cwd: string) {
 }
 
 /**
+ * The expanded folders and the selection at or under `path` follow `to`:
+ * their new path, or null for gone.
+ */
+function followPanel(cwd: string, path: string, to: (p: string) => string | null) {
+    const map = (p: string) => (containsPath(path, p) ? to(p) : p);
+    useFilesPanelStore.setState((s) => ({
+        expanded: { ...s.expanded, [cwd]: (s.expanded[cwd] ?? []).flatMap((p) => map(p) ?? []) },
+        selected: s.selected && map(s.selected)
+    }));
+}
+
+/**
  * Renames `path` of `cwd` to `name`: expanded folders,
  * the selection and open file tabs under it follow; the new path.
  */
 export async function renameTreeEntry(cwd: string, path: string, name: string) {
     const to = await renameEntry(cwd, path, name);
     const moved = (p: string) => to + p.slice(path.length);
-    useFilesPanelStore.setState((s) => ({
-        expanded: {
-            ...s.expanded,
-            [cwd]: (s.expanded[cwd] ?? []).map((p) => (containsPath(path, p) ? moved(p) : p))
-        },
-        selected: s.selected && containsPath(path, s.selected) ? moved(s.selected) : s.selected
-    }));
+    followPanel(cwd, path, moved);
     const { tabs, repath } = useRightbarStore.getState();
     for (const tab of tabs) {
         if (tab.kind !== "file" || tab.cwd !== cwd || !containsPath(path, tab.path)) continue;
         const next = moved(tab.path);
-        repath(tab.id, next, nameOf(next));
+        repath(tab.id, next, baseName(next));
         moveDoc(tab.id, next);
     }
     relist(cwd);
@@ -77,13 +85,7 @@ export async function renameTreeEntry(cwd: string, path: string, name: string) {
  */
 export async function deleteTreeEntry(cwd: string, path: string) {
     await deleteEntry(cwd, path);
-    useFilesPanelStore.setState((s) => ({
-        expanded: {
-            ...s.expanded,
-            [cwd]: (s.expanded[cwd] ?? []).filter((p) => !containsPath(path, p))
-        },
-        selected: s.selected && containsPath(path, s.selected) ? null : s.selected
-    }));
+    followPanel(cwd, path, () => null);
     relist(cwd);
     checkAllOnDisk(cwd);
 }

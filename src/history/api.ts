@@ -1,5 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
-import { isTauri } from "@/lib/platform";
+import { backend } from "@/lib/backend";
 import type { GitDiff, GitHistoryCommit, GitHistoryPage } from "@/proto";
 import { compactToVisible, historyMatches } from "./graph";
 
@@ -12,32 +11,33 @@ export const PAGE_SIZE = 100;
  */
 export const historyApi = {
     /** `PAGE_SIZE` commits from `cursor` on; null outside a checkout. */
-    page: (cwd: string, cursor: number): Promise<GitHistoryPage | null> =>
-        isTauri
-            ? invoke("git_history", { cwd, cursor, limit: PAGE_SIZE })
-            : Promise.resolve(fakePage(cursor)),
+    page: (cwd: string, cursor: number) =>
+        backend<GitHistoryPage | null>("git_history", { cwd, cursor, limit: PAGE_SIZE }, () =>
+            fakePage(cursor)
+        ),
     /** The commits matching `query` through all of the history, a page at a time. */
-    search: (cwd: string, query: string, cursor: number): Promise<GitHistoryPage | null> =>
-        isTauri
-            ? invoke("git_search_history", { cwd, query, cursor, limit: PAGE_SIZE })
-            : delay(fakeSearch(query, cursor), 120),
+    search: (cwd: string, query: string, cursor: number) =>
+        backend<GitHistoryPage | null>(
+            "git_search_history",
+            { cwd, query, cursor, limit: PAGE_SIZE },
+            () => delay(fakeSearch(query, cursor), 120)
+        ),
     /** `git fetch --all`. */
-    fetchAll: (cwd: string): Promise<void> =>
-        isTauri ? invoke("git_fetch_all", { cwd }) : delay(undefined, 900),
+    fetchAll: (cwd: string) => backend<void>("git_fetch_all", { cwd }, () => delay(undefined, 900)),
     /** What one commit changed, against its first parent. */
-    commitDiff: (cwd: string, sha: string): Promise<GitDiff | null> =>
-        isTauri
-            ? invoke("git_commit_diff", { cwd, sha })
-            : Promise.resolve({ root: cwd, patch: FAKE_COMMIT_PATCH, truncated: false }),
+    commitDiff: (cwd: string, sha: string) =>
+        backend<GitDiff | null>("git_commit_diff", { cwd, sha }, () => ({
+            root: cwd,
+            patch: FAKE_COMMIT_PATCH,
+            truncated: false
+        })),
     /** GitHub pictures of a page's authors, as `data:` URLs by lowercased email. */
-    avatars: (
-        cwd: string,
-        authors: { sha: string; email: string }[],
-        cursor: number
-    ): Promise<Record<string, string>> =>
-        isTauri
-            ? invoke("git_avatars", { cwd, authors, cursor, limit: PAGE_SIZE })
-            : Promise.resolve({})
+    avatars: (cwd: string, authors: { sha: string; email: string }[], cursor: number) =>
+        backend<Record<string, string>>(
+            "git_avatars",
+            { cwd, authors, cursor, limit: PAGE_SIZE },
+            () => ({})
+        )
 };
 
 const delay = <T>(value: T, ms: number) =>

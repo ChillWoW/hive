@@ -7,15 +7,14 @@ import {
     TerminalWindowIcon,
     WarningCircleIcon
 } from "@phosphor-icons/react";
-import { useContext } from "react";
+import { useContext, type ReactNode } from "react";
 import type { FinishedTask, HarnessId, MessagePart } from "@/proto";
 import { HarnessIcon, useCatalog } from "@/harnesses";
 import { cn } from "@/lib/cn";
 import { Tooltip } from "@/ui";
-import { formatTokens } from "@/usage/format";
+import { formatTokens } from "@/lib/format";
 import { OpenSubagent } from "./context";
 import {
-    formatElapsed,
     plainLine,
     progressLine,
     spawnResult,
@@ -23,7 +22,8 @@ import {
     useSubagent,
     type SubagentPhase
 } from "./subagents";
-import type { ToolPart } from "./tools";
+import { formatElapsed } from "@/lib/time";
+import { singleLine, type ToolPart } from "./tools";
 
 type Part<K extends MessagePart["kind"]> = Extract<MessagePart, { kind: K }>;
 
@@ -32,22 +32,44 @@ function resultLine(output: string | undefined): string | null {
     return output?.split("\n").map(plainLine).find(Boolean) ?? null;
 }
 
+/** The harness's mark, else a robot. */
+export function AgentMark({ harness }: { harness?: HarnessId }) {
+    return harness ? (
+        <HarnessIcon harness={harness} className="size-3.5" />
+    ) : (
+        <RobotIcon className="size-3.5 text-dark-200" />
+    );
+}
+
+/**
+ * The round avatar subagents and background tasks share; the glyph inside and
+ * the badge on its corner are the caller's.
+ */
+export function RoundAvatar({ className, children }: { className?: string; children: ReactNode }) {
+    return (
+        <span
+            className={cn(
+                "relative inline-flex size-6 shrink-0 items-center justify-center rounded-full border border-dark-600 bg-dark-800",
+                className
+            )}
+        >
+            {children}
+        </span>
+    );
+}
+
 /** A subagent's round avatar: the harness's mark, its state as a dot on the corner. */
 export function SubagentAvatar({ harness, state }: { harness?: HarnessId; state: SubagentPhase }) {
     return (
-        <span className="relative inline-flex size-6 shrink-0 items-center justify-center rounded-full border border-dark-600 bg-dark-800 ring-2 ring-dark-900">
-            {harness ? (
-                <HarnessIcon harness={harness} className="size-3.5" />
-            ) : (
-                <RobotIcon className="size-3.5 text-dark-200" />
-            )}
+        <RoundAvatar className="ring-2 ring-dark-900">
+            <AgentMark harness={harness} />
             <span
                 className={cn(
                     "absolute -right-px -bottom-px size-2 rounded-full ring-2 ring-dark-900",
                     SUBAGENT_STATE[state].dot
                 )}
             />
-        </span>
+        </RoundAvatar>
     );
 }
 
@@ -189,11 +211,7 @@ function SubagentCard({
             <div className="flex flex-col gap-1.5 border-t border-dark-600 pt-2.5 text-xs">
                 <div className="flex min-w-0 items-center gap-2">
                     <span className="flex w-4 shrink-0 justify-center">
-                        {harness ? (
-                            <HarnessIcon harness={harness} className="size-3.5" />
-                        ) : (
-                            <RobotIcon className="size-3.5 text-dark-200" />
-                        )}
+                        <AgentMark harness={harness} />
                     </span>
                     <span className="min-w-0 truncate text-dark-100">
                         {named ?? (
@@ -225,7 +243,7 @@ function SubagentCard({
                         <span className="flex w-4 shrink-0 justify-center">
                             <TerminalWindowIcon className="size-3.5 text-dark-200" />
                         </span>
-                        <span className="min-w-0 truncate text-dark-200">{prompt.replace(/\s+/g, " ").trim()}</span>
+                        <span className="min-w-0 truncate text-dark-200">{singleLine(prompt)}</span>
                     </div>
                 )}
             </div>
@@ -260,10 +278,7 @@ export function WakeRow({ part }: { part: Part<"wake"> }) {
           ? `After`
           : `After ${part.finished.length} background tasks ended`;
     return (
-        <div className="flex h-[26px] min-w-0 items-center gap-1.5 text-xs">
-            <span className="flex w-[22px] shrink-0 justify-center">
-                <ArrowElbowDownRightIcon className="size-3.5 text-dark-200" />
-            </span>
+        <MarkerRow icon={<ArrowElbowDownRightIcon className="size-3.5 text-dark-200" />}>
             <span className="shrink-0 text-dark-200">{label}</span>
             {first && rest.length === 0 && (
                 <>
@@ -278,6 +293,16 @@ export function WakeRow({ part }: { part: Part<"wake"> }) {
                     {part.finished.map((t) => t.description).join(", ")}
                 </span>
             )}
+        </MarkerRow>
+    );
+}
+
+/** A one-line marker in a reply, its icon in a tool group's caret column. */
+function MarkerRow({ icon, children }: { icon: ReactNode; children: ReactNode }) {
+    return (
+        <div className="flex h-[26px] min-w-0 items-center gap-1.5 text-xs">
+            <span className="flex w-[22px] shrink-0 justify-center">{icon}</span>
+            {children}
         </div>
     );
 }
@@ -342,14 +367,11 @@ export function InputRow({ part, streaming }: { part: Part<"input">; streaming: 
           ? "Waiting for your answer"
           : "Question not answered";
     return (
-        <div className="flex h-[26px] min-w-0 items-center gap-1.5 text-xs">
-            <span className="flex w-[22px] shrink-0 justify-center">
-                <ChatCircleDotsIcon className="size-3.5 text-dark-200" />
-            </span>
+        <MarkerRow icon={<ChatCircleDotsIcon className="size-3.5 text-dark-200" />}>
             <span className={cn("shrink-0 text-dark-200", waiting && "shimmer")}>{label}</span>
             {part.questions[0] && (
                 <span className="min-w-0 truncate text-dark-250">{part.questions[0].question}</span>
             )}
-        </div>
+        </MarkerRow>
     );
 }

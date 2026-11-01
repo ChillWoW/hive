@@ -19,10 +19,10 @@ import type { MessagePart, ToolCall } from "@/proto";
 import type { JsonValue } from "@/proto/serde_json/JsonValue";
 import type { PageRef } from "@/htmlpage";
 import { HiveMark } from "@/ui";
-import { ThoughtIcon } from "./ThoughtIcon";
+import type { ToolPart } from "./fold";
 
-export type ToolPart = Extract<MessagePart, { kind: "tool" }>;
-export type ReasoningPart = Extract<MessagePart, { kind: "reasoning" }>;
+export type { ToolPart };
+type ReasoningPart = Extract<MessagePart, { kind: "reasoning" }>;
 
 /**
  * One line in a tool group: a call, a run of back-to-back file changes (two
@@ -40,7 +40,7 @@ function changedPath(call: ToolCall): string | undefined {
         case "editFile":
             return call.path;
         case "applyPatch":
-            return call.path ?? undefined;
+            return call.path;
         default:
             return undefined;
     }
@@ -86,11 +86,6 @@ export function isRunning(part: ToolPart, streaming: boolean) {
     return streaming && !part.resolved;
 }
 
-/** The last segment of a path, either slash. */
-export function fileName(path: string): string {
-    return path.split(/[\\/]/).filter(Boolean).pop() ?? path;
-}
-
 /** `path` relative to `cwd` when it's inside it. */
 export function shortPath(path: string, cwd: string | undefined): string {
     if (!cwd) return path;
@@ -106,23 +101,14 @@ export function shortPath(path: string, cwd: string | undefined): string {
 
 /** The one file a call touched, shown as a file badge instead of text. */
 export function pathOf(call: ToolCall): string | undefined {
-    switch (call.kind) {
-        case "readFile":
-        case "writeFile":
-        case "editFile":
-            return call.path;
-        case "applyPatch":
-            return call.path;
-        default:
-            return undefined;
-    }
+    return call.kind === "readFile" ? call.path : changedPath(call);
 }
 
 /** A rail icon: a phosphor icon or one of ours, sized and coloured by `className`. */
 export type ToolIcon = ComponentType<{ className?: string }>;
 
 /** The server name Hive's own MCP tools come from (`McpServer::HIVE`). */
-export const HIVE_SERVER = "hive";
+const HIVE_SERVER = "hive";
 
 /** How one of Hive's own tools shows: its label (the tool name otherwise) and detail. */
 type HiveTool = { label?: string; detail?: (input: JsonValue | undefined) => string };
@@ -194,7 +180,7 @@ function resultPage(output: string | undefined): Record<string, unknown> | undef
  * prefixes (`claude_ai_Gmail`, `plugin_context7_context7`) peeled,
  * separators as spaces, all-lowercase words capitalized.
  */
-export function serverLabel(server: string): string {
+function serverLabel(server: string): string {
     const peeled = server.replace(/^claude_ai_/, "").replace(/^plugin_[^_]+_/, "");
     return singleLine(peeled.replace(/[_-]+/g, " "))
         .split(" ")
@@ -243,14 +229,14 @@ function isHiveTool(call: ToolCall): boolean {
     return call.kind === "mcp" && call.server === HIVE_SERVER;
 }
 
-/** Claude's deferred-tool loader: `select:A,B` loads those tools, anything else searches. */
-function toolSearch(call: ToolCall): { select: string[] | undefined; query: string } | undefined {
+/**
+ * Claude's deferred-tool loader: `select:A,B` loads those tools, anything
+ * else searches. `query` is as sent (untrimmed); undefined without one.
+ */
+export function toolSearch(call: ToolCall): { select: string[] | undefined; query?: string } | undefined {
     if (call.kind !== "unknown" || call.name !== "ToolSearch") return undefined;
-    const input = call.input;
-    const raw =
-        input && typeof input === "object" && !Array.isArray(input) && typeof input.query === "string"
-            ? input.query.trim()
-            : "";
+    const query = stringField(call.input, "query");
+    const raw = query?.trim() ?? "";
     const select = raw.startsWith("select:")
         ? raw
               .slice("select:".length)
@@ -258,17 +244,15 @@ function toolSearch(call: ToolCall): { select: string[] | undefined; query: stri
               .map((name) => name.trim())
               .filter(Boolean)
         : undefined;
-    return { select, query: raw };
+    return { select, query };
 }
 
 /** Claude's skill loader: the skill's name and the arguments it was handed. */
 export function skillOf(call: ToolCall): { name: string; args: string } | undefined {
     if (call.kind !== "unknown" || call.name !== "Skill") return undefined;
-    const input = call.input;
-    if (!input || typeof input !== "object" || Array.isArray(input)) return { name: "", args: "" };
     return {
-        name: typeof input.skill === "string" ? input.skill.trim() : "",
-        args: typeof input.args === "string" ? input.args.trim() : ""
+        name: stringField(call.input, "skill")?.trim() ?? "",
+        args: stringField(call.input, "args")?.trim() ?? ""
     };
 }
 
@@ -337,8 +321,6 @@ export function iconOf(call: ToolCall): ToolIcon {
     }
 }
 
-export const THOUGHT_ICON: ToolIcon = ThoughtIcon;
-
 /**
  * A thought's one-line preview for its row: a `**Heading**`
  * line (Codex's summaries open each section with one) — the latest while
@@ -361,7 +343,7 @@ export function thoughtPreview(markdown: string, live: boolean): string {
 }
 
 /** Whitespace runs folded to single spaces, for one-line slots. */
-function singleLine(text: string) {
+export function singleLine(text: string) {
     return text.split(/\s+/).filter(Boolean).join(" ");
 }
 
@@ -383,7 +365,7 @@ export function chipContent(
     if (search) {
         return search.select
             ? chip("Load tools", search.select.join(", "))
-            : chip("Find tools", search.query);
+            : chip("Find tools", search.query ?? "");
     }
     const skill = skillOf(call);
     if (skill) return chip("Skill", skill.name);
@@ -431,7 +413,7 @@ export function chipContent(
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
-export type SummarySegment = { text: string; danger?: boolean };
+type SummarySegment = { text: string; danger?: boolean };
 
 /**
  * The group header: "Thought process · Ran 3 commands · edited 2 files ·
@@ -466,10 +448,8 @@ export function summarize(items: GroupItem[]): SummarySegment[] {
                 break;
             case "writeFile":
             case "editFile":
-                edited.add(call.path);
-                break;
             case "applyPatch":
-                edited.add(call.path ?? "patch");
+                edited.add(changedPath(call) ?? "patch");
                 break;
             case "readFile":
                 reads++;

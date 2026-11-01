@@ -5,15 +5,15 @@ import { useShallow } from "zustand/react/shallow";
 
 // Widths in px.
 export const SIDEBAR_WIDTH = 260;
-export const FILES_PANEL_MIN = 220;
-export const FILES_PANEL_MAX = 440;
-export const FILES_PANEL_DEFAULT = 286;
-export const RIGHT_SIDEBAR_MIN = 360;
-export const RIGHT_SIDEBAR_DEFAULT = 520;
+const FILES_PANEL_MIN = 220;
+const FILES_PANEL_MAX = 440;
+const FILES_PANEL_DEFAULT = 286;
+const RIGHT_SIDEBAR_MIN = 360;
+const RIGHT_SIDEBAR_DEFAULT = 520;
 /** The conversation never gets narrower than this beside open panels. */
-export const CHAT_MIN = 300;
+const CHAT_MIN = 300;
 
-export type Column = "sidebar" | "files" | "right";
+type Column = "sidebar" | "files" | "right";
 
 type LayoutState = {
     sidebarOpen: boolean;
@@ -28,9 +28,11 @@ type LayoutState = {
     rightWidth: number;
     /** A panel edge is being dragged (widths follow the pointer, unanimated). */
     resizing: boolean;
-    toggleSidebar: () => void;
-    toggleFilePanel: () => void;
-    toggleRightSidebar: () => void;
+    /**
+     * Opens or closes a column. One that's open but hidden for room is brought
+     * back instead (it becomes the newest).
+     */
+    toggle: (column: Column) => void;
     /** Maximizes the right sidebar (opening it), or restores it. */
     toggleRightMaximized: () => void;
     /** Opens a column, or brings it back when it was hidden for room. */
@@ -86,7 +88,7 @@ export function fitColumns(
     }
 }
 
-export type PanelLayout = {
+type PanelLayout = {
     visible: Record<Column, boolean>;
     sidebar: number;
     files: number;
@@ -99,7 +101,7 @@ export type PanelLayout = {
 };
 
 /** Each visible column's width: its preference, as far as the conversation's minimum allows. */
-export function panelLayout(
+function panelLayout(
     viewport: number,
     state: FitInput & Pick<LayoutState, "filesWidth" | "rightWidth">
 ): PanelLayout {
@@ -133,16 +135,15 @@ const clamp = (value: number, min: number, max: number) =>
 export const useLayoutStore = create<LayoutState>()(
     persist(
         (set, get) => {
-            /**
-             * Opens or closes a column. One that's open but hidden for room
-             * is brought back instead (it becomes the newest).
-             */
+            /** Open and shown: not hidden for room. */
+            const shown = (column: Column) => {
+                const state = get();
+                return state[OPEN_KEY[column]] && fitColumns(window.innerWidth, state)[column];
+            };
             const toggle = (column: Column) => {
                 const state = get();
                 const key = OPEN_KEY[column];
-                const hidden =
-                    state[key] && !fitColumns(window.innerWidth, state)[column];
-                const open = hidden || !state[key];
+                const open = !shown(column);
                 set({
                     [key]: open,
                     ...(column === "right" && !open && { rightMaximized: false }),
@@ -160,14 +161,10 @@ export const useLayoutStore = create<LayoutState>()(
                 filesWidth: FILES_PANEL_DEFAULT,
                 rightWidth: RIGHT_SIDEBAR_DEFAULT,
                 resizing: false,
-                toggleSidebar: () => toggle("sidebar"),
-                toggleFilePanel: () => toggle("files"),
-                toggleRightSidebar: () => toggle("right"),
+                toggle,
                 toggleRightMaximized: () => {
                     const state = get();
-                    const maximized =
-                        state.rightMaximized &&
-                        fitColumns(window.innerWidth, state).right;
+                    const maximized = state.rightMaximized && shown("right");
                     set({
                         rightMaximized: !maximized,
                         ...(!maximized && {
@@ -178,18 +175,10 @@ export const useLayoutStore = create<LayoutState>()(
                     });
                 },
                 show: (column) => {
-                    const state = get();
-                    if (state[OPEN_KEY[column]] && fitColumns(window.innerWidth, state)[column]) return;
-                    toggle(column);
+                    if (!shown(column)) toggle(column);
                 },
                 setFilesWidth: (width) =>
-                    set({
-                        filesWidth: clamp(
-                            width,
-                            FILES_PANEL_MIN,
-                            FILES_PANEL_MAX
-                        )
-                    }),
+                    set({ filesWidth: clamp(width, FILES_PANEL_MIN, FILES_PANEL_MAX) }),
                 setResizing: (resizing) => set({ resizing }),
                 setRightWidth: (width) =>
                     set({ rightWidth: Math.max(width, RIGHT_SIDEBAR_MIN) })
@@ -215,7 +204,7 @@ const subscribeResize = (onChange: () => void) => {
     return () => window.removeEventListener("resize", onChange);
 };
 
-export const useViewportWidth = () =>
+const useViewportWidth = () =>
     useSyncExternalStore(subscribeResize, () => window.innerWidth);
 
 /** The columns shown and their widths, for the window's current width. */

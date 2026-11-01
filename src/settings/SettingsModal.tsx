@@ -4,7 +4,7 @@ import { cn } from "@/lib/cn";
 import { iconButtonClassName, Modal } from "@/ui";
 import { getSettingsPage, SETTINGS_PAGES } from "./pages";
 import { SettingsQueryContext } from "./search";
-import { useSettingsStore } from "./store";
+import { useSettingsStore, type SettingsPageId } from "./store";
 
 /** Open from anywhere with `settings.open()`, Mod+, or the sidebar button. */
 export function SettingsModal() {
@@ -28,7 +28,7 @@ export function SettingsModal() {
         scroller.current?.scrollTo({ top: 0 });
     }, [pageId, searching]);
 
-    const go = (id: typeof pageId) => {
+    const go = (id: SettingsPageId) => {
         setPage(id);
         setQuery("");
     };
@@ -135,8 +135,8 @@ function SettingsNav({
     activeId,
     onSelect
 }: {
-    activeId: string | null;
-    onSelect: (id: (typeof SETTINGS_PAGES)[number]["id"]) => void;
+    activeId: SettingsPageId | null;
+    onSelect: (id: SettingsPageId) => void;
 }) {
     const onKeyDown = (event: KeyboardEvent<HTMLElement>) => {
         const buttons = Array.from(
@@ -203,7 +203,7 @@ function SettingsNav({
 function SearchResults({
     onOpenPage
 }: {
-    onOpenPage: (id: (typeof SETTINGS_PAGES)[number]["id"]) => void;
+    onOpenPage: (id: SettingsPageId) => void;
 }) {
     return (
         <div className="flex flex-col gap-8 [&:has([data-setting-row])>[data-no-matches]]:hidden">

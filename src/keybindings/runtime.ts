@@ -7,7 +7,7 @@ import { canonical, shortcutFromEvent, stringifyShortcut } from "./shortcut";
  * Returns false when it didn't apply (nothing to do here), so the key goes
  * on to the page as if unbound.
  */
-export type ShortcutHandler = () => boolean | void;
+type ShortcutHandler = () => boolean | void;
 
 /** Per action, every mounted handler; the latest one runs. */
 const handlers = new Map<ActionId, ShortcutHandler[]>();
@@ -46,6 +46,12 @@ export function runAction(id: ActionId): boolean {
 /** Whether something handles `id` now. */
 export const canRunAction = (id: ActionId) => !!handlers.get(id)?.length;
 
+/** The pressed combo in `canonical` spelling; null for a lone modifier or an unknown key. */
+function comboOf(event: KeyboardEvent): string | null {
+    const pressed = shortcutFromEvent(event);
+    return pressed ? stringifyShortcut(pressed) : null;
+}
+
 function inScope(target: EventTarget | null, scope: "global" | "composer") {
     if (scope === "global") return true;
     return target instanceof Element && !!target.closest("[data-shortcut-scope='composer']");
@@ -61,9 +67,8 @@ export function useKeybindingsRuntime() {
     useEffect(() => {
         const onKeyDown = (event: KeyboardEvent) => {
             if (event.defaultPrevented || event.isComposing) return;
-            const pressed = shortcutFromEvent(event);
-            if (!pressed) return;
-            const combo = stringifyShortcut(pressed);
+            const combo = comboOf(event);
+            if (!combo) return;
             const { settings, isOpen } = useSettingsStore.getState();
 
             for (const action of ACTIONS) {
@@ -89,15 +94,14 @@ export function useKeybindingsRuntime() {
  * so a widget that eats keys (the terminal) can let it through to the app.
  */
 export function isAppShortcut(event: KeyboardEvent) {
-    const pressed = shortcutFromEvent(event);
-    if (!pressed) return false;
-    const combo = stringifyShortcut(pressed);
+    const combo = comboOf(event);
+    if (!combo) return false;
     const { keyboard } = useSettingsStore.getState().settings;
     return ACTIONS.some(
         (action) =>
             action.scope === "global" &&
             canonical(keyboard[action.id]) === combo &&
-            !!handlers.get(action.id)?.length
+            canRunAction(action.id)
     );
 }
 

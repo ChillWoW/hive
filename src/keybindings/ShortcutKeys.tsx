@@ -1,6 +1,6 @@
 import { cn } from "@/lib/cn";
 import { isMac } from "@/lib/platform";
-import { parseShortcut, shortcutKeys, type Shortcut } from "./shortcut";
+import { parseShortcut, shortcutKeys } from "./shortcut";
 
 /**
  * A shortcut as the platform writes it; nothing when unbound. `caps` draws
@@ -12,17 +12,12 @@ export function ShortcutKeys({
     variant = "caps",
     className
 }: {
-    /** Stored text (`Mod+N`) or a parsed shortcut. */
-    shortcut: string | Shortcut;
+    /** As stored (`Mod+N`). */
+    shortcut: string;
     variant?: "caps" | "plain";
     className?: string;
 }) {
-    const parsed =
-        typeof shortcut === "string"
-            ? shortcut.trim()
-                ? parseShortcut(shortcut)
-                : null
-            : shortcut;
+    const parsed = parseShortcut(shortcut);
     if (!parsed) return null;
     const keys = shortcutKeys(parsed);
 

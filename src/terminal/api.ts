@@ -1,7 +1,8 @@
-import { Channel, invoke } from "@tauri-apps/api/core";
+import { Channel } from "@tauri-apps/api/core";
+import { backend } from "@/lib/backend";
 import { isTauri } from "@/lib/platform";
 
-export type TerminalStarted = { id: number; shell: string };
+type TerminalStarted = { id: number; shell: string };
 
 /**
  * Starts the user's shell in `cwd` (`src-tauri/src/terminals.rs`). Its output
@@ -17,6 +18,7 @@ export function spawnTerminal(
     onExit: (code: number | null) => void,
     onProcess: (name: string | null) => void
 ): Promise<TerminalStarted> {
+    // Channels need the app, so this can't wait for `backend` to refuse.
     if (!isTauri) return Promise.reject(new Error("No shell under plain `bun run dev`."));
     const data = new Channel<ArrayBuffer>();
     data.onmessage = (buffer) => onData(new Uint8Array(buffer));
@@ -24,7 +26,7 @@ export function spawnTerminal(
     exit.onmessage = onExit;
     const process = new Channel<string | null>();
     process.onmessage = onProcess;
-    return invoke<TerminalStarted>("terminal_spawn", {
+    return backend<TerminalStarted>("terminal_spawn", {
         cwd,
         cols,
         rows,
@@ -35,18 +37,18 @@ export function spawnTerminal(
 }
 
 export function writeTerminal(id: number, bytes: Uint8Array) {
-    void invoke("terminal_write", { id, data: Array.from(bytes) });
+    void backend("terminal_write", { id, data: Array.from(bytes) });
 }
 
 export function resizeTerminal(id: number, cols: number, rows: number) {
-    void invoke("terminal_resize", { id, cols, rows }).catch(() => {});
+    void backend("terminal_resize", { id, cols, rows }).catch(() => {});
 }
 
 export function killTerminal(id: number) {
-    void invoke("terminal_kill", { id });
+    void backend("terminal_kill", { id });
 }
 
 /** What runs in terminal `id` right now, as `onProcess` reports it. */
 export function foregroundProcess(id: number): Promise<string | null> {
-    return invoke<string | null>("terminal_foreground", { id });
+    return backend<string | null>("terminal_foreground", { id });
 }

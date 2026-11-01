@@ -1,3 +1,8 @@
+import { formatTokens } from "@/lib/format";
+import type { Measure } from "./store";
+
+export { formatAgo, formatCount, formatTokens } from "@/lib/format";
+
 const usd0 = new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "USD",
@@ -29,27 +34,14 @@ export function formatTokensTick(value: number): string {
     return formatTokens(value).replace(/\.0+(?=[KMB]?$)/, "");
 }
 
-/** `3.50B`, `55.4M`, `352K`, `980`. */
-export function formatTokens(value: number): string {
-    const abs = Math.abs(value);
-    if (abs >= 1e9) return `${three(value / 1e9)}B`;
-    if (abs >= 1e6) return `${three(value / 1e6)}M`;
-    if (abs >= 1e3) return `${three(value / 1e3)}K`;
-    return String(Math.round(value));
-}
-
-export const formatCount = (value: number) => value.toLocaleString("en-US");
+/** A value of `measure`: dollars or processed tokens. */
+export const formatMeasure = (value: number, measure: Measure, { exact = false } = {}) =>
+    measure === "cost" ? formatUsd(value, { exact }) : formatTokens(value);
 
 export function formatPercent(fraction: number): string {
     if (!Number.isFinite(fraction) || fraction <= 0) return "0%";
     if (fraction < 0.01) return "<1%";
     return `${Math.round(fraction * 100)}%`;
-}
-
-/** Three significant digits: 3.50, 55.4, 352. */
-function three(n: number): string {
-    const abs = Math.abs(n);
-    return abs >= 100 ? n.toFixed(0) : abs >= 10 ? n.toFixed(1) : n.toFixed(2);
 }
 
 function trim(n: number): string {
@@ -65,19 +57,12 @@ const weekdayFormat = new Intl.DateTimeFormat(undefined, {
 const hourFormat = new Intl.DateTimeFormat(undefined, { hour: "numeric" });
 
 export const formatDay = (ms: number) => dayFormat.format(ms);
-export const formatWeekday = (ms: number) => weekdayFormat.format(ms);
+const formatWeekday = (ms: number) => weekdayFormat.format(ms);
 export const formatHour = (ms: number) => hourFormat.format(ms);
 
-/** "just now", "5m ago", "3h ago", "2d ago". */
-export function formatAgo(at: number, now = Date.now()): string {
-    const seconds = Math.max(0, Math.round((now - at) / 1000));
-    if (seconds < 45) return "just now";
-    const minutes = Math.round(seconds / 60);
-    if (minutes < 60) return `${minutes}m ago`;
-    const hours = Math.round(minutes / 60);
-    if (hours < 48) return `${hours}h ago`;
-    return `${Math.round(hours / 24)}d ago`;
-}
+/** A chart bucket by its start: its day, or with `hourly` its day and hour. */
+export const formatBucket = (start: number, hourly: boolean) =>
+    hourly ? `${formatWeekday(start)}, ${formatHour(start)}` : formatWeekday(start);
 
 /** The last two segments of a folder path, for tables. */
 export function shortPath(path: string): string {

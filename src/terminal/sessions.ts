@@ -4,6 +4,8 @@ import { WebglAddon } from "@xterm/addon-webgl";
 import { Terminal } from "@xterm/xterm";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { isAppShortcut } from "@/keybindings";
+import { copyText } from "@/lib/clipboard";
+import { errorMessage } from "@/lib/errors";
 import { isMac, isTauri } from "@/lib/platform";
 import { foregroundProcess, killTerminal, resizeTerminal, spawnTerminal, writeTerminal } from "./api";
 import { TERMINAL_OPTIONS } from "./theme";
@@ -104,7 +106,7 @@ function onKey(term: Terminal, event: KeyboardEvent) {
     if (event.code === "KeyC" && (event.shiftKey || term.hasSelection())) {
         event.preventDefault();
         const text = term.getSelection();
-        if (text) void navigator.clipboard.writeText(text);
+        if (text) void copyText(text);
         term.clearSelection();
         return false;
     }
@@ -186,8 +188,7 @@ async function start(id: string, session: Session) {
         session.shell = shell;
         updateTitle(session);
     } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        session.term.write(`\x1b[2m${message}\x1b[0m\r\n`);
+        session.term.write(`\x1b[2m${errorMessage(error)}\x1b[0m\r\n`);
     }
 }
 
@@ -203,7 +204,8 @@ export function attachSession(id: string, parent: HTMLElement) {
     if (!session) return () => {};
     parent.appendChild(session.host);
 
-    if (!session.opened) {
+    const first = !session.opened;
+    if (first) {
         session.opened = true;
         session.term.open(session.host);
         try {
@@ -213,12 +215,10 @@ export function attachSession(id: string, parent: HTMLElement) {
         } catch {
             // The DOM renderer it is.
         }
-        fitSession(session);
-        void start(id, session);
-    } else {
-        fitSession(session);
-        session.term.refresh(0, session.term.rows - 1);
     }
+    fitSession(session);
+    if (first) void start(id, session);
+    else session.term.refresh(0, session.term.rows - 1);
     session.term.focus();
 
     const observer = new ResizeObserver(() => fitSession(session));

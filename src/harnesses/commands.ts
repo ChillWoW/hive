@@ -1,8 +1,10 @@
 import { useEffect } from "react";
-import { invoke } from "@tauri-apps/api/core";
 import { create } from "zustand";
 import type { HarnessCatalog, HarnessId, SlashCommand } from "@/proto";
+import { backend } from "@/lib/backend";
 import { isTauri } from "@/lib/platform";
+import { singleFlight } from "@/lib/singleFlight";
+import { onWindowFocus } from "@/lib/windowFocus";
 
 /** How long a probed list is fresh; the harness caches as long. */
 const FRESH_MS = 30_000;
@@ -19,27 +21,22 @@ const useProbedStore = create<{ probed: Record<string, Probed> }>()(() => ({
 }));
 
 const key = (harness: HarnessId, cwd: string) => `${harness}\n${cwd}`;
-const inflight = new Map<string, Promise<void>>();
+const listing = singleFlight<string>();
 
 /** Re-lists `harness`'s commands in `cwd` unless the last list is fresh. */
-export function refreshCommands(harness: HarnessId, cwd: string): Promise<void> {
+function refreshCommands(harness: HarnessId, cwd: string): Promise<void> {
     const k = key(harness, cwd);
     const last = useProbedStore.getState().probed[k];
     if (!isTauri || (last && Date.now() - last.at < FRESH_MS)) return Promise.resolve();
-    let pending = inflight.get(k);
-    if (!pending) {
-        pending = invoke<SlashCommand[]>("list_commands", { harness, cwd })
-            .then(
-                (commands) =>
-                    useProbedStore.setState((s) => ({
-                        probed: { ...s.probed, [k]: { at: Date.now(), commands } }
-                    })),
-                (error: unknown) => console.warn("[harnesses] listing commands failed", error)
-            )
-            .finally(() => inflight.delete(k));
-        inflight.set(k, pending);
-    }
-    return pending;
+    return listing(k, () =>
+        backend<SlashCommand[]>("list_commands", { harness, cwd }).then(
+            (commands) =>
+                useProbedStore.setState((s) => ({
+                    probed: { ...s.probed, [k]: { at: Date.now(), commands } }
+                })),
+            (error: unknown) => console.warn("[harnesses] listing commands failed", error)
+        )
+    );
 }
 
 /**
@@ -62,8 +59,7 @@ export function useCommands(
         if (!harness) return;
         const refresh = () => void refreshCommands(harness, folder);
         refresh();
-        window.addEventListener("focus", refresh);
-        return () => window.removeEventListener("focus", refresh);
+        return onWindowFocus(refresh);
     }, [harness, folder]);
 
     if (live?.length) return live;

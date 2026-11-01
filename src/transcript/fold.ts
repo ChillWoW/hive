@@ -1,5 +1,7 @@
 import type { AgentEvent, MessagePart } from "@/proto";
 
+export type ToolPart = Extract<MessagePart, { kind: "tool" }>;
+
 /**
  * Folds one streamed event into an assistant message's parts, in place
  * (call it on an immer draft). Mirrors `fold_event` in
@@ -173,13 +175,13 @@ export function foldEvent(parts: MessagePart[], event: AgentEvent) {
 }
 
 function runningCompaction(parts: MessagePart[]) {
-    const part = parts.findLast((p) => p.kind === "compaction" && p.status === "running");
-    return part?.kind === "compaction" ? part : undefined;
+    return parts.findLast(
+        (p): p is Extract<MessagePart, { kind: "compaction" }> => p.kind === "compaction" && p.status === "running"
+    );
 }
 
 function findTool(parts: MessagePart[], id: string) {
-    const part = parts.find((p) => p.kind === "tool" && p.id === id);
-    return part?.kind === "tool" ? part : undefined;
+    return parts.find((p): p is ToolPart => p.kind === "tool" && p.id === id);
 }
 
 /**
@@ -204,7 +206,7 @@ export function stampEvent(parts: MessagePart[], event: AgentEvent, at: number) 
 }
 
 /** A subagent spawn by its call id, at this level or in a spawn's thread. */
-export function findSpawn(parts: MessagePart[], id: string): ToolPartOf | undefined {
+export function findSpawn(parts: MessagePart[], id: string): ToolPart | undefined {
     const here = findTool(parts, id);
     if (here) return here;
     for (const p of parts) {
@@ -214,5 +216,3 @@ export function findSpawn(parts: MessagePart[], id: string): ToolPartOf | undefi
     }
     return undefined;
 }
-
-type ToolPartOf = Extract<MessagePart, { kind: "tool" }>;

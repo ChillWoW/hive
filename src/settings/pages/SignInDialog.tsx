@@ -1,18 +1,19 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { ArrowSquareOutIcon, CircleNotchIcon } from "@phosphor-icons/react";
 import { isTauri } from "@/lib/platform";
 import { cn } from "@/lib/cn";
+import { errorMessage } from "@/lib/errors";
 import { afterChange, providersApi } from "@/providers";
 import type { HarnessCatalog, SignInMethod } from "@/proto";
-import { Button, Input, Modal } from "@/ui";
+import { Button, Input, Modal, useLastNonNull } from "@/ui";
 
 type Step =
     | { kind: "choose" }
     | { kind: "starting"; method: SignInMethod }
     | { kind: "code"; loginId: string; url: string }
     // The browser finishes the sign-in itself (Codex): no code, just waiting.
-    | { kind: "browser"; loginId: string; url: string }
+    | { kind: "browser"; url: string }
     | { kind: "failed"; message: string };
 
 type Method = { method: SignInMethod; label: string; description: string };
@@ -43,10 +44,6 @@ function methodsFor(catalog: HarnessCatalog | null): Method[] {
     return catalog?.id === "codex" ? CODEX_METHODS : CLAUDE_METHODS;
 }
 
-function message(error: unknown): string {
-    return error instanceof Error ? error.message : String(error);
-}
-
 function open(url: string) {
     if (isTauri) void openUrl(url);
     else window.open(url, "_blank", "noopener");
@@ -65,11 +62,10 @@ export function SignInDialog({
     onClose: () => void;
 }) {
     // Kept while the dialog animates out.
-    const [shown, setShown] = useState(catalog);
+    const shown = useLastNonNull(catalog);
     const [step, setStep] = useState<Step>({ kind: "choose" });
     const [code, setCode] = useState("");
     const [verifying, setVerifying] = useState(false);
-    const [codeError, setCodeError] = useState<string | null>(null);
     // The login the CLI is holding open, so closing can end it.
     const pending = useRef<string | null>(null);
     // Bumped on close, so a start that lands afterwards is dropped.
@@ -77,10 +73,8 @@ export function SignInDialog({
 
     useEffect(() => {
         if (!catalog) return;
-        setShown(catalog);
         setStep({ kind: "choose" });
         setCode("");
-        setCodeError(null);
         // One way in: nothing to choose.
         const methods = methodsFor(catalog);
         if (methods.length === 1) void start(methods[0]!.method, catalog);
@@ -106,7 +100,6 @@ export function SignInDialog({
         const mine = ++session.current;
         setStep({ kind: "starting", method });
         setCode("");
-        setCodeError(null);
         try {
             const started = await providersApi.signIn(target.id, method);
             if (mine !== session.current) {
@@ -119,7 +112,7 @@ export function SignInDialog({
                 return;
             }
             // The CLI waits for the browser; finishing just waits with it.
-            setStep({ kind: "browser", loginId: started.loginId, url: started.url });
+            setStep({ kind: "browser", url: started.url });
             open(started.url);
             await providersApi.finishSignIn(started.loginId, "");
             pending.current = null;
@@ -128,7 +121,7 @@ export function SignInDialog({
         } catch (error) {
             if (mine === session.current) {
                 pending.current = null;
-                setStep({ kind: "failed", message: message(error) });
+                setStep({ kind: "failed", message: errorMessage(error) });
             }
         }
     };
@@ -143,7 +136,6 @@ export function SignInDialog({
         if (step.kind !== "code" || !shown || !code.trim()) return;
         const mine = session.current;
         setVerifying(true);
-        setCodeError(null);
         // The CLI is done with this login whatever happens.
         pending.current = null;
         try {
@@ -151,7 +143,7 @@ export function SignInDialog({
             await afterChange(shown.id);
             if (mine === session.current) onClose();
         } catch (error) {
-            if (mine === session.current) setStep({ kind: "failed", message: message(error) });
+            if (mine === session.current) setStep({ kind: "failed", message: errorMessage(error) });
         } finally {
             setVerifying(false);
         }
@@ -160,7 +152,7 @@ export function SignInDialog({
     return (
         <Modal
             open={catalog !== null}
-            onOpenChange={(next) => !next && close()}
+            onClose={close}
             title={`Sign in to ${shown?.label ?? ""}`}
             size="sm"
         >
@@ -190,11 +182,7 @@ export function SignInDialog({
                         Signing in replaces the account {shown?.label} uses now, here and in
                         your terminal.
                     </p>
-                    <div className="mt-4 flex justify-end">
-                        <Button size="sm" variant="ghost" onClick={close}>
-                            Cancel
-                        </Button>
-                    </div>
+                    <Footer onCancel={close} />
                 </>
             )}
 
@@ -204,11 +192,7 @@ export function SignInDialog({
                         <CircleNotchIcon weight="bold" className="size-3.5 animate-spin" />
                         Opening the sign-in page…
                     </p>
-                    <div className="mt-4 flex justify-end">
-                        <Button size="sm" variant="ghost" onClick={close}>
-                            Cancel
-                        </Button>
-                    </div>
+                    <Footer onCancel={close} />
                 </>
             )}
 
@@ -222,14 +206,7 @@ export function SignInDialog({
                     <p>
                         Approve access in your browser, then paste the code the page shows.
                     </p>
-                    <button
-                        type="button"
-                        onClick={() => open(step.url)}
-                        className="mt-1.5 inline-flex items-center gap-1 text-xs text-dark-200 underline-offset-2 transition-colors hover:text-dark-50 hover:underline"
-                    >
-                        <ArrowSquareOutIcon className="size-3" />
-                        Reopen the sign-in page
-                    </button>
+                    <ReopenLink url={step.url} />
                     <Input
                         autoFocus
                         value={code}
@@ -239,14 +216,9 @@ export function SignInDialog({
                         spellCheck={false}
                         autoComplete="off"
                         disabled={verifying}
-                        invalid={codeError !== null}
                         className="mt-3 w-full font-mono text-xs"
                     />
-                    {codeError && <p className="mt-2 text-xs text-danger">{codeError}</p>}
-                    <div className="mt-4 flex justify-end gap-2">
-                        <Button type="button" size="sm" variant="ghost" onClick={close}>
-                            Cancel
-                        </Button>
+                    <Footer onCancel={close}>
                         <Button
                             type="submit"
                             size="sm"
@@ -256,7 +228,7 @@ export function SignInDialog({
                         >
                             {verifying ? "Verifying…" : "Sign in"}
                         </Button>
-                    </div>
+                    </Footer>
                 </form>
             )}
 
@@ -266,40 +238,54 @@ export function SignInDialog({
                         <CircleNotchIcon weight="bold" className="size-3.5 animate-spin" />
                         Approve access in your browser. Hive signs in once you do.
                     </p>
-                    <button
-                        type="button"
-                        onClick={() => open(step.url)}
-                        className="mt-1.5 inline-flex items-center gap-1 text-xs text-dark-200 underline-offset-2 transition-colors hover:text-dark-50 hover:underline"
-                    >
-                        <ArrowSquareOutIcon className="size-3" />
-                        Reopen the sign-in page
-                    </button>
-                    <div className="mt-4 flex justify-end">
-                        <Button size="sm" variant="ghost" onClick={close}>
-                            Cancel
-                        </Button>
-                    </div>
+                    <ReopenLink url={step.url} />
+                    <Footer onCancel={close} />
                 </>
             )}
 
             {step.kind === "failed" && (
                 <>
                     <p className="text-xs whitespace-pre-line text-danger">{step.message}</p>
-                    <div className="mt-4 flex justify-end gap-2">
-                        <Button size="sm" variant="ghost" onClick={close}>
-                            Close
-                        </Button>
-                        <Button
-                            size="sm"
-                            variant="default"
-                            autoFocus
-                            onClick={retry}
-                        >
+                    <Footer onCancel={close} cancelLabel="Close">
+                        <Button size="sm" variant="default" autoFocus onClick={retry}>
                             Try again
                         </Button>
-                    </div>
+                    </Footer>
                 </>
             )}
         </Modal>
+    );
+}
+
+/** The dialog's buttons: Cancel (or `cancelLabel`), then `children`. */
+function Footer({
+    onCancel,
+    cancelLabel = "Cancel",
+    children
+}: {
+    onCancel: () => void;
+    cancelLabel?: string;
+    children?: ReactNode;
+}) {
+    return (
+        <div className="mt-4 flex justify-end gap-2">
+            <Button type="button" size="sm" variant="ghost" onClick={onCancel}>
+                {cancelLabel}
+            </Button>
+            {children}
+        </div>
+    );
+}
+
+function ReopenLink({ url }: { url: string }) {
+    return (
+        <button
+            type="button"
+            onClick={() => open(url)}
+            className="mt-1.5 inline-flex items-center gap-1 text-xs text-dark-200 underline-offset-2 transition-colors hover:text-dark-50 hover:underline"
+        >
+            <ArrowSquareOutIcon className="size-3" />
+            Reopen the sign-in page
+        </button>
     );
 }

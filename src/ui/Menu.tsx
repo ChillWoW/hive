@@ -20,8 +20,6 @@ const popupBaseClassName = cn(
     "data-[ending-style]:opacity-0 data-[ending-style]:scale-95"
 );
 
-const positionerBaseClassName = "z-50 outline-none";
-
 const itemBaseClassName = cn(
     "relative flex w-full cursor-pointer select-none items-center gap-2",
     "rounded-sm px-2.5 py-1.5 text-xs text-dark-50 outline-none transition-colors",
@@ -46,127 +44,57 @@ const indicatorWrapperClassName = cn(
 
 export type MenuProps<Payload = unknown> = BaseMenu.Root.Props<Payload>;
 
-export type MenuTriggerProps = ComponentProps<typeof BaseMenu.Trigger>;
+type MenuPositionerProps = ComponentProps<typeof BaseMenu.Positioner>;
 
-export type MenuPortalProps = ComponentProps<typeof BaseMenu.Portal>;
+type MenuContentProps = ComponentProps<typeof BaseMenu.Popup> &
+    Pick<MenuPositionerProps, "side" | "align" | "sideOffset" | "alignOffset" | "collisionPadding">;
 
-export type MenuPositionerProps = ComponentProps<
-    typeof BaseMenu.Positioner
->;
-
-function MenuPositioner({
-    className,
-    sideOffset,
-    ...props
-}: MenuPositionerProps) {
-    const defaultSideOffset = useContext(MenuSideOffsetContext);
-
-    return (
-        <BaseMenu.Positioner
-            sideOffset={sideOffset ?? defaultSideOffset}
-            className={mergeClassName(positionerBaseClassName, className)}
-            {...props}
-        />
-    );
-}
-
-export type MenuPopupProps = ComponentProps<typeof BaseMenu.Popup>;
-
-function MenuPopup({ className, ...props }: MenuPopupProps) {
-    return (
-        <BaseMenu.Popup
-            className={mergeClassName(popupBaseClassName, className)}
-            {...props}
-        />
-    );
-}
-
-export type MenuContentProps = MenuPopupProps &
-    Pick<
-        MenuPositionerProps,
-        "side" | "align" | "sideOffset" | "alignOffset" | "collisionPadding"
-    > &
-    Pick<MenuPortalProps, "container" | "keepMounted"> & {
-        positionerClassName?: MenuPositionerProps["className"];
-    };
-
-/** Portal, positioner and popup in one, for the common case of a menu that needs no custom
- *  positioning layer. */
+/** Portal (the shell's overlay layer), positioner and popup in one. */
 function MenuContent({
     side,
     align,
     sideOffset,
     alignOffset,
     collisionPadding,
-    container,
-    keepMounted,
-    positionerClassName,
+    className,
     ...popupProps
 }: MenuContentProps) {
     const portalContainer = usePortalContainer();
+    const defaultSideOffset = useContext(MenuSideOffsetContext);
     return (
-        <BaseMenu.Portal
-            container={container ?? portalContainer ?? undefined}
-            keepMounted={keepMounted}
-        >
-            <MenuPositioner
+        <BaseMenu.Portal container={portalContainer ?? undefined}>
+            <BaseMenu.Positioner
                 side={side}
                 align={align}
-                sideOffset={sideOffset}
+                sideOffset={sideOffset ?? defaultSideOffset}
                 alignOffset={alignOffset}
                 collisionPadding={collisionPadding}
-                className={positionerClassName}
+                className="z-50 outline-none"
             >
-                <MenuPopup {...popupProps} />
-            </MenuPositioner>
+                <BaseMenu.Popup
+                    className={mergeClassName(popupBaseClassName, className)}
+                    {...popupProps}
+                />
+            </BaseMenu.Positioner>
         </BaseMenu.Portal>
     );
 }
 
-export type MenuItemProps = ComponentProps<typeof BaseMenu.Item> & {
-    inset?: boolean;
+type MenuItemProps = ComponentProps<typeof BaseMenu.Item> & {
     /** `danger` keeps the normal text colour at rest and turns red only while highlighted. */
     variant?: ItemVariant;
 };
 
-function MenuItem({
-    inset,
-    variant = "default",
-    className,
-    ...props
-}: MenuItemProps) {
+function MenuItem({ variant = "default", className, ...props }: MenuItemProps) {
     return (
         <BaseMenu.Item
-            className={mergeClassName(
-                [itemBaseClassName, itemVariantStyles[variant], inset && "pl-7"],
-                className
-            )}
+            className={mergeClassName([itemBaseClassName, itemVariantStyles[variant]], className)}
             {...props}
         />
     );
 }
 
-export type MenuLinkItemProps = ComponentProps<
-    typeof BaseMenu.LinkItem
-> & {
-    inset?: boolean;
-};
-
-function MenuLinkItem({ inset, className, ...props }: MenuLinkItemProps) {
-    return (
-        <BaseMenu.LinkItem
-            className={mergeClassName(
-                [itemBaseClassName, "no-underline", inset && "pl-7"],
-                className
-            )}
-            {...props}
-        />
-    );
-}
-
-export type MenuSeparatorProps = ComponentProps<typeof BaseMenu.Separator>;
-
-function MenuSeparator({ className, ...props }: MenuSeparatorProps) {
+function MenuSeparator({ className, ...props }: ComponentProps<typeof BaseMenu.Separator>) {
     return (
         <BaseMenu.Separator
             className={mergeClassName("-mx-1 my-1 h-px bg-dark-600", className)}
@@ -175,48 +103,19 @@ function MenuSeparator({ className, ...props }: MenuSeparatorProps) {
     );
 }
 
-export type MenuGroupProps = ComponentProps<typeof BaseMenu.Group>;
-
-export type MenuGroupLabelProps = ComponentProps<
-    typeof BaseMenu.GroupLabel
->;
-
-function MenuGroupLabel({ className, ...props }: MenuGroupLabelProps) {
+function MenuGroupLabel({ className, ...props }: ComponentProps<typeof BaseMenu.GroupLabel>) {
     return (
         <BaseMenu.GroupLabel
-            className={mergeClassName(
-                "px-2.5 py-1 text-[11px] font-medium text-dark-200",
-                className
-            )}
+            className={mergeClassName("px-2.5 py-1 text-[11px] font-medium text-dark-200", className)}
             {...props}
         />
     );
 }
 
-export type MenuRadioGroupProps = ComponentProps<
-    typeof BaseMenu.RadioGroup
->;
-
-export type MenuRadioItemProps = ComponentProps<
-    typeof BaseMenu.RadioItem
-> & {
-    indicatorClassName?: string;
-};
-
-function MenuRadioItem({
-    className,
-    indicatorClassName,
-    children,
-    ...props
-}: MenuRadioItemProps) {
+function MenuRadioItem({ className, children, ...props }: ComponentProps<typeof BaseMenu.RadioItem>) {
     return (
-        <BaseMenu.RadioItem
-            className={mergeClassName(indicatorItemClassName, className)}
-            {...props}
-        >
-            <BaseMenu.RadioItemIndicator
-                className={cn(indicatorWrapperClassName, indicatorClassName)}
-            >
+        <BaseMenu.RadioItem className={mergeClassName(indicatorItemClassName, className)} {...props}>
+            <BaseMenu.RadioItemIndicator className={indicatorWrapperClassName}>
                 <CircleIcon className="size-2" weight="fill" aria-hidden />
             </BaseMenu.RadioItemIndicator>
             {children}
@@ -224,26 +123,10 @@ function MenuRadioItem({
     );
 }
 
-export type MenuCheckboxItemProps = ComponentProps<
-    typeof BaseMenu.CheckboxItem
-> & {
-    indicatorClassName?: string;
-};
-
-function MenuCheckboxItem({
-    className,
-    indicatorClassName,
-    children,
-    ...props
-}: MenuCheckboxItemProps) {
+function MenuCheckboxItem({ className, children, ...props }: ComponentProps<typeof BaseMenu.CheckboxItem>) {
     return (
-        <BaseMenu.CheckboxItem
-            className={mergeClassName(indicatorItemClassName, className)}
-            {...props}
-        >
-            <BaseMenu.CheckboxItemIndicator
-                className={cn(indicatorWrapperClassName, indicatorClassName)}
-            >
+        <BaseMenu.CheckboxItem className={mergeClassName(indicatorItemClassName, className)} {...props}>
+            <BaseMenu.CheckboxItemIndicator className={indicatorWrapperClassName}>
                 <CheckIcon className="size-3.5" weight="bold" aria-hidden />
             </BaseMenu.CheckboxItemIndicator>
             {children}
@@ -251,11 +134,8 @@ function MenuCheckboxItem({
     );
 }
 
-export type MenuSubmenuRootProps = ComponentProps<
-    typeof BaseMenu.SubmenuRoot
->;
-
-function MenuSubmenuRoot(props: MenuSubmenuRootProps) {
+/** Sets the gap back for its popup, inside either kind of menu. */
+function MenuSubmenuRoot(props: ComponentProps<typeof BaseMenu.SubmenuRoot>) {
     return (
         <MenuSideOffsetContext value={6}>
             <BaseMenu.SubmenuRoot {...props} />
@@ -263,35 +143,18 @@ function MenuSubmenuRoot(props: MenuSubmenuRootProps) {
     );
 }
 
-export type MenuSubmenuTriggerProps = ComponentProps<
-    typeof BaseMenu.SubmenuTrigger
-> & {
-    inset?: boolean;
-};
-
 function MenuSubmenuTrigger({
-    inset,
     className,
     children,
     ...props
-}: MenuSubmenuTriggerProps) {
+}: ComponentProps<typeof BaseMenu.SubmenuTrigger>) {
     return (
         <BaseMenu.SubmenuTrigger
-            className={mergeClassName(
-                [
-                    itemBaseClassName,
-                    "data-[popup-open]:bg-dark-700",
-                    inset && "pl-7"
-                ],
-                className
-            )}
+            className={mergeClassName([itemBaseClassName, "data-[popup-open]:bg-dark-700"], className)}
             {...props}
         >
             {children}
-            <CaretRightIcon
-                className="ml-auto size-3.5 shrink-0 text-dark-100"
-                aria-hidden
-            />
+            <CaretRightIcon className="ml-auto size-3.5 shrink-0 text-dark-100" aria-hidden />
         </BaseMenu.SubmenuTrigger>
     );
 }
@@ -302,23 +165,16 @@ function MenuRoot<Payload>(props: MenuProps<Payload>) {
     return <BaseMenu.Root {...props} />;
 }
 
-/** Base UI's ContextMenu is built from these same parts, so ContextMenu reuses everything here
- *  except Root, Trigger and Backdrop. */
+/** Base UI's ContextMenu is built from these same parts, so ContextMenu reuses them. */
 export const Menu = Object.assign(MenuRoot, {
     Trigger: BaseMenu.Trigger,
-    Portal: BaseMenu.Portal,
-    Positioner: MenuPositioner,
-    Popup: MenuPopup,
     Content: MenuContent,
     Item: MenuItem,
-    LinkItem: MenuLinkItem,
     Separator: MenuSeparator,
-    Group: BaseMenu.Group,
     GroupLabel: MenuGroupLabel,
     RadioGroup: BaseMenu.RadioGroup,
     RadioItem: MenuRadioItem,
     CheckboxItem: MenuCheckboxItem,
     SubmenuRoot: MenuSubmenuRoot,
-    SubmenuTrigger: MenuSubmenuTrigger,
-    createHandle: BaseMenu.createHandle
+    SubmenuTrigger: MenuSubmenuTrigger
 });
