@@ -95,6 +95,14 @@ export const ACTIONS: readonly Action[] = [
         scope: "global"
     },
     {
+        id: "findInChat",
+        category: "chats",
+        label: "Find in chat",
+        description: "Searches the open chat's messages",
+        keywords: "find search chat thread transcript messages text ctrl f",
+        scope: "global"
+    },
+    {
         id: "toggleSidebar",
         category: "panels",
         label: "Toggle sidebar",

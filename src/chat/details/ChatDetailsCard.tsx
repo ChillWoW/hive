@@ -40,7 +40,7 @@ import { openDiffTab, openTerminalTab } from "@/rightbar";
 import { ContextMenu, DotMatrixSpinner, GithubMark, Menu, Tooltip } from "@/ui";
 import { DetailsItemsMenuItems } from "./DetailsItemsMenu";
 import { useDetailsItems } from "./items";
-import { DETAILS_CARD_GAP, DETAILS_CARD_WIDTH } from "./layout";
+import { DETAILS_CARD_GAP, DETAILS_CARD_WIDTH, FIND_BAR_HEIGHT } from "./layout";
 
 const reveal = (path: string) => void revealItemInDir(path).catch(() => {});
 
@@ -48,8 +48,10 @@ const reveal = (path: string) => void revealItemInDir(path).catch(() => {});
  * The open chat's details, floating at the chat pane's top right over the
  * transcript. Sized to its content, scrolling past the pane's height.
  */
-export function ChatDetailsCard({ chat }: { chat: Chat }) {
+export function ChatDetailsCard({ chat, belowFind }: { chat: Chat; belowFind?: boolean }) {
     const shown = useDetailsItems();
+    // The transcript's find bar takes the corner; the card goes under it.
+    const top = belowFind ? DETAILS_CARD_GAP + FIND_BAR_HEIGHT + 8 : DETAILS_CARD_GAP;
     return (
         // Right-click anywhere on it: which rows it shows.
         <ContextMenu>
@@ -58,13 +60,13 @@ export function ChatDetailsCard({ chat }: { chat: Chat }) {
                     <aside
                         aria-label="Chat details"
                         style={{
-                            top: DETAILS_CARD_GAP,
+                            top,
                             right: DETAILS_CARD_GAP,
                             width: DETAILS_CARD_WIDTH,
-                            maxHeight: `calc(100% - ${DETAILS_CARD_GAP * 2}px)`
+                            maxHeight: `calc(100% - ${top + DETAILS_CARD_GAP}px)`
                         }}
                         className={cn(
-                            "group/details absolute z-20 flex flex-col overflow-y-auto overscroll-contain",
+                            "group/details absolute z-20 flex transition-[top] duration-150 ease-out flex-col overflow-y-auto overscroll-contain",
                             "rounded-2xl border border-dark-600 bg-dark-850 text-dark-50 shadow-lg shadow-black/40"
                         )}
                     />

@@ -1,6 +1,8 @@
 /** The card's inset from the chat pane's top and right edges. */
 export const DETAILS_CARD_GAP = 12;
 export const DETAILS_CARD_WIDTH = 280;
+/** The transcript's find bar (`h-9`), which floats where the card does; the card goes under it. */
+export const FIND_BAR_HEIGHT = 36;
 /** Room kept between the card and the transcript's column. */
 const CLEARANCE = 32;
 /** The column's side padding (`px-6`) and widest (`max-w-3xl`). */

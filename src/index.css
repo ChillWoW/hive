@@ -422,6 +422,16 @@ body {
     text-rendering: optimizeLegibility;
 }
 
+/* Find in chat (`src/transcript/find.ts`). */
+::highlight(chat-find) {
+    background-color: color-mix(in oklab, var(--color-warning) 28%, transparent);
+}
+
+::highlight(chat-find-current) {
+    background-color: var(--color-warning);
+    color: var(--color-dark-950);
+}
+
 :root {
     --scrollbar-size: 8px;
     --scrollbar-track: var(--color-dark-900);

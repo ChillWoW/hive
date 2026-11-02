@@ -20,7 +20,11 @@ chatDetails: string, focusComposer: string, previousChat: string, nextChat: stri
  * Archives the open chat and moves on to the next one (unarchives an
  * archived one).
  */
-archiveChat: string, newTerminal: string, openDiff: string, openHistory: string, toggleFilePanel: string, toggleRightSidebar: string, 
+archiveChat: string, 
+/**
+ * Opens the find bar over the open chat's transcript.
+ */
+findInChat: string, newTerminal: string, openDiff: string, openHistory: string, toggleFilePanel: string, toggleRightSidebar: string, 
 /**
  * Opens the file panel with its search field focused.
  */

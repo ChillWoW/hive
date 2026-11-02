@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowDownIcon } from "@phosphor-icons/react";
 import { useWorktreeSetup, type TranscriptMessage } from "@/chats";
+import { runAction, useShortcut } from "@/keybindings";
 import { cn } from "@/lib/cn";
 import type { HarnessId, Worktree } from "@/proto";
 import { WorktreeSetupCard } from "./WorktreeSetupCard";
@@ -8,6 +9,8 @@ import { AssistantMessage } from "./AssistantMessage";
 import { ChatCwd, OpenSubagent } from "./context";
 import { Minimap } from "./Minimap";
 import { minimapItems, type MinimapItem } from "./minimapItems";
+import { DETAILS_CARD_GAP, DETAILS_CARD_WIDTH } from "@/chat/details/layout";
+import { FindBar } from "./FindBar";
 import { CompactionRow } from "./parts";
 import { promptText } from "./text";
 import { UserMessage } from "./UserMessage";
@@ -33,6 +36,8 @@ type TranscriptProps = {
     chatId?: string;
     /** Opens a subagent row's thread; unset, rows aren't clickable. */
     onOpenSubagent?: (id: string) => void;
+    /** The find bar opened or closed (it takes the details card's spot). */
+    onFindOpenChange?: (open: boolean) => void;
     /** Under the messages, inside the scroller (the composer's spacer). */
     className?: string;
 };
@@ -86,6 +91,7 @@ export function Transcript({
     harness,
     chatId,
     onOpenSubagent,
+    onFindOpenChange,
     className
 }: TranscriptProps) {
     const scrollRef = useRef<HTMLDivElement>(null);
@@ -141,6 +147,23 @@ export function Transcript({
         if (!el) return;
         pin(true);
         el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+    };
+
+    // Find in chat. The query outlives closing the bar, for the next Mod+F.
+    const [findOpen, setFindOpen] = useState(false);
+    const [findQuery, setFindQuery] = useState("");
+    const [findFocus, setFindFocus] = useState(0);
+    useShortcut("findInChat", () => {
+        setFindOpen(true);
+        setFindFocus((n) => n + 1);
+    });
+    useEffect(() => {
+        onFindOpenChange?.(findOpen);
+    }, [findOpen, onFindOpenChange]);
+    useEffect(() => () => onFindOpenChange?.(false), [onFindOpenChange]);
+    const closeFind = (refocus: boolean) => {
+        setFindOpen(false);
+        if (refocus) runAction("focusComposer");
     };
 
     const lastMessage = messages.at(-1);
@@ -248,6 +271,23 @@ export function Transcript({
                 </OpenSubagent>
                 </ChatCwd>
             </div>
+            {findOpen && (
+                // Where the chat details card floats, which moves down under it.
+                <div
+                    style={{ top: DETAILS_CARD_GAP, right: DETAILS_CARD_GAP, width: DETAILS_CARD_WIDTH }}
+                    className="absolute z-30"
+                >
+                    <FindBar
+                        content={contentRef}
+                        scroller={scrollRef}
+                        query={findQuery}
+                        onQueryChange={setFindQuery}
+                        focusKey={findFocus}
+                        onReveal={() => pin(false)}
+                        onClose={closeFind}
+                    />
+                </div>
+            )}
             <Minimap
                 items={items}
                 ticks={ticks}

@@ -238,6 +238,8 @@ pub struct KeyboardSettings {
     /// Archives the open chat and moves on to the next one (unarchives an
     /// archived one).
     pub archive_chat: String,
+    /// Opens the find bar over the open chat's transcript.
+    pub find_in_chat: String,
     pub new_terminal: String,
     pub open_diff: String,
     pub open_history: String,
@@ -270,6 +272,7 @@ impl Default for KeyboardSettings {
             go_back: "Alt+Left".into(),
             go_forward: "Alt+Right".into(),
             archive_chat: "Mod+Shift+A".into(),
+            find_in_chat: "Mod+F".into(),
             new_terminal: "Mod+J".into(),
             open_diff: "Mod+Shift+G".into(),
             open_history: "Mod+Shift+H".into(),

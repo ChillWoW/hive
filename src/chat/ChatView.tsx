@@ -222,6 +222,7 @@ export function ChatView() {
         return () => observer.disconnect();
     }, [pane]);
     const detailsOpen = useChatDetailsStore((s) => s.open);
+    const [findOpen, setFindOpen] = useState(false);
     const details = detailsLayout(paneWidth, detailsOpen && !!chat && paneWidth > 0);
     const laneStyle = details.inline
         ? ({ "--lane-shift": `${details.shift}px`, "--lane-max": `${details.lane}px` } as CSSProperties)
@@ -401,11 +402,12 @@ export function ChatView() {
                         harness={chat?.config.harness}
                         chatId={chat?.id}
                         onOpenSubagent={chat ? (id) => openSubagent(chat.id, id) : undefined}
+                        onFindOpenChange={setFindOpen}
                         className={laneClassName}
                     />
                 )}
                 {bottom}
-                {chat && details.inline && <ChatDetailsCard chat={chat} />}
+                {chat && details.inline && <ChatDetailsCard chat={chat} belowFind={findOpen} />}
             </div>
         </LiveTasks>
     );
