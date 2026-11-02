@@ -136,6 +136,12 @@ export const gitApi = {
                 fake.branches = fake.branches.filter((b) => b.name !== name);
             })
         ),
+    /** Every remote's branches (`git fetch --all`). */
+    fetch: (cwd: string) => backend<void>("git_fetch_all", { cwd }, () => fakeChange(() => {})),
+    /** Fast-forwards the checked-out branch to its upstream. */
+    pull: (cwd: string) => backend<void>("git_pull", { cwd }, () => fakeChange(() => {})),
+    /** Pushes the checked-out branch, publishing it to `origin` without an upstream. */
+    push: (cwd: string) => backend<void>("git_push", { cwd }, () => fakeChange(() => {})),
     /** `owner/repo` of the GitHub repository `origin` points at; null when it isn't GitHub. */
     githubRemote: (cwd: string) =>
         backend<string | null>("git_github_remote", { cwd }, () => "ChillWoW/hive")

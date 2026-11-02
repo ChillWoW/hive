@@ -1,7 +1,11 @@
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import {
+    ArrowDownIcon,
+    ArrowsClockwiseIcon,
+    ArrowUpIcon,
     ArrowUpRightIcon,
     CaretDownIcon,
+    CloudArrowUpIcon,
     CodeIcon,
     FolderOpenIcon,
     GitDiffIcon,
@@ -13,6 +17,7 @@ import { LineCounts } from "@/diff/DiffFiles";
 import { parsePatch, totals } from "@/diff/patch";
 import { useCheckoutDiff, useDiffPrefs } from "@/diff/store";
 import { useGitRepo } from "@/git";
+import { git, useGitAction } from "@/git/store";
 import { gitApi } from "@/git/api";
 import { EDITORS, openInEditor, refreshEditors, useEditor, useEditorsStore } from "@/editors";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
@@ -24,7 +29,7 @@ import { isTauri } from "@/lib/platform";
 import { ProjectIcon } from "@/projects/ProjectIcon";
 import type { Chat, GitBranch } from "@/proto";
 import { openDiffTab, openTerminalTab } from "@/rightbar";
-import { GithubMark, Menu, Tooltip } from "@/ui";
+import { DotMatrixSpinner, GithubMark, Menu, Tooltip } from "@/ui";
 import { DETAILS_CARD_GAP, DETAILS_CARD_WIDTH } from "./layout";
 
 const reveal = (path: string) => void revealItemInDir(path).catch(() => {});
@@ -91,14 +96,16 @@ function WorkspaceSection({ chat }: { chat: Chat }) {
     );
 }
 
-/** The checkout where the agent works: its uncommitted changes, its GitHub page. Nothing outside a checkout. */
+/** The checkout where the agent works: its uncommitted changes, sync with its upstream, its GitHub page. Nothing outside a checkout. */
 function VersionControlSection({ folder }: { folder: string }) {
     const repo = useGitRepo(folder)?.repo;
     if (!repo) return null;
+    const current = repo.branches.find((b) => b.current);
     return (
         <Section label="Version control">
             <ChangesRow folder={folder} />
-            <GithubRow folder={folder} branch={repo.branches.find((b) => b.current)} />
+            <SyncRow folder={folder} branch={current} />
+            <GithubRow folder={folder} branch={current} />
         </Section>
     );
 }
@@ -200,49 +207,196 @@ function OpenInRow({ folder }: { folder: string }) {
     }
 
     return (
+        <SplitRow
+            icon={current ? <EditorMark id={current} className="size-4" /> : <CodeIcon className="size-4" />}
+            label={`Open in ${current ? EDITORS[current].label : "editor"}`}
+            disabled={!current}
+            onClick={() => current && void openInEditor(current, folder).catch(() => {})}
+            menuLabel="Choose editor"
+            menuDisabled={!installed}
+            menu={
+                <Menu.RadioGroup value={current} onValueChange={(id: string) => setPreferred(id)}>
+                    {installed?.map((id) => (
+                        <Menu.RadioItem key={id} value={id} className="gap-2">
+                            <EditorMark id={id} className="size-4 shrink-0" />
+                            {EDITORS[id].label}
+                        </Menu.RadioItem>
+                    ))}
+                </Menu.RadioGroup>
+            }
+        />
+    );
+}
+
+/** Fetched quietly when the card shows a checkout, at most this often per folder. */
+const AUTO_FETCH_MS = 5 * 60_000;
+const autoFetched = new Map<string, number>();
+
+type SyncAction = "fetch" | "pull" | "push";
+
+/**
+ * The checked-out branch against its upstream ("↓3 ↑2"). The row does what's
+ * due: Publish a branch without an upstream, Pull when behind, Push when
+ * ahead, else Fetch; the chevron offers all three. A failure shows under it.
+ * Hidden on a detached HEAD.
+ */
+function SyncRow({ folder, branch }: { folder: string; branch?: GitBranch }) {
+    const { busy, error, setError, run } = useGitAction();
+    const [running, setRunning] = useState<SyncAction | null>(null);
+
+    // Ahead/behind are only as fresh as the last fetch.
+    useEffect(() => {
+        if (Date.now() - (autoFetched.get(folder) ?? 0) < AUTO_FETCH_MS) return;
+        autoFetched.set(folder, Date.now());
+        void git.fetch(folder).catch(() => {});
+    }, [folder]);
+    // A different folder's error isn't this one's.
+    useEffect(() => setError(null), [folder, setError]);
+
+    if (!branch) return null;
+    const upstream = branch.upstream;
+    const go = (action: SyncAction) => {
+        setRunning(action);
+        void run(() => git[action](folder)).finally(() => setRunning(null));
+    };
+
+    const due: SyncAction = !upstream ? "push" : branch.behind > 0 ? "pull" : branch.ahead > 0 ? "push" : "fetch";
+    const RUNNING: Record<SyncAction, string> = {
+        fetch: "Fetching…",
+        pull: "Pulling…",
+        push: upstream ? "Pushing…" : "Publishing…"
+    };
+    const LABEL: Record<SyncAction, string> = {
+        fetch: "Fetch",
+        pull: "Pull",
+        push: upstream ? "Push" : "Publish branch"
+    };
+    const ICON: Record<SyncAction, ReactNode> = {
+        fetch: <ArrowsClockwiseIcon className="size-4" />,
+        pull: <ArrowDownIcon className="size-4" />,
+        push: upstream ? <ArrowUpIcon className="size-4" /> : <CloudArrowUpIcon className="size-4" />
+    };
+    const tooltip = !upstream
+        ? `Push ${branch.name} to origin and track it`
+        : branch.ahead === 0 && branch.behind === 0
+          ? `Up to date with ${upstream}`
+          : `${[
+                branch.behind > 0 && `${branch.behind} behind`,
+                branch.ahead > 0 && `${branch.ahead} ahead`
+            ]
+                .filter(Boolean)
+                .join(" and ")} of ${upstream}`;
+
+    return (
+        <>
+            <SplitRow
+                icon={running ? <DotMatrixSpinner className="size-3.5" /> : ICON[due]}
+                label={running ? RUNNING[running] : LABEL[due]}
+                tooltip={tooltip}
+                disabled={busy}
+                onClick={() => go(due)}
+                meta={
+                    upstream &&
+                    (branch.behind > 0 || branch.ahead > 0) && (
+                        <span className="flex items-center gap-1.5 text-xs font-normal tabular-nums text-dark-200">
+                            {branch.behind > 0 && <span>↓{branch.behind}</span>}
+                            {branch.ahead > 0 && <span>↑{branch.ahead}</span>}
+                        </span>
+                    )
+                }
+                menuLabel="Sync actions"
+                menuDisabled={busy}
+                menu={
+                    <>
+                        <Menu.Item onClick={() => go("fetch")} className="gap-2">
+                            <ArrowsClockwiseIcon className="size-3.5" />
+                            Fetch
+                        </Menu.Item>
+                        <Menu.Item onClick={() => go("pull")} disabled={!upstream} className="gap-2">
+                            <ArrowDownIcon className="size-3.5" />
+                            Pull
+                        </Menu.Item>
+                        <Menu.Item onClick={() => go("push")} className="gap-2">
+                            {upstream ? <ArrowUpIcon className="size-3.5" /> : <CloudArrowUpIcon className="size-3.5" />}
+                            {upstream ? "Push" : "Publish branch"}
+                        </Menu.Item>
+                    </>
+                }
+            />
+            {error && (
+                <p className="px-2.5 pt-0.5 pb-1.5 text-[11.5px] leading-snug break-words text-danger">{error}</p>
+            )}
+        </>
+    );
+}
+
+/**
+ * A row split in two: its own action on the left, a chevron opening `menu`
+ * on the right; each half lights on its own.
+ */
+function SplitRow({
+    icon,
+    label,
+    meta,
+    tooltip,
+    onClick,
+    disabled,
+    menuLabel,
+    menuDisabled,
+    menu
+}: {
+    icon: ReactNode;
+    label: string;
+    meta?: ReactNode;
+    tooltip?: string;
+    onClick: () => void;
+    disabled?: boolean;
+    menuLabel: string;
+    menuDisabled?: boolean;
+    menu: ReactNode;
+}) {
+    const main = (
+        <button
+            type="button"
+            disabled={disabled}
+            onClick={onClick}
+            className={cn(
+                "flex h-full min-w-0 flex-1 items-center gap-2.5 rounded-s-lg px-2.5 text-left outline-none select-none",
+                "text-[13px] font-medium text-dark-100 transition-colors",
+                "hover:bg-dark-700 hover:text-dark-50 focus-visible:bg-dark-700",
+                "disabled:pointer-events-none"
+            )}
+        >
+            <span className="flex size-4 shrink-0 items-center justify-center text-dark-250">{icon}</span>
+            <span className="min-w-0 flex-1 truncate">{label}</span>
+            {meta && <span className="flex shrink-0 items-center">{meta}</span>}
+        </button>
+    );
+    return (
         <div className="flex h-8 w-full min-w-0 items-center">
-            <button
-                type="button"
-                disabled={!current}
-                onClick={() => current && void openInEditor(current, folder).catch(() => {})}
-                className={cn(
-                    "flex h-full min-w-0 flex-1 items-center gap-2.5 rounded-s-lg px-2.5 text-left outline-none select-none",
-                    "text-[13px] font-medium text-dark-100 transition-colors",
-                    "hover:bg-dark-700 hover:text-dark-50 focus-visible:bg-dark-700"
-                )}
-            >
-                <span className="flex size-4 shrink-0 items-center justify-center text-dark-250">
-                    {current ? (
-                        <EditorMark id={current} className="size-4" />
-                    ) : (
-                        <CodeIcon className="size-4" />
-                    )}
-                </span>
-                <span className="min-w-0 flex-1 truncate">
-                    Open in {current ? EDITORS[current].label : "editor"}
-                </span>
-            </button>
+            {tooltip ? (
+                <Tooltip>
+                    <Tooltip.Trigger render={main} />
+                    <Tooltip.Content side="left">{tooltip}</Tooltip.Content>
+                </Tooltip>
+            ) : (
+                main
+            )}
             <Menu>
                 <Menu.Trigger
-                    aria-label="Choose editor"
-                    disabled={!installed}
+                    aria-label={menuLabel}
+                    disabled={menuDisabled}
                     className={cn(
                         "flex h-full w-8 shrink-0 items-center justify-center rounded-e-lg text-dark-250 outline-none transition-colors",
                         "hover:bg-dark-700 hover:text-dark-50 focus-visible:bg-dark-700",
-                        "data-[popup-open]:bg-dark-700 data-[popup-open]:text-dark-50"
+                        "data-[popup-open]:bg-dark-700 data-[popup-open]:text-dark-50",
+                        "disabled:pointer-events-none disabled:opacity-50"
                     )}
                 >
                     <CaretDownIcon className="size-3.5" />
                 </Menu.Trigger>
                 <Menu.Content side="bottom" align="end" className="w-52 min-w-0">
-                    <Menu.RadioGroup value={current} onValueChange={(id: string) => setPreferred(id)}>
-                        {installed?.map((id) => (
-                            <Menu.RadioItem key={id} value={id} className="gap-2">
-                                <EditorMark id={id} className="size-4 shrink-0" />
-                                {EDITORS[id].label}
-                            </Menu.RadioItem>
-                        ))}
-                    </Menu.RadioGroup>
+                    {menu}
                 </Menu.Content>
             </Menu>
         </div>

@@ -159,5 +159,8 @@ export const git = {
     createBranch: (cwd: string, name: string, from: string) =>
         then(cwd, gitApi.createBranch(cwd, name, from)),
     deleteBranch: (cwd: string, name: string) =>
-        then(cwd, gitApi.deleteBranch(cwd, name))
+        then(cwd, gitApi.deleteBranch(cwd, name)),
+    fetch: (cwd: string) => then(cwd, gitApi.fetch(cwd)),
+    pull: (cwd: string) => then(cwd, gitApi.pull(cwd)),
+    push: (cwd: string) => then(cwd, gitApi.push(cwd))
 };

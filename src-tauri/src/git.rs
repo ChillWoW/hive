@@ -120,3 +120,15 @@ pub async fn git_github_remote(cwd: String) -> Option<String> {
         .await
         .map(|(owner, repo)| format!("{owner}/{repo}"))
 }
+
+/// Fast-forwards the checked-out branch to its upstream.
+#[tauri::command]
+pub async fn git_pull(cwd: String) -> Result<(), String> {
+    hive_git::pull(Path::new(&cwd)).await.map_err(err)
+}
+
+/// Pushes the checked-out branch, publishing it to `origin` when it has no upstream.
+#[tauri::command]
+pub async fn git_push(cwd: String) -> Result<(), String> {
+    hive_git::push(Path::new(&cwd)).await.map_err(err)
+}

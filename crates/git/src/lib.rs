@@ -13,12 +13,14 @@ use tokio::process::Command;
 
 mod diff;
 mod history;
+mod sync;
 mod turn;
 pub use diff::{diff, head_text};
 pub use history::{
     commit_diff, fetch_all, github_remote, history, search_history, HISTORY_DEFAULT_LIMIT,
     HISTORY_MAX_LIMIT,
 };
+pub use sync::{pull, push};
 pub use turn::{revert_turn, snapshot_tree, sweep_turn_snapshots, turn_diff, TreeSnapshot};
 
 #[derive(Debug, thiserror::Error)]
