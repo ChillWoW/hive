@@ -50,6 +50,8 @@ pub struct Aggregator<'a> {
     harness_sessions: HashMap<HarnessId, HashSet<u64>>,
     sessions: HashSet<u64>,
     projects: HashMap<String, Project>,
+    /// Only this harness's session with this id counts.
+    only: Option<(HarnessId, &'a str)>,
 }
 
 fn harness_tag(h: HarnessId) -> u8 {
@@ -75,7 +77,14 @@ impl<'a> Aggregator<'a> {
             harness_sessions: HashMap::new(),
             sessions: HashSet::new(),
             projects: HashMap::new(),
+            only: None,
         }
+    }
+
+    /// Counts only `harness`'s session `id`, nothing else.
+    pub fn only_session(mut self, harness: HarnessId, id: &'a str) -> Self {
+        self.only = Some((harness, id));
+        self
     }
 
     pub fn since(&self) -> i64 {
@@ -97,6 +106,12 @@ impl<'a> Aggregator<'a> {
     pub fn add(&mut self, r: View<'_>, fallback_session: &str) {
         if r.at < self.since() || r.at >= self.query.until {
             return;
+        }
+        if let Some((harness, id)) = self.only {
+            let name = if r.session.is_empty() { fallback_session } else { r.session };
+            if r.harness != harness || name != id {
+                return;
+            }
         }
         // The same request copied into another file (resumed, forked).
         if r.key != 0 && !self.seen.insert(r.key) {
@@ -270,5 +285,35 @@ mod tests {
         assert_eq!(projects[0].harnesses[0].requests, 3);
         assert_eq!(projects[0].harnesses[0].cost, 9.0);
         assert_eq!(projects[0].harnesses[0].sessions, 1);
+    }
+
+    #[test]
+    fn counts_only_the_session_asked_for() {
+        let prices = RateTable::parse(
+            &json!({ "m1": { "input_cost_per_token": 1.0, "output_cost_per_token": 2.0 } }),
+            0,
+        );
+        let query = UsageQuery { buckets: vec![0], until: 100, refresh_prices: false };
+        let mut agg = Aggregator::new(&query, &prices).only_session(HarnessId::Codex, "s1");
+        let counts: Counts = [1, 0, 0, 0, 0, 0];
+        let view = |harness, session, key| View {
+            harness,
+            at: 5,
+            model: "m1",
+            session,
+            project: None,
+            counts: &counts,
+            cost: None,
+            fast: false,
+            key,
+        };
+        agg.add(view(HarnessId::Codex, "s1", 1), "");
+        agg.add(view(HarnessId::Codex, "s2", 2), "");
+        agg.add(view(HarnessId::ClaudeCode, "s1", 3), "");
+        // No session on the record: the file names it.
+        agg.add(view(HarnessId::Codex, "", 4), "s1");
+        let (rows, ..) = agg.finish();
+        assert_eq!(rows.len(), 1);
+        assert_eq!((rows[0].requests, rows[0].cost.total()), (2, 2.0));
     }
 }

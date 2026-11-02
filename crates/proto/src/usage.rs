@@ -119,6 +119,21 @@ pub struct UsageRow {
     pub unpriced: u32,
 }
 
+/// One CLI session's usage over its whole history (as far back as the scan
+/// cache keeps), priced as the Usage panel prices it: a chat's cost.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionUsage {
+    pub tokens: UsageTokens,
+    pub cost: UsageCost,
+    /// Model requests.
+    pub requests: u32,
+    /// Requests with no price; their tokens count, their cost doesn't.
+    pub unpriced: u32,
+    /// The models it used, most tokens first.
+    pub models: Vec<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct UsageModel {

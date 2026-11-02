@@ -1,7 +1,7 @@
-//! The Usage panel's one command, over `hive_usage` (its scan cache and
+//! The Usage panel's command and a chat's cost, over `hive_usage` (its scan cache and
 //! price table live under `usage/` in the data dir).
 
-use hive_proto::{UsageQuery, UsageReport};
+use hive_proto::{HarnessId, SessionUsage, UsageQuery, UsageReport};
 use hive_usage::Usage;
 use tauri::State;
 
@@ -11,4 +11,14 @@ pub async fn usage_report(
     query: UsageQuery,
 ) -> Result<UsageReport, String> {
     usage.report(query).await
+}
+
+/// What one CLI session (a chat's `harnessSessionId`) cost, over all its history.
+#[tauri::command]
+pub async fn usage_session(
+    usage: State<'_, Usage>,
+    harness: HarnessId,
+    session_id: String,
+) -> Result<SessionUsage, String> {
+    usage.session(harness, session_id).await
 }

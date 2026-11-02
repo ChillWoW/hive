@@ -62,6 +62,7 @@ export type { SecretRequest } from "./SecretRequest";
 export type { SendKey } from "./SendKey";
 export type { Session } from "./Session";
 export type { SessionStatus } from "./SessionStatus";
+export type { SessionUsage } from "./SessionUsage";
 export type { Settings } from "./Settings";
 export type { SignInMethod } from "./SignInMethod";
 export type { SignInStarted } from "./SignInStarted";

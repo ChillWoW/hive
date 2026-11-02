@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import {
     ArrowDownIcon,
     ArrowsClockwiseIcon,
@@ -7,6 +7,7 @@ import {
     CaretDownIcon,
     CloudArrowUpIcon,
     CodeIcon,
+    CoinsIcon,
     FolderOpenIcon,
     GitDiffIcon,
     GitForkIcon,
@@ -21,13 +22,19 @@ import { git, useGitAction } from "@/git/store";
 import { gitApi } from "@/git/api";
 import { EDITORS, openInEditor, refreshEditors, useEditor, useEditorsStore } from "@/editors";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
-import { workDir } from "@/chats";
+import { useSession, workDir } from "@/chats";
+import { formatCount, formatTokens } from "@/lib/format";
+import { onWindowFocus } from "@/lib/windowFocus";
+import { usageApi } from "@/usage/api";
+import { useUsageStore } from "@/usage/store";
+import { formatUsd } from "@/usage/format";
+import { costTotal, processed } from "@/usage/summary";
 import { ShortcutKeys, useBinding } from "@/keybindings";
 import { cn } from "@/lib/cn";
 import { baseName } from "@/lib/paths";
 import { isTauri } from "@/lib/platform";
 import { ProjectIcon } from "@/projects/ProjectIcon";
-import type { Chat, GitBranch } from "@/proto";
+import type { Chat, GitBranch, SessionUsage } from "@/proto";
 import { openDiffTab, openTerminalTab } from "@/rightbar";
 import { DotMatrixSpinner, GithubMark, Menu, Tooltip } from "@/ui";
 import { DETAILS_CARD_GAP, DETAILS_CARD_WIDTH } from "./layout";
@@ -55,6 +62,7 @@ export function ChatDetailsCard({ chat }: { chat: Chat }) {
         >
             <WorkspaceSection chat={chat} />
             <VersionControlSection folder={workDir(chat)} />
+            <SessionSection chat={chat} />
         </aside>
     );
 }
@@ -177,6 +185,93 @@ function GithubRow({ folder, branch }: { folder: string; branch?: GitBranch }) {
             tooltip={url}
             onClick={() => void openUrl(url).catch(() => {})}
             meta={<ArrowUpRightIcon className="size-3.5 text-dark-250" />}
+        />
+    );
+}
+
+/** The chat's agent session: what it cost. Nothing before it has one. */
+function SessionSection({ chat }: { chat: Chat }) {
+    const usage = useChatCost(chat);
+    if (!usage || usage.requests === 0) return null;
+    return (
+        <Section label="Session">
+            <CostRow usage={usage} />
+        </Section>
+    );
+}
+
+/** Read again at most this often, unless a turn just ended. */
+const COST_FRESH_MS = 30_000;
+
+/**
+ * What the chat's CLI session cost (`usage_session`, over the CLIs' own
+ * history, as the Usage panel reads it): on mount, when a turn ends and on
+ * window focus.
+ */
+function useChatCost(chat: Chat) {
+    const sessionId = chat.harnessSessionId;
+    const harness = chat.config.harness;
+    const status = useSession(chat.id)?.status;
+    const [usage, setUsage] = useState<{ key: string; value: SessionUsage } | null>(null);
+    const key = sessionId && harness !== "mock" ? `${harness}\0${sessionId}` : null;
+    const lastRead = useRef(0);
+
+    useEffect(() => {
+        if (!key || !sessionId) return;
+        let live = true;
+        const read = (force: boolean) => {
+            if (!force && Date.now() - lastRead.current < COST_FRESH_MS) return;
+            lastRead.current = Date.now();
+            void usageApi
+                .session(harness, sessionId)
+                .then((value) => live && setUsage({ key, value }))
+                .catch(() => {});
+        };
+        read(true);
+        const stop = onWindowFocus(() => read(false));
+        return () => {
+            live = false;
+            stop();
+        };
+    }, [key, harness, sessionId]);
+
+    // A turn ending wrote its last requests.
+    const working = status === "working";
+    const wasWorking = useRef(working);
+    useEffect(() => {
+        const ended = wasWorking.current && !working;
+        wasWorking.current = working;
+        if (!ended || !key || !sessionId) return;
+        lastRead.current = Date.now();
+        void usageApi
+            .session(harness, sessionId)
+            .then((value) => setUsage({ key, value }))
+            .catch(() => {});
+    }, [working, key, harness, sessionId]);
+
+    return usage?.key === key ? usage.value : null;
+}
+
+/** "$3.12", the tokens and models behind it on hover; opens the Usage panel. */
+function CostRow({ usage }: { usage: SessionUsage }) {
+    const total = costTotal(usage.cost);
+    const details = [
+        `${formatTokens(processed(usage.tokens))} tokens`,
+        `${formatCount(usage.requests)} ${usage.requests === 1 ? "request" : "requests"}`
+    ];
+    if (usage.unpriced > 0) details.push(`${formatCount(usage.unpriced)} unpriced`);
+    return (
+        <Row
+            icon={<CoinsIcon className="size-4" />}
+            label="Cost"
+            tooltip={details.join(" · ")}
+            onClick={() => useUsageStore.getState().setOpen(true)}
+            meta={
+                <span className="text-xs font-normal tabular-nums text-dark-200">
+                    {formatUsd(total)}
+                    {usage.unpriced > 0 && "+"}
+                </span>
+            }
         />
     );
 }

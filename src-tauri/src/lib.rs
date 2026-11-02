@@ -122,6 +122,7 @@ pub fn run() {
       updater::update_check,
       updater::update_install,
       usage::usage_report,
+      usage::usage_session,
       watch::watch_folder,
       watch::unwatch_folder,
     ])

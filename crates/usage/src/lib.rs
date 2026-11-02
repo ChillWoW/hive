@@ -20,8 +20,8 @@ use std::path::{Path, PathBuf};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use hive_proto::{
-    HarnessId, UsagePricing, UsagePricingStatus, UsageQuery, UsageReport, UsageSource,
-    UsageSourceStatus,
+    HarnessId, SessionUsage, UsagePricing, UsagePricingStatus, UsageQuery, UsageReport, UsageRow,
+    UsageSource, UsageSourceStatus,
 };
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -94,6 +94,32 @@ impl Usage {
         Ok(report)
     }
 
+    /// `harness`'s session `id` (a chat's `harness_session_id`) over all the
+    /// history the cache keeps, read and priced as `report` does.
+    pub async fn session(&self, harness: HarnessId, id: String) -> Result<SessionUsage, String> {
+        let mut state = self.state.lock().await;
+        self.refresh_prices(&mut state, false).await;
+        let prices = state.prices.clone().unwrap_or_default();
+        let cache = state.cache.take();
+        let dir = self.dir.clone();
+        let (cache, usage) = tokio::task::spawn_blocking(move || {
+            let mut cache = cache.unwrap_or_else(|| load_cache(&dir));
+            let now = now_ms();
+            let since = now - KEEP_MS;
+            scan(&mut cache, since, now, &dir);
+            // Past `now`: a request written while this runs still counts.
+            let query = UsageQuery { buckets: vec![since], until: now + 60_000, refresh_prices: false };
+            let mut agg = Aggregator::new(&query, &prices).only_session(harness, &id);
+            aggregate(&cache, &mut agg);
+            let usage = session_usage(agg.finish().0);
+            (cache, usage)
+        })
+        .await
+        .map_err(|e| format!("The scan failed: {e}"))?;
+        state.cache = Some(cache);
+        Ok(usage)
+    }
+
     async fn refresh_prices(&self, state: &mut State, force: bool) -> UsagePricing {
         let path = self.dir.join("prices.json");
         if state.prices.is_none() {
@@ -153,9 +179,27 @@ fn build(
 ) -> UsageReport {
     let started = Instant::now();
     let now = now_ms();
-    let since = query.buckets[0];
-    let skip_before = since - FILE_SLACK_MS;
+    let sources = scan(cache, query.buckets[0], now, dir);
+    let mut agg = Aggregator::new(query, prices);
+    aggregate(cache, &mut agg);
+    let (rows, models, harnesses, projects, sessions) = agg.finish();
+    UsageReport {
+        rows,
+        models,
+        harnesses,
+        projects,
+        sessions,
+        sources,
+        pricing,
+        read_at: now,
+        scan_ms: started.elapsed().as_millis().min(u128::from(u32::MAX)) as u32,
+    }
+}
 
+/// Reads whatever changed since `since` into the cache (saving it when it
+/// changed); where each harness's history was read from.
+fn scan(cache: &mut Cache, since: i64, now: i64, dir: &Path) -> Vec<UsageSource> {
+    let skip_before = since - FILE_SLACK_MS;
     let claude_roots = claude::roots();
     let claude = files::scan(&claude_roots, &mut cache.claude, skip_before);
     let codex_roots = codex::roots();
@@ -173,16 +217,19 @@ fn build(
         cache.version = CACHE_VERSION;
         write_json(&dir.join("scan.json"), cache);
     }
+    sources
+}
 
-    let mut agg = Aggregator::new(query, prices);
+/// Every cached record into `agg`.
+fn aggregate(cache: &Cache, agg: &mut Aggregator<'_>) {
     // Sorted, so which copy of a request counts doesn't depend on hashing.
     let mut paths: Vec<&String> = cache.claude.keys().collect();
     paths.sort();
     for path in paths {
-        add_file(&mut agg, HarnessId::ClaudeCode, path, &cache.claude[path]);
+        add_file(agg, HarnessId::ClaudeCode, path, &cache.claude[path]);
     }
     for (path, entry) in &cache.codex {
-        add_file(&mut agg, HarnessId::Codex, path, entry);
+        add_file(agg, HarnessId::Codex, path, entry);
     }
     for db in cache.opencode.values() {
         for (id, m) in &db.messages {
@@ -202,18 +249,25 @@ fn build(
             );
         }
     }
-    let (rows, models, harnesses, projects, sessions) = agg.finish();
-    UsageReport {
-        rows,
-        models,
-        harnesses,
-        projects,
-        sessions,
-        sources,
-        pricing,
-        read_at: now,
-        scan_ms: started.elapsed().as_millis().min(u128::from(u32::MAX)) as u32,
+}
+
+/// One session's rows summed; its models by tokens, most first.
+fn session_usage(rows: Vec<UsageRow>) -> SessionUsage {
+    let mut usage = SessionUsage::default();
+    let mut models: Vec<(String, u64)> = Vec::new();
+    for row in rows {
+        usage.tokens.add(&row.tokens);
+        usage.cost.add(&row.cost);
+        usage.requests += row.requests;
+        usage.unpriced += row.unpriced;
+        match models.iter_mut().find(|(m, _)| *m == row.model) {
+            Some((_, tokens)) => *tokens += row.tokens.total(),
+            None => models.push((row.model, row.tokens.total())),
+        }
     }
+    models.sort_by_key(|(_, tokens)| std::cmp::Reverse(*tokens));
+    usage.models = models.into_iter().map(|(m, _)| m).filter(|m| !m.is_empty()).collect();
+    usage
 }
 
 fn add_file<S>(agg: &mut Aggregator<'_>, harness: HarnessId, path: &str, entry: &FileEntry<S>) {

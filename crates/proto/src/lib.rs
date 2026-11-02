@@ -79,6 +79,7 @@ mod export {
         TaskOutput::export_all(&cfg).unwrap();
         UsageQuery::export_all(&cfg).unwrap();
         UsageReport::export_all(&cfg).unwrap();
+        SessionUsage::export_all(&cfg).unwrap();
 
         let mut modules = Vec::new();
         collect_modules(&dir, "", &mut modules);

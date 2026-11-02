@@ -1,4 +1,4 @@
-import type { HarnessId, UsageQuery, UsageReport, UsageRow } from "@/proto";
+import type { HarnessId, SessionUsage, UsageQuery, UsageReport, UsageRow } from "@/proto";
 import { backend } from "@/lib/backend";
 
 /**
@@ -7,7 +7,16 @@ import { backend } from "@/lib/backend";
  */
 export const usageApi = {
     report: (query: UsageQuery) =>
-        backend<UsageReport>("usage_report", { query }, () => browserReport(query))
+        backend<UsageReport>("usage_report", { query }, () => browserReport(query)),
+    /** What one CLI session (a chat's `harnessSessionId`) cost over all its history. */
+    session: (harness: HarnessId, sessionId: string) =>
+        backend<SessionUsage>("usage_session", { harness, sessionId }, () => ({
+            tokens: { input: 18_400, cacheRead: 2_310_000, cacheWrite: 96_000, output: 41_200, reasoning: 9_800 },
+            cost: { input: 0.09, cacheRead: 1.16, cacheWrite: 0.6, output: 1.03, other: 0, savings: 10.4, fastPremium: 0 },
+            requests: 63,
+            unpriced: 0,
+            models: ["claude-opus-5-5"]
+        }))
 };
 
 const FAKE_MODELS: [HarnessId, string, number, number][] = [
