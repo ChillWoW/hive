@@ -186,5 +186,13 @@ export const ACTIONS: readonly Action[] = [
         description: "While typing a prompt",
         keywords: "plan mode toggle switch",
         scope: "composer"
+    },
+    {
+        id: "sendInBackground",
+        category: "prompt",
+        label: "Send in background",
+        description: "Starts the new chat but stays on the new-chat page",
+        keywords: "send background stay new chat submit keep queue fire",
+        scope: "composer"
     }
 ];

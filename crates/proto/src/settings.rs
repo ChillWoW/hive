@@ -249,6 +249,9 @@ pub struct KeyboardSettings {
     pub close_tab: String,
     /// Only while typing a prompt.
     pub toggle_plan: String,
+    /// Only while typing a prompt: in the new-chat view, starts the chat but
+    /// stays on the new-chat view; in a started chat, sends as usual.
+    pub send_in_background: String,
 }
 
 impl Default for KeyboardSettings {
@@ -275,6 +278,7 @@ impl Default for KeyboardSettings {
             search_files: "Mod+P".into(),
             close_tab: "Mod+W".into(),
             toggle_plan: "Shift+Tab".into(),
+            send_in_background: "Mod+Shift+Enter".into(),
         }
     }
 }

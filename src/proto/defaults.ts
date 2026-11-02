@@ -59,7 +59,8 @@ export const DEFAULT_SETTINGS: Settings = {
     "toggleRightSidebar": "Mod+Alt+B",
     "searchFiles": "Mod+P",
     "closeTab": "Mod+W",
-    "togglePlan": "Shift+Tab"
+    "togglePlan": "Shift+Tab",
+    "sendInBackground": "Mod+Shift+Enter"
   },
   "providers": {
     "claudeCode": true,

@@ -39,6 +39,8 @@ type Outgoing = {
     commandId?: string;
     /** Waiting behind the running turn. */
     queued: boolean;
+    /** Sent from the new-chat view without following it: kept out of that view unless it fails. */
+    background?: boolean;
     error?: string;
 };
 
@@ -93,8 +95,16 @@ type ChatsState = {
     openParent: () => void;
     goBack: () => void;
     goForward: () => void;
-    /** Shows the prompt now; creates the chat first for a new-chat target. */
-    send: (target: SendTarget, prompt: string, attachments?: Attachment[]) => Promise<void>;
+    /**
+     * Shows the prompt now; creates the chat first for a new-chat target and
+     * opens it, unless `background` (the new-chat view stays).
+     */
+    send: (
+        target: SendTarget,
+        prompt: string,
+        attachments?: Attachment[],
+        options?: { background?: boolean }
+    ) => Promise<void>;
     /** Drops a failed prompt from the outbox. */
     discard: (messageId: string) => void;
     /** Withdraws a queued prompt; gone at once, back if that's refused. */
@@ -356,7 +366,7 @@ export const useChatsStore = create<ChatsState>()(
         goBack: () => set((s) => step(s, s.back, s.forward)),
         goForward: () => set((s) => step(s, s.forward, s.back)),
 
-        send: async (target, prompt, attachments = []) => {
+        send: async (target, prompt, attachments = [], { background = false } = {}) => {
             const messageId = crypto.randomUUID();
             const edit = (change: (o: Outgoing) => void) =>
                 set((s) => {
@@ -371,7 +381,8 @@ export const useChatsStore = create<ChatsState>()(
                     prompt,
                     attachments,
                     createdAt: Date.now(),
-                    queued: false
+                    queued: false,
+                    ...(background && !("chatId" in target) && { background: true })
                 });
             });
 
@@ -409,7 +420,7 @@ export const useChatsStore = create<ChatsState>()(
                         // Follow the prompt into its chat, unless the user
                         // already went elsewhere.
                         // The chat takes the new-chat view's place in history.
-                        if (s.activeChatId === null) {
+                        if (s.activeChatId === null && !background) {
                             s.activeChatId = chat.id;
                             s.forward = [];
                         }
@@ -873,7 +884,8 @@ export function useChatMessages(chatId: string | null) {
 
     return useMemo(() => {
         const outgoing = outbox
-            .filter((o) => o.chatId === chatId)
+            // A background send shows in the new-chat view only if it failed.
+            .filter((o) => o.chatId === chatId && !(chatId === null && o.background && !o.error))
             .map(toMessage);
         const messages: TranscriptMessage[] = transcript
             ? [...transcript.messages, ...outgoing]

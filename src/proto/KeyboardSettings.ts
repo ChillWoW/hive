@@ -32,4 +32,9 @@ closeTab: string,
 /**
  * Only while typing a prompt.
  */
-togglePlan: string, };
+togglePlan: string, 
+/**
+ * Only while typing a prompt: in the new-chat view, starts the chat but
+ * stays on the new-chat view; in a started chat, sends as usual.
+ */
+sendInBackground: string, };

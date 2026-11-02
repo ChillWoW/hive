@@ -122,7 +122,11 @@ export function ChatView() {
     // A question first; secrets wait their turn, oldest first.
     const secret = input ? undefined : session?.secrets?.[0];
 
-    const sendTo = (prompt: string, attachments: Attachment[] = []) => {
+    const sendTo = (
+        prompt: string,
+        attachments: Attachment[] = [],
+        options?: { background?: boolean }
+    ) => {
         if (chat) {
             void chats.send({ chatId: chat.id }, prompt, attachments);
             return true;
@@ -138,7 +142,8 @@ export function ChatView() {
                 worktree: worktreeMode ? { base } : undefined
             },
             prompt,
-            attachments
+            attachments,
+            options
         );
         return true;
     };
@@ -190,12 +195,16 @@ export function ChatView() {
     const [keepFull, setKeepFull] = useState<string | null>(null);
     const compactFirst = stale && keepFull !== staleKey;
 
-    const send = (prompt: string, attachments: Attachment[] = []) => {
+    const send = (
+        prompt: string,
+        attachments: Attachment[] = [],
+        options?: { background?: boolean }
+    ) => {
         if (compactFirst && !prompt.trimStart().startsWith("/")) {
             // The prompt waits in the queue until the compaction's turn ends.
             sendTo("/compact");
         }
-        return sendTo(prompt, attachments);
+        return sendTo(prompt, attachments, options);
     };
 
     const hero = !chatId && shown.length === 0;

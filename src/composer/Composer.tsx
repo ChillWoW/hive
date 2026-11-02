@@ -8,7 +8,8 @@ import {
 } from "@phosphor-icons/react";
 import type { Attachment, ChatConfig, SlashCommand } from "@/proto";
 import { AttachmentTile, SavedAttachmentTile } from "@/attachments";
-import { COMPOSER_SCOPE, useShortcut } from "@/keybindings/runtime";
+import { COMPOSER_SCOPE, useBinding, useShortcut } from "@/keybindings/runtime";
+import { canonical, shortcutFromEvent, stringifyShortcut } from "@/keybindings/shortcut";
 import { cn } from "@/lib/cn";
 import { isMac } from "@/lib/platform";
 import { useResizeObserver } from "@/lib/useResizeObserver";
@@ -75,8 +76,15 @@ type ComposerProps = {
     cwd?: string | null;
     /** The harness takes files with a prompt: the attach button, paste and drop. */
     canAttach?: boolean;
-    /** False keeps the draft: the prompt couldn't be sent yet. */
-    onSend: (prompt: string, attachments: Attachment[]) => boolean | void;
+    /**
+     * False keeps the draft: the prompt couldn't be sent yet. `background`
+     * (the `sendInBackground` shortcut): a new chat starts without being opened.
+     */
+    onSend: (
+        prompt: string,
+        attachments: Attachment[],
+        options?: { background?: boolean }
+    ) => boolean | void;
     onStop?: () => void;
     placeholder?: string;
     className?: string;
@@ -265,6 +273,7 @@ export function Composer({
         fieldRef.current.focus("end");
     });
     const sendWith = useSettingsStore((s) => s.settings.keyboard.sendWith);
+    const backgroundCombo = canonical(useBinding("sendInBackground"));
 
     // Decides the shape. The text is measured on one line in a hidden span
     // and compared against the room the one-row shape leaves the field —
@@ -371,7 +380,7 @@ export function Composer({
           : "send";
     const disabled = mode !== "stop" && (!content || !filesReady);
 
-    const submit = () => {
+    const submit = (background = false) => {
         if (mode === "stop") {
             onStop?.();
             return;
@@ -394,7 +403,7 @@ export function Composer({
             return;
         }
         const sent = attachments.flatMap((a) => (a.attachment ? [a.attachment] : []));
-        if (onSend(withDiffComments(prompt, comments), sent) !== false) {
+        if (onSend(withDiffComments(prompt, comments), sent, { background }) !== false) {
             fill("");
             takeAttachments(chatId);
             takeComments(chatId);
@@ -497,6 +506,16 @@ export function Composer({
         if (mention.onKeyDown(event) || slash.onKeyDown(event) || recall(event)) {
             event.preventDefault();
             return true;
+        }
+        // Handled here, not by the window listener: the field's own keymap
+        // would take Mod/Shift+Enter first.
+        if (backgroundCombo && !event.isComposing) {
+            const pressed = shortcutFromEvent(event);
+            if (pressed && stringifyShortcut(pressed) === backgroundCombo) {
+                event.preventDefault();
+                if (content) submit(true);
+                return true;
+            }
         }
         if (event.key !== "Enter" || event.shiftKey) return false;
         // With Mod+Enter sending, a bare Enter is a new line.
