@@ -112,25 +112,23 @@ function ChangesRow({ folder }: { folder: string }) {
             icon={<GitDiffIcon className="size-4" />}
             label="Changes"
             tooltip={
-                !sum
-                    ? undefined
-                    : sum.files === 0
-                      ? "No uncommitted changes"
-                      : `${sum.files === 1 ? "1 file" : `${sum.files} files`} changed`
+                sum && sum.files > 0
+                    ? `${sum.files === 1 ? "1 file" : `${sum.files} files`} changed`
+                    : undefined
             }
             onClick={() => {
                 useDiffPrefs.getState().setScope("workingTree");
                 openDiffTab();
             }}
+            // Nothing to show while the tree is clean.
+            disabled={sum?.files === 0}
             meta={
                 sum &&
-                (sum.files === 0 ? (
-                    <span className="text-xs font-normal text-dark-250">None</span>
-                ) : (
+                sum.files > 0 && (
                     <span className="flex items-center gap-1.5 text-xs">
                         <LineCounts additions={sum.additions} deletions={sum.deletions} />
                     </span>
-                ))
+                )
             }
         />
     );
@@ -269,13 +267,16 @@ function Row({
     label,
     meta,
     tooltip,
-    onClick
+    onClick,
+    disabled
 }: {
     icon: ReactNode;
     label: string;
     meta?: ReactNode;
     tooltip?: string;
     onClick?: () => void;
+    /** Dimmed, and `onClick` off. */
+    disabled?: boolean;
 }) {
     const content = (
         <>
@@ -287,10 +288,11 @@ function Row({
     const className = cn(
         "flex h-8 w-full min-w-0 items-center gap-2.5 rounded-lg px-2.5 text-left",
         "text-[13px] font-medium text-dark-100 outline-none select-none",
-        onClick && "transition-colors hover:bg-dark-700 hover:text-dark-50 focus-visible:bg-dark-700"
+        onClick && "transition-colors hover:bg-dark-700 hover:text-dark-50 focus-visible:bg-dark-700",
+        "disabled:pointer-events-none disabled:opacity-50"
     );
     const row = onClick ? (
-        <button type="button" onClick={onClick} className={className}>
+        <button type="button" onClick={onClick} disabled={disabled} className={className}>
             {content}
         </button>
     ) : (
