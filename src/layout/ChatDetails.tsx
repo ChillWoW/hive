@@ -13,15 +13,11 @@ export function ChatDetailsButton() {
         if (!hasChat) return false;
         toggle();
     });
+    // Hidden, not disabled, while there's no chat to show details of.
+    if (!hasChat) return null;
     return (
-        <BarButton
-            label="Chat details"
-            shortcut="chatDetails"
-            onClick={toggle}
-            disabled={!hasChat}
-            pressed={hasChat && open}
-        >
-            <DetailsCardIcon weight={hasChat && open ? "fill" : "regular"} className="size-4" />
+        <BarButton label="Chat details" shortcut="chatDetails" onClick={toggle} pressed={open}>
+            <DetailsCardIcon weight={open ? "fill" : "regular"} className="size-4" />
         </BarButton>
     );
 }
