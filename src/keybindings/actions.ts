@@ -172,6 +172,14 @@ export const ACTIONS: readonly Action[] = [
         scope: "global"
     },
     {
+        id: "chatDetails",
+        category: "chats",
+        label: "Chat details",
+        description: "The open chat's session, under the top bar's corner",
+        keywords: "chat details session thread info project branch card open close",
+        scope: "global"
+    },
+    {
         id: "togglePlan",
         category: "prompt",
         label: "Toggle plan mode",

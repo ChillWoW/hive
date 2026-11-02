@@ -1,4 +1,8 @@
-import { useEffect, useState } from "react";
+import { type CSSProperties, useEffect, useLayoutEffect, useState } from "react";
+import { cn } from "@/lib/cn";
+import { ChatDetailsCard } from "./details/ChatDetailsCard";
+import { detailsLayout } from "./details/layout";
+import { useChatDetailsStore } from "./details/store";
 import {
     chats,
     isBusy,
@@ -196,9 +200,30 @@ export function ChatView() {
 
     const hero = !chatId && shown.length === 0;
 
+    // The details card floats at the pane's top right; the column slides
+    // aside (then narrows) to clear it.
+    // A callback ref: the pane mounts only once there's a transcript to show.
+    const [pane, setPane] = useState<HTMLDivElement | null>(null);
+    const [paneWidth, setPaneWidth] = useState(0);
+    useLayoutEffect(() => {
+        if (!pane) return;
+        setPaneWidth(pane.clientWidth);
+        const observer = new ResizeObserver(() => setPaneWidth(pane.clientWidth));
+        observer.observe(pane);
+        return () => observer.disconnect();
+    }, [pane]);
+    const detailsOpen = useChatDetailsStore((s) => s.open);
+    const details = detailsLayout(paneWidth, detailsOpen && !!chat && paneWidth > 0);
+    const laneStyle = details.inline
+        ? ({ "--lane-shift": `${details.shift}px`, "--lane-max": `${details.lane}px` } as CSSProperties)
+        : undefined;
+    const laneClassName = details.inline
+        ? "relative right-(--lane-shift) max-w-(--lane-max) transition-[right,max-width] duration-150 ease-out"
+        : undefined;
+
     const bottom = (
         <div className="shrink-0 px-6 pb-3">
-            <div className="mx-auto w-full max-w-3xl">
+            <div className={cn("mx-auto w-full max-w-3xl", !hero && laneClassName)}>
                 <div className={trayStackClassName}>
                     {!input && !secret && <UsageLimitTray harness={config.harness} />}
                     {chat && session?.goal && !input && !secret && (
@@ -350,7 +375,7 @@ export function ChatView() {
 
     return (
         <LiveTasks value={session?.background ?? NO_TASKS}>
-            <div className="flex h-full w-full flex-col">
+            <div ref={setPane} style={laneStyle} className="relative flex h-full w-full flex-col">
                 {loading ? (
                     <div className="flex-1" />
                 ) : (
@@ -367,9 +392,11 @@ export function ChatView() {
                         harness={chat?.config.harness}
                         chatId={chat?.id}
                         onOpenSubagent={chat ? (id) => openSubagent(chat.id, id) : undefined}
+                        className={laneClassName}
                     />
                 )}
                 {bottom}
+                {chat && details.inline && <ChatDetailsCard chat={chat} />}
             </div>
         </LiveTasks>
     );

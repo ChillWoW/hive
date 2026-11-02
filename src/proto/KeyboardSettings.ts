@@ -11,7 +11,11 @@ export type KeyboardSettings = { sendWith: SendKey,
 /**
  * Opens the command palette (chats, files, actions).
  */
-commandPalette: string, newChat: string, toggleSidebar: string, openSettings: string, openUsage: string, focusComposer: string, previousChat: string, nextChat: string, goBack: string, goForward: string, 
+commandPalette: string, newChat: string, toggleSidebar: string, openSettings: string, openUsage: string, 
+/**
+ * Opens the open chat's details card under the top bar's right corner.
+ */
+chatDetails: string, focusComposer: string, previousChat: string, nextChat: string, goBack: string, goForward: string, 
 /**
  * Archives the open chat and moves on to the next one (unarchives an
  * archived one).

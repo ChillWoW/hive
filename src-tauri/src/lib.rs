@@ -8,6 +8,7 @@ mod git;
 mod html;
 mod http;
 mod mcp;
+mod open_in;
 mod providers;
 mod secrets;
 mod settings;
@@ -80,6 +81,8 @@ pub fn run() {
       editor::write_file,
       editor::open_file,
       folders::folder_icon,
+      open_in::list_editors,
+      open_in::open_in_editor,
       git::git_repo,
       git::git_switch_branch,
       git::git_create_branch,

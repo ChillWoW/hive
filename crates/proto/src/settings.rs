@@ -196,6 +196,8 @@ pub struct KeyboardSettings {
     pub toggle_sidebar: String,
     pub open_settings: String,
     pub open_usage: String,
+    /// Opens the open chat's details card under the top bar's right corner.
+    pub chat_details: String,
     pub focus_composer: String,
     pub previous_chat: String,
     pub next_chat: String,
@@ -226,6 +228,7 @@ impl Default for KeyboardSettings {
             toggle_sidebar: "Mod+B".into(),
             open_settings: "Mod+,".into(),
             open_usage: "Mod+U".into(),
+            chat_details: "Mod+I".into(),
             focus_composer: "Mod+L".into(),
             previous_chat: "Ctrl+Shift+Tab".into(),
             next_chat: "Ctrl+Tab".into(),

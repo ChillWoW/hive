@@ -1,5 +1,6 @@
 import { SIDEBAR_WIDTH, useLayoutStore, usePanelLayout } from "@/stores/useLayoutStore";
 import { BarButton } from "./BarButton";
+import { ChatDetailsButton } from "./ChatDetails";
 import { useWindowState } from "./useWindowState";
 import { WindowControls } from "./WindowControls";
 import { chats, useChatsStore } from "@/chats";
@@ -200,6 +201,7 @@ export function TopBar({ title, subagents = [], harness }: TopBarProps) {
                 <div data-tauri-drag-region className="flex h-full items-center gap-0.5 px-2">
                     <PaletteButton />
                     <UsageButton />
+                    <ChatDetailsButton />
                     <BarButton
                         label="Toggle file panel"
                         shortcut="toggleFilePanel"
