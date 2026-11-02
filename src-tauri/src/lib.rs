@@ -95,6 +95,7 @@ pub fn run() {
       git::git_fetch_all,
       git::git_commit_diff,
       git::git_head_text,
+      git::git_status,
       git::git_github_remote,
       git::git_pull,
       git::git_push,

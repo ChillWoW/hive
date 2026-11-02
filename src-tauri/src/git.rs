@@ -3,7 +3,7 @@
 
 use std::path::Path;
 
-use hive_proto::{GitDiff, GitHistoryPage, GitRepo};
+use hive_proto::{GitDiff, GitFileStatus, GitHistoryPage, GitRepo};
 
 use crate::util::{err, inside};
 
@@ -96,6 +96,13 @@ pub async fn git_search_history(
 #[tauri::command]
 pub async fn git_fetch_all(cwd: String) -> Result<(), String> {
     hive_git::fetch_all(Path::new(&cwd)).await.map_err(err)
+}
+
+/// The file panel's marks: each changed, untracked or conflicted path under
+/// `cwd`; null outside a checkout.
+#[tauri::command]
+pub async fn git_status(cwd: String) -> Result<Option<Vec<GitFileStatus>>, String> {
+    hive_git::status(Path::new(&cwd)).await.map_err(err)
 }
 
 /// The editor's gutter base for `path` (relative to `cwd`): its text at HEAD,

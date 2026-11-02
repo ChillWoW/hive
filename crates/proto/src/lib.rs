@@ -69,6 +69,7 @@ mod export {
         SignInStarted::export_all(&cfg).unwrap();
         GitRepo::export_all(&cfg).unwrap();
         GitDiff::export_all(&cfg).unwrap();
+        GitFileStatus::export_all(&cfg).unwrap();
         GitHistoryPage::export_all(&cfg).unwrap();
         NewWorktree::export_all(&cfg).unwrap();
         WorktreeStep::export_all(&cfg).unwrap();

@@ -16,6 +16,7 @@ import { DeleteEntryDialog, type DeleteTarget } from "./DeleteEntryDialog";
 import { useFilesPanelStore } from "./panel";
 import { baseName } from "@/lib/paths";
 import { dirKey, loadDir, useTreeStore, type DirListing } from "./tree";
+import { markColor, markLetter, marksFor, useGitMarks } from "./gitStatus";
 
 // Tree metrics.
 const ROW_HEIGHT = 27;
@@ -71,6 +72,7 @@ export function FileTree({ cwd, all }: { cwd: string; all: boolean }) {
     const selected = useFilesPanelStore((s) => s.selected);
     const reveal = useFilesPanelStore((s) => s.reveal);
     const { toggleExpanded, select, clearReveal } = useFilesPanelStore.getState();
+    const marks = useGitMarks(cwd);
     const list = useRef<HTMLDivElement>(null);
     // The entry the menu is for, kept while it animates out.
     const [menuFor, setMenuFor] = useState<DirectoryEntry | null>(null);
@@ -177,6 +179,7 @@ export function FileTree({ cwd, all }: { cwd: string; all: boolean }) {
                             ) : row.kind === "entry" ? (
                                 <TreeRow
                                     row={row}
+                                    git={marksFor(marks, row.entry.path)}
                                     selected={selected === row.entry.path}
                                     onClick={() => {
                                         select(row.entry.path);
@@ -338,19 +341,45 @@ function RenameField({
     );
 }
 
+/**
+ * A row's git mark at its end, as Zed's: a file's status letter, or a dim dot
+ * for a folder with changes inside.
+ */
+function GitMark({ bits, dir }: { bits: number; dir: boolean }) {
+    const mark = markLetter(bits);
+    if (!mark) return null;
+    return dir ? (
+        <span
+            aria-label={`Contains ${mark.label.toLowerCase()} files`}
+            className={cn("ml-auto size-1.5 shrink-0 rounded-full bg-current opacity-50", mark.color)}
+        />
+    ) : (
+        <span
+            aria-label={mark.label}
+            className={cn("ml-auto shrink-0 pl-1 text-[10.5px] font-medium", mark.color)}
+        >
+            {mark.letter}
+        </span>
+    );
+}
+
 function TreeRow({
     row,
+    git,
     selected,
     onClick,
     onKeyDown
 }: {
     row: Extract<Row, { kind: "entry" }>;
+    /** Its git marks' bits (`marksFor`). */
+    git: number;
     selected: boolean;
     onClick: () => void;
     onKeyDown: (event: KeyboardEvent<HTMLButtonElement>) => void;
 }) {
     const { entry, depth, expanded } = row;
     const name = baseName(entry.path);
+    const color = markColor(git);
     return (
         <button
             type="button"
@@ -377,7 +406,8 @@ function TreeRow({
                 )}
             </span>
             <FileIcon name={name} folder={entry.dir} open={expanded} className="size-3.5" />
-            <span className="min-w-0 truncate text-[11.5px]">{name}</span>
+            <span className={cn("min-w-0 truncate text-[11.5px]", color)}>{name}</span>
+            <GitMark bits={git} dir={entry.dir} />
         </button>
     );
 }

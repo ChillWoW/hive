@@ -26,6 +26,8 @@ export type { FileText } from "./FileText";
 export type { FinishedTask } from "./FinishedTask";
 export type { GitBranch } from "./GitBranch";
 export type { GitDiff } from "./GitDiff";
+export type { GitFileState } from "./GitFileState";
+export type { GitFileStatus } from "./GitFileStatus";
 export type { GitHistoryCommit } from "./GitHistoryCommit";
 export type { GitHistoryComparison } from "./GitHistoryComparison";
 export type { GitHistoryPage } from "./GitHistoryPage";

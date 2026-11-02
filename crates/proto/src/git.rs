@@ -50,6 +50,31 @@ pub struct GitBranch {
     pub subject: Option<String>,
 }
 
+/// How a path differs from HEAD, as the file panel marks it (after Zed's
+/// project panel): one state per path, the most notable when there are two.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub enum GitFileState {
+    /// Unmerged.
+    Conflict,
+    Untracked,
+    Deleted,
+    /// Changed, type-changed, renamed or copied.
+    Modified,
+    /// Added to the index.
+    Added,
+}
+
+/// One path of a folder's `git status`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct GitFileStatus {
+    /// Relative to the folder asked about, `/`-separated; an untracked
+    /// folder (everything in it untracked) ends in `/`.
+    pub path: String,
+    pub state: GitFileState,
+}
+
 /// A checkout's changes as one unified patch, for the diff tab: the working
 /// tree (untracked files as new ones) against HEAD, or against the merge
 /// base with another branch.
