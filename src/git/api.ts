@@ -135,5 +135,8 @@ export const gitApi = {
             fakeChange(() => {
                 fake.branches = fake.branches.filter((b) => b.name !== name);
             })
-        )
+        ),
+    /** `owner/repo` of the GitHub repository `origin` points at; null when it isn't GitHub. */
+    githubRemote: (cwd: string) =>
+        backend<string | null>("git_github_remote", { cwd }, () => "ChillWoW/hive")
 };

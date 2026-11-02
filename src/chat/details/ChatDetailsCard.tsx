@@ -1,11 +1,19 @@
-import { type ReactNode, useEffect } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 import {
+    ArrowUpRightIcon,
     CaretDownIcon,
     CodeIcon,
     FolderOpenIcon,
+    GitDiffIcon,
     GitForkIcon,
     TerminalWindowIcon
 } from "@phosphor-icons/react";
+import { openUrl } from "@tauri-apps/plugin-opener";
+import { LineCounts } from "@/diff/DiffFiles";
+import { parsePatch, totals } from "@/diff/patch";
+import { useCheckoutDiff, useDiffPrefs } from "@/diff/store";
+import { useGitRepo } from "@/git";
+import { gitApi } from "@/git/api";
 import { EDITORS, openInEditor, refreshEditors, useEditor, useEditorsStore } from "@/editors";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { workDir } from "@/chats";
@@ -14,9 +22,9 @@ import { cn } from "@/lib/cn";
 import { baseName } from "@/lib/paths";
 import { isTauri } from "@/lib/platform";
 import { ProjectIcon } from "@/projects/ProjectIcon";
-import type { Chat } from "@/proto";
-import { openTerminalTab } from "@/rightbar";
-import { Menu, Tooltip } from "@/ui";
+import type { Chat, GitBranch } from "@/proto";
+import { openDiffTab, openTerminalTab } from "@/rightbar";
+import { GithubMark, Menu, Tooltip } from "@/ui";
 import { DETAILS_CARD_GAP, DETAILS_CARD_WIDTH } from "./layout";
 
 const reveal = (path: string) => void revealItemInDir(path).catch(() => {});
@@ -41,6 +49,7 @@ export function ChatDetailsCard({ chat }: { chat: Chat }) {
             )}
         >
             <WorkspaceSection chat={chat} />
+            <VersionControlSection folder={workDir(chat)} />
         </aside>
     );
 }
@@ -79,6 +88,91 @@ function WorkspaceSection({ chat }: { chat: Chat }) {
                 }
             />
         </Section>
+    );
+}
+
+/** The checkout where the agent works: its uncommitted changes, its GitHub page. Nothing outside a checkout. */
+function VersionControlSection({ folder }: { folder: string }) {
+    const repo = useGitRepo(folder)?.repo;
+    if (!repo) return null;
+    return (
+        <Section label="Version control">
+            <ChangesRow folder={folder} />
+            <GithubRow folder={folder} branch={repo.branches.find((b) => b.current)} />
+        </Section>
+    );
+}
+
+/** The working tree's changes against HEAD ("+251 −5"), opening the diff tab on them. */
+function ChangesRow({ folder }: { folder: string }) {
+    const diff = useCheckoutDiff(folder, undefined)?.diff;
+    const sum = useMemo(() => (diff ? totals(parsePatch(diff.patch)) : null), [diff]);
+    return (
+        <Row
+            icon={<GitDiffIcon className="size-4" />}
+            label="Changes"
+            tooltip={
+                !sum
+                    ? undefined
+                    : sum.files === 0
+                      ? "No uncommitted changes"
+                      : `${sum.files === 1 ? "1 file" : `${sum.files} files`} changed`
+            }
+            onClick={() => {
+                useDiffPrefs.getState().setScope("workingTree");
+                openDiffTab();
+            }}
+            meta={
+                sum &&
+                (sum.files === 0 ? (
+                    <span className="text-xs font-normal text-dark-250">None</span>
+                ) : (
+                    <span className="flex items-center gap-1.5 text-xs">
+                        <LineCounts additions={sum.additions} deletions={sum.deletions} />
+                    </span>
+                ))
+            }
+        />
+    );
+}
+
+/** Each folder's GitHub `owner/repo` (null: not GitHub), read once per launch. */
+const githubRemotes = new Map<string, Promise<string | null>>();
+
+function useGithubRemote(folder: string) {
+    const [remote, setRemote] = useState<{ folder: string; repo: string | null } | null>(null);
+    useEffect(() => {
+        let live = true;
+        let read = githubRemotes.get(folder);
+        if (!read) {
+            read = gitApi.githubRemote(folder).catch(() => null);
+            githubRemotes.set(folder, read);
+        }
+        void read.then((repo) => live && setRemote({ folder, repo }));
+        return () => {
+            live = false;
+        };
+    }, [folder]);
+    return remote?.folder === folder ? remote.repo : null;
+}
+
+/**
+ * The repository on GitHub, at the checked-out branch when it's pushed (it
+ * has an upstream on `origin`), else its front page. Hidden for other hosts.
+ */
+function GithubRow({ folder, branch }: { folder: string; branch?: GitBranch }) {
+    const repo = useGithubRemote(folder);
+    if (!repo) return null;
+    const pushed = branch?.upstream?.startsWith("origin/") ? branch.upstream.slice("origin/".length) : null;
+    const url = `https://github.com/${repo}${pushed ? `/tree/${encodeURI(pushed)}` : ""}`;
+    return (
+        <Row
+            icon={<GithubMark className="size-4" />}
+            label="Open on GitHub"
+            tooltip={url}
+            onClick={() => void openUrl(url).catch(() => {})}
+            meta={<ArrowUpRightIcon className="size-3.5 text-dark-250" />}
+        />
     );
 }
 

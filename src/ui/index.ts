@@ -5,6 +5,7 @@ export { ContextMenu } from "./ContextMenu";
 export { DOT_MATRIX_FULL, DotMatrixSpinner } from "./DotMatrixSpinner";
 export { FileIcon } from "./FileIcon";
 export { FolderTreeIcon } from "./FolderTreeIcon";
+export { GithubMark } from "./GithubMark";
 export { DetailsCardIcon } from "./DetailsCardIcon";
 export { HiveMark } from "./HiveMark";
 export { IconButton, iconButtonClassName } from "./IconButton";

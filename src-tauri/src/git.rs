@@ -111,3 +111,12 @@ pub async fn git_head_text(cwd: String, path: String) -> Result<Option<String>, 
 pub async fn git_commit_diff(cwd: String, sha: String) -> Result<Option<GitDiff>, String> {
     hive_git::commit_diff(Path::new(&cwd), &sha).await.map_err(err)
 }
+
+/// `owner/repo` of the GitHub repository `origin` points at; null when it
+/// doesn't point at GitHub (or `cwd` isn't in a checkout).
+#[tauri::command]
+pub async fn git_github_remote(cwd: String) -> Option<String> {
+    hive_git::github_remote(Path::new(&cwd))
+        .await
+        .map(|(owner, repo)| format!("{owner}/{repo}"))
+}
