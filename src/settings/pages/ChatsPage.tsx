@@ -1,6 +1,7 @@
 import { NumberInput } from "@/ui";
 import { SettingRow, SettingsSection, SwitchRow } from "../SettingsSection";
 import { useSetting } from "../store";
+import { ChatDetailsRow } from "./ChatDetailsRow";
 import { TextGenerationRow } from "./TextGenerationRow";
 
 export function ChatsPage() {
@@ -28,6 +29,10 @@ export function ChatsPage() {
                     keywords="sidebar activity status working tool line agent doing progress"
                     setting={showActivity}
                 />
+            </SettingsSection>
+
+            <SettingsSection title="Chat details">
+                <ChatDetailsRow />
             </SettingsSection>
 
             <SettingsSection title="Archiving">

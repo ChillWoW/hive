@@ -26,6 +26,7 @@ pub const SETTINGS_VERSION: u32 = 1;
 pub struct Settings {
     pub version: u32,
     pub chats: ChatsSettings,
+    pub chat_details: ChatDetailsSettings,
     pub text_generation: TextGenerationSettings,
     pub worktrees: WorktreesSettings,
     pub notifications: NotificationsSettings,
@@ -42,6 +43,7 @@ impl Default for Settings {
         Self {
             version: SETTINGS_VERSION,
             chats: ChatsSettings::default(),
+            chat_details: ChatDetailsSettings::default(),
             text_generation: TextGenerationSettings::default(),
             worktrees: WorktreesSettings::default(),
             notifications: NotificationsSettings::default(),
@@ -82,6 +84,36 @@ impl Default for ChatsSettings {
             auto_archive: true,
             auto_archive_days: 3,
             show_activity: false,
+        }
+    }
+}
+
+/// Which rows the chat details card shows (`src/chat/details/`), one switch
+/// each; all on by default. Never rename one: they're stored.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase", default)]
+pub struct ChatDetailsSettings {
+    pub project: bool,
+    pub worktree: bool,
+    pub open_in: bool,
+    pub terminal: bool,
+    pub changes: bool,
+    pub sync: bool,
+    pub github: bool,
+    pub cost: bool,
+}
+
+impl Default for ChatDetailsSettings {
+    fn default() -> Self {
+        Self {
+            project: true,
+            worktree: true,
+            open_in: true,
+            terminal: true,
+            changes: true,
+            sync: true,
+            github: true,
+            cost: true,
         }
     }
 }

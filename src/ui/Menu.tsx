@@ -172,6 +172,7 @@ export const Menu = Object.assign(MenuRoot, {
     Item: MenuItem,
     Separator: MenuSeparator,
     GroupLabel: MenuGroupLabel,
+    Group: BaseMenu.Group,
     RadioGroup: BaseMenu.RadioGroup,
     RadioItem: MenuRadioItem,
     CheckboxItem: MenuCheckboxItem,

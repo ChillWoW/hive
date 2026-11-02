@@ -10,6 +10,16 @@ export const DEFAULT_SETTINGS: Settings = {
     "autoArchiveDays": 3,
     "showActivity": false
   },
+  "chatDetails": {
+    "project": true,
+    "worktree": true,
+    "openIn": true,
+    "terminal": true,
+    "changes": true,
+    "sync": true,
+    "github": true,
+    "cost": true
+  },
   "textGeneration": {
     "harness": null,
     "model": null,

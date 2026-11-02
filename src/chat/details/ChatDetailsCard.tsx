@@ -11,6 +11,7 @@ import {
     FolderOpenIcon,
     GitDiffIcon,
     GitForkIcon,
+    SlidersHorizontalIcon,
     TerminalWindowIcon
 } from "@phosphor-icons/react";
 import { openUrl } from "@tauri-apps/plugin-opener";
@@ -34,9 +35,11 @@ import { cn } from "@/lib/cn";
 import { baseName } from "@/lib/paths";
 import { isTauri } from "@/lib/platform";
 import { ProjectIcon } from "@/projects/ProjectIcon";
-import type { Chat, GitBranch, SessionUsage } from "@/proto";
+import type { Chat, ChatDetailsSettings, GitBranch, SessionUsage } from "@/proto";
 import { openDiffTab, openTerminalTab } from "@/rightbar";
-import { DotMatrixSpinner, GithubMark, Menu, Tooltip } from "@/ui";
+import { ContextMenu, DotMatrixSpinner, GithubMark, Menu, Tooltip } from "@/ui";
+import { DetailsItemsMenuItems } from "./DetailsItemsMenu";
+import { useDetailsItems } from "./items";
 import { DETAILS_CARD_GAP, DETAILS_CARD_WIDTH } from "./layout";
 
 const reveal = (path: string) => void revealItemInDir(path).catch(() => {});
@@ -46,41 +49,80 @@ const reveal = (path: string) => void revealItemInDir(path).catch(() => {});
  * transcript. Sized to its content, scrolling past the pane's height.
  */
 export function ChatDetailsCard({ chat }: { chat: Chat }) {
+    const shown = useDetailsItems();
     return (
-        <aside
-            aria-label="Chat details"
-            style={{
-                top: DETAILS_CARD_GAP,
-                right: DETAILS_CARD_GAP,
-                width: DETAILS_CARD_WIDTH,
-                maxHeight: `calc(100% - ${DETAILS_CARD_GAP * 2}px)`
-            }}
-            className={cn(
-                "absolute z-20 flex flex-col overflow-y-auto overscroll-contain",
-                "rounded-2xl border border-dark-600 bg-dark-850 text-dark-50 shadow-lg shadow-black/40"
-            )}
-        >
-            <WorkspaceSection chat={chat} />
-            <VersionControlSection folder={workDir(chat)} />
-            <SessionSection chat={chat} />
-        </aside>
+        // Right-click anywhere on it: which rows it shows.
+        <ContextMenu>
+            <ContextMenu.Trigger
+                render={
+                    <aside
+                        aria-label="Chat details"
+                        style={{
+                            top: DETAILS_CARD_GAP,
+                            right: DETAILS_CARD_GAP,
+                            width: DETAILS_CARD_WIDTH,
+                            maxHeight: `calc(100% - ${DETAILS_CARD_GAP * 2}px)`
+                        }}
+                        className={cn(
+                            "group/details absolute z-20 flex flex-col overflow-y-auto overscroll-contain",
+                            "rounded-2xl border border-dark-600 bg-dark-850 text-dark-50 shadow-lg shadow-black/40"
+                        )}
+                    />
+                }
+            >
+                <WorkspaceSection chat={chat} shown={shown} />
+                {(shown.changes || shown.sync || shown.github) && (
+                    <VersionControlSection folder={workDir(chat)} shown={shown} />
+                )}
+                {shown.cost && <SessionSection chat={chat} />}
+                <EmptyCard />
+            </ContextMenu.Trigger>
+            <ContextMenu.Content className="w-56 min-w-0">
+                <DetailsItemsMenuItems />
+            </ContextMenu.Content>
+        </ContextMenu>
     );
 }
 
-/** Where the chat works: its project, its worktree, a terminal there. */
-function WorkspaceSection({ chat }: { chat: Chat }) {
+/** Only while every row is hidden: a way to bring some back. */
+function EmptyCard() {
+    return (
+        <div className="p-2 group-has-[>section:not(:empty)]/details:hidden">
+            <Menu>
+                <Menu.Trigger
+                    className={cn(
+                        "flex h-8 w-full items-center gap-2.5 rounded-lg px-2.5 text-left outline-none select-none",
+                        "text-[13px] font-medium text-dark-200 transition-colors",
+                        "hover:bg-dark-700 hover:text-dark-50 focus-visible:bg-dark-700 data-[popup-open]:bg-dark-700"
+                    )}
+                >
+                    <SlidersHorizontalIcon className="size-4 shrink-0 text-dark-250" />
+                    Choose what to show
+                </Menu.Trigger>
+                <Menu.Content side="bottom" align="start" className="w-56 min-w-0">
+                    <DetailsItemsMenuItems />
+                </Menu.Content>
+            </Menu>
+        </div>
+    );
+}
+
+/** Where the chat works: its project, its worktree, an editor and a terminal there. */
+function WorkspaceSection({ chat, shown }: { chat: Chat; shown: ChatDetailsSettings }) {
     const terminalKeys = useBinding("newTerminal");
     const worktree = chat.worktree;
     return (
         <Section label="Workspace">
-            <Row
-                icon={<ProjectIcon path={chat.cwd} className="size-4" />}
-                label={baseName(chat.cwd)}
-                tooltip={chat.cwd}
-                onClick={isTauri ? () => reveal(chat.cwd) : undefined}
-                meta={<FolderOpenIcon className="size-4 text-dark-250" />}
-            />
-            {worktree && (
+            {shown.project && (
+                <Row
+                    icon={<ProjectIcon path={chat.cwd} className="size-4" />}
+                    label={baseName(chat.cwd)}
+                    tooltip={chat.cwd}
+                    onClick={isTauri ? () => reveal(chat.cwd) : undefined}
+                    meta={<FolderOpenIcon className="size-4 text-dark-250" />}
+                />
+            )}
+            {shown.worktree && worktree && (
                 <Row
                     icon={<GitForkIcon className="size-4" />}
                     label="Worktree"
@@ -89,31 +131,33 @@ function WorkspaceSection({ chat }: { chat: Chat }) {
                     meta={<FolderOpenIcon className="size-4 text-dark-250" />}
                 />
             )}
-            <OpenInRow folder={workDir(chat)} />
-            <Row
-                icon={<TerminalWindowIcon className="size-4" />}
-                label="Open terminal"
-                onClick={() => openTerminalTab(workDir(chat))}
-                meta={
-                    terminalKeys && (
-                        <ShortcutKeys shortcut={terminalKeys} variant="plain" className="text-dark-250" />
-                    )
-                }
-            />
+            {shown.openIn && <OpenInRow folder={workDir(chat)} />}
+            {shown.terminal && (
+                <Row
+                    icon={<TerminalWindowIcon className="size-4" />}
+                    label="Open terminal"
+                    onClick={() => openTerminalTab(workDir(chat))}
+                    meta={
+                        terminalKeys && (
+                            <ShortcutKeys shortcut={terminalKeys} variant="plain" className="text-dark-250" />
+                        )
+                    }
+                />
+            )}
         </Section>
     );
 }
 
 /** The checkout where the agent works: its uncommitted changes, sync with its upstream, its GitHub page. Nothing outside a checkout. */
-function VersionControlSection({ folder }: { folder: string }) {
+function VersionControlSection({ folder, shown }: { folder: string; shown: ChatDetailsSettings }) {
     const repo = useGitRepo(folder)?.repo;
     if (!repo) return null;
     const current = repo.branches.find((b) => b.current);
     return (
         <Section label="Version control">
-            <ChangesRow folder={folder} />
-            <SyncRow folder={folder} branch={current} />
-            <GithubRow folder={folder} branch={current} />
+            {shown.changes && <ChangesRow folder={folder} />}
+            {shown.sync && <SyncRow folder={folder} branch={current} />}
+            {shown.github && <GithubRow folder={folder} branch={current} />}
         </Section>
     );
 }
@@ -498,10 +542,16 @@ function SplitRow({
     );
 }
 
-/** A group of rows; the next one starts under a hairline. */
+/**
+ * A group of rows, gone while none of them shows; one after a shown section
+ * starts under a hairline.
+ */
 function Section({ label, children }: { label: string; children: ReactNode }) {
     return (
-        <section aria-label={label} className="flex flex-col p-2 not-first:border-t not-first:border-dark-700">
+        <section
+            aria-label={label}
+            className="flex flex-col border-dark-700 p-2 empty:hidden [section:not(:empty)~&]:border-t"
+        >
             {children}
         </section>
     );

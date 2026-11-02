@@ -9,6 +9,7 @@ export type { BackgroundTaskKind } from "./BackgroundTaskKind";
 export type { BranchNaming } from "./BranchNaming";
 export type { Chat } from "./Chat";
 export type { ChatConfig } from "./ChatConfig";
+export type { ChatDetailsSettings } from "./ChatDetailsSettings";
 export type { ChatsSettings } from "./ChatsSettings";
 export type { ChatsUpdate } from "./ChatsUpdate";
 export type { ClaudeSettings } from "./ClaudeSettings";
