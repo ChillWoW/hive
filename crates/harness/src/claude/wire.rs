@@ -372,6 +372,27 @@ pub(crate) fn task_output_line(request_id: &str, task_id: &str) -> String {
     )
 }
 
+/// Asks how full the context is, from local estimates (no API calls).
+pub(crate) fn context_usage_line(request_id: &str) -> String {
+    control_request_line(
+        request_id,
+        json!({ "subtype": "get_context_usage", "detail": "summary" }),
+    )
+}
+
+/// The model's context window from a `get_context_usage` answer. With an
+/// `autoCompactWindow` set the CLI reports that window instead, which isn't
+/// the model's.
+pub(crate) fn context_usage_window(response: &Value) -> Option<u64> {
+    if response.get("autocompactSource").and_then(Value::as_str) == Some("settings") {
+        return None;
+    }
+    response
+        .get("rawMaxTokens")
+        .and_then(Value::as_u64)
+        .filter(|n| *n > 0)
+}
+
 /// Stops the in-flight turn; the process keeps reading stdin.
 pub(crate) fn interrupt_line(request_id: &str) -> String {
     control_request_line(request_id, json!({ "subtype": "interrupt" }))

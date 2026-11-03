@@ -64,6 +64,9 @@ use normalize::Normalizer;
 use wire::{ControlRequestFrame, Frame};
 
 const INITIALIZE_ID: &str = "hive_initialize";
+/// Asked once `initialize` answers: the context window, before the first
+/// turn's `result` would report it.
+const CONTEXT_USAGE_ID: &str = "hive_context_usage";
 /// How long a command probe may take.
 const PROBE_TIMEOUT: Duration = Duration::from_secs(20);
 /// How long a probe's answer is reused for the same folder.
@@ -624,8 +627,17 @@ impl Session {
                     {
                         self.advertised = commands::parse(list);
                     }
+                    self.write(wire::context_usage_line(CONTEXT_USAGE_ID));
                     self.write_first().await;
                     self.report_commands().await?;
+                } else if response.response.request_id == CONTEXT_USAGE_ID {
+                    if let Some(window) = wire::context_usage_window(&response.response.response) {
+                        self.emit(AgentEvent::ContextUsage {
+                            tokens: None,
+                            window: Some(window),
+                        })
+                        .await?;
+                    }
                 } else if let Some(reply) = self.task_outputs.remove(&response.response.request_id) {
                     let _ = reply.send(task_output(response.response));
                 }
