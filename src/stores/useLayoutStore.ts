@@ -12,6 +12,8 @@ const RIGHT_SIDEBAR_MIN = 360;
 const RIGHT_SIDEBAR_DEFAULT = 520;
 /** The conversation never gets narrower than this beside open panels. */
 const CHAT_MIN = 300;
+/** Panels shrink before the conversation gets narrower than this. */
+const CHAT_COMFORT = 560;
 
 type Column = "sidebar" | "files" | "right";
 
@@ -107,9 +109,16 @@ function panelLayout(
 ): PanelLayout {
     const visible = fitColumns(viewport, state);
     const maximized = state.rightMaximized && visible.right;
-    const chat = maximized ? 0 : CHAT_MIN;
     const sidebar = visible.sidebar ? SIDEBAR_WIDTH : 0;
     const available = viewport - sidebar;
+    // The panels give way down to their minimums before the conversation goes
+    // under its comfortable width; past that it shrinks to its minimum.
+    const panelMinimums =
+        (visible.files ? FILES_PANEL_MIN : 0) +
+        (visible.right ? RIGHT_SIDEBAR_MIN : 0);
+    const chat = maximized
+        ? 0
+        : clamp(available - panelMinimums, CHAT_MIN, CHAT_COMFORT);
     const filesMax = visible.files
         ? Math.max(
               0,
