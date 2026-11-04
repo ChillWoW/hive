@@ -76,6 +76,8 @@ mod export {
         WorkspaceEntry::export_all(&cfg).unwrap();
         DirectoryEntry::export_all(&cfg).unwrap();
         FileText::export_all(&cfg).unwrap();
+        TextSearchOptions::export_all(&cfg).unwrap();
+        TextSearchResult::export_all(&cfg).unwrap();
         WriteOutcome::export_all(&cfg).unwrap();
         TaskOutput::export_all(&cfg).unwrap();
         UsageQuery::export_all(&cfg).unwrap();

@@ -125,6 +125,14 @@ export const ACTIONS: readonly Action[] = [
         scope: "global"
     },
     {
+        id: "searchInFiles",
+        category: "panels",
+        label: "Search in files",
+        description: "Searches the text inside the folder's files",
+        keywords: "search find text grep content in files workspace project",
+        scope: "global"
+    },
+    {
         id: "toggleRightSidebar",
         category: "panels",
         label: "Toggle right sidebar",

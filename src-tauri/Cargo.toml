@@ -29,6 +29,8 @@ tokio = { workspace = true }
 serde_json = "1.0"
 base64 = "0.22"
 ignore = "0.4"
+# The file panel's search in file contents.
+regex = "1"
 # Folder watches: the file panel, diff and editor tabs follow the disk.
 notify = "8"
 sha2 = "0.10"

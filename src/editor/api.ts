@@ -1,10 +1,13 @@
 import type { FileText, LineEnding, WriteOutcome } from "@/proto";
 import { backend } from "@/lib/backend";
+import { FAKE_TEXT } from "@/files/api";
 
 /** Files of the made-up project under plain `bun run dev`, by path. */
 const fake = new Map<string, string>();
 const fakeText = (path: string) =>
-    fake.get(path) ?? `// ${path}\n// A made-up file: there's no backend under plain \`bun run dev\`.\n`;
+    fake.get(path) ??
+    FAKE_TEXT[path] ??
+    `// ${path}\n// A made-up file: there's no backend under plain \`bun run dev\`.\n`;
 /** Good enough to tell versions apart in the fake. */
 const fakeHash = (text: string) => `${text.length}:${[...text].reduce((h, c) => (h * 31 + c.charCodeAt(0)) | 0, 7)}`;
 

@@ -6,7 +6,7 @@ import { WindowControls } from "./WindowControls";
 import { chats, useChatsStore } from "@/chats";
 import { composer } from "@/composer";
 import { useEffect, useRef, useState } from "react";
-import { openFileSearch } from "@/files";
+import { openFileSearch, openTextSearch } from "@/files";
 import {
     closeShownTab,
     openDiffTab,
@@ -92,7 +92,8 @@ export function TopBar({ title, subagents = [], harness }: TopBarProps) {
     useShortcut("openHistory", () => openHistoryTab());
     useShortcut("toggleFilePanel", toggleFilePanel);
     useShortcut("toggleRightSidebar", toggleRightSidebar);
-    useShortcut("searchFiles", openFileSearch);
+    useShortcut("searchFiles", () => openFileSearch());
+    useShortcut("searchInFiles", openTextSearch);
     useShortcut("closeTab", closeShownTab);
 
     const canGoBack = useChatsStore((s) => s.back.length > 0);

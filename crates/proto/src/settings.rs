@@ -247,6 +247,8 @@ pub struct KeyboardSettings {
     pub toggle_right_sidebar: String,
     /// Opens the file panel with its search field focused.
     pub search_files: String,
+    /// Opens the file panel's search on the text inside files.
+    pub search_in_files: String,
     /// Closes the right sidebar's shown tab.
     pub close_tab: String,
     /// Only while typing a prompt.
@@ -279,6 +281,7 @@ impl Default for KeyboardSettings {
             toggle_file_panel: "Mod+Shift+E".into(),
             toggle_right_sidebar: "Mod+Alt+B".into(),
             search_files: "Mod+P".into(),
+            search_in_files: "Mod+Shift+F".into(),
             close_tab: "Mod+W".into(),
             toggle_plan: "Shift+Tab".into(),
             send_in_background: "Mod+Shift+Enter".into(),

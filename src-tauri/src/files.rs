@@ -15,7 +15,7 @@ use crate::util::{blocking, err, inside};
 const MAX_ENTRIES: usize = 50_000;
 
 /// A walk of `dir`, `depth` levels down (all of it for `None`).
-fn walker(dir: &Path, depth: Option<usize>, all: bool) -> ignore::WalkBuilder {
+pub(crate) fn walker(dir: &Path, depth: Option<usize>, all: bool) -> ignore::WalkBuilder {
     let mut builder = ignore::WalkBuilder::new(dir);
     builder
         .max_depth(depth)
@@ -31,7 +31,7 @@ fn walker(dir: &Path, depth: Option<usize>, all: bool) -> ignore::WalkBuilder {
 }
 
 /// `path` relative to `root`, `/`-separated.
-fn relative(root: &Path, path: &Path) -> Option<String> {
+pub(crate) fn relative(root: &Path, path: &Path) -> Option<String> {
     let relative = path.strip_prefix(root).ok()?;
     Some(
         relative
@@ -48,7 +48,7 @@ fn is_dir(entry: &ignore::DirEntry) -> Option<bool> {
     Some(kind.is_dir() || (kind.is_symlink() && entry.path().is_dir()))
 }
 
-fn check_root(root: &Path) -> Result<(), String> {
+pub(crate) fn check_root(root: &Path) -> Result<(), String> {
     if root.is_dir() {
         Ok(())
     } else {

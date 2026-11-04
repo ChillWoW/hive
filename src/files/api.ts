@@ -1,4 +1,9 @@
-import type { DirectoryEntry, WorkspaceEntry } from "@/proto";
+import type {
+    DirectoryEntry,
+    TextSearchOptions,
+    TextSearchResult,
+    WorkspaceEntry
+} from "@/proto";
 import { backend } from "@/lib/backend";
 import { baseName } from "@/lib/paths";
 
@@ -38,6 +43,52 @@ export function listFiles(cwd: string, all = false): Promise<WorkspaceEntry[]> {
     return backend("list_files", { cwd, all }, () =>
         all ? [...FAKE, ...FAKE_IGNORED] : FAKE
     );
+}
+
+/** The made-up project's text, for its text search and the editor's fake. */
+export const FAKE_TEXT: Record<string, string> = {
+    "README.md": `# Hive\n\nA desktop UI for driving coding-agent CLIs.\n${Array.from(
+        { length: 120 },
+        (_, i) => `\nLine ${i + 4} of filler.`
+    ).join("")}\n\nThe end: a needle far down.\n`,
+    "src/App.tsx": "export function App() {\n    return <Shell />;\n}\n",
+    "src/main.tsx": 'import { App } from "./App";\n\ncreateRoot(root).render(<App />);\n',
+    "src/composer/Composer.tsx": "export function Composer() {\n    // The prompt field.\n}\n"
+};
+
+/**
+ * Every line under `cwd` with `query` in it (`src-tauri/src/search.rs`),
+ * files by path; rejects an invalid regular expression. A newer search of
+ * the same folder ends this one (rejected).
+ */
+export function searchText(
+    cwd: string,
+    query: string,
+    options: TextSearchOptions,
+    all: boolean
+): Promise<TextSearchResult> {
+    return backend("search_text", { cwd, query, options, all }, () => {
+        let source = options.regex ? query : query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        if (options.wholeWord) source = `\\b(?:${source})\\b`;
+        let re: RegExp;
+        try {
+            re = new RegExp(source, options.caseSensitive ? "g" : "gi");
+        } catch (error) {
+            return Promise.reject(`Invalid regular expression: ${String(error)}`);
+        }
+        const files = Object.entries(FAKE_TEXT).flatMap(([path, text]) => {
+            const matches = text.split("\n").flatMap((line, i) => {
+                const ranges = [...line.matchAll(re)]
+                    .filter((m) => m[0])
+                    .map((m): [number, number] => [m.index, m.index + m[0].length]);
+                return ranges.length
+                    ? [{ line: i + 1, preview: line, previewOffset: 0, ranges }]
+                    : [];
+            });
+            return matches.length ? [{ path, matches }] : [];
+        });
+        return { files, truncated: false };
+    });
 }
 
 /** `path` is `ancestor` or inside it. */

@@ -30,6 +30,10 @@ findInChat: string, newTerminal: string, openDiff: string, openHistory: string, 
  */
 searchFiles: string, 
 /**
+ * Opens the file panel's search on the text inside files.
+ */
+searchInFiles: string, 
+/**
  * Closes the right sidebar's shown tab.
  */
 closeTab: string, 

@@ -59,6 +59,7 @@ export const DEFAULT_SETTINGS: Settings = {
     "toggleFilePanel": "Mod+Shift+E",
     "toggleRightSidebar": "Mod+Alt+B",
     "searchFiles": "Mod+P",
+    "searchInFiles": "Mod+Shift+F",
     "closeTab": "Mod+W",
     "togglePlan": "Shift+Tab",
     "sendInBackground": "Mod+Shift+Enter"

@@ -10,6 +10,7 @@ mod http;
 mod mcp;
 mod open_in;
 mod providers;
+mod search;
 mod secrets;
 mod settings;
 mod terminals;
@@ -76,6 +77,7 @@ pub fn run() {
       files::list_directory,
       files::rename_entry,
       files::delete_entry,
+      search::search_text,
       editor::read_file,
       editor::read_file_bytes,
       editor::write_file,

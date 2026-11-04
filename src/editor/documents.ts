@@ -94,8 +94,11 @@ const scrollOnAttach = new Set<string>();
 /** Each doc's last HEAD text handed to its gutter (null: not tracked). */
 const gitBases = new Map<string, string | null>();
 
-/** A 1-based line and, optionally, column. */
-export type LinePosition = { line: number; column?: number };
+/**
+ * A 1-based line and, optionally, column (UTF-16 units); `length` selects
+ * that many units from there (within the line).
+ */
+export type LinePosition = { line: number; column?: number; length?: number };
 
 const MARKDOWN = /\.(md|markdown|mdx)$/i;
 export const isMarkdown = (path: string) => MARKDOWN.test(path);
@@ -274,11 +277,22 @@ export function attachView(id: string, parent: HTMLElement) {
     if (!state || views.has(id)) return null;
     const view = new EditorView({ state, parent });
     views.set(id, view);
-    if (scrollOnAttach.delete(id)) {
-        view.dispatch({ effects: EditorView.scrollIntoView(state.selection.main.head, { y: "center" }) });
-        view.focus();
+    // Next frame, once it's laid out; and only if it's still the one shown
+    // (StrictMode attaches, detaches and attaches again).
+    if (scrollOnAttach.has(id)) {
+        requestAnimationFrame(() => {
+            if (views.get(id) !== view || !scrollOnAttach.delete(id)) return;
+            scrollToSelection(view);
+        });
     }
     return view;
+}
+
+function scrollToSelection(view: EditorView) {
+    view.dispatch({
+        effects: EditorView.scrollIntoView(view.state.selection.main.from, { y: "center" })
+    });
+    view.focus();
 }
 
 /**
@@ -293,13 +307,18 @@ export function revealLine(id: string, at: LinePosition) {
     }
     const line = state.doc.line(Math.min(Math.max(Math.floor(at.line), 1), state.doc.lines));
     const pos = Math.min(line.from + Math.max((at.column ?? 1) - 1, 0), line.to);
+    const selection = { anchor: pos, head: Math.min(pos + Math.max(at.length ?? 0, 0), line.to) };
     if (getDoc(id)?.preview) setDoc(id, { preview: false });
     const view = views.get(id);
     if (view) {
-        view.dispatch({ selection: { anchor: pos }, effects: EditorView.scrollIntoView(pos, { y: "center" }) });
-        view.focus();
+        view.dispatch({ selection });
+        scrollToSelection(view);
+        // Again once a panel that was just shown has its size.
+        requestAnimationFrame(() => {
+            if (views.get(id) === view) scrollToSelection(view);
+        });
     } else {
-        dispatchTo(id, { selection: { anchor: pos } });
+        dispatchTo(id, { selection });
         scrollOnAttach.add(id);
     }
 }

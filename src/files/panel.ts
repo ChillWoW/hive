@@ -1,10 +1,17 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
+import type { TextSearchOptions } from "@/proto";
 import { useLayoutStore } from "@/stores/useLayoutStore";
+
+/** What the search field looks for: file names, or text inside files. */
+export type SearchMode = "files" | "text";
 
 type FilesPanelState = {
     /** What the file panel's search field holds. */
     query: string;
+    mode: SearchMode;
+    /** How the text search reads the query. */
+    textOptions: TextSearchOptions;
     /** Lists hidden and git-ignored files too. */
     showAll: boolean;
     /** Each folder's expanded subfolders, by path. */
@@ -16,6 +23,8 @@ type FilesPanelState = {
     /** Bumped to focus the search field (`openFileSearch`). */
     searchFocus: number;
     setQuery: (query: string) => void;
+    setMode: (mode: SearchMode) => void;
+    toggleTextOption: (option: keyof TextSearchOptions) => void;
     toggleShowAll: () => void;
     toggleExpanded: (cwd: string, path: string) => void;
     select: (path: string | null) => void;
@@ -35,12 +44,19 @@ export const useFilesPanelStore = create<FilesPanelState>()(
     persist(
         (set) => ({
             query: "",
+            mode: "files",
+            textOptions: { caseSensitive: false, wholeWord: false, regex: false },
             showAll: false,
             expanded: {},
             selected: null,
             reveal: null,
             searchFocus: 0,
             setQuery: (query) => set({ query }),
+            setMode: (mode) => set({ mode }),
+            toggleTextOption: (option) =>
+                set((s) => ({
+                    textOptions: { ...s.textOptions, [option]: !s.textOptions[option] }
+                })),
             toggleShowAll: () => set((s) => ({ showAll: !s.showAll })),
             toggleExpanded: (cwd, path) =>
                 set((s) => {
@@ -72,13 +88,24 @@ export const useFilesPanelStore = create<FilesPanelState>()(
         {
             name: "hive.filesPanel",
             storage: createJSONStorage(() => localStorage),
-            partialize: (s) => ({ showAll: s.showAll, expanded: s.expanded })
+            partialize: (s) => ({
+                showAll: s.showAll,
+                expanded: s.expanded,
+                mode: s.mode,
+                textOptions: s.textOptions
+            })
         }
     )
 );
 
-/** Shows the file panel with its search field focused, its text selected. */
-export function openFileSearch() {
+/**
+ * Shows the file panel with its search field focused, its text selected,
+ * searching file names (or, with `mode`, what it says).
+ */
+export function openFileSearch(mode: SearchMode = "files") {
     useLayoutStore.getState().show("files");
-    useFilesPanelStore.setState((s) => ({ searchFocus: s.searchFocus + 1 }));
+    useFilesPanelStore.setState((s) => ({ mode, searchFocus: s.searchFocus + 1 }));
 }
+
+/** Shows the file panel searching the text inside files (Mod+Shift+F). */
+export const openTextSearch = () => openFileSearch("text");
