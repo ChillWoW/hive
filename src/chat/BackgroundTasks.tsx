@@ -52,11 +52,11 @@ const ORDER = Object.keys(KINDS) as BackgroundTaskKind[];
 /** How often an open shell's output is read again. */
 const OUTPUT_POLL_MS = 1500;
 
-/** "2 shells", "1 agent", or "3 tasks" for a mix. */
-function summary(tasks: BackgroundTask[]): string {
+/** "2 shells", "1 agent", or "3 tasks" for a mix, with the kind's icon. */
+function summary(tasks: BackgroundTask[]): { label: string; icon: Icon } {
     const mixed = new Set(tasks.map((t) => t.kind)).size > 1;
-    const [one, many] = KINDS[mixed ? "other" : tasks[0].kind].noun;
-    return `${tasks.length} ${tasks.length === 1 ? one : many}`;
+    const { noun, icon } = KINDS[mixed ? "other" : tasks[0].kind];
+    return { label: `${tasks.length} ${tasks.length === 1 ? noun[0] : noun[1]}`, icon };
 }
 
 /** Each task after the one that launched it, indented under it. */
@@ -121,17 +121,20 @@ export function BackgroundTasks({
 
     if (!tasks?.length) return null;
 
-    const label = summary(tasks);
+    const { label, icon: KindIcon } = summary(tasks);
     return (
         <ChipPopover
             open={open}
             onOpenChange={setOpen}
             label="Background tasks"
             triggerLabel={`Background: ${label}`}
-            triggerClassName="text-info"
+            triggerClassName={cn(
+                "px-2 text-info",
+                "hover:bg-info/12 hover:text-info data-[popup-open]:bg-info/12 data-[popup-open]:text-info"
+            )}
             trigger={
                 <>
-                    <DotMatrixSpinner interval={400} className="size-2.5" />
+                    <KindIcon className="size-3.5" />
                     <span className="tabular-nums">{label}</span>
                 </>
             }

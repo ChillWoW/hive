@@ -1,4 +1,4 @@
-import { ArrowsInLineVerticalIcon, StackIcon } from "@phosphor-icons/react";
+import { ArrowsInSimpleIcon, StackIcon } from "@phosphor-icons/react";
 import { cn } from "@/lib/cn";
 import { formatTokens } from "@/lib/format";
 import { chipTriggerClassName } from "@/ui/chip";
@@ -18,7 +18,7 @@ export function StaleCompactChip({
     on: boolean;
     onChange: (on: boolean) => void;
 }) {
-    const Icon = on ? ArrowsInLineVerticalIcon : StackIcon;
+    const Icon = on ? ArrowsInSimpleIcon : StackIcon;
     return (
         <Tooltip>
             <Tooltip.Trigger
@@ -27,11 +27,17 @@ export function StaleCompactChip({
                         type="button"
                         aria-pressed={on}
                         onClick={() => onChange(!on)}
-                        className={cn(chipTriggerClassName, "shrink-0", on && "text-info")}
+                        className={cn(
+                            chipTriggerClassName,
+                            "shrink-0",
+                            on && "text-warning hover:bg-warning/12 hover:text-warning"
+                        )}
                     >
                         <Icon className="size-3.5" />
                         {on ? "Compact" : "Full"}
-                        <span className="text-dark-250 tabular-nums">{formatTokens(tokens)}</span>
+                        <span className={cn("tabular-nums", !on && "text-dark-250")}>
+                            {formatTokens(tokens)}
+                        </span>
                     </button>
                 }
             />
