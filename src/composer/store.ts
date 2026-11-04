@@ -100,6 +100,8 @@ type ComposerState = {
     discardFolderDrafts: (cwd: string) => void;
     /** Drops the drafts of chats that are gone. */
     pruneDrafts: (chatIds: Set<string>) => void;
+    /** Moves a chat's draft (text, files, comments) to another, as a handoff does. */
+    moveDraft: (from: string, to: string) => void;
     toggleFavorite: (key: string) => void;
 };
 
@@ -280,6 +282,16 @@ export const useComposerStore = create<ComposerState>()(
                 ),
             pruneDrafts: (chatIds) =>
                 set((s) => dropDrafts(s, (key) => !isNewDraftKey(key) && !chatIds.has(key))),
+            moveDraft: (from, to) =>
+                set((s) => {
+                    const move = <T,>(record: Record<string, T>) =>
+                        from in record ? { ...omit(record, from), [to]: record[from]! } : record;
+                    return {
+                        drafts: move(s.drafts),
+                        attachments: move(s.attachments),
+                        comments: move(s.comments)
+                    };
+                }),
             favorites: [],
             toggleFavorite: (key) =>
                 set((s) => ({
@@ -504,5 +516,6 @@ export const composer = {
     openDraft: (key: string) => useComposerStore.getState().openDraft(key),
     discardDraft: (key: string) => useComposerStore.getState().discardDraft(key),
     discardFolderDrafts: (cwd: string) => useComposerStore.getState().discardFolderDrafts(cwd),
-    pruneDrafts: (chatIds: Set<string>) => useComposerStore.getState().pruneDrafts(chatIds)
+    pruneDrafts: (chatIds: Set<string>) => useComposerStore.getState().pruneDrafts(chatIds),
+    moveDraft: (from: string, to: string) => useComposerStore.getState().moveDraft(from, to)
 };

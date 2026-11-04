@@ -28,11 +28,12 @@ import { activity, chats, chatTitle, isBusy, useChatsStore, workDir } from "@/ch
 import { baseName } from "@/lib/paths";
 import { useWorkspaceFiles } from "@/files";
 import { scoreEntry } from "@/files/rank";
-import { HarnessIcon } from "@/harnesses";
+import { continueIn, handoffBlocked, handoffConfig } from "@/chat/handoff";
+import { HarnessIcon, useCatalogs } from "@/harnesses";
 import { ACTIONS, canRunAction, runAction, type ActionId } from "@/keybindings";
 import { copyText } from "@/lib/clipboard";
 import { fuzzyScore, rankBy } from "@/lib/fuzzy";
-import type { Chat, Session } from "@/proto";
+import type { Chat, HarnessCatalog, Session } from "@/proto";
 import { openFileTab, useActiveFolder } from "@/rightbar";
 import { settings } from "@/settings";
 import { SETTINGS_PAGES } from "@/settings/pages";
@@ -171,16 +172,36 @@ function fileItem(cwd: string, path: string, showFolder: boolean): PaletteItem {
 }
 
 /** Commands about the open chat, before the app-wide ones. */
-function chatActions(chat: Chat | undefined, session: Session | undefined): PaletteItem[] {
+function chatActions(
+    chat: Chat | undefined,
+    session: Session | undefined,
+    catalogs: HarnessCatalog[]
+): PaletteItem[] {
     if (!chat) return [];
     const items: PaletteItem[] = [];
-    if (isBusy(session?.status)) {
+    const busy = isBusy(session?.status);
+    if (busy) {
         items.push({
             id: "chat-stop",
             label: "Stop the turn",
             icon: <StopIcon />,
             run: () => void chats.interrupt(chat.id)
         });
+    }
+    if (!handoffBlocked(busy, chat.lastMessageAt != null)) {
+        for (const catalog of catalogs) {
+            if (catalog.id === chat.config.harness || !catalog.installed) continue;
+            items.push({
+                id: `chat-handoff:${catalog.id}`,
+                label: `Continue in ${catalog.label}`,
+                detail: "New chat with a summary of this one",
+                icon: <HarnessIcon harness={catalog.id} />,
+                run: () =>
+                    void continueIn(chat, handoffConfig(chat, catalog)).catch((e: unknown) =>
+                        console.warn("[palette] handoff failed", e)
+                    )
+            });
+        }
     }
     const pinned = chat.pinnedAt != null;
     items.push(
@@ -256,6 +277,7 @@ export function usePaletteSections(raw: string): PaletteSection[] {
     const recentChats = usePaletteStore((s) => s.chats);
     const recentFiles = usePaletteStore((s) => s.files);
     const folder = useActiveFolder();
+    const catalogs = useCatalogs();
     const wantFiles = scope === "all" || scope === "files";
     const workspace = useWorkspaceFiles(folder, wantFiles && query !== "");
 
@@ -266,7 +288,10 @@ export function usePaletteSections(raw: string): PaletteSection[] {
             if (items.length) sections.push({ id, title, items });
         };
         const limit = (n: number) => (scope === "all" ? n : SCOPED);
-        const actions = [...chatActions(active, active && sessions[active.id]), ...appActions()];
+        const actions = [
+            ...chatActions(active, active && sessions[active.id], catalogs),
+            ...appActions()
+        ];
 
         if (query === "") {
             if (scope === "all" || scope === "chats") {
@@ -369,6 +394,7 @@ export function usePaletteSections(raw: string): PaletteSection[] {
         recentFiles,
         folder,
         workspace,
-        wantFiles
+        wantFiles,
+        catalogs
     ]);
 }

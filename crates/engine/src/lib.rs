@@ -44,6 +44,7 @@ use hive_store::{new_id, now_ms, Recovery, Store, StoreError, Turn};
 use tokio::sync::{mpsc, oneshot, watch};
 
 mod branches;
+mod handoff;
 mod titles;
 
 /// How long a file attached to a draft but never sent is kept: the app keeps
@@ -125,6 +126,8 @@ pub enum EngineError {
     Busy,
     #[error("No turn recorded since Hive started.")]
     NoTurnSnapshot,
+    #[error("There's nothing in this chat to hand off yet.")]
+    NothingToHandOff,
     #[error(transparent)]
     Git(#[from] hive_git::GitError),
 }
@@ -443,6 +446,9 @@ impl Engine {
     pub fn start(&self) -> Result<Recovery> {
         let store = self.store();
         let recovery = store.recover()?;
+        if let Err(e) = self.recover_handoffs() {
+            log::warn!("recovering handoffs: {e}");
+        }
         match store.sweep_attachments(DRAFT_FILES_GRACE) {
             Ok(0) => {}
             Ok(n) => log::info!("removed {n} unused attachments"),
@@ -749,7 +755,16 @@ impl Engine {
         self.publish_list(ChatsUpdate::Removed {
             chat_id: chat_id.to_owned(),
         });
-        if let Some(worktree) = chat.worktree {
+        // A chat handed off (or handed off from) shares the worktree: it
+        // stays while another chat works in it.
+        let shared = chat.worktree.as_ref().is_some_and(|w| {
+            self.store().chats().is_ok_and(|chats| {
+                chats
+                    .iter()
+                    .any(|c| c.worktree.as_ref().is_some_and(|o| o.root == w.root))
+            })
+        });
+        if let Some(worktree) = chat.worktree.filter(|_| !shared) {
             let delete_branch = lock(&self.inner.worktrees).delete_branch;
             self.inner.runtime.spawn(async move {
                 let cwd = Path::new(&chat.cwd);
@@ -1043,16 +1058,28 @@ impl Engine {
         if st.restart {
             self.end_run(&chat.id, st);
         }
-        if st.run.is_none() {
-            return self.start_run(chat, runtime, st, prompt);
+        // A handed-off chat's first prompt carries the old chat's context to
+        // the agent; the saved prompt stays the user's own.
+        let handoff = self.pending_handoff(chat, &prompt.text);
+        let wire = match &handoff {
+            Some(context) => handoff::with_handoff(context, &prompt.text),
+            None => prompt.text.clone(),
+        };
+        let outcome = if st.run.is_none() {
+            self.start_run(chat, runtime, st, prompt, wire)?
+        } else {
+            self.start_turn(&chat.id, st, Some(&prompt))?;
+            self.snapshot_turn(chat);
+            if let Some(run) = &st.run {
+                run.handle.send_with(wire, prompt.paths());
+            }
+            self.set_status(&chat.id, st, SessionStatus::Working);
+            Outcome::Applied
+        };
+        if handoff.is_some() && matches!(outcome, Outcome::Applied) {
+            self.handoff_delivered(&chat.id);
         }
-        self.start_turn(&chat.id, st, Some(&prompt))?;
-        self.snapshot_turn(chat);
-        if let Some(run) = &st.run {
-            run.handle.send_with(prompt.text.clone(), prompt.paths());
-        }
-        self.set_status(&chat.id, st, SessionStatus::Working);
-        Ok(Outcome::Applied)
+        Ok(outcome)
     }
 
     // The queue
@@ -1140,6 +1167,8 @@ impl Engine {
         runtime: &Arc<ChatRuntime>,
         st: &mut ChatState,
         prompt: Prompt,
+        // What the agent gets: the prompt, with any handoff context.
+        wire: String,
     ) -> Result<Outcome> {
         let Some(harness) = self.inner.harnesses.get(&chat.config.harness) else {
             return Ok(Outcome::Rejected(format!(
@@ -1162,7 +1191,7 @@ impl Engine {
         let config = &chat.config;
         let request = RunRequest {
             harness: config.harness,
-            prompt: prompt.text.clone(),
+            prompt: wire,
             cwd: chat.work_dir().to_owned(),
             sandbox: config.sandbox,
             model: config.model.clone(),

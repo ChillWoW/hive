@@ -8,7 +8,7 @@ use hive_engine::{Engine, EngineConfig, EngineError, RESUME_PROMPT};
 use hive_harness::{Harness, MockHarness};
 use hive_proto::{
     fold_event, stamp_event, AgentActivity, AgentEvent, ChatConfig, ChatsUpdate, Command, CommandPayload, CommandStatus,
-    DoneStatus, HarnessId, Message, MessagePart, MessageRole, MessageStatus, MessagesUpdate,
+    DoneStatus, HandoffStatus, HarnessId, Message, MessagePart, MessageRole, MessageStatus, MessagesUpdate,
     SandboxLevel, SecretRequest, Session, SessionStatus, UserInputAnswer,
 };
 use hive_store::Store;
@@ -1250,4 +1250,56 @@ async fn the_latest_turn_diffs_against_the_checkout_as_it_started() {
 
     engine.delete_chat(&chat.id).unwrap();
     assert!(engine.turn_diff(&chat.id).await.is_err(), "the chat is gone");
+}
+
+#[tokio::test]
+async fn a_handoff_continues_a_chat_with_its_summary() {
+    let (_dir, engine) = engine(0.0);
+    let source = engine.create_chat("/demo", config(HarnessId::Mock)).unwrap();
+    assert!(matches!(
+        engine.handoff_chat(&source.id, config(HarnessId::Mock)).await,
+        Err(EngineError::NothingToHandOff)
+    ));
+
+    let mut updates = watch_messages(&engine, &source.id);
+    engine.queue_command(&source.id, send("hi")).unwrap();
+    let seen = until(&mut updates, is_input).await;
+    assert!(matches!(
+        engine.handoff_chat(&source.id, config(HarnessId::Mock)).await,
+        Err(EngineError::Busy)
+    ));
+    engine
+        .queue_command(&source.id, answer(request_id(&seen)))
+        .unwrap();
+    until(&mut updates, is_done).await;
+    until(&mut updates, |u| matches!(u, MessagesUpdate::Message { .. })).await;
+
+    let mut chats = watch_chats(&engine);
+    let chat = engine
+        .handoff_chat(&source.id, config(HarnessId::Mock))
+        .await
+        .unwrap();
+    assert_ne!(chat.id, source.id);
+    assert_eq!(chat.cwd, "/demo");
+    let handoff = chat.handoff.clone().unwrap();
+    assert_eq!(handoff.from_chat_id, source.id);
+    assert_eq!(handoff.status, HandoffStatus::Summarizing);
+
+    until(&mut chats, |u| {
+        matches!(u, ChatsUpdate::Chat { chat: c }
+            if c.id == chat.id
+                && c.handoff.as_ref().is_some_and(|h| h.status == HandoffStatus::Ready))
+    })
+    .await;
+    let summary = engine.store().chat(&chat.id).unwrap().unwrap().handoff.unwrap().summary;
+    assert!(summary.unwrap().contains("**Goal**"));
+
+    // The context goes to the agent; the saved prompt is the user's own.
+    let mut updates = watch_messages(&engine, &chat.id);
+    engine.queue_command(&chat.id, send("carry on")).unwrap();
+    until(&mut updates, is_input).await;
+    let stored = engine.store().messages(&chat.id).unwrap();
+    assert!(matches!(&stored[0].parts[..], [MessagePart::Text { text, .. }] if text == "carry on"));
+    let handoff = engine.store().chat(&chat.id).unwrap().unwrap().handoff.unwrap();
+    assert!(handoff.delivered);
 }

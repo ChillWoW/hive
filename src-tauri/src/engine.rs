@@ -68,6 +68,17 @@ pub async fn create_chat(
     .map_err(err)
 }
 
+/// Continues a chat in a new one on another harness: same folder and
+/// worktree, its first prompt carrying a summary of this one.
+#[tauri::command]
+pub async fn handoff_chat(
+    engine: State<'_, Engine>,
+    chat_id: String,
+    config: ChatConfig,
+) -> Result<Chat, String> {
+    engine.handoff_chat(&chat_id, config).await.map_err(err)
+}
+
 #[tauri::command]
 pub async fn list_chats(engine: State<'_, Engine>) -> Result<Vec<Chat>, String> {
     engine.chats().map_err(err)

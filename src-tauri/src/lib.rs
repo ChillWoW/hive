@@ -53,6 +53,7 @@ pub fn run() {
       attachments::attachment_bytes,
       attachments::open_attachment,
       engine::create_chat,
+      engine::handoff_chat,
       engine::list_chats,
       engine::queue_command,
       engine::cancel_queued,

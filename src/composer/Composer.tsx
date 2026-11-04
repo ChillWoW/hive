@@ -18,7 +18,7 @@ import { useWorkspaceFiles } from "@/files";
 import { refreshCatalogs, useCatalog } from "@/harnesses";
 import { useUsageStore } from "@/usage/store";
 import { IconButton, Tooltip } from "@/ui";
-import { ModelPicker } from "./ModelPicker";
+import { type Handoff, ModelPicker } from "./ModelPicker";
 import { AccessPicker } from "./AccessPicker";
 import { MentionMenu } from "./MentionMenu";
 import { SlashMenu } from "./SlashMenu";
@@ -64,6 +64,10 @@ type ComposerProps = {
     onConfigChange: (config: ChatConfig) => void;
     /** A started chat keeps its harness; only its models are offered. */
     lockedHarness?: boolean;
+    /** A locked chat's other harnesses in the model picker, each continuing it in a new chat. */
+    handoff?: Handoff;
+    /** Why a prompt can't go yet (a handoff summary being written); Send waits. */
+    hold?: string;
     /** The agent is working on a turn. */
     busy?: boolean;
     /** The harness can stop a running turn. */
@@ -112,6 +116,8 @@ export function Composer({
     config,
     onConfigChange,
     lockedHarness,
+    handoff,
+    hold,
     busy = false,
     canStop = false,
     steering = false,
@@ -378,14 +384,14 @@ export function Composer({
         : busy && canStop && onStop
           ? "stop"
           : "send";
-    const disabled = mode !== "stop" && (!content || !filesReady);
+    const disabled = mode !== "stop" && (!content || !filesReady || !!hold);
 
     const submit = (background = false) => {
         if (mode === "stop") {
             onStop?.();
             return;
         }
-        if (!content || !filesReady) return;
+        if (!content || !filesReady || hold) return;
         // `/plan` and the like on their own run here; they never reach the agent.
         const standalone =
             attachments.length === 0 && comments.length === 0
@@ -529,7 +535,8 @@ export function Composer({
         return true;
     };
 
-    const { label, icon: ModeIcon } = MODES[mode];
+    const { label: modeLabel, icon: ModeIcon } = MODES[mode];
+    const label = hold && mode !== "stop" ? hold : modeLabel;
 
     return (
         <form
@@ -709,6 +716,7 @@ export function Composer({
                             config={config}
                             onChange={onConfigChange}
                             locked={lockedHarness}
+                            handoff={handoff}
                             open={modelOpen}
                             onOpenChange={setModelOpen}
                         />

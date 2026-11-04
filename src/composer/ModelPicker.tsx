@@ -58,7 +58,10 @@ function matches(row: Row, query: string) {
  * row above it that opens On / Off the same way; while it's on, a bolt replaces the chip's harness mark. A model's effort defaults to High (else Medium,
  * else its first level); there is no "let the CLI decide". Picking a model
  * keeps the card open so its effort can be set next. A chat
- * already started is `locked` to its harness and lists only its models; a
+ * already started is `locked` to its harness and lists only its models,
+ * unless it can be handed off (`handoff`): then the other harnesses' models
+ * are listed too, and picking one continues the chat in a new one there
+ * (after t3code, whose picker switches providers in place); a
  * harness whose CLI isn't installed is listed, and picking it opens Settings › Providers.
  *
  * Elsewhere (Settings › Chats › Text generation): a null `config` shows
@@ -74,11 +77,14 @@ export function ModelPicker({
     placement = "top",
     triggerClassName,
     open: openProp,
-    onOpenChange
+    onOpenChange,
+    handoff
 }: {
     config: ChatConfig | null;
     onChange: (config: ChatConfig) => void;
     locked?: boolean;
+    /** A locked chat's way to another harness: picking its model continues the chat there. */
+    handoff?: Handoff;
     fastMode?: boolean;
     placeholder?: string;
     placement?: "top" | "bottom";
@@ -109,7 +115,14 @@ export function ModelPicker({
         );
     }
 
-    const catalogs = locked && current ? [current] : all;
+    const catalogs =
+        !locked || !current
+            ? all
+            : !handoff
+              ? [current]
+              : all.some((c) => c.id === current.id)
+                ? all
+                : [current, ...all];
 
     return (
         <Popover
@@ -166,6 +179,18 @@ export function ModelPicker({
                             fast={fast}
                             showFast={showFast}
                             onChange={onChange}
+                            handoff={
+                                locked && handoff
+                                    ? {
+                                          ...handoff,
+                                          onPick: (next) => {
+                                              setOpen(false);
+                                              setSide(null);
+                                              handoff.onPick(next);
+                                          }
+                                      }
+                                    : undefined
+                            }
                             side={side}
                             onToggleSide={(next) => setSide((s) => (s === next ? null : next))}
                         />
@@ -210,6 +235,14 @@ const SEARCH_ID = "model-picker-search";
 /** The footer row whose card is open beside the picker. */
 type Side = "fast" | "effort";
 
+/** Handing a started chat to another harness from the picker. */
+export type Handoff = {
+    /** Picked another harness's model: `config` is the chat's settings fitted to it. */
+    onPick: (config: ChatConfig) => void;
+    /** Why it can't be handed off now (a turn running), else null. */
+    blocked: string | null;
+};
+
 const FAST_CHOICES = [
     { id: "on", label: "On" },
     { id: "off", label: "Off" }
@@ -232,6 +265,7 @@ function ModelCard({
     fast,
     showFast,
     onChange,
+    handoff,
     side,
     onToggleSide
 }: {
@@ -243,6 +277,7 @@ function ModelCard({
     fast: boolean;
     showFast: boolean;
     onChange: (config: ChatConfig) => void;
+    handoff?: Handoff;
     side: Side | null;
     onToggleSide: (side: Side) => void;
 }) {
@@ -303,18 +338,20 @@ function ModelCard({
             ?.scrollIntoView({ block: "nearest" });
     }, [active]);
 
+    /** Picking this row hands the chat off: another harness than a locked chat's. */
+    const handsOff = (row: Row) => !!handoff && row.harness.id !== current?.id;
+
     const pick = (row: Row) => {
         // Settings › Providers can install it.
         if (!row.harness.installed) return openProviderSettings(row.harness.id);
-        if (row.key !== selectedKey) {
-            onChange(
-                fitConfig(row.harness, {
-                    ...(config ?? BLANK),
-                    harness: row.harness.id,
-                    model: row.model.id
-                })
-            );
-        }
+        if (row.key === selectedKey) return;
+        const next = fitConfig(row.harness, {
+            ...(config ?? BLANK),
+            harness: row.harness.id,
+            model: row.model.id
+        });
+        if (!handsOff(row)) onChange(next);
+        else if (!handoff!.blocked) handoff!.onPick(next);
     };
 
     const onKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
@@ -426,6 +463,11 @@ function ModelCard({
                         row={row}
                         selected={row.key === selectedKey}
                         active={index === active}
+                        handoff={
+                            handsOff(row)
+                                ? handoff!.blocked ?? `Continue in a new ${row.harness.label} chat`
+                                : undefined
+                        }
                         onHover={() => {
                             keyboardRef.current = false;
                             setActive(index);
@@ -496,6 +538,7 @@ function ModelRow({
     row,
     selected,
     active,
+    handoff,
     onHover,
     onPick,
     onStar
@@ -504,6 +547,8 @@ function ModelRow({
     row: Row;
     selected: boolean;
     active: boolean;
+    /** Picking it continues the chat on its harness: what that does, or why it can't. */
+    handoff?: string;
     onHover: () => void;
     onPick: () => void;
     onStar: () => void;
@@ -511,7 +556,7 @@ function ModelRow({
     const disabled = !row.harness.installed;
     const description = disabled
         ? `${row.harness.label} isn't installed · set it up in Settings`
-        : row.model.description;
+        : (handoff ?? row.model.description);
     return (
         <div
             id={`model-row-${index}`}

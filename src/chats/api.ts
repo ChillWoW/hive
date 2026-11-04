@@ -72,6 +72,13 @@ export const chatsApi = {
         });
     },
 
+    /**
+     * Continues a chat in a new one with `config` (another harness): same
+     * folder and worktree; a summary of this one goes with its first prompt.
+     */
+    handoff: (chatId: string, config: ChatConfig): Promise<Chat> =>
+        call<Chat>("handoff_chat", { chatId, config }),
+
     /** A live run picks the new settings up from its next turn. */
     updateConfig: (chatId: string, config: ChatConfig): Promise<Chat> =>
         call<Chat>("update_chat_config", { chatId, config }),

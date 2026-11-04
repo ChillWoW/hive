@@ -115,6 +115,8 @@ type ChatsState = {
     sendNow: (messageId: string) => Promise<void>;
     /** Saves a chat's run settings; shown at once, reverted if refused. */
     updateConfig: (chatId: string, config: ChatConfig) => Promise<void>;
+    /** Continues a chat in a new one with `config` (`Chat.handoff`), and opens it. */
+    handoff: (chatId: string, config: ChatConfig) => Promise<Chat>;
     /** Shown at once, reverted if refused; a blank title clears it. */
     rename: (chatId: string, title: string | null) => Promise<void>;
     /** Archiving also unpins. */
@@ -515,7 +517,16 @@ export const useChatsStore = create<ChatsState>()(
         updateConfig: (chatId, config) =>
             editChat(chatId, { config }, () => chatsApi.updateConfig(chatId, config)),
 
-        rename: (chatId, title) => {
+        handoff: async (chatId, config) => {
+            const chat = await chatsApi.handoff(chatId, config);
+            set((s) => {
+                upsertChat(s, chat);
+                if (s.activeChatId !== chat.id) navigate(s, { chatId: chat.id, subagent: [] });
+            });
+            return chat;
+        },
+
+        rename:(chatId, title) => {
             const trimmed = title?.trim() || undefined;
             return editChat(chatId, { title: trimmed }, () =>
                 chatsApi.rename(chatId, trimmed ?? null)

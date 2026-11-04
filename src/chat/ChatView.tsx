@@ -30,7 +30,8 @@ import { useShortcut } from "@/keybindings";
 import type { Attachment, BackgroundTask, ChatConfig, MessagePart } from "@/proto";
 import { useMinuteClock } from "@/lib/time";
 import { useSettingsStore } from "@/settings/store";
-import { LiveTasks, promptText, Transcript } from "@/transcript";
+import { ContinuedRows, HandoffCard, LiveTasks, promptText, Transcript } from "@/transcript";
+import { continueIn, handoffBlocked } from "./handoff";
 import { MorphHeight } from "@/ui";
 import { AgentUpdates } from "./AgentUpdates";
 import { BackgroundTasks } from "./BackgroundTasks";
@@ -121,6 +122,24 @@ export function ChatView() {
     const input = pendingInput(shown);
     // A question first; secrets wait their turn, oldest first.
     const secret = input ? undefined : session?.secrets?.[0];
+
+    // Another harness's model in the picker continues the chat there; a
+    // handed-off chat's first prompt waits for the summary it carries.
+    const hasPrompt = shown.some((m) => m.role === "user" && !m.delivery);
+    const handoff = chat && hasPrompt
+        ? {
+              blocked: handoffBlocked(busy, hasPrompt),
+              onPick: (next: ChatConfig) => {
+                  continueIn(chat, next).catch((e: unknown) =>
+                      console.warn("[chat] handoff failed", e)
+                  );
+              }
+          }
+        : undefined;
+    const hold =
+        chat?.handoff && !chat.handoff.delivered && chat.handoff.status === "summarizing"
+            ? "Waiting for the handoff summary"
+            : undefined;
 
     const sendTo = (
         prompt: string,
@@ -285,6 +304,8 @@ export function ChatView() {
                             config={config}
                             onConfigChange={setConfig}
                             lockedHarness={!!chat}
+                            handoff={handoff}
+                            hold={hold}
                             busy={busy}
                             canStop={!!chat && streaming && !!catalog?.capabilities.interrupt}
                             steering={!!catalog?.capabilities.steering}
@@ -403,6 +424,8 @@ export function ChatView() {
                         chatId={chat?.id}
                         onOpenSubagent={chat ? (id) => openSubagent(chat.id, id) : undefined}
                         onFindOpenChange={setFindOpen}
+                        header={chat?.handoff && <HandoffCard chat={chat} handoff={chat.handoff} />}
+                        footer={chat && <ContinuedRows chatId={chat.id} />}
                         className={laneClassName}
                     />
                 )}

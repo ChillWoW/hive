@@ -119,7 +119,8 @@ impl Harness for MockHarness {
     }
 
     /// Title-cases the request's first four words, which the prompt's last
-    /// line carries as a JSON string.
+    /// line carries as a JSON string; a handoff's transcript gets a canned
+    /// summary.
     fn run_title(&self, request: RunRequest) -> Result<Run, HarnessError> {
         let asked = request
             .prompt
@@ -127,17 +128,22 @@ impl Harness for MockHarness {
             .last()
             .and_then(|line| serde_json::from_str::<String>(line).ok())
             .unwrap_or_default();
-        let title = asked
-            .split_whitespace()
-            .take(4)
-            .map(|word| {
-                let mut chars = word.chars();
-                chars.next().map_or_else(String::new, |first| {
-                    first.to_uppercase().chain(chars).collect()
+        let title = if request.prompt.contains("<transcript>") {
+            "**Goal** Finish the mock task.\n\n**Next** Pick up where the last agent stopped."
+                .to_owned()
+        } else {
+            asked
+                .split_whitespace()
+                .take(4)
+                .map(|word| {
+                    let mut chars = word.chars();
+                    chars.next().map_or_else(String::new, |first| {
+                        first.to_uppercase().chain(chars).collect()
+                    })
                 })
-            })
-            .collect::<Vec<_>>()
-            .join(" ");
+                .collect::<Vec<_>>()
+                .join(" ")
+        };
         let delay = Duration::from_secs_f64(0.4 * self.speed);
         Ok(Run::spawn(8, |events_tx, mut commands| async move {
             tokio::time::sleep(delay).await;

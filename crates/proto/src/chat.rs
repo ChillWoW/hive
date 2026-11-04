@@ -9,6 +9,7 @@ use crate::agent::{
     AccessMode, BackgroundTask, Goal, HarnessId, ReasoningLevel, SandboxLevel, SlashCommand,
     ToolCall,
 };
+use crate::git::GitFileState;
 
 /// The run settings a chat sends with each turn; the composer edits these.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
@@ -67,6 +68,62 @@ pub struct Chat {
     /// missing for a chat in `cwd`'s own checkout.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub worktree: Option<Worktree>,
+    /// The chat this one continues ("Continue in …"): what its first prompt
+    /// carries over to this chat's agent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub handoff: Option<Handoff>,
+}
+
+/// A chat handed to another agent: a new chat, in the same folder (and
+/// worktree), whose first prompt carries a summary of the old one and the
+/// files it changed.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(optional_fields)]
+pub struct Handoff {
+    /// The chat continued; it may have been deleted since.
+    pub from_chat_id: String,
+    /// Its title then, for when it's gone.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub from_title: Option<String>,
+    pub from_harness: HarnessId,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub from_model: Option<String>,
+    pub status: HandoffStatus,
+    /// Markdown, by the text generation model; none while it's written or
+    /// when that failed (the old chat's latest messages go instead).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub summary: Option<String>,
+    /// Files the old chat's agent edited and the folder's uncommitted
+    /// changes, paths relative to where the agent runs.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[ts(as = "Option<Vec<HandoffFile>>")]
+    pub files: Vec<HandoffFile>,
+    /// The context went out with this chat's first prompt.
+    #[serde(default)]
+    pub delivered: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub enum HandoffStatus {
+    /// A text run is writing the summary.
+    Summarizing,
+    Ready,
+    /// No summary: the old chat's latest messages are carried instead.
+    Failed,
+}
+
+/// A file a handoff names.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(optional_fields)]
+pub struct HandoffFile {
+    pub path: String,
+    /// Its uncommitted change; none for a file edited and since committed
+    /// (or put back).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub state: Option<GitFileState>,
 }
 
 /// A git worktree Hive made for one chat: a checkout of its own branch in a

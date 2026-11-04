@@ -1,4 +1,4 @@
-import { chats, useSession } from "@/chats";
+import { chats, useChatsStore, useSession } from "@/chats";
 import { useGitRepo } from "@/git";
 import type { Chat } from "@/proto";
 import { useSetting } from "@/settings/store";
@@ -18,6 +18,10 @@ export function DeleteChatDialog({
     const worktree = shown?.worktree;
     const changes = useGitRepo(worktree?.path)?.repo?.changes ?? 0;
     const deleteBranch = useSetting("worktrees", "deleteBranch").value;
+    // A handoff shares the worktree; it stays while another chat works in it.
+    const shared = useChatsStore((s) =>
+        s.chats.some((c) => c.id !== shown?.id && !!worktree && c.worktree?.root === worktree.root)
+    );
 
     return (
         <ConfirmDialog
@@ -36,7 +40,12 @@ export function DeleteChatDialog({
                 and its transcript will be deleted.
                 {running && " Its agent will be stopped."} This can't be undone.
             </p>
-            {worktree && (
+            {worktree && shared && (
+                <p className="mt-2">
+                    Its worktree is kept: another chat works in it.
+                </p>
+            )}
+            {worktree && !shared && (
                 <p className="mt-2">
                     {deleteBranch
                         ? "Its worktree and branch "

@@ -121,15 +121,29 @@ impl Engine {
         timeout: Duration,
         accept: impl Fn(&str) -> Option<T>,
     ) -> Option<T> {
+        let body = format!(
+            "{task}\n\nSession request (JSON string):\n{}",
+            serde_json::to_string(prompt).ok()?
+        );
+        self.generate_from(chat_harness, body, retries, timeout, accept)
+            .await
+    }
+
+    /// [`Engine::generate_text`] with the whole prompt written by the caller.
+    pub(crate) async fn generate_from<T>(
+        &self,
+        chat_harness: HarnessId,
+        body: String,
+        retries: &[Duration],
+        timeout: Duration,
+        accept: impl Fn(&str) -> Option<T>,
+    ) -> Option<T> {
         let (harness, model, reasoning) = self.text_model(chat_harness)?;
         // No project instructions, files or session to pick up.
         let scratch = tempfile::tempdir().ok()?;
         let request = RunRequest {
             harness: harness.id(),
-            prompt: format!(
-                "{task}\n\nSession request (JSON string):\n{}",
-                serde_json::to_string(prompt).ok()?
-            ),
+            prompt: body,
             cwd: scratch.path().to_string_lossy().into_owned(),
             sandbox: SandboxLevel::ReadOnly,
             model,

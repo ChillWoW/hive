@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowDownIcon } from "@phosphor-icons/react";
 import { useWorktreeSetup, type TranscriptMessage } from "@/chats";
 import { runAction, useShortcut } from "@/keybindings";
@@ -38,6 +38,10 @@ type TranscriptProps = {
     onOpenSubagent?: (id: string) => void;
     /** The find bar opened or closed (it takes the details card's spot). */
     onFindOpenChange?: (open: boolean) => void;
+    /** Before the first message (a handed-off chat's handoff card). */
+    header?: ReactNode;
+    /** After the last message (where a chat was continued). */
+    footer?: ReactNode;
     /** Under the messages, inside the scroller (the composer's spacer). */
     className?: string;
 };
@@ -92,6 +96,8 @@ export function Transcript({
     chatId,
     onOpenSubagent,
     onFindOpenChange,
+    header,
+    footer,
     className
 }: TranscriptProps) {
     const scrollRef = useRef<HTMLDivElement>(null);
@@ -234,6 +240,7 @@ export function Transcript({
                         ref={contentRef}
                         className={cn("mx-auto flex w-full max-w-3xl flex-col gap-5 py-6", className)}
                     >
+                        {header}
                         {messages.map((message, i) =>
                             isBareCompact(message) &&
                             message.delivery?.state !== "failed" &&
@@ -266,6 +273,7 @@ export function Transcript({
                                 />
                             )
                         )}
+                        {footer}
                         {error && <p className="text-sm text-danger">{error}</p>}
                     </div>
                 </OpenSubagent>

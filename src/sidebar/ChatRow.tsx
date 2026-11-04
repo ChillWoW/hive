@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import {
     ArchiveIcon,
     ArrowCounterClockwiseIcon,
+    ArrowsLeftRightIcon,
     DotsThreeIcon,
     PencilSimpleIcon,
     PencilSimpleLineIcon,
@@ -9,12 +10,13 @@ import {
     PushPinSlashIcon,
     TrashIcon
 } from "@phosphor-icons/react";
-import { activity, chats, useChatsStore, workDir } from "@/chats";
+import { activity, chats, isBusy, useChatsStore, workDir } from "@/chats";
+import { continueIn, handoffBlocked, handoffConfig } from "@/chat/handoff";
 import { describeActivity } from "@/transcript";
 import { ActivityText } from "./ActivityText";
 import { useSetting } from "@/settings/store";
 import { useHasDraft } from "@/composer";
-import { HarnessIcon } from "@/harnesses";
+import { HarnessIcon, useCatalogs } from "@/harnesses";
 import { cn } from "@/lib/cn";
 import type { Chat } from "@/proto";
 import { ContextMenu, Menu, Tooltip, useInlineRename } from "@/ui";
@@ -33,7 +35,8 @@ export const CARD_DWELL = 300;
 /**
  * One chat in the sidebar: status dot, title, time since its last activity
  * and its harness's mark. The "⋯" button (on hover) and a right-click open
- * the same menu: Rename (in place), Pin, Archive, Delete. Resting on it
+ * the same menu: Rename (in place), Continue in (another agent), Pin,
+ * Archive, Delete. Resting on it
  * shows its card (`ChatCard`) beside the sidebar; a click or a menu hides it.
  */
 export function ChatRow({
@@ -187,12 +190,38 @@ function ChatMenuItems({
     onDelete: () => void;
 }) {
     const pinned = chat.pinnedAt != null;
+    const busy = isBusy(useChatsStore((s) => s.sessions[chat.id]?.status));
+    // Every other agent turned on; one not installed is offered but can't be picked.
+    const targets = useCatalogs().filter((c) => c.id !== chat.config.harness);
+    const blocked = handoffBlocked(busy, chat.lastMessageAt != null);
     return (
         <>
             <Menu.Item onClick={onRename}>
                 <PencilSimpleIcon className="size-3.5" />
                 Rename
             </Menu.Item>
+            {targets.length > 0 && (
+                <Menu.SubmenuRoot>
+                    <Menu.SubmenuTrigger disabled={!!blocked}>
+                        <ArrowsLeftRightIcon className="size-3.5" />
+                        Continue in
+                    </Menu.SubmenuTrigger>
+                    <Menu.Content className="w-44 min-w-0">
+                        {targets.map((catalog) => (
+                            <Menu.Item
+                                key={catalog.id}
+                                disabled={!catalog.installed}
+                                onClick={() =>
+                                    void continueIn(chat, handoffConfig(chat, catalog)).catch(warn)
+                                }
+                            >
+                                <HarnessIcon harness={catalog.id} className="size-3.5" />
+                                {catalog.label}
+                            </Menu.Item>
+                        ))}
+                    </Menu.Content>
+                </Menu.SubmenuRoot>
+            )}
             {!chat.archived && (
                 <Menu.Item onClick={() => chats.setPinned(chat.id, !pinned).catch(warn)}>
                     {pinned ? (
