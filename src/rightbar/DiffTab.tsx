@@ -228,7 +228,7 @@ function BaseStrip({
 }) {
     const others = repo.branches.filter((b) => !b.current);
     return (
-        <div className="ml-1 flex min-w-0 items-center gap-1.5 font-mono text-[11.5px]">
+        <div className="ml-1 flex min-w-0 items-center gap-1.5 text-[11.5px]">
             <span className="min-w-0 truncate text-dark-200">{branch}</span>
             <ArrowRightIcon className="size-3 shrink-0 text-dark-250" />
             <Menu>
@@ -239,7 +239,7 @@ function BaseStrip({
                 <Menu.Content side="bottom" align="start" sideOffset={6} className="max-h-72 w-60 min-w-0">
                     {others.map((b) => (
                         <Menu.Item key={b.name} onClick={() => onChange(b.name)}>
-                            <span className="min-w-0 flex-1 truncate font-mono">{b.name}</span>
+                            <span className="min-w-0 flex-1 truncate">{b.name}</span>
                             {b.name === base && <CheckIcon className="size-3 shrink-0" weight="bold" />}
                         </Menu.Item>
                     ))}
