@@ -281,7 +281,8 @@ export function Composer({
     const sendWith = useSettingsStore((s) => s.settings.keyboard.sendWith);
     const backgroundCombo = canonical(useBinding("sendInBackground"));
 
-    // Decides the shape. The text is measured on one line in a hidden span
+    // Decides the shape. The text (or the placeholder, while there's none)
+    // is measured on one line in a hidden span
     // and compared against the room the one-row shape leaves the field —
     // only measurable while in that shape, so it's remembered from there,
     // which also keeps the shapes from flipping back and forth at the edge.
@@ -641,6 +642,9 @@ export function Composer({
                         aria-hidden="true"
                         className="invisible absolute text-sm leading-6 whitespace-pre"
                     >
+                        {/* An empty field shows the placeholder, which has to
+                            fit on the one row too. */}
+                        {draft === "" && placeholder}
                         {tagPieces(draft, tags).map((piece, i) =>
                             "tag" in piece ? (
                                 <TagFace
