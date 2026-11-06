@@ -58,12 +58,16 @@ const chrome = EditorView.theme(
             color: "#e6edf3"
         },
         ".cm-panels": { backgroundColor: DARK[850], color: DARK[50] },
-        ".cm-panels.cm-panels-top": { borderBottom: `1px solid ${DARK[600]}` },
         ".cm-panels.cm-panels-bottom": { borderTop: `1px solid ${DARK[600]}` },
-        ".cm-panel.cm-search": { padding: "6px 8px", fontSize: "12px" },
-        ".cm-panel.cm-search input, .cm-panel.cm-search button": {
-            fontSize: "12px",
-            borderRadius: "4px"
+        // The find widget (`searchPanel.tsx`) floats over the code's top right.
+        ".cm-panels.cm-panels-top": {
+            position: "absolute",
+            top: "8px",
+            left: "auto",
+            right: "14px",
+            maxWidth: "calc(100% - 28px)",
+            backgroundColor: "transparent",
+            border: "none"
         },
         ".cm-textfield": {
             backgroundColor: DARK[700],

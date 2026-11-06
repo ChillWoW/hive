@@ -28,6 +28,7 @@ import type { FileText } from "@/proto";
 import { headText, readFile, writeFile } from "./api";
 import { gitGutter, setGitBase } from "./gitGutter";
 import { languageOf } from "./language";
+import { searchExtension } from "./searchPanel";
 import { editorTheme } from "./theme";
 
 /** What's wrong with an open file now. */
@@ -154,6 +155,7 @@ function extensions(id: string, file: FileText): Extension[] {
         rectangularSelection(),
         highlightActiveLine(),
         highlightSelectionMatches(),
+        searchExtension,
         keymap.of([
             {
                 key: "Mod-s",
