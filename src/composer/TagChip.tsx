@@ -1,4 +1,11 @@
-import { ChatTextIcon, PuzzlePieceIcon } from "@phosphor-icons/react";
+import { useState } from "react";
+import {
+    CaretUpIcon,
+    ChatTextIcon,
+    ClipboardTextIcon,
+    PuzzlePieceIcon
+} from "@phosphor-icons/react";
+import { pasteLines } from "./pastes";
 import { cn } from "@/lib/cn";
 import { labelTitle } from "@/review/comments";
 import { FileIcon, Tooltip } from "@/ui";
@@ -68,6 +75,48 @@ export function TagFace({ tag, comment }: { tag: Tag; comment?: TagComment }) {
             );
         }
     }
+}
+
+/**
+ * A big paste folded (`pastes.ts`), in the composer and a sent prompt alike:
+ * its size, clickable to unfold. Plain markup, as `TagFace`.
+ */
+export function PasteFace({ raw, open = false }: { raw: string; open?: boolean }) {
+    const lines = pasteLines(raw);
+    const size = lines > 1 ? `${lines} lines` : `${raw.length.toLocaleString()} chars`;
+    return (
+        <span className={cn(chipClassName, "cursor-pointer hover:bg-dark-500")}>
+            <ClipboardTextIcon className="size-3.5 shrink-0 text-dark-200" />
+            <span className="shrink-0">Pasted text</span>
+            <span className="shrink-0 text-dark-200">{size}</span>
+            {open && <CaretUpIcon className="size-3 shrink-0 text-dark-200" />}
+        </span>
+    );
+}
+
+/**
+ * A sent prompt's paste: folded to its chip, a click shows the text under it
+ * (and folds it again).
+ */
+export function PasteChip({ raw }: { raw: string }) {
+    const [open, setOpen] = useState(false);
+    return (
+        <>
+            <button
+                type="button"
+                aria-expanded={open}
+                onClick={() => setOpen((o) => !o)}
+                className="contents"
+            >
+                <PasteFace raw={raw} open={open} />
+            </button>
+            {open && (
+                <span className="my-1 block rounded-md bg-dark-850 px-2 py-1 text-[13px] whitespace-pre-wrap">
+                    {raw.replace(/\n$/, "")}
+                </span>
+            )}
+        </>
+    );
 }
 
 /** `TagFace` with what it stands for in a tooltip: a path, a comment in full. */

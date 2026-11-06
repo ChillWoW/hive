@@ -23,8 +23,15 @@ import {
 } from "@codemirror/view";
 import { history, historyKeymap, insertNewline, standardKeymap } from "@codemirror/commands";
 import { commentTokens } from "@/review/comments";
-import { TagFace, type TagComment } from "./TagChip";
+import { PasteFace, TagFace, type TagComment } from "./TagChip";
 import { findTags, type FoundTag, type Tag } from "./tags";
+import {
+    findPastes,
+    forgetPaste,
+    isBigPaste,
+    rememberPaste,
+    type Span
+} from "./pastes";
 
 /** Rows the field grows to before it scrolls. */
 const MAX_ROWS = 12;
@@ -124,6 +131,125 @@ const tagsField = StateField.define<RangeSet<TagValue>>({
     }
 });
 
+/**
+ * Big pastes, folded to a chip. Only drawn that way: the text stays in the
+ * draft and is sent as is. Atomic like a tag (Backspace takes it whole); a
+ * click unfolds it. Folded pastes are remembered (`pastes.ts`), so a draft
+ * that comes back (another chat, a queued prompt edited, history, a reload)
+ * folds them again, and the sent prompt shows them the same way.
+ */
+class PasteValue extends RangeValue {
+    override startSide = 1;
+    override endSide = -1;
+    readonly raw: string;
+    constructor(raw: string) {
+        super();
+        this.raw = raw;
+    }
+    override eq(other: RangeValue): boolean {
+        return other instanceof PasteValue && other.raw === this.raw;
+    }
+}
+
+const addPastes = StateEffect.define<Span[]>();
+/** Unfolds the paste starting there. */
+const unfoldPaste = StateEffect.define<number>();
+
+const pasteRanges = (doc: string, spans: Span[]) =>
+    spans
+        .toSorted((a, b) => a.from - b.from)
+        .map((s) => new PasteValue(doc.slice(s.from, s.to)).range(s.from, s.to));
+
+const pastesField = StateField.define<RangeSet<PasteValue>>({
+    create: (state) => {
+        const doc = state.doc.toString();
+        return RangeSet.of(pasteRanges(doc, findPastes(doc)));
+    },
+    update(value, tr) {
+        let next = value.map(tr.changes);
+        const doc = tr.docChanged ? tr.newDoc.toString() : null;
+        const unfold = tr.effects.filter((e) => e.is(unfoldPaste)).map((e) => e.value);
+        if (doc !== null || unfold.length) {
+            next = next.update({
+                filter: (from, to, paste) =>
+                    to > from &&
+                    !unfold.includes(from) &&
+                    (doc === null || doc.slice(from, to) === paste.raw)
+            });
+        }
+        const add: Span[] = [];
+        for (const effect of tr.effects) if (effect.is(addPastes)) add.push(...effect.value);
+        if (tr.isUserEvent("input.paste")) {
+            tr.changes.iterChanges((_fa, _ta, from, to, inserted) => {
+                if (isBigPaste(inserted.toString())) add.push({ from, to });
+            });
+        }
+        const fresh = add.filter((s) => {
+            let covered = false;
+            next.between(s.from, s.to, (from, to) => {
+                if (from < s.to && to > s.from) covered = true;
+            });
+            return !covered;
+        });
+        if (fresh.length) {
+            next = next.update({
+                add: pasteRanges(doc ?? tr.state.doc.toString(), fresh),
+                sort: true
+            });
+        }
+        return next;
+    }
+});
+
+class PasteWidget extends WidgetType {
+    readonly raw: string;
+    constructor(raw: string) {
+        super();
+        this.raw = raw;
+    }
+    override eq(other: PasteWidget): boolean {
+        return other.raw === this.raw;
+    }
+    toDOM(view: EditorView): HTMLElement {
+        const span = document.createElement("span");
+        span.className = "cm-tag";
+        span.innerHTML = renderToStaticMarkup(<PasteFace raw={this.raw} />);
+        span.addEventListener("mousedown", (event) => {
+            if (event.button !== 0) return;
+            event.preventDefault();
+            forgetPaste(this.raw);
+            const at = view.posAtDOM(span);
+            view.dispatch({ effects: unfoldPaste.of(at), selection: EditorSelection.cursor(at) });
+            view.focus();
+        });
+        return span;
+    }
+    override ignoreEvent(event: Event): boolean {
+        return event.type === "mousedown";
+    }
+}
+
+const pasteDecorations = EditorView.decorations.compute([pastesField], (state): DecorationSet => {
+    const builder = new RangeSetBuilder<Decoration>();
+    for (const iter = state.field(pastesField).iter(); iter.value; iter.next()) {
+        builder.add(
+            iter.from,
+            iter.to,
+            Decoration.replace({ widget: new PasteWidget(iter.value.raw) })
+        );
+    }
+    return builder.finish();
+});
+
+/** Whether `from`–`to` lies inside a folded paste. */
+function inPaste(state: EditorState, from: number, to: number): boolean {
+    let inside = false;
+    state.field(pastesField).between(from, to, (pFrom, pTo) => {
+        if (pFrom <= from && pTo >= to) inside = true;
+    });
+    return inside;
+}
+
 const commentsField = StateField.define<ReadonlyMap<string, TagComment>>({
     create: () => new Map(),
     update(value, tr) {
@@ -157,11 +283,13 @@ class TagWidget extends WidgetType {
 }
 
 const tagDecorations = EditorView.decorations.compute(
-    [tagsField, commentsField],
+    [tagsField, commentsField, pastesField],
     (state): DecorationSet => {
         const comments = state.field(commentsField);
         const builder = new RangeSetBuilder<Decoration>();
         for (const iter = state.field(tagsField).iter(); iter.value; iter.next()) {
+            // The paste's chip covers it.
+            if (inPaste(state, iter.from, iter.to)) continue;
             const { tag } = iter.value;
             const comment = tag.kind === "comment" ? comments.get(tag.ref) : undefined;
             builder.add(iter.from, iter.to, Decoration.replace({ widget: new TagWidget(tag, comment) }));
@@ -246,8 +374,11 @@ export const PromptField = forwardRef<PromptFieldHandle, PromptFieldProps>(
                 extensions: [
                     tagsField,
                     commentsField.init(() => propsRef.current.comments),
+                    pastesField,
                     tagDecorations,
+                    pasteDecorations,
                     EditorView.atomicRanges.of((view) => view.state.field(tagsField)),
+                    EditorView.atomicRanges.of((view) => view.state.field(pastesField)),
                     EditorView.lineWrapping,
                     EditorView.contentAttributes.of({ "aria-label": "Message" }),
                     history(),
@@ -284,6 +415,12 @@ export const PromptField = forwardRef<PromptFieldHandle, PromptFieldProps>(
                             p.onCaret(update.state.selection.main.head);
                         }
                         if (update.focusChanged) p.onFocusChange(update.view.hasFocus);
+                        const pastes = update.state.field(pastesField);
+                        if (update.startState.field(pastesField) !== pastes) {
+                            for (const iter = pastes.iter(); iter.value; iter.next()) {
+                                rememberPaste(iter.value.raw);
+                            }
+                        }
                         if (update.startState.field(tagsField) !== update.state.field(tagsField)) {
                             p.onTags(tagsOf(update.state));
                         }
@@ -349,7 +486,7 @@ export const PromptField = forwardRef<PromptFieldHandle, PromptFieldProps>(
                     options.caret === undefined
                         ? undefined
                         : EditorSelection.cursor(Math.min(options.caret, text.length)),
-                effects: addTags.of(made),
+                effects: [addTags.of(made), addPastes.of(findPastes(text))],
                 annotations: external.of(true),
                 scrollIntoView: options.caret !== undefined
             });

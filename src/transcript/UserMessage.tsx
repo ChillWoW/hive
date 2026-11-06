@@ -1,4 +1,4 @@
-import { Fragment, useRef, useState, type ReactNode } from "react";
+import { Fragment, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import {
     ArrowClockwiseIcon,
     CaretDownIcon,
@@ -7,8 +7,9 @@ import {
 } from "@phosphor-icons/react";
 import { openAttachment, SavedAttachmentTile } from "@/attachments";
 import type { TranscriptMessage } from "@/chats";
-import { TagChip } from "@/composer/TagChip";
-import { findTags, tagPieces } from "@/composer/tags";
+import { findPastes, pastesVersion, subscribePastes } from "@/composer/pastes";
+import { PasteChip, TagChip } from "@/composer/TagChip";
+import { findTags, tagPieces, type FoundTag } from "@/composer/tags";
 import { cn } from "@/lib/cn";
 import { useResizeObserver } from "@/lib/useResizeObserver";
 import { sentCommentRef, splitDiffComments } from "@/review/comments";
@@ -59,6 +60,28 @@ function Collapsible({ children }: { children: ReactNode }) {
     );
 }
 
+/** A sent prompt as text runs, tags and folded pastes (tags inside a paste are its text). */
+function promptPieces(text: string) {
+    const pastes = findPastes(text);
+    const tags = findTags(text, { sent: true }).filter(
+        (t) => !pastes.some((p) => p.from < t.to && p.to > t.from)
+    );
+    const pieces: (ReturnType<typeof tagPieces>[number] | { paste: string })[] = [];
+    let last = 0;
+    for (const { from, to } of pastes) {
+        const before = tags.filter((t) => t.from >= last && t.to <= from);
+        pieces.push(...tagPieces(text.slice(last, from), shift(before, -last)));
+        pieces.push({ paste: text.slice(from, to) });
+        last = to;
+    }
+    const rest = tags.filter((t) => t.from >= last);
+    pieces.push(...tagPieces(text.slice(last), shift(rest, -last)));
+    return pieces;
+}
+
+const shift = (tags: FoundTag[], by: number) =>
+    tags.map((t) => ({ ...t, from: t.from + by, to: t.to + by }));
+
 /** Retry and Discard under a prompt that failed. */
 const FAILED_ACTION =
     "inline-flex items-center gap-1 rounded-sm px-1 py-0.5 text-dark-200 hover:bg-dark-700 hover:text-dark-50";
@@ -77,6 +100,8 @@ export function UserMessage({
     onRetry?: () => void;
     onDiscard?: () => void;
 }) {
+    // Re-drawn when the known pastes change.
+    useSyncExternalStore(subscribePastes, pastesVersion);
     const { prompt: text, comments } = splitDiffComments(promptText(message));
     const delivery = message.delivery;
     const sending = delivery?.state === "sending";
@@ -106,7 +131,8 @@ export function UserMessage({
                     )}
                 >
                     <Collapsible>
-                        {tagPieces(text, findTags(text, { sent: true })).map((piece, i) => {
+                        {promptPieces(text).map((piece, i) => {
+                            if ("paste" in piece) return <PasteChip key={i} raw={piece.paste} />;
                             if (!("tag" in piece)) return <Fragment key={i}>{piece.text}</Fragment>;
                             const { tag } = piece;
                             if (tag.kind !== "comment") return <TagChip key={i} tag={tag} />;
