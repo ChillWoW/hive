@@ -17,6 +17,8 @@ use crate::cli;
 use crate::codex::provider as codex;
 use crate::opencode::provider as opencode;
 
+pub use crate::claude::provider::CodeInput;
+
 pub(crate) const INSTALL_TIMEOUT: Duration = Duration::from_secs(15 * 60);
 pub(crate) const UPDATE_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 
@@ -83,9 +85,8 @@ pub async fn sign_out(harness: HarnessId) -> Result<(), ProviderError> {
     }
 }
 
-/// A sign-in started in the browser: waiting for the code it shows
-/// (Claude), or for the browser to finish on its own (Codex). Dropping it
-/// cancels the sign-in.
+/// A sign-in started in the browser, waiting for it to finish (or, for
+/// Claude, a code its fallback page shows). Dropping it cancels the sign-in.
 pub enum SignIn {
     Claude(claude::SignIn),
     Codex(codex::SignIn),
@@ -109,23 +110,33 @@ impl SignIn {
         }
     }
 
-    /// Whether [`SignIn::finish`] needs the code the page shows.
-    pub fn needs_code(&self) -> bool {
+    /// Whether the CLI opened its own page already ([`SignIn::url`] being
+    /// the fallback); else the app opens `url`.
+    pub fn opened(&self) -> bool {
         matches!(self, Self::Claude(_))
     }
 
-    /// Cancels a [`SignIn::finish`] that's waiting on the browser, for a
-    /// sign-in that needs no code.
-    pub fn canceller(&self) -> Option<Arc<Notify>> {
+    /// Where a code the fallback page shows goes, while [`SignIn::finish`]
+    /// waits (Claude).
+    pub fn code_input(&self) -> Option<CodeInput> {
         match self {
-            Self::Claude(_) => None,
-            Self::Codex(s) => Some(s.canceller()),
+            Self::Claude(s) => Some(s.code_input()),
+            Self::Codex(_) => None,
         }
     }
 
-    pub async fn finish(self, code: &str) -> Result<(), ProviderError> {
+    /// Cancels a [`SignIn::finish`] that's waiting on the browser.
+    pub fn canceller(&self) -> Arc<Notify> {
         match self {
-            Self::Claude(s) => s.finish(code).await,
+            Self::Claude(s) => s.canceller(),
+            Self::Codex(s) => s.canceller(),
+        }
+    }
+
+    /// Waits for the browser (or a pasted code) to finish the sign-in.
+    pub async fn finish(self) -> Result<(), ProviderError> {
+        match self {
+            Self::Claude(s) => s.finish().await,
             Self::Codex(s) => s.finish().await,
         }
     }

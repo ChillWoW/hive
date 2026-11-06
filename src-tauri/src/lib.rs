@@ -109,6 +109,7 @@ pub fn run() {
       providers::provider_update,
       providers::provider_sign_in,
       providers::provider_finish_sign_in,
+      providers::provider_submit_sign_in_code,
       providers::provider_cancel_sign_in,
       providers::provider_sign_out,
       settings::settings_get,

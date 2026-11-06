@@ -2,9 +2,9 @@
 //! `claude auth status`), installing it, updating it (`claude update`), and
 //! signing in and out (`claude auth login` / `logout`).
 //!
-//! Sign-in runs the CLI's own flow. Without a terminal, `claude auth login`
-//! opens the browser, prints the page's URL and waits for the code that page
-//! shows to be pasted on stdin.
+//! Sign-in runs the CLI's own flow ([`SignIn`]): the browser it opens
+//! finishes the login through its localhost listener; the code a fallback
+//! page shows can be pasted on stdin instead.
 
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
@@ -15,6 +15,7 @@ use hive_proto::{HarnessId, ProviderAccount, ProviderStatus, SignInMethod};
 use serde_json::Value;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
 use tokio::process::{Child, ChildStdin, Command};
+use tokio::sync::Notify;
 
 use super::find_claude;
 use crate::cli;
@@ -25,8 +26,8 @@ use crate::provider::{
 const PROBE_TIMEOUT: Duration = Duration::from_secs(15);
 /// How long the CLI gets to print the sign-in URL.
 const SIGN_IN_START_TIMEOUT: Duration = Duration::from_secs(30);
-/// How long it gets to trade a pasted code for a login.
-const SIGN_IN_FINISH_TIMEOUT: Duration = Duration::from_secs(60);
+/// How long a sign-in waits on the browser.
+const SIGN_IN_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 
 pub(super) fn cli(exe: &Path) -> Command {
     let mut cmd = crate::overrides::command(HarnessId::ClaudeCode, exe);
@@ -139,45 +140,100 @@ pub async fn sign_out() -> Result<(), ProviderError> {
     run_ok(cmd, PROBE_TIMEOUT).await.map(drop)
 }
 
-/// A `claude auth login` waiting for its code. Dropping it ends the login.
+/// A running `claude auth login`. Dropping it ends the login.
+///
+/// As in a terminal, the CLI opens the browser itself on a page that
+/// redirects to its own localhost listener: approving there finishes the
+/// login, with nothing to paste. The URL it prints is the fallback for when
+/// the browser didn't open: that page shows a code, which goes in on stdin
+/// ([`CodeInput`]) while the CLI keeps listening.
 pub struct SignIn {
     child: Child,
-    stdin: ChildStdin,
-    output: Arc<Mutex<String>>,
+    code: CodeInput,
     url: String,
+    cancel: Arc<Notify>,
 }
 
 impl SignIn {
+    /// The fallback page, showing a code.
     pub fn url(&self) -> &str {
         &self.url
     }
 
-    /// Pastes `code` and waits for the CLI to finish logging in.
-    pub async fn finish(mut self, code: &str) -> Result<(), ProviderError> {
-        let line = format!("{}\n", code.trim());
-        self.stdin
-            .write_all(line.as_bytes())
-            .await
-            .map_err(|e| ProviderError::Failed(e.to_string()))?;
-        let _ = self.stdin.flush().await;
-        let status = tokio::time::timeout(SIGN_IN_FINISH_TIMEOUT, self.child.wait())
-            .await
-            .map_err(|_| ProviderError::TimedOut)?
-            .map_err(|e| ProviderError::Failed(e.to_string()))?;
+    /// Wakes a [`SignIn::finish`] in progress (or the next one) to cancel.
+    pub fn canceller(&self) -> Arc<Notify> {
+        Arc::clone(&self.cancel)
+    }
+
+    /// Where a code from the fallback page goes.
+    pub fn code_input(&self) -> CodeInput {
+        self.code.clone()
+    }
+
+    /// Waits for the CLI to finish logging in: through the browser, or a
+    /// code pasted meanwhile.
+    pub async fn finish(mut self) -> Result<(), ProviderError> {
+        let status = tokio::select! {
+            status = self.child.wait() => status.map_err(|e| ProviderError::Failed(e.to_string()))?,
+            _ = self.cancel.notified() => {
+                return Err(ProviderError::Failed("Sign-in cancelled.".into()));
+            }
+            _ = tokio::time::sleep(SIGN_IN_TIMEOUT) => return Err(ProviderError::TimedOut),
+        };
+        // Let the readers drain what it printed before exiting.
+        tokio::time::sleep(Duration::from_millis(50)).await;
         if status.success() {
             return Ok(());
         }
-        // The output since the code went in, where the CLI says what failed.
-        let output = lock(&self.output).clone();
-        let after = output.rsplit_once('>').map_or(output.as_str(), |(_, rest)| rest);
+        // What came after the prompt, where the CLI says what failed.
+        let output = lock(&self.code.output).clone();
+        let after = output.rsplit_once(CODE_PROMPT).map_or(output.as_str(), |(_, rest)| rest);
         let message = tail(&strip_ansi(after));
         Err(ProviderError::Failed(if message.is_empty() {
-            "Sign-in failed. Check the code and try again.".into()
+            "Sign-in failed. Try again.".into()
         } else {
             message
         }))
     }
 }
+
+/// A waiting `claude auth login`'s stdin, for the fallback page's code.
+#[derive(Clone)]
+pub struct CodeInput {
+    stdin: Arc<tokio::sync::Mutex<ChildStdin>>,
+    output: Arc<Mutex<String>>,
+}
+
+impl CodeInput {
+    /// Pastes `code`. The CLI exchanges it and exits, which ends
+    /// [`SignIn::finish`]; one it can't read is refused here and it keeps
+    /// waiting.
+    pub async fn submit(&self, code: &str) -> Result<(), ProviderError> {
+        let code = code.trim();
+        // `code#state`, as the page shows it.
+        if code.split_once('#').is_none_or(|(c, s)| c.is_empty() || s.is_empty()) {
+            return Err(ProviderError::Failed(INVALID_CODE.into()));
+        }
+        let seen = lock(&self.output).len();
+        let mut stdin = self.stdin.lock().await;
+        stdin
+            .write_all(format!("{code}\n").as_bytes())
+            .await
+            .map_err(|_| ProviderError::Failed("This sign-in has ended. Start again.".into()))?;
+        let _ = stdin.flush().await;
+        drop(stdin);
+        // It answers a malformed one at once, and keeps waiting.
+        tokio::time::sleep(Duration::from_millis(300)).await;
+        let output = lock(&self.output);
+        if output.get(seen..).is_some_and(|new| new.contains("Invalid code")) {
+            return Err(ProviderError::Failed(INVALID_CODE.into()));
+        }
+        Ok(())
+    }
+}
+
+const CODE_PROMPT: &str = "Paste code here if prompted >";
+const INVALID_CODE: &str = "That isn't the whole code. Copy all of it from the page and try again.";
 
 pub async fn start_sign_in(method: SignInMethod) -> Result<SignIn, ProviderError> {
     let mut cmd = cli(&installed()?);
@@ -199,9 +255,12 @@ pub async fn start_sign_in(method: SignInMethod) -> Result<SignIn, ProviderError
         if let Some(url) = url {
             return Ok(SignIn {
                 child,
-                stdin,
-                output,
+                code: CodeInput {
+                    stdin: Arc::new(tokio::sync::Mutex::new(stdin)),
+                    output,
+                },
                 url,
+                cancel: Arc::new(Notify::new()),
             });
         }
         if let Ok(Some(_)) = child.try_wait() {

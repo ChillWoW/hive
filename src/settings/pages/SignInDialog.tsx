@@ -11,9 +11,9 @@ import { Button, Input, Modal, useLastNonNull } from "@/ui";
 type Step =
     | { kind: "choose" }
     | { kind: "starting"; method: SignInMethod }
-    | { kind: "code"; loginId: string; url: string }
-    // The browser finishes the sign-in itself (Codex): no code, just waiting.
-    | { kind: "browser"; url: string }
+    // The browser finishes the sign-in; with `acceptsCode` (Claude) `url` is
+    // the fallback page, whose code can be pasted here meanwhile.
+    | { kind: "browser"; loginId: string; url: string; opened: boolean; acceptsCode: boolean }
     | { kind: "failed"; message: string };
 
 type Method = { method: SignInMethod; label: string; description: string };
@@ -50,9 +50,11 @@ function open(url: string) {
 }
 
 /**
- * The CLI's own sign-in. Claude: it opens Claude's page in the browser, which shows
- * a code once access is approved; the code goes back to the CLI here. A new
- * login replaces the current one. Closed while `catalog` is null.
+ * The CLI's own sign-in, as in a terminal: approving access in the browser
+ * finishes it (Claude's CLI opens the page itself and listens on localhost;
+ * Codex's page is opened here). If Claude's browser didn't open, its fallback
+ * page shows a code to paste here instead. A new login replaces the current
+ * one. Closed while `catalog` is null.
  */
 export function SignInDialog({
     catalog,
@@ -66,6 +68,7 @@ export function SignInDialog({
     const [step, setStep] = useState<Step>({ kind: "choose" });
     const [code, setCode] = useState("");
     const [verifying, setVerifying] = useState(false);
+    const [codeError, setCodeError] = useState<string | null>(null);
     // The login the CLI is holding open, so closing can end it.
     const pending = useRef<string | null>(null);
     // Bumped on close, so a start that lands afterwards is dropped.
@@ -100,6 +103,8 @@ export function SignInDialog({
         const mine = ++session.current;
         setStep({ kind: "starting", method });
         setCode("");
+        setCodeError(null);
+        setVerifying(false);
         try {
             const started = await providersApi.signIn(target.id, method);
             if (mine !== session.current) {
@@ -107,14 +112,16 @@ export function SignInDialog({
                 return;
             }
             pending.current = started.loginId;
-            if (started.needsCode) {
-                setStep({ kind: "code", loginId: started.loginId, url: started.url });
-                return;
-            }
-            // The CLI waits for the browser; finishing just waits with it.
-            setStep({ kind: "browser", url: started.url });
-            open(started.url);
-            await providersApi.finishSignIn(started.loginId, "");
+            setStep({
+                kind: "browser",
+                loginId: started.loginId,
+                url: started.url,
+                opened: started.opened,
+                acceptsCode: started.acceptsCode
+            });
+            if (!started.opened) open(started.url);
+            // The CLI waits for the browser (or a pasted code); this waits with it.
+            await providersApi.finishSignIn(started.loginId);
             pending.current = null;
             await afterChange(target.id);
             if (mine === session.current) onClose();
@@ -123,6 +130,8 @@ export function SignInDialog({
                 pending.current = null;
                 setStep({ kind: "failed", message: errorMessage(error) });
             }
+        } finally {
+            if (mine === session.current) setVerifying(false);
         }
     };
 
@@ -132,20 +141,19 @@ export function SignInDialog({
         else setStep({ kind: "choose" });
     };
 
-    const finish = async () => {
-        if (step.kind !== "code" || !shown || !code.trim()) return;
+    // The waiting `finishSignIn` ends with how the code went.
+    const submitCode = async () => {
+        if (step.kind !== "browser" || !code.trim() || verifying) return;
         const mine = session.current;
         setVerifying(true);
-        // The CLI is done with this login whatever happens.
-        pending.current = null;
+        setCodeError(null);
         try {
-            await providersApi.finishSignIn(step.loginId, code);
-            await afterChange(shown.id);
-            if (mine === session.current) onClose();
+            await providersApi.submitSignInCode(step.loginId, code);
         } catch (error) {
-            if (mine === session.current) setStep({ kind: "failed", message: errorMessage(error) });
-        } finally {
-            setVerifying(false);
+            if (mine === session.current) {
+                setVerifying(false);
+                setCodeError(errorMessage(error));
+            }
         }
     };
 
@@ -196,51 +204,61 @@ export function SignInDialog({
                 </>
             )}
 
-            {step.kind === "code" && (
-                <form
-                    onSubmit={(event) => {
-                        event.preventDefault();
-                        void finish();
-                    }}
-                >
-                    <p>
-                        Approve access in your browser, then paste the code the page shows.
-                    </p>
-                    <ReopenLink url={step.url} />
-                    <Input
-                        autoFocus
-                        value={code}
-                        onChange={(event) => setCode(event.target.value)}
-                        placeholder="Paste the code"
-                        aria-label="Sign-in code"
-                        spellCheck={false}
-                        autoComplete="off"
-                        disabled={verifying}
-                        className="mt-3 w-full font-mono text-xs"
-                    />
-                    <Footer onCancel={close}>
-                        <Button
-                            type="submit"
-                            size="sm"
-                            variant="primary"
-                            loading={verifying}
-                            disabled={!code.trim()}
-                        >
-                            {verifying ? "Verifying…" : "Sign in"}
-                        </Button>
-                    </Footer>
-                </form>
-            )}
-
-            {step.kind === "browser" && (
+            {step.kind === "browser" && !step.acceptsCode && (
                 <>
                     <p className="flex items-center gap-2">
                         <CircleNotchIcon weight="bold" className="size-3.5 animate-spin" />
                         Approve access in your browser. Hive signs in once you do.
                     </p>
-                    <ReopenLink url={step.url} />
+                    <ReopenLink url={step.url} label="Reopen the sign-in page" />
                     <Footer onCancel={close} />
                 </>
+            )}
+
+            {step.kind === "browser" && step.acceptsCode && (
+                <form
+                    onSubmit={(event) => {
+                        event.preventDefault();
+                        void submitCode();
+                    }}
+                >
+                    <p className="flex items-center gap-2">
+                        <CircleNotchIcon weight="bold" className="size-3.5 animate-spin" />
+                        {verifying
+                            ? "Signing in…"
+                            : "Approve access in your browser. Hive signs in once you do."}
+                    </p>
+                    <p className="mt-3 text-xs text-dark-250">
+                        Browser didn't open? Open the sign-in page and paste the code it shows.
+                    </p>
+                    <ReopenLink url={step.url} label="Open the sign-in page" />
+                    <Input
+                        value={code}
+                        onChange={(event) => {
+                            setCode(event.target.value);
+                            setCodeError(null);
+                        }}
+                        placeholder="Paste the code"
+                        aria-label="Sign-in code"
+                        spellCheck={false}
+                        autoComplete="off"
+                        disabled={verifying}
+                        className="mt-2 w-full font-mono text-xs"
+                    />
+                    {codeError && <p className="mt-1.5 text-xs text-danger">{codeError}</p>}
+                    <Footer onCancel={close}>
+                        {code.trim() && (
+                            <Button
+                                type="submit"
+                                size="sm"
+                                variant="primary"
+                                loading={verifying}
+                            >
+                                {verifying ? "Verifying…" : "Sign in"}
+                            </Button>
+                        )}
+                    </Footer>
+                </form>
             )}
 
             {step.kind === "failed" && (
@@ -277,7 +295,7 @@ function Footer({
     );
 }
 
-function ReopenLink({ url }: { url: string }) {
+function ReopenLink({ url, label }: { url: string; label: string }) {
     return (
         <button
             type="button"
@@ -285,7 +303,7 @@ function ReopenLink({ url }: { url: string }) {
             className="mt-1.5 inline-flex items-center gap-1 text-xs text-dark-200 underline-offset-2 transition-colors hover:text-dark-50 hover:underline"
         >
             <ArrowSquareOutIcon className="size-3" />
-            Reopen the sign-in page
+            {label}
         </button>
     );
 }

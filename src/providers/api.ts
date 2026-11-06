@@ -67,8 +67,12 @@ export const providersApi = {
     signOut: (harness: HarnessId): Promise<void> => backend("provider_sign_out", { harness }),
     signIn: (harness: HarnessId, method: SignInMethod): Promise<SignInStarted> =>
         backend("provider_sign_in", { harness, method }),
-    finishSignIn: (loginId: string, code: string): Promise<void> =>
-        backend("provider_finish_sign_in", { loginId, code }),
+    /** Waits for the browser (or a code submitted meanwhile) to finish it. */
+    finishSignIn: (loginId: string): Promise<void> =>
+        backend("provider_finish_sign_in", { loginId }),
+    /** The fallback page's code, for a sign-in `finishSignIn` waits on. */
+    submitSignInCode: (loginId: string, code: string): Promise<void> =>
+        backend("provider_submit_sign_in_code", { loginId, code }),
     cancelSignIn: (loginId: string): Promise<void> =>
         backend("provider_cancel_sign_in", { loginId }, () => undefined)
 };

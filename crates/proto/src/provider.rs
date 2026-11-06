@@ -67,18 +67,20 @@ pub enum SignInMethod {
     Console,
 }
 
-/// A sign-in waiting for the code the browser shows.
+/// A sign-in waiting on the browser. It finishes when the browser does:
+/// finish it at once and wait.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct SignInStarted {
     pub login_id: String,
-    /// The page to approve access on. With `needs_code` the CLI already
-    /// tried to open it; without, the app opens it.
+    /// The page to approve access on. With `opened` the CLI already opened
+    /// its own page and this one is the fallback (Claude's shows a code);
+    /// without, the app opens it.
     pub url: String,
-    /// The page shows a code to paste back (Claude). Without one (Codex) the
-    /// sign-in finishes when the browser does: finish it at once, with no
-    /// code, and wait.
-    pub needs_code: bool,
+    pub opened: bool,
+    /// A code the fallback page shows can be pasted back while the sign-in
+    /// waits (`provider_submit_sign_in_code`; Claude).
+    pub accepts_code: bool,
 }
 
 /// How much of a subscription's rate limits the signed-in account has used,
