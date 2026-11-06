@@ -411,6 +411,28 @@ export function chipContent(
     }
 }
 
+/** `chipContent` labels as a line says them: while running, then once done. */
+const TENSES: Record<string, [running: string, done: string]> = {
+    Run: ["Running", "Ran"],
+    Read: ["Reading", "Read"],
+    Write: ["Writing", "Wrote"],
+    Edit: ["Editing", "Edited"],
+    Patch: ["Patching", "Patched"],
+    Search: ["Searching", "Searched"],
+    Glob: ["Listing", "Listed"],
+    Fetch: ["Fetching", "Fetched"],
+    Web: ["Searching web", "Searched web"],
+    Todo: ["Updating todos", "Todos"],
+    "Load tools": ["Loading tools", "Loaded tools"],
+    "Find tools": ["Finding tools", "Found tools"]
+};
+
+/** A call's label in the tense of its line: "Running" while it runs, "Ran" after. */
+export function lineLabel(label: string, running: boolean): string {
+    const tenses = TENSES[label];
+    return tenses ? tenses[running ? 0 : 1] : label;
+}
+
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
 type SummarySegment = { text: string; danger?: boolean };

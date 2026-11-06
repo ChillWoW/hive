@@ -1,7 +1,6 @@
 import { Fragment, use, useState, type ReactNode } from "react";
 import { Collapsible } from "@base-ui/react/collapsible";
 import {
-    CaretDownIcon,
     CaretRightIcon,
     CheckIcon,
     CircleIcon,
@@ -21,10 +20,19 @@ import { DiffView } from "./DiffView";
 import { Markdown } from "./Markdown";
 import { ThoughtIcon } from "./ThoughtIcon";
 import {
+    blockClassName,
+    lineBodyClassName,
+    lineClassName,
+    panelTransition,
+    targetClassName,
+    verbClassName
+} from "./line";
+import {
     chipContent,
     editedFiles,
     iconOf,
     isRunning,
+    lineLabel,
     pathOf,
     shortPath,
     skillOf,
@@ -39,25 +47,20 @@ import {
 /** Output past this many lines folds into a "N more lines" row. */
 const MAX_LINES = 24;
 
-export const panelTransition =
-    "h-(--collapsible-panel-height) overflow-hidden transition-[height] duration-200 ease-out data-ending-style:h-0 data-starting-style:h-0";
-
-/** A group's header: a caret that turns as it opens, then what the group did. */
+/** A group's header: what the group did, then a chevron that turns as it opens. */
 export function FoldHeader({ className, children }: { className?: string; children: ReactNode }) {
     return (
         <Collapsible.Trigger
             className={cn(
-                "group/header flex h-[26px] max-w-full items-center gap-1.5 pr-1 text-left text-xs text-dark-200 transition-colors hover:text-dark-50",
+                "group/header flex h-6 max-w-full items-center gap-1.5 text-left text-[13px] text-dark-250 transition-colors hover:text-dark-100",
                 className
             )}
         >
-            <span className="relative h-[18px] w-[22px] shrink-0">
-                <CaretDownIcon
-                    weight="bold"
-                    className="absolute top-0.5 left-[5.5px] size-3.5 -rotate-90 transition-transform duration-200 group-data-panel-open/header:rotate-0"
-                />
-            </span>
             {children}
+            <CaretRightIcon
+                weight="bold"
+                className="size-3 shrink-0 opacity-80 transition-transform duration-200 group-data-panel-open/header:rotate-90"
+            />
         </Collapsible.Trigger>
     );
 }
@@ -65,7 +68,7 @@ export function FoldHeader({ className, children }: { className?: string; childr
 /**
  * A run of consecutive tool calls and thoughts behind one quiet summary —
  * "Thought process · Ran 3 commands · edited 2 files · 1 failed" — opening
- * onto a tree rail with one line per item.
+ * onto a line per item: a small muted icon, the verb, what it acted on.
  *
  * Open while `active` (the group is the tail of a turn still running), then
  * folded; a click makes it the user's either way. The header stays muted
@@ -107,14 +110,13 @@ export function ToolGroup({
                 </span>
             </FoldHeader>
             <Collapsible.Panel className={panelTransition}>
-                <div className="flex flex-col pt-0.5">
-                    {items.map((item, i) => (
+                <div className="flex flex-col pt-1">
+                    {items.map((item) => (
                         <Item
                             // A run keeps its first call's key, so the row
                             // stays put (and keeps its fold) as it grows.
                             key={item.kind === "edits" ? item.parts[0]!.id : item.part.id}
                             item={item}
-                            last={i === items.length - 1}
                             streaming={streaming}
                         />
                     ))}
@@ -124,85 +126,76 @@ export function ToolGroup({
     );
 }
 
-/**
- * The tree: a trunk down the gutter, a rounded elbow out to each item's
- * icon, and the trunk carrying on past an open item's body to the next.
- * Opaque strokes, so the joints don't double up the way alpha would.
- */
-export function Rail({
-    icon: RailIcon,
+/** A line's icon: muted, red when it failed, blue while it runs past its turn. */
+export function LineIcon({
+    icon: Icon,
     failed,
-    running = false,
-    last
+    running = false
 }: {
     icon: ToolIcon;
     failed: boolean;
-    /** Still running past its turn (a background shell): the icon in blue. */
+    /** Still running past its turn (a background shell). */
     running?: boolean;
-    last: boolean;
 }) {
     return (
-        <div aria-hidden className="relative w-12 shrink-0 self-stretch">
-            <span className="absolute top-0 left-3 h-2.5 w-px bg-dark-600" />
-            {!last && <span className="absolute top-2.5 bottom-0 left-3 w-px bg-dark-600" />}
-            <span className="absolute top-2.5 left-3 h-1.5 w-4 rounded-bl-[6px] border-b border-l border-dark-600" />
-            <RailIcon
-                className={cn(
-                    "absolute top-2 left-8 size-4",
-                    failed ? "text-danger" : running ? "text-info" : "text-dark-200"
-                )}
-            />
-        </div>
+        <Icon
+            className={cn(
+                "size-3.5 shrink-0 transition-colors",
+                failed ? "text-danger" : running ? "text-info" : "text-dark-300 group-hover/item:text-dark-200"
+            )}
+        />
     );
 }
 
-/** A chip on a rail line: an icon in its own square, then a name. */
-export function Badge({
-    icon,
-    title,
-    className,
-    children
-}: {
-    icon: ReactNode;
-    title?: string;
-    className?: string;
-    children: ReactNode;
-}) {
+/** A file on a line: its icon and name; the path is in the tooltip. */
+function FileName({ path, failed }: { path: string; failed: boolean }) {
+    const cwd = use(ChatCwd);
     return (
         <span
-            title={title}
+            title={shortPath(path, cwd)}
             className={cn(
-                "flex h-[22px] min-w-0 items-center gap-1.5 rounded-[5px] bg-white/[0.06] pr-1.5 pl-px",
-                className
+                "flex min-w-0 items-center gap-1.5 transition-colors",
+                failed ? "text-danger" : "text-dark-200 group-hover/item:text-dark-100"
             )}
         >
-            <span className="flex size-5 shrink-0 items-center justify-center rounded-[4px] bg-white/[0.05]">
-                {icon}
-            </span>
-            {children}
+            <FileIcon name={path} className="size-[13px] shrink-0" />
+            <span className="min-w-0 truncate">{baseName(path)}</span>
         </span>
     );
 }
 
-/** A file the call touched, as a chip: its name only; the path is in the tooltip. */
-function FileBadge({ path, failed }: { path: string; failed: boolean }) {
-    const cwd = use(ChatCwd);
+/** `+12 −3`, in the line's smaller type. */
+function Counts({ added, removed }: { added: number; removed: number }) {
+    if (!added && !removed) return null;
     return (
-        <Badge
-            title={shortPath(path, cwd)}
-            icon={<FileIcon name={path} className={cn("size-3.5", failed && "opacity-60")} />}
-            className={failed ? "text-danger" : "text-dark-100 group-hover/item:text-dark-50"}
-        >
-            <span className="min-w-0 truncate">{baseName(path)}</span>
-        </Badge>
+        <span className="shrink-0 text-xs tabular-nums">
+            {added > 0 && <span className="text-success">+{added}</span>}
+            {added > 0 && removed > 0 && " "}
+            {removed > 0 && <span className="text-danger">−{removed}</span>}
+        </span>
     );
 }
 
-function Item({ item, last, streaming }: { item: GroupItem; last: boolean; streaming: boolean }) {
+/** Each file a run of changes touched, with its lines added and removed, in first-touched order. */
+function fileCounts(parts: ToolPart[]) {
+    return editedFiles(parts).map((path) => {
+        let added = 0;
+        let removed = 0;
+        for (const part of parts) {
+            if (pathOf(part.call) !== path) continue;
+            const change = changeOf(part);
+            added += change?.additions ?? 0;
+            removed += change?.deletions ?? 0;
+        }
+        return { path, added, removed };
+    });
+}
+
+function Item({ item, streaming }: { item: GroupItem; streaming: boolean }) {
     const cwd = use(ChatCwd);
     const tasks = use(LiveTasks);
-    // Everything starts folded (a live thought's preview line is in the
-    // header); a click opens it.
+    // Everything starts folded (a live thought's preview is on its line);
+    // a click opens it.
     const [open, setOpen] = useState(false);
     const call = item.kind === "call" ? item.part.call : undefined;
 
@@ -215,12 +208,11 @@ function Item({ item, last, streaming }: { item: GroupItem; last: boolean; strea
                 <ShellRow
                     part={part}
                     task={task}
-                    rail={(tone) => (
-                        <Rail
+                    icon={(tone) => (
+                        <LineIcon
                             icon={iconOf(part.call)}
                             failed={tone === "failed" || part.isError}
                             running={tone === "running"}
-                            last={last}
                         />
                     )}
                     body={<CallBody part={part} />}
@@ -232,117 +224,81 @@ function Item({ item, last, streaming }: { item: GroupItem; last: boolean; strea
     const running =
         (item.kind === "call" && isRunning(item.part, streaming)) ||
         (item.kind === "edits" && item.parts.some((p) => isRunning(p, streaming)));
-    const files = item.kind === "edits" ? editedFiles(item.parts) : undefined;
-    const { label, detail } =
-        item.kind === "call"
-            ? chipContent(item.part.call, cwd, item.part.output)
-            : item.kind === "edits"
-              ? { label: files!.length === 1 ? "Edited" : `Edited ${files!.length} files`, detail: "" }
-              : { label: item.live ? "Thinking" : "Thought", detail: thoughtPreview(item.part.text, item.live) };
-    const path = call && pathOf(call);
+    const live = running || (item.kind === "thought" && item.live);
+
+    let label: string;
+    let target: ReactNode = null;
+    if (item.kind === "thought") {
+        label = item.live ? "Thinking" : "Thought";
+        const preview = thoughtPreview(item.part.text, item.live);
+        if (preview) target = <span className={targetClassName}>{preview}</span>;
+    } else if (item.kind === "edits") {
+        label = running ? "Editing" : "Edited";
+        target = (
+            <span className="flex min-w-0 items-center gap-3 overflow-hidden">
+                {fileCounts(item.parts).map(({ path, added, removed }) => (
+                    <span key={path} className="flex min-w-0 items-center gap-1.5">
+                        <FileName path={path} failed={false} />
+                        <Counts added={added} removed={removed} />
+                    </span>
+                ))}
+            </span>
+        );
+    } else {
+        const content = chipContent(item.part.call, cwd, item.part.output);
+        label = lineLabel(content.label, running);
+        const path = pathOf(item.part.call);
+        if (path) {
+            const change = changeOf(item.part);
+            target = (
+                <>
+                    <FileName path={path} failed={failed} />
+                    {!failed && <Counts added={change?.additions ?? 0} removed={change?.deletions ?? 0} />}
+                </>
+            );
+        } else if (content.detail) {
+            target = <span className={targetClassName}>{content.detail}</span>;
+        }
+    }
+
     const body =
         item.kind === "thought" ? (
             item.part.text.trim() && (
-                <div className="pt-0.5 pb-2">
+                <div className={blockClassName}>
                     <Markdown className="markdown-muted markdown-small" streaming={item.live}>
                         {item.part.text}
                     </Markdown>
                 </div>
             )
         ) : item.kind === "edits" ? (
-            // Every change on its own line, on a rail of its own.
+            // Every change on its own line.
             <div className="flex flex-col pb-1">
-                {item.parts.map((part, i) => (
-                    <Item
-                        key={part.id}
-                        item={{ kind: "call", part }}
-                        last={i === item.parts.length - 1}
-                        streaming={streaming}
-                    />
+                {item.parts.map((part) => (
+                    <Item key={part.id} item={{ kind: "call", part }} streaming={streaming} />
                 ))}
             </div>
         ) : (
             <CallBody part={item.part} />
         );
 
-    const header = (
+    const icon = call ? iconOf(call) : item.kind === "edits" ? PencilSimpleIcon : ThoughtIcon;
+    const line = (
         <>
-            <span
-                className={cn(
-                    "shrink-0",
-                    failed ? "text-danger" : "text-dark-200 group-hover/item:text-dark-50",
-                    (running || (item.kind === "thought" && item.live)) && "shimmer"
-                )}
-            >
-                {label}
-            </span>
-            {failed && <span className="shrink-0 text-danger">Failed</span>}
-            {files ? (
-                <span className="flex min-w-0 items-center gap-1 overflow-hidden">
-                    {files.map((file) => (
-                        <FileBadge key={file} path={file} failed={false} />
-                    ))}
-                </span>
-            ) : path ? (
-                <FileBadge path={path} failed={failed} />
-            ) : (
-                detail && (
-                    <span
-                        className={cn(
-                            "min-w-0 truncate",
-                            failed ? "text-danger/80" : "text-dark-250 group-hover/item:text-dark-100"
-                        )}
-                    >
-                        {detail}
-                    </span>
-                )
-            )}
-            {item.kind !== "thought" && <Trailing parts={item.kind === "call" ? [item.part] : item.parts} />}
-            {body && (
-                <span className="ml-auto flex size-[18px] shrink-0 items-center justify-center text-dark-250 opacity-0 transition-opacity group-hover/item:opacity-100 group-data-panel-open/item:opacity-100">
-                    <CaretRightIcon
-                        weight="bold"
-                        className="size-3 transition-transform duration-200 group-data-panel-open/item:rotate-90"
-                    />
-                </span>
-            )}
+            <LineIcon icon={icon} failed={failed} />
+            <span className={cn(verbClassName, live && "shimmer")}>{label}</span>
+            {target}
+            {failed && <span className="shrink-0 text-xs text-danger">failed</span>}
         </>
     );
-    const rowClassName = "group/item flex h-8 w-full min-w-0 items-center gap-2 text-left text-xs";
 
+    if (!body) return <div className={lineClassName}>{line}</div>;
     return (
-        <div className="flex min-w-0">
-            <Rail icon={call ? iconOf(call) : files ? PencilSimpleIcon : ThoughtIcon} failed={failed} last={last} />
-            <div className="ml-2 min-w-0 flex-1">
-                {body ? (
-                    <Collapsible.Root open={open} onOpenChange={setOpen}>
-                        <Collapsible.Trigger className={rowClassName}>{header}</Collapsible.Trigger>
-                        <Collapsible.Panel className={panelTransition}>{body}</Collapsible.Panel>
-                    </Collapsible.Root>
-                ) : (
-                    <div className={rowClassName}>{header}</div>
-                )}
-            </div>
-        </div>
-    );
-}
-
-/** After the detail: +/- counts for a file change, summed over a run of them. */
-function Trailing({ parts }: { parts: ToolPart[] }) {
-    let added = 0;
-    let removed = 0;
-    for (const part of parts) {
-        const change = changeOf(part);
-        added += change?.additions ?? 0;
-        removed += change?.deletions ?? 0;
-    }
-    if (!added && !removed) return null;
-    return (
-        <span className="shrink-0 tabular-nums">
-            {added > 0 && <span className="text-success">+{added}</span>}
-            {added > 0 && removed > 0 && " "}
-            {removed > 0 && <span className="text-danger">−{removed}</span>}
-        </span>
+        <Collapsible.Root open={open} onOpenChange={setOpen}>
+            <Collapsible.Trigger className={cn(lineClassName, "cursor-pointer")}>{line}</Collapsible.Trigger>
+            <Collapsible.Panel className={panelTransition}>
+                <div className={lineBodyClassName}>{body}</div>
+            </Collapsible.Panel>
+        </Collapsible.Root>
     );
 }
 
@@ -382,14 +338,14 @@ function Lines({ text, className }: { text: string; className?: string }) {
     const lines = text.replace(/\n+$/, "").split("\n");
     const hidden = Math.max(0, lines.length - MAX_LINES);
     return (
-        <div className={cn("overflow-x-auto py-1.5 font-mono text-xs leading-[18px]", className)}>
+        <div className={className}>
             {lines.slice(0, MAX_LINES).map((line, i) => (
                 <div key={i} className="min-h-[18px] whitespace-pre">
                     {line}
                 </div>
             ))}
             {hidden > 0 && (
-                <div className="font-sans text-dark-250">
+                <div className="pt-0.5 font-sans text-dark-250">
                     {hidden.toLocaleString()} more {hidden === 1 ? "line" : "lines"}
                 </div>
             )}
@@ -404,18 +360,15 @@ function json(value: JsonValue | undefined) {
     return JSON.stringify(value, null, 2);
 }
 
-/** What exactly was asked: the whole command, pattern, URL or input the header cut to one line. */
+/**
+ * What exactly was asked, when the line cut it short: the whole command,
+ * pattern, URL or input. Nothing for file calls, whose line names the file.
+ */
 function invocationOf(part: ToolPart, cwd: string | undefined): string {
     const call = part.call;
     switch (call.kind) {
         case "exec":
-            return call.command;
-        case "readFile":
-        case "writeFile":
-        case "editFile":
-            return shortPath(call.path, cwd);
-        case "applyPatch":
-            return call.path ? shortPath(call.path, cwd) : "";
+            return `$ ${call.command}`;
         case "search":
             return call.path ? `${call.pattern}\nin ${shortPath(call.path, cwd)}` : call.pattern;
         case "glob":
@@ -431,32 +384,23 @@ function invocationOf(part: ToolPart, cwd: string | undefined): string {
         }
         case "mcp":
             return json(call.input);
+        case "readFile":
+        case "writeFile":
+        case "editFile":
+        case "applyPatch":
         case "todo":
         case "subagent":
             return "";
     }
 }
 
-/** An open call: the invocation, then what came back — a diff, a task list or the output. */
+/** An open call: a diff or a task list, else one block with the invocation over the output. */
 function CallBody({ part }: { part: ToolPart }): ReactNode {
     const cwd = use(ChatCwd);
-    const invocation = invocationOf(part, cwd);
-    const result = callResult(part);
-    if (!invocation && !result) return null;
-    return (
-        <div className="pb-1.5">
-            {invocation && <Lines text={invocation} className="text-dark-200" />}
-            {result}
-        </div>
-    );
-}
-
-/** What a call came back with: a diff, a task list or the output; null for nothing. */
-function callResult(part: ToolPart): ReactNode {
     const call = part.call;
     if (call.kind === "todo") {
         return (
-            <ul className="flex flex-col gap-1 py-1.5 text-xs">
+            <ul className={cn(blockClassName, "flex flex-col gap-1 text-xs")}>
                 {call.items.map((item, i) => (
                     <li key={i} className="flex items-start gap-2">
                         {item.status === "completed" ? (
@@ -483,9 +427,15 @@ function callResult(part: ToolPart): ReactNode {
         );
     }
     const change = changeOf(part);
-    if (change && change.lineCount > 0 && !part.isError) return <DiffView file={change} className="my-1.5" />;
-    if (part.output?.trim()) {
-        return <Lines text={part.output} className={part.isError ? "text-danger/80" : "text-dark-250"} />;
-    }
-    return null;
+    if (change && change.lineCount > 0 && !part.isError) return <DiffView file={change} className="mt-0.5 mb-2" />;
+
+    const invocation = invocationOf(part, cwd);
+    const output = part.output?.trim() ? part.output : "";
+    if (!invocation && !output) return null;
+    return (
+        <div className={cn(blockClassName, "flex flex-col gap-1.5 font-mono text-xs leading-[18px]")}>
+            {invocation && <Lines text={invocation} className="text-dark-100" />}
+            {output && <Lines text={output} className={part.isError ? "text-danger/80" : "text-dark-250"} />}
+        </div>
+    );
 }

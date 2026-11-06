@@ -1,6 +1,5 @@
 import { use, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Collapsible } from "@base-ui/react/collapsible";
-import { CaretRightIcon, GlobeSimpleIcon, XIcon } from "@phosphor-icons/react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { cn } from "@/lib/cn";
 import { formatElapsed, useNow } from "@/lib/time";
@@ -9,6 +8,7 @@ import { ChatCwd, TaskChat } from "./context";
 import { ShellOutput } from "./ShellOutput";
 import { failureOf, plainText, seenShells as seen, servedUrl, useTaskOutput } from "./shellTask";
 import { chipContent, type ToolPart } from "./tools";
+import { lineBodyClassName, lineClassName, panelTransition, targetClassName, verbClassName } from "./line";
 
 /** How often a running shell's row reads its output for its port and failures. */
 const ROW_POLL_MS = 4000;
@@ -24,12 +24,12 @@ const ROW_POLL_MS = 4000;
 export function ShellRow({
     part,
     task,
-    rail,
+    icon,
     body
 }: {
     part: ToolPart;
     task: BackgroundTask | undefined;
-    rail: (tone: "running" | "failed" | undefined) => ReactNode;
+    icon: (tone: "running" | "failed" | undefined) => ReactNode;
     body: ReactNode;
 }) {
     const chatId = use(TaskChat);
@@ -73,68 +73,40 @@ export function ShellRow({
           : "in background";
 
     return (
-        <div className="flex min-w-0">
-            {rail(failure ? "failed" : live ? "running" : undefined)}
-            <div className="ml-2 min-w-0 flex-1">
-                <Collapsible.Root open={open} onOpenChange={setOpen}>
-                    <div className="group/item relative flex h-8 w-full min-w-0 items-center gap-2 text-xs">
-                        {/* The whole row opens it; the port sits above. */}
-                        <Collapsible.Trigger
-                            aria-label={`${open ? "Hide" : "Show"} output of ${detail}`}
-                            className="absolute inset-0 outline-none"
-                        />
-                        <span
-                            className={cn(
-                                "pointer-events-none shrink-0 text-dark-200 group-hover/item:text-dark-50",
-                                live && "shimmer"
-                            )}
-                        >
-                            {live ? "Running" : "Ran"}
-                        </span>
-                        <span className="pointer-events-none min-w-0 truncate text-dark-250 group-hover/item:text-dark-100">
-                            {detail}
-                        </span>
-                        {live && url && (
-                            <button
-                                type="button"
-                                onClick={() => void openUrl(url.url).catch(() => {})}
-                                aria-label={`Open ${url.url}`}
-                                className={cn(
-                                    "relative z-10 inline-flex h-[18px] shrink-0 items-center gap-1 rounded px-1.5 font-mono text-[11px] text-info outline-none",
-                                    "bg-info/12 transition-colors hover:bg-info/20 focus-visible:bg-info/20"
-                                )}
-                            >
-                                <GlobeSimpleIcon className="size-3" />:{url.port}
-                            </button>
-                        )}
-                        {failure && (
-                            <span className="pointer-events-none inline-flex h-[18px] shrink-0 items-center gap-1 rounded bg-danger/12 px-1.5 text-[11px] text-danger">
-                                <XIcon weight="bold" className="size-2.5" />
-                                {failure}
-                            </span>
-                        )}
-                        <span className="pointer-events-none ml-auto flex shrink-0 items-center gap-0.5">
-                            <span className="px-1 text-[11px] text-dark-250 tabular-nums">{meta}</span>
-                            <span className="flex size-[18px] items-center justify-center text-dark-250 opacity-0 transition-opacity group-hover/item:opacity-100 group-has-[[data-panel-open]]/item:opacity-100">
-                                <CaretRightIcon
-                                    weight="bold"
-                                    className={cn(
-                                        "size-3 transition-transform duration-200",
-                                        open && "rotate-90"
-                                    )}
-                                />
-                            </span>
-                        </span>
-                    </div>
-                    <Collapsible.Panel className="h-(--collapsible-panel-height) overflow-hidden transition-[height] duration-200 ease-out data-ending-style:h-0 data-starting-style:h-0">
-                        {readable ? (
-                            <ShellOutput chatId={chatId} taskId={task.id} className="pt-0.5 pb-2" />
-                        ) : (
-                            body
-                        )}
-                    </Collapsible.Panel>
-                </Collapsible.Root>
+        <Collapsible.Root open={open} onOpenChange={setOpen}>
+            <div className={cn(lineClassName, "relative")}>
+                {/* The whole line opens it; the address sits above. */}
+                <Collapsible.Trigger
+                    aria-label={`${open ? "Hide" : "Show"} output of ${detail}`}
+                    className="absolute inset-0 cursor-pointer outline-none"
+                />
+                <span className="pointer-events-none contents">
+                    {icon(failure ? "failed" : live ? "running" : undefined)}
+                </span>
+                <span className={cn(verbClassName, "pointer-events-none", live && "shimmer")}>
+                    {live ? "Running" : "Ran"}
+                </span>
+                <span className={cn(targetClassName, "pointer-events-none")}>{detail}</span>
+                {live && url && (
+                    <button
+                        type="button"
+                        onClick={() => void openUrl(url.url).catch(() => {})}
+                        aria-label={`Open ${url.url}`}
+                        className="relative z-10 shrink-0 text-xs text-info outline-none hover:underline focus-visible:underline"
+                    >
+                        {url.url.replace(/^https?:\/\//, "").replace(/\/$/, "")}
+                    </button>
+                )}
+                {failure && <span className="pointer-events-none shrink-0 text-xs text-danger">{failure}</span>}
+                <span className="pointer-events-none ml-auto shrink-0 pl-3 text-xs text-dark-300 tabular-nums">
+                    {meta}
+                </span>
             </div>
-        </div>
+            <Collapsible.Panel className={panelTransition}>
+                <div className={lineBodyClassName}>
+                    {readable ? <ShellOutput chatId={chatId} taskId={task.id} className="pt-0.5 pb-2" /> : body}
+                </div>
+            </Collapsible.Panel>
+        </Collapsible.Root>
     );
 }

@@ -18,7 +18,8 @@ import { isTauri, REVEAL_LABEL } from "@/lib/platform";
 import type { Worktree } from "@/proto";
 import { openTerminalTab } from "@/rightbar";
 import { useNow } from "@/lib/time";
-import { Badge, FoldHeader, panelTransition, Rail } from "./ToolGroup";
+import { lineClassName, panelTransition, targetClassName, verbClassName } from "./line";
+import { FoldHeader, LineIcon } from "./ToolGroup";
 import type { ToolIcon } from "./tools";
 
 const STAGE_LABELS: Record<SetupStage["id"], string> = {
@@ -48,36 +49,27 @@ const STATUS_ICONS: Record<SetupStatus, ToolIcon> = {
     failed: XCircleIcon
 };
 
-function BranchBadge({ branch }: { branch: string }) {
+function BranchName({ branch }: { branch: string }) {
     return (
-        <Badge icon={<GitBranchIcon className="size-3.5" />} className="text-dark-100">
-            <span className="min-w-0 truncate font-mono text-[11px]">{branch}</span>
-        </Badge>
+        <span className={cn(targetClassName, "flex items-center gap-1.5")}>
+            <GitBranchIcon className="size-[13px] shrink-0" />
+            <span className="min-w-0 truncate font-mono text-xs">{branch}</span>
+        </span>
     );
 }
 
-function StageRow({
-    stage,
-    last,
-    now,
-    agent
-}: {
-    stage: SetupStage;
-    last: boolean;
-    now: number;
-    agent?: string;
-}) {
+function StageRow({ stage, now, agent }: { stage: SetupStage; now: number; agent?: string }) {
     const running = stage.status === "running";
     const failed = stage.status === "failed";
     const elapsed =
         stage.startedAt !== undefined ? (stage.endedAt ?? now) - stage.startedAt : undefined;
     return (
-        <div className="flex h-8 min-w-0 items-center gap-2 text-xs">
-            <Rail icon={STATUS_ICONS[stage.status]} failed={failed} last={last} />
+        <div className={lineClassName}>
+            <LineIcon icon={STATUS_ICONS[stage.status]} failed={failed} />
             <span
                 className={cn(
-                    "shrink-0",
-                    failed ? "text-danger" : "text-dark-200",
+                    verbClassName,
+                    failed && "text-danger",
                     stage.status === "pending" && "opacity-50",
                     running && "shimmer"
                 )}
@@ -85,16 +77,14 @@ function StageRow({
                 {STAGE_LABELS[stage.id]}
             </span>
             {stage.branch && stage.status !== "pending" ? (
-                <BranchBadge branch={stage.branch} />
+                <BranchName branch={stage.branch} />
             ) : (
                 stage.id === "agent" &&
                 agent &&
-                stage.status !== "pending" && (
-                    <span className="min-w-0 truncate text-dark-250">{agent}</span>
-                )
+                stage.status !== "pending" && <span className={targetClassName}>{agent}</span>
             )}
             {elapsed !== undefined && stage.status !== "pending" && (
-                <span className="ml-auto shrink-0 pr-1 text-[11px] text-dark-250 tabular-nums">
+                <span className="ml-auto shrink-0 pl-3 text-xs text-dark-300 tabular-nums">
                     {formatDuration(elapsed)}
                 </span>
             )}
@@ -129,7 +119,7 @@ function ActionButton({
 /** Where the worktree is, and what to do with it. */
 function Details({ worktree }: { worktree: Worktree }) {
     return (
-        <div className="flex flex-col gap-2 pt-1 pb-1 pl-12">
+        <div className="flex flex-col gap-2 pt-1 pb-1 pl-[22px]">
             <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-xs">
                 <dt className="text-dark-250">Branch</dt>
                 <dd className="truncate font-mono text-[11px] leading-4 text-dark-100">{worktree.branch}</dd>
@@ -216,18 +206,12 @@ export function WorktreeSetupCard({
                 )}
             </FoldHeader>
             <Collapsible.Panel className={panelTransition}>
-                <div className="flex flex-col pt-0.5">
-                    {setup?.stages.map((stage, i) => (
-                        <StageRow
-                            key={stage.id}
-                            stage={stage}
-                            last={i === setup.stages.length - 1}
-                            now={now}
-                            agent={agent}
-                        />
+                <div className="flex flex-col pt-1">
+                    {setup?.stages.map((stage) => (
+                        <StageRow key={stage.id} stage={stage} now={now} agent={agent} />
                     ))}
                     {setup?.error && (
-                        <p className="pt-0.5 pb-1 pl-12 text-xs break-words whitespace-pre-wrap text-danger">
+                        <p className="pt-0.5 pb-1 pl-[22px] text-xs break-words whitespace-pre-wrap text-danger">
                             {setup.error}
                         </p>
                     )}
