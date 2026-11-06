@@ -13,7 +13,9 @@ import type { JsonValue } from "@/proto/serde_json/JsonValue";
 import { cn } from "@/lib/cn";
 import { baseName } from "@/lib/paths";
 import { FileIcon } from "@/ui";
-import { ChatCwd } from "./context";
+import { ChatCwd, LiveTasks } from "./context";
+import { ShellRow } from "./ShellRow";
+import { isBackgroundShell } from "./shellTask";
 import { diffLines, toFileDiff } from "./diff";
 import { DiffView } from "./DiffView";
 import { Markdown } from "./Markdown";
@@ -80,9 +82,14 @@ export function ToolGroup({
     streaming: boolean;
 }) {
     const [userOpen, setUserOpen] = useState<boolean>();
+    const tasks = use(LiveTasks);
+    // Commands still running in the background keep the group open past its turn.
+    const background = items.filter(
+        (item) => item.kind === "call" && tasks.some((t) => t.toolCallId === item.part.id)
+    ).length;
 
     return (
-        <Collapsible.Root open={userOpen ?? active} onOpenChange={setUserOpen}>
+        <Collapsible.Root open={userOpen ?? (active || background > 0)} onOpenChange={setUserOpen}>
             <FoldHeader>
                 <span className={cn("min-w-0 truncate", active && "shimmer")}>
                     {summarize(items).map((s, i) => (
@@ -91,6 +98,12 @@ export function ToolGroup({
                             <span className={cn(s.danger && "text-danger")}>{s.text}</span>
                         </Fragment>
                     ))}
+                    {background > 0 && (
+                        <>
+                            {" · "}
+                            <span className="text-info">{background} running</span>
+                        </>
+                    )}
                 </span>
             </FoldHeader>
             <Collapsible.Panel className={panelTransition}>
@@ -116,14 +129,28 @@ export function ToolGroup({
  * icon, and the trunk carrying on past an open item's body to the next.
  * Opaque strokes, so the joints don't double up the way alpha would.
  */
-export function Rail({ icon: RailIcon, failed, last }: { icon: ToolIcon; failed: boolean; last: boolean }) {
+export function Rail({
+    icon: RailIcon,
+    failed,
+    running = false,
+    last
+}: {
+    icon: ToolIcon;
+    failed: boolean;
+    /** Still running past its turn (a background shell): the icon in blue. */
+    running?: boolean;
+    last: boolean;
+}) {
     return (
         <div aria-hidden className="relative w-12 shrink-0 self-stretch">
             <span className="absolute top-0 left-3 h-2.5 w-px bg-dark-600" />
             {!last && <span className="absolute top-2.5 bottom-0 left-3 w-px bg-dark-600" />}
             <span className="absolute top-2.5 left-3 h-1.5 w-4 rounded-bl-[6px] border-b border-l border-dark-600" />
             <RailIcon
-                className={cn("absolute top-2 left-8 size-4", failed ? "text-danger" : "text-dark-200")}
+                className={cn(
+                    "absolute top-2 left-8 size-4",
+                    failed ? "text-danger" : running ? "text-info" : "text-dark-200"
+                )}
             />
         </div>
     );
@@ -173,10 +200,34 @@ function FileBadge({ path, failed }: { path: string; failed: boolean }) {
 
 function Item({ item, last, streaming }: { item: GroupItem; last: boolean; streaming: boolean }) {
     const cwd = use(ChatCwd);
+    const tasks = use(LiveTasks);
     // Everything starts folded (a live thought's preview line is in the
     // header); a click opens it.
     const [open, setOpen] = useState(false);
     const call = item.kind === "call" ? item.part.call : undefined;
+
+    // A command left running in the background: a live row of its own.
+    if (item.kind === "call" && call?.kind === "exec") {
+        const part = item.part;
+        const task = tasks.find((t) => t.toolCallId === part.id);
+        if (isBackgroundShell(part, task)) {
+            return (
+                <ShellRow
+                    part={part}
+                    task={task}
+                    rail={(tone) => (
+                        <Rail
+                            icon={iconOf(part.call)}
+                            failed={tone === "failed" || part.isError}
+                            running={tone === "running"}
+                            last={last}
+                        />
+                    )}
+                    body={<CallBody part={part} />}
+                />
+            );
+        }
+    }
     const failed = item.kind === "call" && item.part.isError;
     const running =
         (item.kind === "call" && isRunning(item.part, streaming)) ||

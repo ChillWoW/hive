@@ -10,6 +10,7 @@ import {
     SUBAGENT_STATE,
     SubagentAvatar,
     subagentState,
+    TaskChat,
     Transcript,
     subagentName,
     useSubagent,
@@ -54,25 +55,27 @@ export function SubagentView({
 
     return (
         <LiveTasks value={tasks}>
-            <div className="flex h-full w-full flex-col">
-                <Transcript
-                    key={`subagent:${id}`}
-                    messages={threadMessages(chatId, spawn, message.createdAt, running)}
-                    cwd={cwd}
-                    harness={harness}
-                    onOpenSubagent={(child) => openSubagent(chatId, child)}
-                />
-                <div className="shrink-0 px-6 pb-3">
-                    <div className="mx-auto w-full max-w-3xl">
-                        <SubagentBar
-                            spawn={spawn}
-                            harness={harness}
-                            streaming={streaming}
-                            onOpenParent={openParent}
-                        />
+            <TaskChat value={chatId}>
+                <div className="flex h-full w-full flex-col">
+                    <Transcript
+                        key={`subagent:${id}`}
+                        messages={threadMessages(chatId, spawn, message.createdAt, running)}
+                        cwd={cwd}
+                        harness={harness}
+                        onOpenSubagent={(child) => openSubagent(chatId, child)}
+                    />
+                    <div className="shrink-0 px-6 pb-3">
+                        <div className="mx-auto w-full max-w-3xl">
+                            <SubagentBar
+                                spawn={spawn}
+                                harness={harness}
+                                streaming={streaming}
+                                onOpenParent={openParent}
+                            />
+                        </div>
                     </div>
                 </div>
-            </div>
+            </TaskChat>
         </LiveTasks>
     );
 }

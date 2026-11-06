@@ -1,35 +1,29 @@
+import { useMemo, useState, type KeyboardEvent, type ReactNode } from "react";
 import {
-    useEffect,
-    useLayoutEffect,
-    useMemo,
-    useRef,
-    useState,
-    type KeyboardEvent,
-    type ReactNode
-} from "react";
-import {
-    CaretDownIcon,
     CaretRightIcon,
-    CheckIcon,
-    CopyIcon,
     EyeIcon,
     FlowArrowIcon,
     GearSixIcon,
     RobotIcon,
+    StackIcon,
     TerminalWindowIcon,
     type Icon
 } from "@phosphor-icons/react";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { chats, type TranscriptMessage } from "@/chats";
-import { useCopy } from "@/lib/clipboard";
 import { cn } from "@/lib/cn";
 import { errorMessage } from "@/lib/errors";
 import { formatElapsed, useNow } from "@/lib/time";
-import type { BackgroundTask, BackgroundTaskKind, HarnessId, TaskOutput, ToolCall } from "@/proto";
+import type { BackgroundTask, BackgroundTaskKind, HarnessId, ToolCall } from "@/proto";
 import {
     AgentMark,
+    failureOf,
     findSpawnIn,
+    plainText,
     progressLine,
     RoundAvatar,
+    servedUrl,
+    useTaskOutput,
     type SpawnPart
 } from "@/transcript";
 import { DotMatrixSpinner } from "@/ui";
@@ -49,14 +43,12 @@ const KINDS: Record<BackgroundTaskKind, { icon: Icon; noun: [string, string]; ti
 
 const ORDER = Object.keys(KINDS) as BackgroundTaskKind[];
 
-/** How often an open shell's output is read again. */
-const OUTPUT_POLL_MS = 1500;
-
 /** "2 shells", "1 agent", or "3 tasks" for a mix, with the kind's icon. */
 function summary(tasks: BackgroundTask[]): { label: string; icon: Icon } {
     const mixed = new Set(tasks.map((t) => t.kind)).size > 1;
     const { noun, icon } = KINDS[mixed ? "other" : tasks[0].kind];
-    return { label: `${tasks.length} ${tasks.length === 1 ? noun[0] : noun[1]}`, icon };
+    // A mix is a stack of things, not the gear an unknown task gets.
+    return { label: `${tasks.length} ${tasks.length === 1 ? noun[0] : noun[1]}`, icon: mixed ? StackIcon : icon };
 }
 
 /** Each task after the one that launched it, indented under it. */
@@ -70,24 +62,6 @@ function nest(tasks: BackgroundTask[]): { task: BackgroundTask; depth: number }[
     };
     for (const task of tasks) if (!task.parentId || !ids.has(task.parentId)) visit(task, 0);
     return out;
-}
-
-/* eslint-disable no-control-regex -- terminal escape sequences, on purpose */
-const OSC = /\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g;
-const CSI = /\x1b\[[0-?]*[ -/]*[@-~]/g;
-const ESC = /\x1b[@-Z\\-_]/g;
-/* eslint-enable no-control-regex */
-
-/** Terminal output as plain text: escape sequences out, `\r` rewrites kept. */
-function plainText(output: string): string {
-    return output
-        .replace(OSC, "")
-        .replace(CSI, "")
-        .replace(ESC, "")
-        .split("\n")
-        .map((line) => line.split("\r").filter(Boolean).pop() ?? "")
-        .join("\n")
-        .trimEnd();
 }
 
 /**
@@ -221,26 +195,39 @@ function TaskList({
                             <span className="tabular-nums">{section.tasks.length}</span>
                         </div>
                         <div className="flex flex-col gap-px px-1">
-                            {nest(section.tasks).map(({ task, depth }) => (
-                                <TaskRow
-                                    key={task.id}
-                                    chatId={chatId}
-                                    harness={harness}
-                                    task={task}
-                                    depth={depth}
-                                    call={task.toolCallId ? calls.get(task.toolCallId) : undefined}
-                                    spawn={
-                                        task.kind === "agent" && task.toolCallId
-                                            ? findSpawnIn(messages, task.toolCallId)?.spawn
-                                            : undefined
-                                    }
-                                    now={now}
-                                    stopping={stopping.has(task.id)}
-                                    error={errors[task.id]}
-                                    onStop={() => stop(task.id)}
-                                    onOpenAgent={onOpenAgent}
-                                />
-                            ))}
+                            {nest(section.tasks).map(({ task, depth }) =>
+                                task.kind === "shell" || task.kind === "monitor" ? (
+                                    <ShellTaskRow
+                                        key={task.id}
+                                        chatId={chatId}
+                                        task={task}
+                                        depth={depth}
+                                        call={task.toolCallId ? calls.get(task.toolCallId) : undefined}
+                                        now={now}
+                                        stopping={stopping.has(task.id)}
+                                        error={errors[task.id]}
+                                        onStop={() => stop(task.id)}
+                                    />
+                                ) : (
+                                    <TaskRow
+                                        key={task.id}
+                                        harness={harness}
+                                        task={task}
+                                        depth={depth}
+                                        call={task.toolCallId ? calls.get(task.toolCallId) : undefined}
+                                        spawn={
+                                            task.kind === "agent" && task.toolCallId
+                                                ? findSpawnIn(messages, task.toolCallId)?.spawn
+                                                : undefined
+                                        }
+                                        now={now}
+                                        stopping={stopping.has(task.id)}
+                                        error={errors[task.id]}
+                                        onStop={() => stop(task.id)}
+                                        onOpenAgent={onOpenAgent}
+                                    />
+                                )
+                            )}
                         </div>
                     </section>
                 ))}
@@ -280,8 +267,8 @@ function toolCount(spawn: SpawnPart | undefined): number {
     return spawn?.thread?.filter((p) => p.kind === "tool").length ?? 0;
 }
 
+/** An agent, workflow or other task; shells and monitors are `ShellTaskRow`s. */
 function TaskRow({
-    chatId,
     harness,
     task,
     depth,
@@ -293,7 +280,6 @@ function TaskRow({
     onStop,
     onOpenAgent
 }: {
-    chatId: string;
     harness: HarnessId;
     task: BackgroundTask;
     depth: number;
@@ -305,9 +291,7 @@ function TaskRow({
     onStop: () => void;
     onOpenAgent: (spawnId: string) => void;
 }) {
-    const [expanded, setExpanded] = useState(false);
     const agent = task.kind === "agent";
-    const readable = task.kind === "shell" || task.kind === "monitor";
     const openable = agent && !!spawn;
     const { text: title, mono } = titleOf(task, call);
     const indent = depth * 16;
@@ -326,11 +310,7 @@ function TaskRow({
         detail = detailOf(task, call);
     }
 
-    const action = openable
-        ? { label: `Open ${title}`, run: () => onOpenAgent(spawn.id) }
-        : readable
-          ? { label: `${expanded ? "Hide" : "Show"} output of ${title}`, run: () => setExpanded((v) => !v) }
-          : null;
+    const action = openable ? { label: `Open ${title}`, run: () => onOpenAgent(spawn.id) } : null;
 
     return (
         <div className="flex flex-col">
@@ -346,7 +326,6 @@ function TaskRow({
                 <button
                     type="button"
                     data-task-row={task.id}
-                    aria-expanded={readable ? expanded : undefined}
                     aria-label={action?.label ?? title}
                     onClick={action?.run}
                     className={cn("absolute inset-0 rounded-md outline-none", !action && "cursor-default")}
@@ -381,8 +360,6 @@ function TaskRow({
                     </button>
                     <span className="grid w-3.5 place-items-center text-dark-250">
                         {openable && <CaretRightIcon className="size-3" />}
-                        {readable &&
-                            (expanded ? <CaretDownIcon className="size-3" /> : <CaretRightIcon className="size-3" />)}
                     </span>
                 </span>
             </div>
@@ -391,107 +368,157 @@ function TaskRow({
                     {error}
                 </div>
             )}
-            {expanded && <OutputTail chatId={chatId} taskId={task.id} indent={indent} />}
         </div>
     );
 }
 
-/** A round avatar as the transcript's subagents have, a live dot matrix on its corner. */
-function TaskAvatar({ task, harness }: { task: BackgroundTask; harness: HarnessId }) {
+/** How often a listed shell's row reads its output for its latest line. */
+const SHELL_ROW_POLL_MS = 2000;
+
+/**
+ * A shell or monitor: a dot matrix while it runs (a red dot once its output
+ * says it failed), its description (else its command) with the address it
+ * serves (opens in the browser) or how its latest run went, and under it the
+ * newest line of its output, live; then how long it has run, Stop. It
+ * doesn't open: the transcript's row for it has the output.
+ */
+function ShellTaskRow({
+    chatId,
+    task,
+    depth,
+    call,
+    now,
+    stopping,
+    error,
+    onStop
+}: {
+    chatId: string;
+    task: BackgroundTask;
+    depth: number;
+    call: ToolCall | undefined;
+    now: number;
+    stopping: boolean;
+    error: string | undefined;
+    onStop: () => void;
+}) {
+    const { output } = useTaskOutput(chatId, task.id, SHELL_ROW_POLL_MS);
+    const text = useMemo(() => (output ? plainText(output.output) : ""), [output]);
+    const url = servedUrl(text);
+    const failure = failureOf(text);
+    const lastLine = text.split("\n").findLast((l) => l.trim())?.trim();
+
+    const command = call?.kind === "exec" ? call.command : undefined;
+    const title = task.description || command || KINDS[task.kind].noun[0];
+    // Until it has printed something, the second line is what it runs.
+    const line = lastLine ?? (task.description ? command : undefined);
+    const indent = depth * 16;
+
+    return (
+        <div className="flex flex-col">
+            <div
+                className={cn(
+                    "group/task relative flex items-center gap-2.5 rounded-md py-1.5 pr-1 transition-colors duration-100",
+                    "has-[>button:focus-visible]:bg-white/[0.05]",
+                    stopping && "opacity-60"
+                )}
+                style={{ paddingLeft: 8 + indent }}
+            >
+                {/* Only a focus stop for ↑↓ and Backspace; the address and Stop sit above it. */}
+                <button
+                    type="button"
+                    data-task-row={task.id}
+                    aria-label={title}
+                    className="absolute inset-0 cursor-default rounded-md outline-none"
+                />
+                <TaskAvatar task={task} failed={!!failure} />
+                <span className="pointer-events-none flex min-w-0 flex-1 flex-col">
+                    <span className="flex min-w-0 items-center gap-1.5">
+                        <span
+                            className={cn(
+                                "truncate text-xs text-dark-50",
+                                task.description ? "font-medium" : "font-mono text-[11px]"
+                            )}
+                        >
+                            {title}
+                        </span>
+                        {url && (
+                            <button
+                                type="button"
+                                tabIndex={-1}
+                                aria-label={`Open ${url.url}`}
+                                onClick={() => void openUrl(url.url).catch(() => {})}
+                                className="pointer-events-auto relative z-10 inline-flex h-4 shrink-0 items-center rounded bg-info/12 px-1.5 font-mono text-[10.5px] text-info outline-none transition-colors hover:bg-info/20"
+                            >
+                                :{url.port}
+                            </button>
+                        )}
+                        {failure && (
+                            <span className="inline-flex h-4 shrink-0 items-center rounded bg-danger/12 px-1.5 text-[10.5px] text-danger">
+                                {failure}
+                            </span>
+                        )}
+                    </span>
+                    {line && (
+                        <span
+                            className={cn(
+                                "truncate font-mono text-[11px] leading-relaxed",
+                                failure ? "text-danger" : "text-dark-200"
+                            )}
+                        >
+                            {line}
+                        </span>
+                    )}
+                </span>
+                <span className="pointer-events-none relative z-10 flex shrink-0 items-center gap-0.5">
+                    <span className="px-1 text-[11px] text-dark-200 tabular-nums">
+                        {stopping
+                            ? "Stopping…"
+                            : task.startedAt != null && formatElapsed(now - task.startedAt, { pad: true })}
+                    </span>
+                    <button
+                        type="button"
+                        aria-label={`Stop ${title}`}
+                        tabIndex={-1}
+                        disabled={stopping}
+                        onClick={onStop}
+                        className="pointer-events-auto grid size-6 place-items-center rounded-md text-dark-250 outline-none transition-colors hover:bg-danger/10 hover:text-danger disabled:pointer-events-none disabled:opacity-0"
+                    >
+                        <span className="size-2 rounded-[2px] bg-current" />
+                    </button>
+                    {/* The agents' caret column, so times and Stop line up. */}
+                    <span className="w-3.5" />
+                </span>
+            </div>
+            {error && (
+                <div className="pb-1 text-[11px] text-danger" style={{ paddingLeft: 42 + indent }}>
+                    {error}
+                </div>
+            )}
+        </div>
+    );
+}
+
+/**
+ * A round avatar as the transcript's subagents have (the harness mark for an
+ * agent, its kind's glyph otherwise), a live dot matrix on its corner, or a
+ * red dot once it `failed`.
+ */
+function TaskAvatar({ task, harness, failed = false }: { task: BackgroundTask; harness?: HarnessId; failed?: boolean }) {
     const Glyph = KINDS[task.kind].icon;
     return (
         <RoundAvatar className="pointer-events-none">
-            {task.kind === "agent" ? (
+            {task.kind === "agent" && harness ? (
                 <AgentMark harness={harness} />
             ) : (
                 <Glyph className="size-3.5 text-dark-200" />
             )}
             <span className="absolute -right-1 -bottom-1 grid size-3 place-items-center rounded-full bg-dark-850 text-info">
-                <DotMatrixSpinner interval={400} label="Running" className="size-[7px] gap-[0.5px]" />
+                {failed ? (
+                    <span className="size-1.5 rounded-full bg-danger" />
+                ) : (
+                    <DotMatrixSpinner interval={400} label="Running" className="size-[7px] gap-[0.5px]" />
+                )}
             </span>
         </RoundAvatar>
-    );
-}
-
-/** The end of a shell's output, read again while shown; pinned to the bottom. */
-function OutputTail({ chatId, taskId, indent }: { chatId: string; taskId: string; indent: number }) {
-    const [output, setOutput] = useState<TaskOutput | null>(null);
-    const [error, setError] = useState<string | null>(null);
-    const [copied, copy] = useCopy();
-    const ref = useRef<HTMLPreElement>(null);
-    const pinned = useRef(true);
-
-    useEffect(() => {
-        let alive = true;
-        let timer: ReturnType<typeof setTimeout> | undefined;
-        const read = () => {
-            chats
-                .taskOutput(chatId, taskId)
-                .then(
-                    (next) => {
-                        if (!alive) return;
-                        setOutput(next);
-                        setError(null);
-                    },
-                    (e) => alive && setError(errorMessage(e))
-                )
-                .finally(() => {
-                    if (alive) timer = setTimeout(read, OUTPUT_POLL_MS);
-                });
-        };
-        read();
-        return () => {
-            alive = false;
-            clearTimeout(timer);
-        };
-    }, [chatId, taskId]);
-
-    const text = useMemo(() => (output ? plainText(output.output) : ""), [output]);
-
-    useLayoutEffect(() => {
-        const el = ref.current;
-        if (el && pinned.current) el.scrollTop = el.scrollHeight;
-    }, [text]);
-
-    return (
-        <div className="flex flex-col gap-1 pt-0.5 pr-2 pb-1.5" style={{ paddingLeft: 42 + indent }}>
-            <div className="overflow-hidden rounded-md border border-dark-700 bg-dark-900">
-                <div className="relative">
-                    <pre
-                        ref={ref}
-                        onScroll={(e) => {
-                            const el = e.currentTarget;
-                            pinned.current = el.scrollHeight - el.scrollTop - el.clientHeight < 8;
-                        }}
-                        className={cn(
-                            "max-h-48 overflow-auto px-2.5 py-2",
-                            "font-mono text-[10.5px] leading-[1.5] break-all whitespace-pre-wrap",
-                            text ? "text-dark-100" : "text-dark-250"
-                        )}
-                    >
-                        {text || (error ? "" : output ? "No output yet." : "Reading…")}
-                    </pre>
-                    {/* Older lines fade out at the top. */}
-                    <span className="pointer-events-none absolute inset-x-0 top-0 h-4 bg-gradient-to-b from-dark-900 to-transparent" />
-                </div>
-                <div className="flex items-center gap-2 border-t border-dark-700 py-0.5 pr-0.5 pl-2.5 text-[10.5px] text-dark-250">
-                    <span className="min-w-0 flex-1 truncate">
-                        {output?.truncated
-                            ? `Last 8 KB of ${Math.round(output.totalBytes / 1024).toLocaleString("en-US")} KB`
-                            : ""}
-                    </span>
-                    <button
-                        type="button"
-                        disabled={!text}
-                        onClick={() => copy(text)}
-                        className="inline-flex h-5 items-center gap-1 rounded px-1.5 text-dark-200 outline-none transition-colors hover:bg-dark-700 hover:text-dark-50 focus-visible:bg-dark-700 disabled:pointer-events-none disabled:opacity-50"
-                    >
-                        {copied ? <CheckIcon className="size-3" /> : <CopyIcon className="size-3" />}
-                        {copied ? "Copied" : "Copy"}
-                    </button>
-                </div>
-            </div>
-            {error && <span className="text-[11px] text-danger">{error}</span>}
-        </div>
     );
 }

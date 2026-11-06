@@ -30,7 +30,7 @@ import { useShortcut } from "@/keybindings";
 import type { Attachment, BackgroundTask, ChatConfig, MessagePart } from "@/proto";
 import { useMinuteClock } from "@/lib/time";
 import { useSettingsStore } from "@/settings/store";
-import { ContinuedRows, HandoffCard, LiveTasks, promptText, Transcript } from "@/transcript";
+import { ContinuedRows, HandoffCard, LiveTasks, promptText, TaskChat, Transcript } from "@/transcript";
 import { continueIn, handoffBlocked } from "./handoff";
 import { MorphHeight } from "@/ui";
 import { AgentUpdates } from "./AgentUpdates";
@@ -406,32 +406,34 @@ export function ChatView() {
 
     return (
         <LiveTasks value={session?.background ?? NO_TASKS}>
-            <div ref={setPane} style={laneStyle} className="relative flex h-full w-full flex-col">
-                {loading ? (
-                    <div className="flex-1" />
-                ) : (
-                    <Transcript
-                        key={chatId ?? "new"}
-                        messages={shown}
-                        cwd={folder ?? undefined}
-                        waiting={!!input || !!secret}
-                        error={error}
-                        onRetry={retry}
-                        onDiscard={(m) => chats.discard(m.id)}
-                        worktree={chat?.worktree}
-                        agent={catalog?.label}
-                        harness={chat?.config.harness}
-                        chatId={chat?.id}
-                        onOpenSubagent={chat ? (id) => openSubagent(chat.id, id) : undefined}
-                        onFindOpenChange={setFindOpen}
-                        header={chat?.handoff && <HandoffCard chat={chat} handoff={chat.handoff} />}
-                        footer={chat && <ContinuedRows chatId={chat.id} />}
-                        className={laneClassName}
-                    />
-                )}
-                {bottom}
-                {chat && details.inline && <ChatDetailsCard chat={chat} belowFind={findOpen} />}
-            </div>
+            <TaskChat value={chat?.id}>
+                <div ref={setPane} style={laneStyle} className="relative flex h-full w-full flex-col">
+                    {loading ? (
+                        <div className="flex-1" />
+                    ) : (
+                        <Transcript
+                            key={chatId ?? "new"}
+                            messages={shown}
+                            cwd={folder ?? undefined}
+                            waiting={!!input || !!secret}
+                            error={error}
+                            onRetry={retry}
+                            onDiscard={(m) => chats.discard(m.id)}
+                            worktree={chat?.worktree}
+                            agent={catalog?.label}
+                            harness={chat?.config.harness}
+                            chatId={chat?.id}
+                            onOpenSubagent={chat ? (id) => openSubagent(chat.id, id) : undefined}
+                            onFindOpenChange={setFindOpen}
+                            header={chat?.handoff && <HandoffCard chat={chat} handoff={chat.handoff} />}
+                            footer={chat && <ContinuedRows chatId={chat.id} />}
+                            className={laneClassName}
+                        />
+                    )}
+                    {bottom}
+                    {chat && details.inline && <ChatDetailsCard chat={chat} belowFind={findOpen} />}
+                </div>
+            </TaskChat>
         </LiveTasks>
     );
 }
