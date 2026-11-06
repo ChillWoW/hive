@@ -4,7 +4,7 @@ import { createJSONStorage, persist } from "zustand/middleware";
 import { useShallow } from "zustand/react/shallow";
 
 // Widths in px.
-export const SIDEBAR_WIDTH = 260;
+export const SIDEBAR_WIDTH = 300;
 const FILES_PANEL_MIN = 220;
 const FILES_PANEL_MAX = 440;
 const FILES_PANEL_DEFAULT = 286;
