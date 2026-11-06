@@ -27,6 +27,8 @@ type FilesPanelState = {
     toggleTextOption: (option: keyof TextSearchOptions) => void;
     toggleShowAll: () => void;
     toggleExpanded: (cwd: string, path: string) => void;
+    /** Closes every expanded folder in `cwd`'s tree. */
+    collapseAll: (cwd: string) => void;
     select: (path: string | null) => void;
     /** Opens the folders down to `path` in the tree, selects it and ends the search. */
     revealPath: (cwd: string, path: string, dir: boolean) => void;
@@ -70,6 +72,7 @@ export const useFilesPanelStore = create<FilesPanelState>()(
                         }
                     };
                 }),
+            collapseAll: (cwd) => set((s) => ({ expanded: { ...s.expanded, [cwd]: [] } })),
             select: (selected) => set({ selected }),
             revealPath: (cwd, path, dir) =>
                 set((s) => {

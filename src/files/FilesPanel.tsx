@@ -1,4 +1,5 @@
 import {
+    ArrowsInLineVerticalIcon,
     EyeIcon,
     EyeSlashIcon,
     ListMagnifyingGlassIcon,
@@ -56,7 +57,7 @@ export function FilesPanel() {
 
     return (
         <div className="flex min-h-0 flex-1 flex-col">
-            <FilesHeader />
+            <FilesHeader cwd={cwd} />
             {!cwd ? (
                 <div className="px-3 py-2 text-[11.5px] text-dark-250">
                     Pick a folder to see its files
@@ -72,9 +73,15 @@ export function FilesPanel() {
     );
 }
 
-/** Search field and the hidden-files eye, in the explorer's header band. */
-function FilesHeader() {
+const NO_PATHS: string[] = [];
+
+/** Search field, the hidden-files eye and collapse all, in the explorer's header band. */
+function FilesHeader({ cwd }: { cwd: string | null }) {
     const query = useFilesPanelStore((s) => s.query);
+    const anyExpanded = useFilesPanelStore(
+        (s) => (cwd ? (s.expanded[cwd] ?? NO_PATHS) : NO_PATHS).length > 0
+    );
+    const collapseAll = useFilesPanelStore((s) => s.collapseAll);
     const setQuery = useFilesPanelStore((s) => s.setQuery);
     const showAll = useFilesPanelStore((s) => s.showAll);
     const toggleShowAll = useFilesPanelStore((s) => s.toggleShowAll);
@@ -102,10 +109,23 @@ function FilesHeader() {
                     value={query}
                     onChange={(event) => setQuery(event.target.value)}
                     onKeyDown={(event) => {
-                        if (event.key !== "Escape") return;
-                        setQuery("");
-                        event.currentTarget.blur();
+                        if (event.key === "Escape") {
+                            setQuery("");
+                            event.currentTarget.blur();
+                            return;
+                        }
+                        if (textMode || !query.trim()) return;
+                        // Into the file name results: ↓ focuses the first, Enter opens it.
+                        const first = document.querySelector<HTMLElement>(
+                            "[data-file-result]"
+                        );
+                        if (!first) return;
+                        if (event.key === "ArrowDown") first.focus();
+                        else if (event.key === "Enter") first.click();
+                        else return;
+                        event.preventDefault();
                     }}
+                    data-files-search=""
                     placeholder={placeholder}
                     aria-label={placeholder}
                     spellCheck={false}
@@ -140,6 +160,13 @@ function FilesHeader() {
                     <EyeSlashIcon className="size-3.5" />
                 )}
             </IconButton>
+
+            {/* Only while the tree is shown with folders open. */}
+            {cwd && anyExpanded && !query.trim() && (
+                <IconButton label="Collapse all folders" onClick={() => collapseAll(cwd)}>
+                    <ArrowsInLineVerticalIcon className="size-3.5" />
+                </IconButton>
+            )}
         </div>
     );
 }

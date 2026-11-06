@@ -30,6 +30,20 @@ export function fuzzyScore(query: string, target: string): number | null {
     return score - target.length * 0.01;
 }
 
+/**
+ * Where `fuzzyScore` places `query`'s characters in `target` (same greedy
+ * pass), or `null` when they don't all appear in order.
+ */
+export function fuzzyPositions(query: string, target: string): number[] | null {
+    const q = query.toLowerCase();
+    const t = target.toLowerCase();
+    const positions: number[] = [];
+    for (let ti = 0; ti < t.length && positions.length < q.length; ti++) {
+        if (t[ti] === q[positions.length]) positions.push(ti);
+    }
+    return positions.length < q.length ? null : positions;
+}
+
 function isWordStart(text: string, i: number): boolean {
     if (i === 0) return true;
     const before = text[i - 1]!;
