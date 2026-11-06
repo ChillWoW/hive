@@ -36,6 +36,7 @@
 mod commands;
 mod normalize;
 pub(crate) mod provider;
+mod refresh_lock;
 pub(crate) mod usage;
 mod wire;
 
@@ -351,9 +352,7 @@ impl Harness for ClaudeHarness {
                 Some(advertised) => advertised,
                 None => {
                     let exe = exe.ok_or(HarnessError::NotInstalled("claude"))?;
-                    let advertised = tokio::time::timeout(PROBE_TIMEOUT, probe(&exe, &cwd))
-                        .await
-                        .map_err(|_| HarnessError::Probe("claude didn't list its commands".into()))??;
+                    let advertised = probe(&exe, &cwd).await?;
                     probes
                         .lock()
                         .unwrap()
@@ -485,24 +484,61 @@ async fn probe(exe: &Path, cwd: &str) -> Result<Vec<commands::Advertised>, Harne
     let mut child = cmd.spawn().map_err(|e| HarnessError::Spawn("claude", e))?;
     // Kept open until the answer: closing stdin ends the CLI first.
     let mut stdin = child.stdin.take().expect("piped stdin");
-    let mut line = wire::initialize_line(INITIALIZE_ID);
-    line.push('\n');
-    stdin
-        .write_all(line.as_bytes())
-        .await
-        .map_err(|e| HarnessError::Spawn("claude", e))?;
     let mut lines = BufReader::new(child.stdout.take().expect("piped stdout")).lines();
-    while let Ok(Some(line)) = lines.next_line().await {
-        let Ok(Frame::ControlResponse(response)) = wire::parse_frame(line.trim()) else {
-            continue;
-        };
-        if response.response.request_id != INITIALIZE_ID {
-            continue;
+    let answer = tokio::time::timeout(PROBE_TIMEOUT, async {
+        let mut line = wire::initialize_line(INITIALIZE_ID);
+        line.push('\n');
+        stdin
+            .write_all(line.as_bytes())
+            .await
+            .map_err(|e| HarnessError::Spawn("claude", e))?;
+        while let Ok(Some(line)) = lines.next_line().await {
+            let Ok(Frame::ControlResponse(response)) = wire::parse_frame(line.trim()) else {
+                continue;
+            };
+            if response.response.request_id != INITIALIZE_ID {
+                continue;
+            }
+            let list = response.response.response.get("commands").and_then(Value::as_array);
+            return Ok(list.map(|l| commands::parse(l)).unwrap_or_default());
         }
-        let list = response.response.response.get("commands").and_then(Value::as_array);
-        return Ok(list.map(|l| commands::parse(l)).unwrap_or_default());
+        Err(HarnessError::Probe("claude exited before listing its commands".into()))
+    })
+    .await;
+    // It answers before a login refresh it started is saved.
+    retire(child, stdin, lines.into_inner());
+    answer.unwrap_or_else(|_| Err(HarnessError::Probe("claude didn't list its commands".into())))
+}
+
+/// Stops a Claude process without losing a login refresh it has in flight
+/// (see [`refresh_lock`]): once none is, `stdin` (whatever keeps it open)
+/// drops and the CLI gets its grace to exit. Its stdout is drained until then.
+fn retire<T: Send + 'static>(
+    mut child: Child,
+    stdin: T,
+    mut stdout: impl tokio::io::AsyncRead + Unpin + Send + 'static,
+) {
+    tokio::spawn(async move {
+        tokio::spawn(async move {
+            let _ = tokio::io::copy(&mut stdout, &mut tokio::io::sink()).await;
+        });
+        refresh_lock::settle().await;
+        drop(stdin);
+        let _ = wait_or_kill(&mut child).await;
+    });
+}
+
+/// [`cli::wait_or_kill`], never killing it while a login refresh is in flight.
+async fn wait_or_kill(child: &mut Child) -> Option<std::process::ExitStatus> {
+    if let Ok(status) = tokio::time::timeout(cli::EXIT_GRACE, child.wait()).await {
+        return status.ok();
     }
-    Err(HarnessError::Probe("claude exited before listing its commands".into()))
+    refresh_lock::settle().await;
+    if let Ok(Some(status)) = child.try_wait() {
+        return Some(status);
+    }
+    let _ = child.kill().await;
+    None
 }
 
 /// A `get_task_output` answer.
@@ -590,7 +626,7 @@ impl Session {
                     None => {
                         // Every handle dropped.
                         commands_open = false;
-                        self.stdin = None;
+                        self.close_stdin();
                         Ok(())
                     }
                 },
@@ -601,10 +637,29 @@ impl Session {
                 }
             };
             if outcome.is_err() {
-                return; // `kill_on_drop` takes the process down.
+                // Nobody listens any more.
+                let Session {
+                    child,
+                    stdin,
+                    stdout,
+                    ..
+                } = self;
+                retire(child, stdin, stdout.into_inner());
+                return;
             }
         }
         self.finish().await;
+    }
+
+    /// Closing stdin ends the CLI, which then waits only 2s for a login
+    /// refresh in flight: it closes once none is.
+    fn close_stdin(&mut self) {
+        if let Some(stdin) = self.stdin.take() {
+            tokio::spawn(async move {
+                refresh_lock::settle().await;
+                drop(stdin);
+            });
+        }
     }
 
     async fn on_line(&mut self, line: &str) -> Result<(), Gone> {
@@ -876,7 +931,7 @@ impl Session {
                 Ok(())
             }
             RunCommand::Close => {
-                self.stdin = None;
+                self.close_stdin();
                 Ok(())
             }
         }
@@ -918,7 +973,7 @@ impl Session {
     /// The process exited. A turn still in flight ends here.
     async fn finish(mut self) {
         self.stdin = None;
-        let status = cli::wait_or_kill(&mut self.child).await;
+        let status = wait_or_kill(&mut self.child).await;
         if self.turns == 0 {
             return;
         }
