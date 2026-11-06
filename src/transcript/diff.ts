@@ -73,6 +73,46 @@ export function diffLines(before: string, after: string): DiffLine[] {
     return out;
 }
 
+/** A numbered line as the CLIs' read tools print it: Claude `   12→code` (or a tab), OpenCode `00012| code`. */
+const NUMBERED = /^\s*(\d+)(?:→|\t|\| ?)(.*)$/;
+
+/**
+ * A read tool's output as a `FileDiff` of unchanged lines, so it draws in
+ * the diff rows (highlighted, no markers or washes): the CLI's line numbers
+ * kept when every line has one, its wrappers and notes dropped. Undefined
+ * when nothing is left to show.
+ */
+export function toFileView(path: string, output: string): FileDiff | undefined {
+    let text = output.replace(/\r/g, "");
+    const reminder = text.indexOf("<system-reminder>");
+    if (reminder !== -1) text = text.slice(0, reminder);
+    const raw = text
+        .replace(/\n+$/, "")
+        .split("\n")
+        .filter((line) => !/^<\/?file>$/.test(line.trim()) && !/^\(End of file\b/.test(line.trim()));
+    if (!raw.some((line) => line.trim())) return undefined;
+    const numbered = raw.every((line) => NUMBERED.test(line));
+    let maxLine = 0;
+    const lines: PatchLine[] = raw.map((line) => {
+        const m = numbered ? NUMBERED.exec(line) : null;
+        if (!m) return { kind: "context", text: line };
+        const no = Number(m[1]);
+        maxLine = Math.max(maxLine, no);
+        return { kind: "context", text: m[2]!, newNo: no };
+    });
+    return {
+        path: path.replace(/\\/g, "/"),
+        status: "modified",
+        binary: false,
+        notices: [],
+        hunks: [{ header: "", lines }],
+        additions: 0,
+        deletions: 0,
+        maxLine,
+        lineCount: lines.length
+    };
+}
+
 /**
  * `lines` as a one-hunk `FileDiff` of `path`, drawn by the diff tab's rows.
  * Numbered from 1 only when the lines are the whole file; a snippet's real

@@ -238,6 +238,7 @@ export function FileBody({ file, split, wrap }: { file: FileDiff; split: boolean
     const slots = useFileSlots(file);
     const row = rowProps(file, slots);
     if (!split) {
+        const oneSide = file.hunks.every((hunk) => hunk.lines.every((line) => line.oldNo === undefined));
         return (
             <Scroller wrap={wrap} container={!!slots}>
                 {file.hunks.map((hunk, h) => (
@@ -250,6 +251,7 @@ export function FileBody({ file, split, wrap }: { file: FileDiff; split: boolean
                                     spans={spans?.get(line)}
                                     gutter={gutter}
                                     wrap={wrap}
+                                    oneSide={oneSide}
                                     {...row(line)}
                                 />
                                 {itemsAfter(slots, [line]).map((item) => (
@@ -446,9 +448,12 @@ function UnifiedRow({
     spans: Span[] | undefined;
     gutter: number;
     wrap: boolean;
+    /** The file has no old side (a new file, a file as read): one number column. */
+    oneSide?: boolean;
 } & CommentProps) {
     if (line.kind === "meta") return <MetaRow text={line.text} />;
-    return <LineRow line={line} numbers={[line.oldNo, line.newNo]} {...props} />;
+    const { oneSide, ...rest } = props;
+    return <LineRow line={line} numbers={oneSide ? [line.newNo] : [line.oldNo, line.newNo]} {...rest} />;
 }
 
 /** A line (not a meta one): its gutter (numbers, marker; the comment button) and its code. */

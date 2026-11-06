@@ -15,7 +15,7 @@ import { FileIcon } from "@/ui";
 import { ChatCwd, LiveTasks } from "./context";
 import { ShellRow } from "./ShellRow";
 import { isBackgroundShell } from "./shellTask";
-import { diffLines, toFileDiff } from "./diff";
+import { diffLines, toFileDiff, toFileView } from "./diff";
 import { DiffView } from "./DiffView";
 import { Markdown } from "./Markdown";
 import { ThoughtIcon } from "./ThoughtIcon";
@@ -147,12 +147,10 @@ export function LineIcon({
     );
 }
 
-/** A file on a line: its icon and name; the path is in the tooltip. */
+/** A file on a line: its icon and name. */
 function FileName({ path, failed }: { path: string; failed: boolean }) {
-    const cwd = use(ChatCwd);
     return (
         <span
-            title={shortPath(path, cwd)}
             className={cn(
                 "flex min-w-0 items-center gap-1.5 transition-colors",
                 failed ? "text-danger" : "text-dark-200 group-hover/item:text-dark-100"
@@ -333,6 +331,21 @@ function readChange(part: ToolPart): FileDiff | undefined {
     return undefined;
 }
 
+/** Each read's file view, worked out once, as `changes`. */
+const views = new WeakMap<ToolPart, FileDiff | null>();
+
+/** What a finished read came back with, as the file's lines; undefined for anything else. */
+function viewOf(part: ToolPart): FileDiff | undefined {
+    const call = part.call;
+    if (call.kind !== "readFile" || part.isError || !part.output) return undefined;
+    let view = views.get(part);
+    if (view === undefined) {
+        view = toFileView(call.path, part.output) ?? null;
+        views.set(part, view);
+    }
+    return view ?? undefined;
+}
+
 /** Verbatim mono lines, the tail past `MAX_LINES` counted rather than shown. */
 function Lines({ text, className }: { text: string; className?: string }) {
     const lines = text.replace(/\n+$/, "").split("\n");
@@ -428,6 +441,8 @@ function CallBody({ part }: { part: ToolPart }): ReactNode {
     }
     const change = changeOf(part);
     if (change && change.lineCount > 0 && !part.isError) return <DiffView file={change} className="mt-0.5 mb-2" />;
+    const read = viewOf(part);
+    if (read) return <DiffView file={read} className="mt-0.5 mb-2" />;
 
     const invocation = invocationOf(part, cwd);
     const output = part.output?.trim() ? part.output : "";
