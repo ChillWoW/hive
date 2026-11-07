@@ -15,7 +15,7 @@ use serde_json::{json, Value};
 use tauri::{AppHandle, Manager};
 
 use crate::util::err;
-use crate::{html, secrets};
+use crate::{html, images, secrets};
 
 /// Starts the host and returns how agents launch a bridge to it; None (and
 /// agents run without it) when it can't.
@@ -35,6 +35,8 @@ fn tools(app: &AppHandle) -> Tools {
     let secrets_app = app.clone();
     let preview_app = app.clone();
     let render_app = app.clone();
+    let image_app = app.clone();
+    let svg_app = app.clone();
     Tools::new()
         .tool(
             "whoami",
@@ -63,6 +65,18 @@ fn tools(app: &AppHandle) -> Tools {
             html::render_schema(),
             move |ctx, args| html::render(render_app.clone(), ctx, args),
         )
+        .tool(
+            images::IMAGE_TOOL,
+            images::image_description(),
+            images::image_schema(),
+            move |ctx, args| images::show_image(image_app.clone(), ctx, args),
+        )
+        .tool(
+            images::SVG_TOOL,
+            images::svg_description(),
+            images::svg_schema(),
+            move |ctx, args| images::show_svg(svg_app.clone(), ctx, args),
+        )
 }
 
 fn whoami(app: &AppHandle, ctx: &Ctx) -> Result<Value, String> {
@@ -79,7 +93,7 @@ fn whoami(app: &AppHandle, ctx: &Ctx) -> Result<Value, String> {
 }
 
 /// The chat whose agent called.
-fn calling_chat(app: &AppHandle, ctx: &Ctx) -> Result<hive_proto::Chat, String> {
+pub fn calling_chat(app: &AppHandle, ctx: &Ctx) -> Result<hive_proto::Chat, String> {
     let id = chat_id(ctx)?;
     engine(app)?
         .chats()

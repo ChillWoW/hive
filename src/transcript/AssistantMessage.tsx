@@ -9,7 +9,8 @@ import { CompactionRow, ErrorChip, InputRow, SubagentChip, WakeRow } from "./par
 import { formatElapsed, useNow } from "@/lib/time";
 import { ToolGroup } from "./ToolGroup";
 import { TurnChanges } from "./TurnChanges";
-import { pageOf, pushCall, type GroupItem, type ToolPart } from "./tools";
+import { ShownImage } from "./ShownImage";
+import { imageOf, pageOf, pushCall, type GroupItem, type ToolPart } from "./tools";
 import { useCopy } from "@/lib/clipboard";
 
 /**
@@ -36,8 +37,8 @@ function toBlocks(parts: MessagePart[], streaming: boolean): Block[] {
     parts.forEach((part, index) => {
         if ((part.kind === "text" || part.kind === "reasoning") && !part.text.trim()) return;
 
-        // A page `render_html` showed stands on its own, where it was called.
-        if (part.kind === "tool" && pageOf(part)) {
+        // A page or image Hive's tools showed stands on its own, where it was called.
+        if (part.kind === "tool" && (pageOf(part) || imageOf(part))) {
             open = undefined;
             blocks.push({ kind: "part", part, index });
             return;
@@ -182,7 +183,9 @@ export function AssistantMessage({
                 return <CompactionRow key={part.id} part={part} streaming={streaming} />;
             case "tool": {
                 const page = pageOf(part);
-                return page ? <HtmlPage key={part.id} page={page} /> : null;
+                if (page) return <HtmlPage key={part.id} page={page} />;
+                const image = imageOf(part);
+                return image ? <ShownImage key={part.id} image={image} /> : null;
             }
             default:
                 return null;

@@ -130,6 +130,14 @@ const HIVE_TOOLS: Record<string, HiveTool> = {
     render_html: {
         label: "Show page",
         detail: (input) => stringField(input, "title") ?? ""
+    },
+    show_image: {
+        label: "Show image",
+        detail: (input) => stringField(input, "path") ?? ""
+    },
+    show_svg: {
+        label: "Show SVG",
+        detail: (input) => stringField(input, "title") ?? stringField(input, "caption") ?? ""
     }
 };
 
@@ -160,16 +168,48 @@ export function pageOf(part: ToolPart): PageRef | undefined {
     };
 }
 
+/** An image `show_image` / `show_svg` showed: Hive's saved copy. */
+export type ImageRef = {
+    file: string;
+    mimeType: string;
+    name: string;
+    caption?: string;
+    /** On a white card rather than the dark chat. */
+    light: boolean;
+};
+
+/** The image a finished `show_image` / `show_svg` call showed (`src-tauri/src/images.rs`). */
+export function imageOf(part: ToolPart): ImageRef | undefined {
+    const call = part.call;
+    if (call.kind !== "mcp" || call.server !== HIVE_SERVER) return undefined;
+    if (call.tool !== "show_image" && call.tool !== "show_svg") return undefined;
+    if (!part.resolved || part.isError) return undefined;
+    const image = resultField(part.output, "image");
+    if (typeof image?.file !== "string" || typeof image.mimeType !== "string") return undefined;
+    return {
+        file: image.file,
+        mimeType: image.mimeType,
+        name: typeof image.name === "string" ? image.name : "image",
+        caption: typeof image.caption === "string" ? image.caption : undefined,
+        light: image.background === "light"
+    };
+}
+
 /** `page` from the tool's JSON result, wherever a CLI put the JSON in its output. */
 function resultPage(output: string | undefined): Record<string, unknown> | undefined {
+    return resultField(output, "page");
+}
+
+/** An object field of the tool's JSON result, wherever a CLI put the JSON in its output. */
+function resultField(output: string | undefined, key: string): Record<string, unknown> | undefined {
     if (!output) return undefined;
     const start = output.indexOf("{");
     const end = output.lastIndexOf("}");
     if (start === -1 || end < start) return undefined;
     try {
         const parsed: unknown = JSON.parse(output.slice(start, end + 1));
-        const page = (parsed as { page?: unknown } | null)?.page;
-        return page && typeof page === "object" ? (page as Record<string, unknown>) : undefined;
+        const value = (parsed as Record<string, unknown> | null)?.[key];
+        return value && typeof value === "object" ? (value as Record<string, unknown>) : undefined;
     } catch {
         return undefined;
     }

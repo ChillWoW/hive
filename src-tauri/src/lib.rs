@@ -6,6 +6,7 @@ mod files;
 mod folders;
 mod git;
 mod html;
+mod images;
 mod http;
 mod mcp;
 mod open_in;

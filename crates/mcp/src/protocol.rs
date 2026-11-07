@@ -21,7 +21,9 @@ const LATEST_PROTOCOL: &str = PROTOCOL_VERSIONS[0];
 const INSTRUCTIONS: &str = "Hive is the desktop app running this session. \
 These tools act on Hive itself (its chats, its window), not on the files you work on. \
 To show the user an interactive chart, diagram, dashboard or mockup, check an HTML page \
-with preview_html, then show it in the chat with render_html.";
+with preview_html, then show it in the chat with render_html. \
+To show an image file (a screenshot, a plot) use show_image; for a static diagram or sketch \
+you draw yourself, show_svg.";
 
 const PARSE_ERROR: i64 = -32700;
 const INVALID_REQUEST: i64 = -32600;
