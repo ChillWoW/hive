@@ -24,7 +24,8 @@ const FAKE_MODELS: [HarnessId, string, number, number][] = [
     ["claude-code", "claude-opus-5-5", 0.42, 0.62],
     ["claude-code", "claude-haiku-5-5", 0.05, 0.08],
     ["codex", "gpt-6-sol", 0.3, 0.2],
-    ["opencode", "openrouter/deepseek/deepseek-v4.1-flash-1017", 0.012, 0.1]
+    ["opencode", "openrouter/deepseek/deepseek-v4.1-flash-1017", 0.012, 0.1],
+    ["pi", "anthropic/claude-sonnet-5-5", 0.04, 0.06]
 ];
 
 function browserReport(query: UsageQuery): UsageReport {
@@ -73,7 +74,8 @@ function browserReport(query: UsageQuery): UsageReport {
         harnesses: [
             { harness: "claude-code", sessions: Math.round(sessions * 0.66) },
             { harness: "codex", sessions: Math.round(sessions * 0.2) },
-            { harness: "opencode", sessions: Math.round(sessions * 0.14) }
+            { harness: "opencode", sessions: Math.round(sessions * 0.1) },
+            { harness: "pi", sessions: Math.round(sessions * 0.04) }
         ],
         projects: [
             ["~/dev/hive", 0.46],
@@ -96,7 +98,8 @@ function browserReport(query: UsageQuery): UsageReport {
         sources: [
             { harness: "claude-code", status: "ok", path: "~/.claude/projects", files: 412 },
             { harness: "codex", status: "ok", path: "~/.codex/sessions", files: 23 },
-            { harness: "opencode", status: "ok", path: "~/.local/share/opencode", files: 1 }
+            { harness: "opencode", status: "ok", path: "~/.local/share/opencode", files: 1 },
+            { harness: "pi", status: "ok", path: "~/.pi/agent/sessions", files: 9 }
         ],
         pricing: { status: "fresh", fetchedAt: Date.now() - 3_600_000, models: 4831 },
         readAt: Date.now(),

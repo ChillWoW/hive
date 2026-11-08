@@ -1,6 +1,7 @@
 //! hive-usage — the Usage panel's data: tokens and estimated cost from every
 //! coding-agent CLI's own history on this machine (Claude Code's and Codex's
-//! transcripts, OpenCode's database), so work done outside Hive counts too.
+//! transcripts, OpenCode's database, Pi's sessions), so work done outside
+//! Hive counts too.
 //!
 //! What's been read is cached as `usage/scan.json` in the data dir: files
 //! that didn't change aren't read again, grown ones are read on from where
@@ -12,6 +13,7 @@ mod claude;
 mod codex;
 mod files;
 mod opencode;
+mod pi;
 mod pricing;
 mod record;
 
@@ -31,6 +33,7 @@ use aggregate::{Aggregator, View};
 use claude::Claude;
 use codex::Codex;
 use files::{FileEntry, ScanStats};
+use pi::Pi;
 use pricing::RateTable;
 
 /// Usage older than this is dropped from the cache (the longest range is 90 days).
@@ -50,6 +53,8 @@ struct Cache {
     claude: HashMap<String, FileEntry<Claude>>,
     codex: HashMap<String, FileEntry<Codex>>,
     opencode: HashMap<String, opencode::Database>,
+    #[serde(default)]
+    pi: HashMap<String, FileEntry<Pi>>,
 }
 
 #[derive(Default)]
@@ -206,14 +211,17 @@ fn scan(cache: &mut Cache, since: i64, now: i64, dir: &Path) -> Vec<UsageSource>
     let codex = files::scan(&codex_roots, &mut cache.codex, skip_before);
     let oc_dir = opencode::data_dir();
     let oc = opencode::scan(oc_dir.as_deref(), &mut cache.opencode, since);
+    let pi_roots = pi::roots();
+    let pi = files::scan(&pi_roots, &mut cache.pi, skip_before);
     let sources = vec![
         source(HarnessId::ClaudeCode, claude_roots.first(), &claude),
         source(HarnessId::Codex, codex_roots.first(), &codex),
         source(HarnessId::Opencode, oc_dir.as_ref(), &oc),
+        source(HarnessId::Pi, pi_roots.first(), &pi),
     ];
 
     let pruned = prune(cache, now);
-    if claude.changed || codex.changed || oc.changed || pruned || cache.version != CACHE_VERSION {
+    if claude.changed || codex.changed || oc.changed || pi.changed || pruned || cache.version != CACHE_VERSION {
         cache.version = CACHE_VERSION;
         write_json(&dir.join("scan.json"), cache);
     }
@@ -230,6 +238,11 @@ fn aggregate(cache: &Cache, agg: &mut Aggregator<'_>) {
     }
     for (path, entry) in &cache.codex {
         add_file(agg, HarnessId::Codex, path, entry);
+    }
+    let mut paths: Vec<&String> = cache.pi.keys().collect();
+    paths.sort();
+    for path in paths {
+        add_file(agg, HarnessId::Pi, path, &cache.pi[path]);
     }
     for db in cache.opencode.values() {
         for (id, m) in &db.messages {
@@ -313,10 +326,11 @@ fn source(harness: HarnessId, path: Option<&PathBuf>, stats: &ScanStats) -> Usag
 /// Drops usage older than [`KEEP_MS`]; true when anything went.
 fn prune(cache: &mut Cache, now: i64) -> bool {
     let cutoff = now - KEEP_MS;
-    let before = cache.claude.len() + cache.codex.len();
+    let before = cache.claude.len() + cache.codex.len() + cache.pi.len();
     cache.claude.retain(|_, e| e.newest() >= cutoff);
     cache.codex.retain(|_, e| e.newest() >= cutoff);
-    let mut changed = before != cache.claude.len() + cache.codex.len();
+    cache.pi.retain(|_, e| e.newest() >= cutoff);
+    let mut changed = before != cache.claude.len() + cache.codex.len() + cache.pi.len();
     for db in cache.opencode.values_mut() {
         let n = db.messages.len();
         db.messages.retain(|_, m| m.at >= cutoff);
