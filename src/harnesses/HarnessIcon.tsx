@@ -45,6 +45,23 @@ function OpenCodeMark({ className }: { className?: string }) {
     );
 }
 
+/** Pi's mark (pi.dev's pixel "P" and its dot), in the text colour. */
+function PiMark({ className }: { className?: string }) {
+    return (
+        <svg
+            viewBox="140 140 520 520"
+            fill="currentColor"
+            aria-hidden="true"
+            className={cn("text-dark-50", className)}
+        >
+            <path
+                fillRule="evenodd"
+                d="M165.29 165.29H517.36V400H400V517.36H282.65V634.72H165.29ZM282.65 282.65V400H400V282.65ZM517.36 400H634.72V634.72H517.36Z"
+            />
+        </svg>
+    );
+}
+
 /** The harness's brand mark, for the model chip, list rows and provider tabs. */
 export function HarnessIcon({
     harness,
@@ -60,6 +77,8 @@ export function HarnessIcon({
             return <OpenAIMark className={className} />;
         case "opencode":
             return <OpenCodeMark className={className} />;
+        case "pi":
+            return <PiMark className={className} />;
         default:
             return <FlaskIcon className={cn("text-dark-200", className)} />;
     }

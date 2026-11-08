@@ -17,6 +17,8 @@ pub enum HarnessId {
     Codex,
     /// `opencode serve`.
     Opencode,
+    /// `pi --mode rpc`.
+    Pi,
     /// Scripted in-process harness for tests and UI work; never in pickers.
     Mock,
 }

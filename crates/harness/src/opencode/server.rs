@@ -600,43 +600,7 @@ fn percent_encode(text: &str) -> String {
     out
 }
 
-/// Stops the process and everything it started.
-async fn kill_tree(child: &mut Child) {
-    if let Some(pid) = child.id() {
-        #[cfg(windows)]
-        {
-            let mut taskkill = cli::command(Path::new("taskkill"));
-            taskkill
-                .args(["/T", "/F", "/PID", &pid.to_string()])
-                .stdin(Stdio::null())
-                .stdout(Stdio::null())
-                .stderr(Stdio::null());
-            let _ = tokio::time::timeout(Duration::from_secs(5), taskkill.status()).await;
-        }
-        #[cfg(unix)]
-        {
-            // The server leads its own process group.
-            let _ = tokio::process::Command::new("kill")
-                .args(["-TERM", "--", &format!("-{pid}")])
-                .stdin(Stdio::null())
-                .stdout(Stdio::null())
-                .stderr(Stdio::null())
-                .status()
-                .await;
-            if tokio::time::timeout(Duration::from_secs(2), child.wait())
-                .await
-                .is_ok()
-            {
-                return;
-            }
-            let _ = tokio::process::Command::new("kill")
-                .args(["-KILL", "--", &format!("-{pid}")])
-                .status()
-                .await;
-        }
-    }
-    let _ = child.kill().await;
-}
+use cli::kill_tree;
 
 #[cfg(test)]
 mod tests {

@@ -6,9 +6,10 @@ import type { CodexSettings } from "./CodexSettings";
 import type { KeyboardSettings } from "./KeyboardSettings";
 import type { NotificationsSettings } from "./NotificationsSettings";
 import type { OpencodeSettings } from "./OpencodeSettings";
+import type { PiSettings } from "./PiSettings";
 import type { ProvidersSettings } from "./ProvidersSettings";
 import type { TextGenerationSettings } from "./TextGenerationSettings";
 import type { UpdatesSettings } from "./UpdatesSettings";
 import type { WorktreesSettings } from "./WorktreesSettings";
 
-export type Settings = { version: number, chats: ChatsSettings, chatDetails: ChatDetailsSettings, textGeneration: TextGenerationSettings, worktrees: WorktreesSettings, notifications: NotificationsSettings, keyboard: KeyboardSettings, providers: ProvidersSettings, claude: ClaudeSettings, codex: CodexSettings, opencode: OpencodeSettings, updates: UpdatesSettings, };
+export type Settings = { version: number, chats: ChatsSettings, chatDetails: ChatDetailsSettings, textGeneration: TextGenerationSettings, worktrees: WorktreesSettings, notifications: NotificationsSettings, keyboard: KeyboardSettings, providers: ProvidersSettings, claude: ClaudeSettings, codex: CodexSettings, opencode: OpencodeSettings, pi: PiSettings, updates: UpdatesSettings, };

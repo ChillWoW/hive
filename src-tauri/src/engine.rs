@@ -144,6 +144,7 @@ pub async fn list_harnesses(
             HarnessId::ClaudeCode => &settings.claude.display_name,
             HarnessId::Codex => &settings.codex.display_name,
             HarnessId::Opencode => &settings.opencode.display_name,
+            HarnessId::Pi => &settings.pi.display_name,
             HarnessId::Mock => continue,
         };
         if !name.is_empty() {

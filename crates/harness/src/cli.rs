@@ -144,6 +144,45 @@ pub(crate) async fn wait_or_kill(child: &mut Child) -> Option<ExitStatus> {
     }
 }
 
+/// Stops the process and everything it started. On unix it must lead its
+/// own process group (`process_group(0)`).
+pub(crate) async fn kill_tree(child: &mut Child) {
+    if let Some(pid) = child.id() {
+        #[cfg(windows)]
+        {
+            let mut taskkill = command(Path::new("taskkill"));
+            taskkill
+                .args(["/T", "/F", "/PID", &pid.to_string()])
+                .stdin(std::process::Stdio::null())
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null());
+            let _ = tokio::time::timeout(Duration::from_secs(5), taskkill.status()).await;
+        }
+        #[cfg(unix)]
+        {
+            use std::process::Stdio;
+            let _ = tokio::process::Command::new("kill")
+                .args(["-TERM", "--", &format!("-{pid}")])
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status()
+                .await;
+            if tokio::time::timeout(Duration::from_secs(2), child.wait())
+                .await
+                .is_ok()
+            {
+                return;
+            }
+            let _ = tokio::process::Command::new("kill")
+                .args(["-KILL", "--", &format!("-{pid}")])
+                .status()
+                .await;
+        }
+    }
+    let _ = child.kill().await;
+}
+
 /// Never wakes without a deadline.
 pub(crate) async fn sleep_until(deadline: Option<tokio::time::Instant>) {
     match deadline {

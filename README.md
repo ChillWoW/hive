@@ -1,6 +1,6 @@
 # Hive
 
-A desktop app for driving coding-agent CLIs (Claude Code, Codex, OpenCode) from one place.
+A desktop app for driving coding-agent CLIs (Claude Code, Codex, OpenCode, Pi) from one place.
 
 > **Personal project.** Hive is something I build for myself, in my own time. It's shared as is: no support, no roadmap, and things may change or break without notice.
 
@@ -8,11 +8,11 @@ A desktop app for driving coding-agent CLIs (Claude Code, Codex, OpenCode) from 
 
 ## How it works
 
-Hive doesn't call any provider APIs. It starts the CLIs you already have installed and logged in (`claude`, `codex app-server`, `opencode serve`) and talks to them over stdin/stdout or their local servers. Each CLI's output is normalized into one event stream (text, reasoning, tool calls, questions) and rendered as a live transcript.
+Hive doesn't call any provider APIs. It starts the CLIs you already have installed and logged in (`claude`, `codex app-server`, `opencode serve`, `pi --mode rpc`) and talks to them over stdin/stdout or their local servers. Each CLI's output is normalized into one event stream (text, reasoning, tool calls, questions) and rendered as a live transcript.
 
 ## Features
 
-- Chats with Claude Code, Codex and OpenCode, side by side
+- Chats with Claude Code, Codex, OpenCode and Pi, side by side
 - Plan mode, access modes (supervised / auto-accept edits / full access) and approval questions
 - Queued prompts, steering, interrupts, and background tasks
 - File attachments and `@` file mentions
@@ -22,7 +22,7 @@ Hive doesn't call any provider APIs. It starts the CLIs you already have install
 
 ## Requirements
 
-- At least one of the supported CLIs installed and signed in: [Claude Code](https://docs.claude.com/en/docs/claude-code), [Codex](https://github.com/openai/codex) or [OpenCode](https://opencode.ai) (2.x)
+- At least one of the supported CLIs installed and signed in: [Claude Code](https://docs.claude.com/en/docs/claude-code), [Codex](https://github.com/openai/codex) [OpenCode](https://opencode.ai) (2.x) or [Pi](https://pi.dev)
 - `git` for branch and worktree features
 
 Windows is the main platform for now. macOS is coming soon.

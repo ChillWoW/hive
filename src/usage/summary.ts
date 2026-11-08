@@ -9,17 +9,19 @@ import type { Measure } from "./store";
 
 /** Chart and legend order, and each harness's fixed colour (validated as a
  * set against the dark surface; follows the harness, never its rank). */
-export const HARNESS_ORDER: HarnessId[] = ["claude-code", "codex", "opencode", "mock"];
+export const HARNESS_ORDER: HarnessId[] = ["claude-code", "codex", "opencode", "pi", "mock"];
 export const HARNESS_COLOR: Record<HarnessId, string> = {
     "claude-code": "#d95926",
     codex: "#3987e5",
     opencode: "#199e70",
+    pi: "#d0559b",
     mock: "#9085e9"
 };
 export const HARNESS_NAME: Record<HarnessId, string> = {
     "claude-code": "Claude Code",
     codex: "Codex",
     opencode: "OpenCode",
+    pi: "Pi",
     mock: "Mock"
 };
 

@@ -21,7 +21,7 @@ import { useSetting, useSettingsStore, type SettingHandle } from "../store";
  */
 
 /** The settings section a harness's own settings live in. */
-type Section = "claude" | "codex" | "opencode";
+type Section = "claude" | "codex" | "opencode" | "pi";
 
 export function sectionOf(harness: HarnessId): Section | null {
     switch (harness) {
@@ -31,6 +31,8 @@ export function sectionOf(harness: HarnessId): Section | null {
             return "codex";
         case "opencode":
             return "opencode";
+        case "pi":
+            return "pi";
         default:
             return null;
     }
@@ -40,7 +42,8 @@ export function sectionOf(harness: HarnessId): Section | null {
 export const CLI_NAMES: Partial<Record<HarnessId, string>> = {
     "claude-code": "claude",
     codex: "codex",
-    opencode: "opencode"
+    opencode: "opencode",
+    pi: "pi"
 };
 
 /** Re-reads the CLI's status (version, account) and the catalogs when a field they depend on changes. */
@@ -49,7 +52,8 @@ export function useReprobe(harness: HarnessId) {
         const section = sectionOf(harness);
         if (!section) return "";
         const own = s.settings[section];
-        const dir = "configDir" in own ? own.configDir : "homePath" in own ? own.homePath : "";
+        const dir =
+            "configDir" in own ? own.configDir : "homePath" in own ? own.homePath : "agentDir" in own ? own.agentDir : "";
         return [own.displayName, own.binaryPath, dir, own.env].join("\0");
     });
     const first = useRef(true);
@@ -147,7 +151,7 @@ export function GeneralSection({ catalog, lastOn }: { catalog: HarnessCatalog; l
 
 function DisplayNameRow({ section, tag }: { section: Section; tag: string }) {
     const setting = useText(section, "displayName");
-    const fallback = { claude: "Claude Code", codex: "Codex", opencode: "OpenCode" }[section];
+    const fallback = { claude: "Claude Code", codex: "Codex", opencode: "OpenCode", pi: "Pi" }[section];
     return (
         <TextRow
             label="Display name"
@@ -367,6 +371,7 @@ export function AdvancedSection({ catalog }: { catalog: HarnessCatalog }) {
         <SettingsSection title="Advanced">
             {section === "claude" && <ClaudeConfigDirRow tag={tag} />}
             {section === "codex" && <CodexHomeRow tag={tag} />}
+            {section === "pi" && <PiAgentDirRow tag={tag} />}
             <LaunchArgsRow section={section} cli={cli} tag={tag} />
             <EnvRow section={section} cli={cli} tag={tag} />
         </SettingsSection>
@@ -399,9 +404,29 @@ function CodexHomeRow({ tag }: { tag: string }) {
     );
 }
 
+function PiAgentDirRow({ tag }: { tag: string }) {
+    const setting = useSetting("pi", "agentDir");
+    return (
+        <TextRow
+            label="Agent folder"
+            description="PI_CODING_AGENT_DIR, for another setup"
+            keywords={`${tag} pi agent dir directory config home account profile separate PI_CODING_AGENT_DIR`}
+            setting={setting}
+            placeholder="~/.pi/agent"
+        />
+    );
+}
+
 function LaunchArgsRow({ section, cli, tag }: { section: Section; cli: string; tag: string }) {
     const setting = useText(section, "launchArgs");
-    const what = section === "codex" ? "codex app-server" : section === "opencode" ? "opencode serve" : cli;
+    const what =
+        section === "codex"
+            ? "codex app-server"
+            : section === "opencode"
+              ? "opencode serve"
+              : section === "pi"
+                ? "pi --mode rpc"
+                : cli;
     return (
         <TextRow
             label="Launch arguments"
@@ -469,7 +494,9 @@ function EnvRow({ section, cli, tag }: { section: Section; cli: string; tag: str
                         ? "ANTHROPIC_BASE_URL=https://…\nANTHROPIC_AUTH_TOKEN=…"
                         : section === "codex"
                           ? "OPENAI_BASE_URL=https://…"
-                          : "OPENCODE_CONFIG=~/opencode.json"
+                          : section === "pi"
+                            ? "OPENROUTER_API_KEY=…"
+                            : "OPENCODE_CONFIG=~/opencode.json"
                 }
                 aria-label={label}
                 className={cn(

@@ -135,6 +135,28 @@ const BROWSER_CATALOGS: HarnessCatalog[] = [
         commands: [COMPACT],
         accessModes: ACCESS_MODES,
         capabilities: { steering: false, interrupt: true, attachments: true, plan: true }
+    },
+    {
+        id: "pi",
+        label: "Pi",
+        installed: true,
+        // The real list comes from `pi --mode rpc` (`get_available_models`): the providers set up there.
+        models: (
+            [
+                ["anthropic/claude-sonnet-5-5", "Claude Sonnet 5.5", "anthropic", ["minimal", "low", "medium", "high"]],
+                ["openrouter/deepseek/deepseek-v4.1-flash", "DeepSeek V4.1 Flash", "openrouter", ["low", "high"]]
+            ] as const
+        ).map(([id, label, description, levels]) => ({
+            id,
+            label,
+            description,
+            reasoningLevels: [...levels],
+            options: []
+        })),
+        defaultModel: "anthropic/claude-sonnet-5-5",
+        commands: [COMPACT],
+        accessModes: ACCESS_MODES,
+        capabilities: { steering: false, interrupt: true, attachments: true, plan: false }
     }
 ];
 

@@ -6,6 +6,7 @@
 //!     --mock              Use the scripted mock instead of `claude`
 //!     --codex             Use `codex app-server` instead of `claude`
 //!     --opencode          Use `opencode serve` instead of `claude`
+//!     --pi                Use `pi --mode rpc` instead of `claude`
 //!     --model <id>        Model to run
 //!     --effort <level>    minimal | low | medium | high | xhigh | max
 //!     --sandbox <level>   read-only | workspace-write (default) | danger-full-access
@@ -22,7 +23,7 @@
 
 use std::io::{BufRead, Write};
 
-use hive_harness::{ClaudeHarness, CodexHarness, Harness, MockHarness, OpencodeHarness, RunHandle};
+use hive_harness::{ClaudeHarness, CodexHarness, Harness, MockHarness, OpencodeHarness, PiHarness, RunHandle};
 use hive_proto::{
     AccessMode, AgentEvent, HarnessId, ReasoningLevel, RunRequest, SandboxLevel, ToolCall, UserInputAnswer,
     UserInputQuestion,
@@ -71,6 +72,7 @@ fn parse_args() -> Result<Options, String> {
             "--mock" => mock = true,
             "--codex" => request.harness = HarnessId::Codex,
             "--opencode" => request.harness = HarnessId::Opencode,
+            "--pi" => request.harness = HarnessId::Pi,
             "--plan" => request.plan = true,
             "--access" => {
                 request.access = serde_json::from_value::<AccessMode>(value()?.into())
@@ -119,7 +121,7 @@ async fn main() {
     let options = match parse_args() {
         Ok(options) => options,
         Err(error) => {
-            eprintln!("hive-run: {error}\nusage: hive-run [--mock|--codex|--opencode] [--access mode] [--plan] [--model id] [--effort level] [--sandbox level] [--cwd dir] [--resume id] [--attach path] [--yes] [--json] <prompt>");
+            eprintln!("hive-run: {error}\nusage: hive-run [--mock|--codex|--opencode|--pi] [--access mode] [--plan] [--model id] [--effort level] [--sandbox level] [--cwd dir] [--resume id] [--attach path] [--yes] [--json] <prompt>");
             std::process::exit(2);
         }
     };
@@ -129,6 +131,8 @@ async fn main() {
         Box::new(CodexHarness::new())
     } else if options.request.harness == HarnessId::Opencode {
         Box::new(OpencodeHarness::new())
+    } else if options.request.harness == HarnessId::Pi {
+        Box::new(PiHarness::new())
     } else {
         Box::new(ClaudeHarness::new())
     };

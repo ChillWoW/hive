@@ -25,12 +25,14 @@ mod mock;
 mod models;
 mod opencode;
 pub mod overrides;
+mod pi;
 pub mod provider;
 
 pub use claude::ClaudeHarness;
 pub use codex::CodexHarness;
 pub use mock::MockHarness;
 pub use opencode::OpencodeHarness;
+pub use pi::PiHarness;
 
 #[derive(Debug, thiserror::Error)]
 pub enum HarnessError {

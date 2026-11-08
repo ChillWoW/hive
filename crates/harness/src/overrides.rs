@@ -72,6 +72,18 @@ pub fn configure(settings: &Settings) {
             args: split_args(&opencode.launch_args),
         },
     );
+
+    let pi = &settings.pi;
+    let mut env = parse_env(&pi.env);
+    put_dir(&mut env, "PI_CODING_AGENT_DIR", &pi.agent_dir);
+    set(
+        HarnessId::Pi,
+        CliOverrides {
+            binary: path(&pi.binary_path),
+            env,
+            args: split_args(&pi.launch_args),
+        },
+    );
 }
 
 /// The binary the user picked, else `found()`. A picked one that doesn't

@@ -60,6 +60,7 @@ fn harness_tag(h: HarnessId) -> u8 {
         HarnessId::Codex => 2,
         HarnessId::Opencode => 3,
         HarnessId::Mock => 4,
+        HarnessId::Pi => 5,
     }
 }
 

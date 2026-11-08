@@ -12,7 +12,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use hive_engine::{Engine, EngineConfig};
-use hive_harness::{ClaudeHarness, CodexHarness, Harness, OpencodeHarness};
+use hive_harness::{ClaudeHarness, CodexHarness, Harness, OpencodeHarness, PiHarness};
 use hive_mcp::{Ctx, Host, Tools};
 use hive_proto::{
     AccessMode, AgentEvent, ChatConfig, CommandPayload, DoneStatus, MessagesUpdate, ReasoningLevel,
@@ -161,6 +161,12 @@ async fn opencode_calls_a_hive_tool() {
     agent_calls_hive(Arc::new(OpencodeHarness::new()), None, None, Duration::ZERO).await;
 }
 
+#[tokio::test(flavor = "multi_thread")]
+#[ignore = "spends tokens on the real pi CLI"]
+async fn pi_calls_a_hive_tool() {
+    agent_calls_hive(Arc::new(PiHarness::new()), None, Some(ReasoningLevel::Low), Duration::ZERO).await;
+}
+
 /// Past every CLI's default tool-call timeout (Codex 60s, OpenCode 5s).
 const SLOW: Duration = Duration::from_secs(75);
 
@@ -188,4 +194,10 @@ async fn codex_waits_on_a_slow_hive_tool() {
 #[ignore = "spends tokens on the real opencode CLI"]
 async fn opencode_waits_on_a_slow_hive_tool() {
     agent_calls_hive(Arc::new(OpencodeHarness::new()), None, None, SLOW).await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+#[ignore = "spends tokens on the real pi CLI"]
+async fn pi_waits_on_a_slow_hive_tool() {
+    agent_calls_hive(Arc::new(PiHarness::new()), None, Some(ReasoningLevel::Low), SLOW).await;
 }

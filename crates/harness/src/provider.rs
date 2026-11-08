@@ -16,6 +16,7 @@ use crate::claude::{provider as claude, usage as claude_usage};
 use crate::cli;
 use crate::codex::provider as codex;
 use crate::opencode::provider as opencode;
+use crate::pi::provider as pi;
 
 pub use crate::claude::provider::CodeInput;
 
@@ -40,6 +41,7 @@ pub async fn status(harness: HarnessId) -> ProviderStatus {
         HarnessId::ClaudeCode => claude::status().await,
         HarnessId::Codex => codex::status().await,
         HarnessId::Opencode => opencode::status().await,
+        HarnessId::Pi => pi::status().await,
         _ => ProviderStatus {
             // Mock runs in-process.
             installed: harness == HarnessId::Mock,
@@ -64,6 +66,7 @@ pub async fn install(harness: HarnessId) -> Result<(), ProviderError> {
         HarnessId::ClaudeCode => claude::install().await,
         HarnessId::Codex => codex::install().await,
         HarnessId::Opencode => opencode::install().await,
+        HarnessId::Pi => pi::install().await,
         _ => Err(ProviderError::Unsupported),
     }
 }
@@ -73,6 +76,7 @@ pub async fn update(harness: HarnessId) -> Result<(), ProviderError> {
         HarnessId::ClaudeCode => claude::update().await,
         HarnessId::Codex => codex::update().await,
         HarnessId::Opencode => opencode::update().await,
+        HarnessId::Pi => pi::update().await,
         _ => Err(ProviderError::Unsupported),
     }
 }

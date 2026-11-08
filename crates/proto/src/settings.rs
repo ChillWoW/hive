@@ -35,6 +35,7 @@ pub struct Settings {
     pub claude: ClaudeSettings,
     pub codex: CodexSettings,
     pub opencode: OpencodeSettings,
+    pub pi: PiSettings,
     pub updates: UpdatesSettings,
 }
 
@@ -52,6 +53,7 @@ impl Default for Settings {
             claude: ClaudeSettings::default(),
             codex: CodexSettings::default(),
             opencode: OpencodeSettings::default(),
+            pi: PiSettings::default(),
             updates: UpdatesSettings::default(),
         }
     }
@@ -298,6 +300,7 @@ pub struct ProvidersSettings {
     pub claude_code: bool,
     pub codex: bool,
     pub opencode: bool,
+    pub pi: bool,
     pub mock: bool,
 }
 
@@ -307,6 +310,7 @@ impl Default for ProvidersSettings {
             claude_code: true,
             codex: true,
             opencode: true,
+            pi: true,
             mock: true,
         }
     }
@@ -377,6 +381,19 @@ pub struct OpencodeSettings {
     pub env: String,
 }
 
+/// Pi's CLI; see [`ClaudeSettings`].
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase", default)]
+pub struct PiSettings {
+    pub display_name: String,
+    pub binary_path: String,
+    /// `PI_CODING_AGENT_DIR`: another setup's config folder.
+    pub agent_dir: String,
+    /// Added to `pi --mode rpc`'s command line.
+    pub launch_args: String,
+    pub env: String,
+}
+
 /// Which releases the updater offers.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "kebab-case")]
@@ -428,6 +445,7 @@ impl Settings {
             &mut self.claude.display_name,
             &mut self.codex.display_name,
             &mut self.opencode.display_name,
+            &mut self.pi.display_name,
         ] {
             *name = name.trim().to_owned();
         }

@@ -56,6 +56,7 @@ export type { ModelOptionChoice } from "./ModelOptionChoice";
 export type { NewWorktree } from "./NewWorktree";
 export type { NotificationsSettings } from "./NotificationsSettings";
 export type { OpencodeSettings } from "./OpencodeSettings";
+export type { PiSettings } from "./PiSettings";
 export type { ProviderAccount } from "./ProviderAccount";
 export type { ProviderStatus } from "./ProviderStatus";
 export type { ProviderUsage } from "./ProviderUsage";

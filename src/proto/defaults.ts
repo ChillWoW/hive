@@ -68,6 +68,7 @@ export const DEFAULT_SETTINGS: Settings = {
     "claudeCode": true,
     "codex": true,
     "opencode": true,
+    "pi": true,
     "mock": true
   },
   "claude": {
@@ -89,6 +90,13 @@ export const DEFAULT_SETTINGS: Settings = {
   "opencode": {
     "displayName": "",
     "binaryPath": "",
+    "launchArgs": "",
+    "env": ""
+  },
+  "pi": {
+    "displayName": "",
+    "binaryPath": "",
+    "agentDir": "",
     "launchArgs": "",
     "env": ""
   },

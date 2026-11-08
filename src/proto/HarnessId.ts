@@ -3,4 +3,4 @@
 /**
  * Which coding-agent CLI drives a run.
  */
-export type HarnessId = "claude-code" | "codex" | "opencode" | "mock";
+export type HarnessId = "claude-code" | "codex" | "opencode" | "pi" | "mock";
