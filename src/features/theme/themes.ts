@@ -49,8 +49,6 @@ export const COLOR_KEYS = [
     "warning"
 ] as const satisfies readonly (keyof Theme)[];
 
-export const DEFAULT_THEME = "Hive Slate";
-
 export const BUILTIN_THEMES: Record<string, Theme> = {
     "Hive Slate": { bg: "#0b0d11", surface: "#12151a", raised: "#1a1e25", hover: "#222730", border: "#252a33", text: "#e6e8ed", muted: "#8a919f", accent: "#6b8cff", accentFg: "#ffffff", success: "#3fb27f", danger: "#ef5b5b", warning: "#e5a443" },
     Midnight: { bg: "#09070f", surface: "#110e1b", raised: "#1a1628", hover: "#231e35", border: "#2a2440", text: "#ece8f6", muted: "#948ba8", accent: "#a78bfa", accentFg: "#140f22", success: "#4ade9f", danger: "#f87171", warning: "#fbbf24" },
@@ -80,11 +78,8 @@ const CACHE_KEY = "hive.theme";
 /** Sets the theme's variables on `<html>`; nothing else changes. */
 export function applyTheme(theme: Theme) {
     const root = document.documentElement;
-    const vars: Record<string, string> = {};
-    for (const key of COLOR_KEYS) {
-        vars["--" + kebab(key)] = theme[key];
-        root.style.setProperty("--" + kebab(key), theme[key]);
-    }
+    const vars = Object.fromEntries(COLOR_KEYS.map((key) => ["--" + kebab(key), theme[key]]));
+    for (const [name, value] of Object.entries(vars)) root.style.setProperty(name, value);
     root.style.colorScheme = theme.light ? "light" : "dark";
     try {
         localStorage.setItem(CACHE_KEY, JSON.stringify({ vars, light: !!theme.light }));

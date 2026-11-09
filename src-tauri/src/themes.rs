@@ -36,13 +36,10 @@ pub fn themes_list(dir: State<'_, ThemesDir>) -> Vec<UserTheme> {
             if !colors.is_object() {
                 return None;
             }
-            let name = colors
-                .get("name")
-                .and_then(Value::as_str)
-                .map(str::trim)
-                .filter(|name| !name.is_empty())
-                .map(str::to_owned)
-                .or_else(|| Some(path.file_stem()?.to_string_lossy().into_owned()))?;
+            let name = match colors.get("name").and_then(Value::as_str).map(str::trim) {
+                Some(name) if !name.is_empty() => name.to_owned(),
+                _ => path.file_stem()?.to_string_lossy().into_owned(),
+            };
             Some(UserTheme { name, colors })
         })
         .collect();

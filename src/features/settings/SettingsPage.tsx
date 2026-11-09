@@ -47,7 +47,7 @@ function AppearanceSection() {
     );
 }
 
-const CHANNELS:{ value: UpdateChannel; label: string }[] = [
+const CHANNELS: { value: UpdateChannel; label: string }[] = [
     { value: "stable", label: "Stable" },
     { value: "prerelease", label: "Pre-release" }
 ];
