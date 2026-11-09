@@ -1,0 +1,60 @@
+@import "tailwindcss";
+
+@layer base {
+    button:not(:disabled),
+    [role="button"]:not([aria-disabled="true"]) {
+        cursor: pointer;
+    }
+
+    button:disabled,
+    [role="button"][aria-disabled="true"] {
+        cursor: not-allowed;
+    }
+}
+
+@layer utilities {
+    .hide-scrollbar {
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+    }
+
+    .hide-scrollbar::-webkit-scrollbar {
+        display: none;
+    }
+}
+
+:root {
+    --scrollbar-size: 8px;
+    --scrollbar-track: #141517;
+    --scrollbar-thumb: #4c4d50;
+    --scrollbar-thumb-hover: #6a6c6f;
+}
+
+::-webkit-scrollbar {
+    width: var(--scrollbar-size);
+    height: var(--scrollbar-size);
+}
+
+::-webkit-scrollbar-track {
+    background: var(--scrollbar-track);
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--scrollbar-thumb);
+    border-radius: 0.1875rem;
+    border: 0.125rem solid var(--scrollbar-track);
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--scrollbar-thumb-hover);
+}
+
+::-webkit-scrollbar-corner {
+    background: transparent;
+}
+
+::-webkit-scrollbar-button {
+    display: none;
+    width: 0;
+    height: 0;
+}
