@@ -1,3 +1,8 @@
+mod settings;
+
+use std::path::PathBuf;
+
+use tauri::Manager;
 use tauri_plugin_window_state::StateFlags;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -16,6 +21,31 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
+        .setup(|app| {
+            let data_dir = data_dir(app)?;
+            app.manage(settings::SettingsFile::open(&data_dir)?);
+            Ok(())
+        })
+        .invoke_handler(tauri::generate_handler![
+            settings::settings_get,
+            settings::settings_update,
+            settings::settings_reset,
+            settings::settings_reload,
+            settings::settings_path,
+            settings::settings_reveal,
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+/// `~/.hive`, or `~/.hive.dev` for the dev config (`com.hive.dev`).
+fn data_dir(app: &tauri::App) -> tauri::Result<PathBuf> {
+    let name = if app.config().identifier.ends_with(".dev") {
+        ".hive.dev"
+    } else {
+        ".hive"
+    };
+    let dir = app.path().home_dir()?.join(name);
+    std::fs::create_dir_all(&dir)?;
+    Ok(dir)
 }
