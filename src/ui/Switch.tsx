@@ -1,35 +1,37 @@
+import type { ComponentProps } from "react";
+import { Switch as BaseSwitch } from "@base-ui/react/switch";
 import { cn } from "@/lib/cn";
 
-export function Switch({
-    checked,
-    onCheckedChange,
-    disabled,
-    "aria-label": ariaLabel
-}: {
-    checked: boolean;
-    onCheckedChange: (checked: boolean) => void;
-    disabled?: boolean;
-    "aria-label"?: string;
-}) {
+export interface SwitchProps extends Omit<ComponentProps<typeof BaseSwitch.Root>, "className"> {
+    className?: string;
+}
+
+export function Switch({ className, ...props }: SwitchProps) {
     return (
-        <button
-            type="button"
-            role="switch"
-            aria-checked={checked}
-            aria-label={ariaLabel}
-            disabled={disabled}
-            onClick={() => onCheckedChange(!checked)}
+        <BaseSwitch.Root
+            nativeButton
+            render={<button type="button" />}
             className={cn(
-                "relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors disabled:opacity-50",
-                checked ? "bg-accent" : "bg-border"
+                "group relative inline-flex h-4 w-7 shrink-0 items-center rounded-[4px]",
+                "bg-border",
+                "transition-colors duration-150 ease-out",
+                "hover:bg-muted/40",
+                "data-[checked]:bg-accent",
+                "data-[checked]:hover:bg-accent/90",
+                "focus-visible:outline focus-visible:outline-2 focus-visible:outline-muted focus-visible:outline-offset-2",
+                "data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50",
+                "disabled:cursor-not-allowed disabled:opacity-50",
+                className
             )}
+            {...props}
         >
-            <span
+            <BaseSwitch.Thumb
                 className={cn(
-                    "size-4 rounded-full shadow transition-transform",
-                    checked ? "translate-x-4.5 bg-accent-fg" : "translate-x-0.5 bg-muted"
+                    "block size-3 translate-x-[2px] rounded-[3px] bg-text shadow-sm",
+                    "transition-[translate,background-color] duration-200 ease-out",
+                    "data-[checked]:translate-x-[14px] data-[checked]:bg-accent-fg"
                 )}
             />
-        </button>
+        </BaseSwitch.Root>
     );
 }

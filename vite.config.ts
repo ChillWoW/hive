@@ -18,11 +18,7 @@ export default defineConfig({
         }
     },
     build: {
-        outDir: "build",
-        // File icons stay files, loaded the first time one is drawn, rather
-        // than ~1,200 data URLs in the main chunk.
-        assetsInlineLimit: (file) =>
-            file.includes("material-icon-theme") ? false : undefined
+        outDir: "build"
     },
     server: {
         port: 1421,
