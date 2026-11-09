@@ -2,7 +2,7 @@
 //!
 //! Add a setting only once something reads it: a section struct
 //! (`#[serde(rename_all = "camelCase", default)]` + `Default`) as a field of
-//! [`Settings`], mirrored in `src/settings/types.ts`.
+//! [`Settings`], mirrored in `src/features/settings/types.ts`.
 //!
 //! Keep sections to plain leaves (bools, numbers, strings, enums, options):
 //! [`Settings::sanitize`] applies input leaf by leaf and keeps each one only if

@@ -1,5 +1,5 @@
-import { SettingsPage } from "@/settings/SettingsPage";
-import { useSettingsRuntime } from "@/settings/useSettingsRuntime";
+import { SettingsPage } from "@/features/settings/SettingsPage";
+import { useSettingsRuntime } from "@/features/settings/useSettingsRuntime";
 
 export function App() {
     useSettingsRuntime();
