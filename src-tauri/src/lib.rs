@@ -1,5 +1,7 @@
+mod http;
 mod settings;
 mod themes;
+mod updater;
 
 use std::path::PathBuf;
 
@@ -28,6 +30,7 @@ pub fn run() {
             let themes_dir = data_dir.join("themes");
             std::fs::create_dir_all(&themes_dir)?;
             app.manage(themes::ThemesDir(themes_dir));
+            app.manage(updater::Updates::default());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -39,6 +42,8 @@ pub fn run() {
             settings::settings_reveal,
             themes::themes_list,
             themes::themes_open_dir,
+            updater::update_check,
+            updater::update_install,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

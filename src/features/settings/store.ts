@@ -8,8 +8,19 @@ import {
 } from "./api";
 import { DEFAULT_SETTINGS, type Settings } from "./types";
 
+export type SettingsPageId = "appearance" | "keyboard" | "about";
+
 type SettingsState = {
     settings: Settings;
+
+    /** Modal UI state; not persisted. */
+    isOpen: boolean;
+    page: SettingsPageId;
+    setOpen: (open: boolean) => void;
+    open: (page?: SettingsPageId) => void;
+    toggle: () => void;
+    setPage: (page: SettingsPageId) => void;
+
     /** Optimistic: the UI updates now, Rust's answer wins when it lands. */
     update: (patch: SettingsPatch) => Promise<void>;
     resetAll: () => Promise<void>;
@@ -48,6 +59,13 @@ export const useSettingsStore = create<SettingsState>()((set, get) => {
 
     return {
         settings: DEFAULT_SETTINGS,
+
+        isOpen: false,
+        page: "appearance",
+        setOpen: (isOpen) => set({ isOpen }),
+        open: (page) => set((s) => ({ isOpen: true, page: page ?? s.page })),
+        toggle: () => set((s) => ({ isOpen: !s.isOpen })),
+        setPage: (page) => set({ page }),
 
         update: (patch) => {
             set({ settings: mergeSettings(get().settings, patch) });
@@ -119,5 +137,6 @@ export type SettingHandle = Pick<ReturnType<typeof useSetting>, "modified" | "re
 
 /** Same actions outside React. */
 export const settings = {
-    get: () => useSettingsStore.getState().settings
+    get: () => useSettingsStore.getState().settings,
+    open: (page?: SettingsPageId) => useSettingsStore.getState().open(page)
 };
