@@ -15,7 +15,7 @@ export function SegmentedControl<T extends string>({
         <div
             role="radiogroup"
             aria-label={ariaLabel}
-            className="inline-flex rounded-md bg-neutral-900 p-0.5"
+            className="inline-flex rounded-md bg-bg p-0.5"
         >
             {options.map((option) => (
                 <button
@@ -27,8 +27,8 @@ export function SegmentedControl<T extends string>({
                     className={cn(
                         "rounded px-2.5 py-1 text-xs font-medium transition-colors",
                         option.value === value
-                            ? "bg-neutral-700 text-neutral-50"
-                            : "text-neutral-400 hover:text-neutral-200"
+                            ? "bg-hover text-text"
+                            : "text-muted hover:text-text"
                     )}
                 >
                     {option.label}

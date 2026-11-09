@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
-import { REVEAL_LABEL } from "@/lib/platform";
+import { themesApi } from "@/features/theme/store";
+import { ThemePicker } from "@/features/theme/ThemePicker";
+import { isTauri, REVEAL_LABEL } from "@/lib/platform";
 import { SegmentedControl } from "@/ui/SegmentedControl";
 import { settingsApi } from "./api";
 import { SettingRow, SettingsSection, SwitchRow } from "./SettingsSection";
@@ -11,7 +13,8 @@ export function SettingsPage() {
     return (
         <div className="h-full overflow-y-auto">
             <div className="mx-auto flex max-w-2xl flex-col gap-8 px-6 py-10">
-                <h1 className="px-1 text-lg font-semibold text-neutral-50">Settings</h1>
+                <h1 className="px-1 text-lg font-semibold text-text">Settings</h1>
+                <AppearanceSection />
                 <UpdatesSection />
                 <FileSection />
             </div>
@@ -19,7 +22,32 @@ export function SettingsPage() {
     );
 }
 
-const CHANNELS: { value: UpdateChannel; label: string }[] = [
+function AppearanceSection() {
+    const theme = useSetting("appearance", "theme");
+
+    return (
+        <SettingsSection title="Appearance">
+            <SettingRow
+                label="Theme"
+                description="Add your own as JSON files in the themes folder"
+                setting={theme}
+                control={
+                    <button
+                        type="button"
+                        disabled={!isTauri}
+                        onClick={() => void themesApi.openDir()}
+                        className="rounded-md bg-raised px-2.5 py-1 text-xs font-medium text-text hover:bg-hover disabled:opacity-50"
+                    >
+                        Open themes folder
+                    </button>
+                }
+            />
+            <ThemePicker value={theme.value} onChange={theme.set} />
+        </SettingsSection>
+    );
+}
+
+const CHANNELS:{ value: UpdateChannel; label: string }[] = [
     { value: "stable", label: "Stable" },
     { value: "prerelease", label: "Pre-release" }
 ];
@@ -70,7 +98,7 @@ function FileSection() {
                         type="button"
                         disabled={!path}
                         onClick={() => void settingsApi.reveal()}
-                        className="rounded-md bg-neutral-700 px-2.5 py-1 text-xs font-medium text-neutral-100 hover:bg-neutral-600 disabled:opacity-50"
+                        className="rounded-md bg-hover px-2.5 py-1 text-xs font-medium text-text hover:bg-border disabled:opacity-50"
                     >
                         {REVEAL_LABEL}
                     </button>
@@ -83,7 +111,7 @@ function FileSection() {
                     <button
                         type="button"
                         onClick={() => void resetAll()}
-                        className="rounded-md bg-neutral-700 px-2.5 py-1 text-xs font-medium text-red-300 hover:bg-neutral-600"
+                        className="rounded-md bg-hover px-2.5 py-1 text-xs font-medium text-danger hover:bg-border"
                     >
                         Reset
                     </button>

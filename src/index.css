@@ -1,6 +1,52 @@
 @import "tailwindcss";
 
+/* The theme's colours, by their own names (bg-surface, text-muted,
+   border-border, bg-accent, …) and nothing else: Tailwind's palette is
+   cleared. Only a theme (src/features/theme/themes.ts) sets the variables;
+   switching theme rewrites them and everything follows. */
+@theme static {
+    --color-*: initial;
+    --color-bg: var(--bg);
+    --color-surface: var(--surface);
+    --color-raised: var(--raised);
+    --color-hover: var(--hover);
+    --color-border: var(--border);
+    --color-text: var(--text);
+    --color-muted: var(--muted);
+    --color-accent: var(--accent);
+    --color-accent-fg: var(--accent-fg);
+    --color-success: var(--success);
+    --color-danger: var(--danger);
+    --color-warning: var(--warning);
+    --color-black: #000;
+    --color-white: #fff;
+    --color-transparent: transparent;
+    --color-current: currentColor;
+}
+
+/* Hive Slate, until the theme is applied on a first launch. */
+:root {
+    color-scheme: dark;
+    --bg: #0b0d11;
+    --surface: #12151a;
+    --raised: #1a1e25;
+    --hover: #222730;
+    --border: #252a33;
+    --text: #e6e8ed;
+    --muted: #8a919f;
+    --accent: #6b8cff;
+    --accent-fg: #ffffff;
+    --success: #3fb27f;
+    --danger: #ef5b5b;
+    --warning: #e5a443;
+}
+
 @layer base {
+    body {
+        background-color: var(--color-bg);
+        color: var(--color-text);
+    }
+
     button:not(:disabled),
     [role="button"]:not([aria-disabled="true"]) {
         cursor: pointer;
@@ -25,9 +71,9 @@
 
 :root {
     --scrollbar-size: 8px;
-    --scrollbar-track: #141517;
-    --scrollbar-thumb: #4c4d50;
-    --scrollbar-thumb-hover: #6a6c6f;
+    --scrollbar-track: var(--bg);
+    --scrollbar-thumb: var(--raised);
+    --scrollbar-thumb-hover: var(--hover);
 }
 
 ::-webkit-scrollbar {

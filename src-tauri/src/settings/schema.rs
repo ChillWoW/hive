@@ -20,6 +20,7 @@ pub const SETTINGS_VERSION: u32 = 1;
 #[serde(rename_all = "camelCase", default)]
 pub struct Settings {
     pub version: u32,
+    pub appearance: AppearanceSettings,
     pub updates: UpdatesSettings,
 }
 
@@ -27,7 +28,27 @@ impl Default for Settings {
     fn default() -> Self {
         Self {
             version: SETTINGS_VERSION,
+            appearance: AppearanceSettings::default(),
             updates: UpdatesSettings::default(),
+        }
+    }
+}
+
+pub const DEFAULT_THEME: &str = "Hive Slate";
+
+/// Read by the frontend (`src/features/theme/`).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct AppearanceSettings {
+    /// A theme's name: a built-in one, or a file in `<data dir>/themes/`.
+    /// One that no longer exists shows the default.
+    pub theme: String,
+}
+
+impl Default for AppearanceSettings {
+    fn default() -> Self {
+        Self {
+            theme: DEFAULT_THEME.into(),
         }
     }
 }
@@ -65,6 +86,12 @@ impl Settings {
     pub fn sanitize(base: &Settings, input: &Value) -> Settings {
         let mut settings = sanitize(base, input);
         settings.version = SETTINGS_VERSION;
+        let theme = settings.appearance.theme.trim();
+        settings.appearance.theme = if theme.is_empty() {
+            DEFAULT_THEME.into()
+        } else {
+            theme.into()
+        };
         settings
     }
 }
@@ -129,15 +156,25 @@ mod tests {
         let s = Settings::sanitize(
             &Settings::default(),
             &json!({
+                "appearance": { "theme": 7 },
                 "updates": { "autoCheck": "no", "channel": "prerelease" },
                 "unknown": 1,
             }),
         );
+        assert_eq!(s.appearance.theme, DEFAULT_THEME);
         assert!(s.updates.auto_check);
         assert_eq!(s.updates.channel, UpdateChannel::Prerelease);
 
         let s = Settings::sanitize(&Settings::default(), &json!({ "updates": "big" }));
         assert_eq!(s, Settings::default());
+    }
+
+    #[test]
+    fn theme_is_trimmed_and_never_empty() {
+        let s = Settings::sanitize(&Settings::default(), &json!({ "appearance": { "theme": " Ember " } }));
+        assert_eq!(s.appearance.theme, "Ember");
+        let s = Settings::sanitize(&s, &json!({ "appearance": { "theme": "  " } }));
+        assert_eq!(s.appearance.theme, DEFAULT_THEME);
     }
 
     #[test]

@@ -5,7 +5,7 @@ import type { SettingHandle } from "./store";
 
 /** The hairline between a card's rows, inset to the content. */
 const ROW_DIVIDER =
-    "not-first:before:absolute not-first:before:inset-x-4 not-first:before:top-0 not-first:before:h-px not-first:before:bg-neutral-700";
+    "not-first:before:absolute not-first:before:inset-x-4 not-first:before:top-0 not-first:before:h-px not-first:before:bg-border";
 
 /** A titled group of rows on one card. */
 export function SettingsSection({
@@ -22,13 +22,13 @@ export function SettingsSection({
         <section className="flex flex-col gap-2.5">
             {(title || action) && (
                 <div className={cn("flex items-center gap-2 px-1", action && "min-h-6")}>
-                    <h3 className="min-w-0 flex-1 text-[13px] font-medium text-neutral-300">
+                    <h3 className="min-w-0 flex-1 text-[13px] font-medium text-muted">
                         {title}
                     </h3>
                     {action}
                 </div>
             )}
-            <div className="flex flex-col rounded-md bg-neutral-800">{children}</div>
+            <div className="flex flex-col rounded-md bg-surface">{children}</div>
         </section>
     );
 }
@@ -54,13 +54,13 @@ export function SettingRow({
         <div className={cn("relative flex min-h-13 items-center justify-between gap-x-8 px-4 py-3", ROW_DIVIDER)}>
             <div className="flex min-w-0 flex-col gap-0.5">
                 <div className="flex items-center gap-2">
-                    <span className="text-[13px] leading-5 font-medium text-neutral-50">
+                    <span className="text-[13px] leading-5 font-medium text-text">
                         {label}
                     </span>
                     {setting?.modified && <ResetMarker label={label} onReset={setting.reset} />}
                 </div>
                 {description && (
-                    <span className="truncate text-xs leading-4 text-neutral-400">
+                    <span className="truncate text-xs leading-4 text-muted">
                         {description}
                     </span>
                 )}
@@ -100,9 +100,9 @@ function ResetMarker({ label, onReset }: { label: string; onReset: () => void })
             aria-label={`Reset ${label} to default`}
             title="Reset to default"
             onClick={onReset}
-            className="group/reset relative inline-flex size-4 shrink-0 items-center justify-center rounded-sm text-neutral-400 hover:text-neutral-50"
+            className="group/reset relative inline-flex size-4 shrink-0 items-center justify-center rounded-sm text-muted hover:text-text"
         >
-            <span className="size-1.5 rounded-full bg-sky-400 transition-[opacity,scale] duration-150 group-hover/reset:scale-0 group-hover/reset:opacity-0" />
+            <span className="size-1.5 rounded-full bg-accent transition-[opacity,scale] duration-150 group-hover/reset:scale-0 group-hover/reset:opacity-0" />
             <svg
                 viewBox="0 0 16 16"
                 fill="none"

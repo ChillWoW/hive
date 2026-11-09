@@ -1,4 +1,5 @@
 mod settings;
+mod themes;
 
 use std::path::PathBuf;
 
@@ -24,6 +25,9 @@ pub fn run() {
         .setup(|app| {
             let data_dir = data_dir(app)?;
             app.manage(settings::SettingsFile::open(&data_dir)?);
+            let themes_dir = data_dir.join("themes");
+            std::fs::create_dir_all(&themes_dir)?;
+            app.manage(themes::ThemesDir(themes_dir));
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -33,6 +37,8 @@ pub fn run() {
             settings::settings_reload,
             settings::settings_path,
             settings::settings_reveal,
+            themes::themes_list,
+            themes::themes_open_dir,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
