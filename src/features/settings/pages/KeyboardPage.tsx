@@ -8,66 +8,16 @@ import {
     stringifyShortcut
 } from "@/keybindings/shortcut";
 import { cn } from "@/lib/cn";
-import { isMac } from "@/lib/platform";
-import { SegmentedControl } from "@/ui";
 import { useAutoReset } from "../hooks";
 import { SettingRow, SettingsSection } from "../SettingsSection";
 import { useSetting, useSettingsStore } from "../store";
-import type { SendKey } from "../types";
-
-const MOD = isMac ? "⌘" : "Ctrl";
 
 export function KeyboardPage() {
-    const sendWith = useSetting("keyboard", "sendWith");
-    const enterSends = sendWith.value === "enter";
-
-    return (
-        <>
-            {CATEGORIES.filter((category) => category.id !== "prompt").map((category) => (
-                <SettingsSection key={category.id} title={category.title}>
-                    <ShortcutRows category={category.id} />
-                </SettingsSection>
-            ))}
-
-            <SettingsSection title="Prompt box">
-                <ShortcutRows category="prompt" />
-                <SettingRow
-                    label="Send with"
-                    description={
-                        enterSends ? "Shift+Enter starts a new line" : "Enter starts a new line"
-                    }
-                    keywords="send submit enter return newline line break composer"
-                    setting={sendWith}
-                    controlClassName="w-auto"
-                    control={
-                        <SegmentedControl
-                            size="sm"
-                            value={sendWith.value}
-                            onValueChange={(value) => sendWith.set(value as SendKey)}
-                            aria-label="Send with"
-                        >
-                            <SegmentedControl.Item value="enter">Enter</SegmentedControl.Item>
-                            <SegmentedControl.Item value="mod-enter">
-                                {MOD}+Enter
-                            </SegmentedControl.Item>
-                        </SegmentedControl>
-                    }
-                />
-                <SettingRow
-                    label="Stop the running turn"
-                    keywords="stop interrupt cancel escape abort"
-                    controlClassName="w-auto"
-                    control={<ShortcutKeys shortcut="Escape" />}
-                />
-                <SettingRow
-                    label="Slash commands"
-                    keywords="slash commands menu"
-                    controlClassName="w-auto"
-                    control={<ShortcutKeys shortcut="/" />}
-                />
-            </SettingsSection>
-        </>
-    );
+    return CATEGORIES.map((category) => (
+        <SettingsSection key={category.id} title={category.title}>
+            <ShortcutRows category={category.id} />
+        </SettingsSection>
+    ));
 }
 
 function ShortcutRows({ category }: { category: CategoryId }) {
