@@ -1,3 +1,4 @@
+import { ChatView } from "@/features/chat";
 import { SettingsModal, useSettingsRuntime } from "@/features/settings";
 import { useFontRuntime } from "@/features/fonts/useFontRuntime";
 import { useThemeRuntime } from "@/features/theme/useThemeRuntime";
@@ -17,7 +18,9 @@ export function App() {
         <div className="relative flex h-screen bg-bg text-text">
             <TopBar />
             <Sidebar />
-            <main className="min-w-0 flex-1 pt-9" />
+            <main className="flex min-w-0 flex-1 flex-col overflow-hidden pt-9">
+                <ChatView />
+            </main>
             <RightSidebar />
             <FilePanel />
             <SettingsModal />

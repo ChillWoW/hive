@@ -4,7 +4,7 @@ import { useShortcut } from "@/keybindings";
 import { isMac } from "@/lib/platform";
 import { FolderTreeIcon, IconButton } from "@/ui";
 import { cn } from "@/lib/cn";
-import { useLayoutStore, usePanelOpen, usePanelWidth } from "./store";
+import { useLayoutStore, usePanelLayout } from "./store";
 import { useWindowState } from "./useWindowState";
 import { WindowControls } from "./WindowControls";
 
@@ -23,10 +23,11 @@ const MAC_TRAFFIC_LIGHTS = "w-[72px]";
  */
 export function TopBar() {
     const { fullscreen } = useWindowState();
-    const sidebarOpen = usePanelOpen("left");
-    const rightOpen = usePanelOpen("right");
-    const filesOpen = usePanelOpen("files");
-    const sidebarWidth = usePanelWidth("left");
+    const { visible, widths } = usePanelLayout();
+    const sidebarOpen = visible.left;
+    const rightOpen = visible.right;
+    const filesOpen = visible.files;
+    const sidebarWidth = widths.left;
     const resizing = useLayoutStore((s) => s.resizing);
     const toggle = useLayoutStore((s) => s.toggle);
     const toggleSidebar = () => toggle("left");

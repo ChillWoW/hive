@@ -2,21 +2,17 @@ import { useRef, useState, type ReactNode } from "react";
 import { cn } from "@/lib/cn";
 import {
     edgeOf,
-    getPanelWidth,
-    getShownWidth,
-    MAIN_MIN_WIDTH,
+    getPanelLayout,
     PANEL_WIDTHS,
-    PANELS,
     useLayoutStore,
-    usePanelContentWidth,
-    usePanelOpen,
-    usePanelWidth,
+    usePanelLayout,
     type Panel
 } from "./store";
 
 /**
- * A column beside the main one. It closes by sliding its width to 0; the
- * content keeps its own width meanwhile, so it's uncovered rather than
+ * A column beside the main one, as wide as the layout gives it (see
+ * `panelLayout`). It closes, or hides for room, by sliding its width to 0;
+ * the content keeps its last width meanwhile, so it's uncovered rather than
  * reflowed. Dragging its inner edge resizes it; a double-click there resets
  * it. The top bar overlays its first 36px.
  */
@@ -29,11 +25,14 @@ export function SidePanel({
     label: string;
     children?: ReactNode;
 }) {
-    const open = usePanelOpen(panel);
-    const contentWidth = usePanelContentWidth(panel);
+    const layout = usePanelLayout();
+    const open = layout.visible[panel];
+    const width = layout.widths[panel];
     const resizing = useLayoutStore((s) => s.resizing);
-    const width = usePanelWidth(panel);
     const edge = edgeOf(panel);
+    // The last shown width, kept while it slides closed.
+    const [contentWidth, setContentWidth] = useState(width);
+    if (width > 0 && width !== contentWidth) setContentWidth(width);
 
     return (
         <aside
@@ -61,13 +60,13 @@ export function SidePanel({
 }
 
 /** The shown width of the panels between `panel` and its window edge. */
-const outerWidth = (panel: Panel) => (panel === "right" ? getShownWidth("files") : 0);
+const outerWidth = (panel: Panel) => (panel === "right" ? getPanelLayout().widths.files : 0);
 
 /** A panel's inner edge: drag to resize, double-click to reset. */
 function ResizeHandle({ panel, label }: { panel: Panel; label: string }) {
     // This edge's own drag; the store's `resizing` is shared by every edge.
     const [dragging, setDragging] = useState(false);
-    const { setWidth, setResizing } = useLayoutStore.getState();
+    const { setWidth, setResizing, touch } = useLayoutStore.getState();
     // Where the pointer grabbed, relative to the edge, so the edge doesn't jump to it.
     const grab = useRef(0);
     const edge = edgeOf(panel);
@@ -90,17 +89,15 @@ function ResizeHandle({ panel, label }: { panel: Panel; label: string }) {
                 if (event.button !== 0) return;
                 event.preventDefault();
                 event.currentTarget.setPointerCapture(event.pointerId);
-                grab.current = reach(event.clientX) - getPanelWidth(panel);
+                grab.current = reach(event.clientX) - getPanelLayout().widths[panel];
+                // The panel being dragged keeps its width; the others give way.
+                touch(panel);
                 drag(true);
             }}
             onPointerMove={(event) => {
                 if (!dragging) return;
-                const others = PANELS.filter((p) => p !== panel).reduce(
-                    (sum, p) => sum + getShownWidth(p),
-                    0
-                );
-                const room = window.innerWidth - others - MAIN_MIN_WIDTH;
-                setWidth(panel, Math.min(reach(event.clientX) - grab.current, room));
+                const max = getPanelLayout().dragMax[panel];
+                setWidth(panel, Math.min(reach(event.clientX) - grab.current, max));
             }}
             onPointerUp={stop}
             onPointerCancel={stop}
