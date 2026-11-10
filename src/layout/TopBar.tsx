@@ -2,7 +2,8 @@ import { SidebarSimpleIcon } from "@phosphor-icons/react";
 import { useShortcut } from "@/keybindings";
 import { isMac } from "@/lib/platform";
 import { IconButton } from "@/ui";
-import { SIDEBAR_WIDTH, useLayoutStore } from "./store";
+import { cn } from "@/lib/cn";
+import { useLayoutStore, useSidebarWidth } from "./store";
 import { useWindowState } from "./useWindowState";
 import { WindowControls } from "./WindowControls";
 
@@ -21,6 +22,8 @@ const MAC_TRAFFIC_LIGHTS = "w-[72px]";
 export function TopBar() {
     const { fullscreen } = useWindowState();
     const sidebarOpen = useLayoutStore((s) => s.sidebarOpen);
+    const sidebarWidth = useSidebarWidth();
+    const resizing = useLayoutStore((s) => s.resizing);
     const toggleSidebar = useLayoutStore((s) => s.toggleSidebar);
     useShortcut("toggleSidebar", toggleSidebar);
 
@@ -31,8 +34,11 @@ export function TopBar() {
         >
             <div
                 data-tauri-drag-region
-                style={{ width: sidebarOpen ? SIDEBAR_WIDTH : 0 }}
-                className="flex h-full min-w-fit shrink-0 items-center gap-0.5 px-2 transition-[width] duration-200 ease-out"
+                style={{ width: sidebarWidth }}
+                className={cn(
+                    "flex h-full min-w-fit shrink-0 items-center gap-0.5 px-2",
+                    !resizing && "transition-[width] duration-200 ease-out"
+                )}
             >
                 {isMac && !fullscreen && (
                     <div data-tauri-drag-region className={MAC_TRAFFIC_LIGHTS} />
