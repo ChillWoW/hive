@@ -25,7 +25,7 @@ export function SettingsButton({ className }: { className?: string }) {
             )}
         >
             <GearSixIcon
-                className="size-4 shrink-0 transition-transform duration-300 group-hover:rotate-45"
+                className="size-4 shrink-0"
                 weight={isOpen ? "fill" : "regular"}
             />
             <span className="min-w-0 flex-1 truncate">Settings</span>

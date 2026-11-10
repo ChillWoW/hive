@@ -3,7 +3,7 @@ import { useFontRuntime } from "@/features/fonts/useFontRuntime";
 import { useThemeRuntime } from "@/features/theme/useThemeRuntime";
 import { useUpdaterRuntime } from "@/features/updater";
 import { useKeybindingsRuntime } from "@/keybindings";
-import { TopBar } from "@/layout";
+import { Sidebar, TopBar } from "@/layout";
 
 export function App() {
     useSettingsRuntime();
@@ -13,8 +13,10 @@ export function App() {
     useUpdaterRuntime();
 
     return (
-        <div className="flex h-screen flex-col bg-bg text-text">
+        <div className="relative flex h-screen bg-bg text-text">
             <TopBar />
+            <Sidebar />
+            <main className="min-w-0 flex-1 pt-9" />
             <SettingsModal />
         </div>
     );

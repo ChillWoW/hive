@@ -22,6 +22,7 @@ export type UpdatesSettings = {
  */
 export type KeyboardSettings = {
     openSettings: string;
+    toggleSidebar: string;
 };
 
 export type Settings = {
@@ -42,6 +43,7 @@ export const DEFAULT_SETTINGS: Settings = {
         channel: "stable"
     },
     keyboard: {
-        openSettings: "Mod+,"
+        openSettings: "Mod+,",
+        toggleSidebar: "Mod+B"
     }
 };

@@ -97,12 +97,14 @@ impl Default for UpdatesSettings {
 #[serde(rename_all = "camelCase", default)]
 pub struct KeyboardSettings {
     pub open_settings: String,
+    pub toggle_sidebar: String,
 }
 
 impl Default for KeyboardSettings {
     fn default() -> Self {
         Self {
             open_settings: "Mod+,".into(),
+            toggle_sidebar: "Mod+B".into(),
         }
     }
 }

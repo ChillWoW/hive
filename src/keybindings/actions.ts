@@ -29,5 +29,13 @@ export const ACTIONS: readonly Action[] = [
         description: "Opens or closes this window",
         keywords: "settings preferences options open close",
         scope: "global"
+    },
+    {
+        id: "toggleSidebar",
+        category: "general",
+        label: "Toggle sidebar",
+        description: "Shows or hides the project list",
+        keywords: "sidebar projects panel left show hide",
+        scope: "global"
     }
 ];
