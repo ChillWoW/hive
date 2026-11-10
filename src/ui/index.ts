@@ -10,6 +10,8 @@ export { NumberInput } from "./NumberInput";
 export { Popover } from "./Popover";
 export { PortalContainerProvider } from "./PortalContainer";
 export { SegmentedControl } from "./SegmentedControl";
+export { Select } from "./Select";
+export type { SelectOption } from "./Select";
 export { Skeleton } from "./Skeleton";
 export { Switch } from "./Switch";
 export { Tooltip } from "./Tooltip";
