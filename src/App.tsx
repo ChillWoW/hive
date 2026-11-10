@@ -4,6 +4,7 @@ import { useThemeRuntime } from "@/features/theme/useThemeRuntime";
 import { useUpdaterRuntime } from "@/features/updater";
 import { useKeybindingsRuntime } from "@/keybindings";
 import { Sidebar, TopBar } from "@/layout";
+import { Toaster } from "@/ui";
 
 export function App() {
     useSettingsRuntime();
@@ -18,6 +19,7 @@ export function App() {
             <Sidebar />
             <main className="min-w-0 flex-1 pt-9" />
             <SettingsModal />
+            <Toaster />
         </div>
     );
 }

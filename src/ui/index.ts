@@ -15,4 +15,7 @@ export { Select } from "./Select";
 export type { SelectOption } from "./Select";
 export { Skeleton } from "./Skeleton";
 export { Switch } from "./Switch";
+export { Toaster } from "./Toast";
+export { toast } from "./toastManager";
+export type { ToastType } from "./toastManager";
 export { Tooltip } from "./Tooltip";
