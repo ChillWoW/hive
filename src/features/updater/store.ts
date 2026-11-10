@@ -5,7 +5,7 @@ import { errorMessage } from "@/lib/errors";
 import { onWindowFocus } from "@/lib/windowFocus";
 import { checkForUpdate, installUpdate, type UpdateInfo } from "./api";
 
-/** How often Hive looks for a release while it's open. */
+/** How often Outcode looks for a release while it's open. */
 const CHECK_EVERY_MS = 4 * 60 * 60 * 1000;
 /** A window focus checks again once the last check is this old. */
 const FOCUS_STALE_MS = 60 * 60 * 1000;

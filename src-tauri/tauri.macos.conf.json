@@ -3,7 +3,7 @@
     "app": {
         "windows": [
             {
-                "title": "Hive",
+                "title": "Outcode",
                 "width": 1200,
                 "height": 800,
                 "minWidth": 900,

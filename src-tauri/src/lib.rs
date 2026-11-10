@@ -49,14 +49,20 @@ pub fn run() {
         .expect("error while running tauri application");
 }
 
-/// `~/.hive`, or `~/.hive.dev` for the dev config (`com.hive.dev`).
+/// `~/.outcode`, or `~/.outcode.dev` for the dev config (`com.outcode.dev`).
+/// A data dir from before the rename (`~/.hive`, `~/.hive.dev`) is moved over.
 fn data_dir(app: &tauri::App) -> tauri::Result<PathBuf> {
-    let name = if app.config().identifier.ends_with(".dev") {
-        ".hive.dev"
+    let (name, legacy) = if app.config().identifier.ends_with(".dev") {
+        (".outcode.dev", ".hive.dev")
     } else {
-        ".hive"
+        (".outcode", ".hive")
     };
-    let dir = app.path().home_dir()?.join(name);
+    let home = app.path().home_dir()?;
+    let dir = home.join(name);
+    let legacy = home.join(legacy);
+    if !dir.exists() && legacy.is_dir() {
+        let _ = std::fs::rename(&legacy, &dir);
+    }
     std::fs::create_dir_all(&dir)?;
     Ok(dir)
 }

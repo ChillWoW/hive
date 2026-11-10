@@ -1,9 +1,9 @@
 {
     "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-    "productName": "Hive",
-    "mainBinaryName": "Hive",
+    "productName": "Outcode",
+    "mainBinaryName": "Outcode",
     "version": "0.1.1",
-    "identifier": "com.hive",
+    "identifier": "com.outcode",
     "build": {
         "frontendDist": "../build",
         "devUrl": "http://localhost:1421",
@@ -13,7 +13,7 @@
     "app": {
         "windows": [
             {
-                "title": "Hive",
+                "title": "Outcode",
                 "width": 1200,
                 "height": 800,
                 "minWidth": 900,

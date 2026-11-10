@@ -38,7 +38,7 @@ export function checkForUpdate(): Promise<UpdateInfo | null> {
 
 /**
  * Downloads and installs the update the last check found, stopping every
- * agent and terminal first; Hive then restarts. Resolves only if it didn't.
+ * agent and terminal first; Outcode then restarts. Resolves only if it didn't.
  */
 export function installUpdate(onProgress: (progress: UpdateProgress) => void): Promise<void> {
     if (!isTauri) return fakeInstall(onProgress);

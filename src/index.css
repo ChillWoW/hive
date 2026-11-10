@@ -24,7 +24,7 @@
     --color-current: currentColor;
 }
 
-/* Hive Slate, until the theme is applied on a first launch. */
+/* Outcode Slate, until the theme is applied on a first launch. */
 :root {
     color-scheme: dark;
     --bg: #0b0d11;

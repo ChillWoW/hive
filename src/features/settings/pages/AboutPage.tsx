@@ -34,7 +34,7 @@ function UpdatesSection() {
     const prerelease = channel.value === "prerelease";
 
     return (
-        <SettingsSection title="Hive">
+        <SettingsSection title="Outcode">
             <StatusRow />
             <SwitchRow
                 label="Check automatically"
@@ -79,7 +79,7 @@ function StatusRow() {
         if (isTauri) getVersion().then(setVersion, () => {});
     }, []);
 
-    const current = version ? `Hive ${version}` : "Hive";
+    const current = version ? `Outcode ${version}` : "Outcode";
     const working = isInstalling(state);
     const description = checking ? (
         "Checking…"
@@ -88,13 +88,13 @@ function StatusRow() {
     ) : state.phase === "failed" ? (
         <span className="text-danger">Update failed: {state.error}</span>
     ) : state.phase === "downloading" ? (
-        `Downloading Hive ${state.update.version}…${
+        `Downloading Outcode ${state.update.version}…${
             state.progress === undefined ? "" : ` ${Math.round(state.progress * 100)}%`
         }`
     ) : state.phase === "installing" ? (
         "Restarting…"
     ) : state.phase === "available" ? (
-        `Hive ${state.update.version} is available`
+        `Outcode ${state.update.version} is available`
     ) : checkedAt ? (
         `${current} is up to date · checked ${agoLabel(checkedAt, now)}`
     ) : (

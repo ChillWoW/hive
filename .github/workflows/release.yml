@@ -1,4 +1,4 @@
-# Builds Hive for a pushed `v*` tag (`bun run release <version>`) and
+# Builds Outcode for a pushed `v*` tag (`bun run release <version>`) and
 # publishes it as a GitHub release, with the signed Windows installer, the
 # macOS .dmg / updater bundle, and the `latest.json` the in-app updater reads.
 #
@@ -36,7 +36,7 @@ jobs:
           tauriScript: bunx tauri
           args: --bundles nsis
           tagName: ${{ github.ref_name }}
-          releaseName: Hive ${{ github.ref_name }}
+          releaseName: Outcode ${{ github.ref_name }}
           generateReleaseNotes: true
           releaseDraft: false
           # A tag like v0.1.0-beta.1 is a pre-release: GitHub's "latest" (the
@@ -73,6 +73,6 @@ jobs:
           tauriScript: bunx tauri
           args: --target universal-apple-darwin --bundles app,dmg
           tagName: ${{ github.ref_name }}
-          releaseName: Hive ${{ github.ref_name }}
+          releaseName: Outcode ${{ github.ref_name }}
           releaseDraft: false
           prerelease: ${{ contains(github.ref_name, '-') }}

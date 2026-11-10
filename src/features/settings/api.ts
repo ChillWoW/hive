@@ -19,7 +19,7 @@ export type SettingsPatch = {
 };
 
 const CHANGED = "settings://changed";
-const BROWSER_KEY = "hive.settings";
+const BROWSER_KEY = "outcode.settings";
 
 function isObject(value: unknown): value is Record<string, unknown> {
     return typeof value === "object" && value !== null && !Array.isArray(value);

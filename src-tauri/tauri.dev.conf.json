@@ -1,6 +1,6 @@
 {
-    "productName": "Hive Dev",
-    "identifier": "com.hive.dev",
+    "productName": "Outcode Dev",
+    "identifier": "com.outcode.dev",
     "bundle": {
         "icon": [
             "icons/dev/32x32.png",

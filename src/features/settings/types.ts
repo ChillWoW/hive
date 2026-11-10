@@ -58,7 +58,7 @@ export type Settings = {
 export const DEFAULT_SETTINGS: Settings = {
     version: 1,
     appearance: {
-        theme: "Hive Slate"
+        theme: "Outcode Slate"
     },
     updates: {
         autoCheck: true,

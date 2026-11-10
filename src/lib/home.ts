@@ -22,8 +22,8 @@ export function useHomeDir(): string | null {
 }
 
 /**
- * `path` with the home folder shown as `~` (`C:\Users\me\.hive` →
- * `~\.hive`); unchanged outside it. Case-insensitive on Windows.
+ * `path` with the home folder shown as `~` (`C:\Users\me.outcode` →
+ * `~.outcode`); unchanged outside it. Case-insensitive on Windows.
  */
 export function tildify(path: string, homeDir: string | null): string {
     if (!homeDir) return path;

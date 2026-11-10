@@ -1,5 +1,5 @@
 /**
- * Bumps Hive's version, commits it and tags it, ready to push:
+ * Bumps Outcode's version, commits it and tags it, ready to push:
  *
  *   bun run release 0.0.2
  *   git push --follow-tags
@@ -43,7 +43,7 @@ if (!version || !SEMVER.test(version)) {
 }
 const current = JSON.parse(await readFile(join(root, "src-tauri/tauri.conf.json"), "utf8")).version;
 if (version === current) {
-    console.error(`Hive is already at ${version}.`);
+    console.error(`Outcode is already at ${version}.`);
     process.exit(1);
 }
 if (run(["git", "status", "--porcelain", "--untracked-files=no"], true).trim()) {

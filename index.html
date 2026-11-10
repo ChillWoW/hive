@@ -4,12 +4,12 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Hive</title>
+    <title>Outcode</title>
     <!-- The last theme shown (src/features/theme/themes.ts), before React
          loads, so a non-default theme doesn't flash the default first. -->
     <script>
       try {
-        const cached = JSON.parse(localStorage.getItem("hive.theme"));
+        const cached = JSON.parse(localStorage.getItem("outcode.theme"));
         const root = document.documentElement;
         for (const [name, value] of Object.entries(cached.vars)) {
           root.style.setProperty(name, value);

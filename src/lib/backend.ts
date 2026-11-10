@@ -1,7 +1,7 @@
 import { invoke, type InvokeArgs } from "@tauri-apps/api/core";
 import { isTauri } from "./platform";
 
-const NO_BACKEND = "Needs the Hive app; there's no backend under `bun run dev`.";
+const NO_BACKEND = "Needs the Outcode app; there's no backend under `bun run dev`.";
 
 /**
  * `invoke(command, args)` in the app. Under plain `bun run dev` there is no

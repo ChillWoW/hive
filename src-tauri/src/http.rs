@@ -12,7 +12,7 @@ pub fn client() -> Option<&'static reqwest::Client> {
             reqwest::Client::builder()
                 .timeout(Duration::from_secs(15))
                 // GitHub's API refuses requests without one.
-                .user_agent("hive-desktop")
+                .user_agent("outcode-desktop")
                 .build()
                 .ok()
         })

@@ -46,9 +46,9 @@ Done when: unit tests fold a scripted event list into the expected parts (text m
 - [ ] `attachments.rs`: list paths under the prompt; inline images where the CLI supports it.
 - [ ] `models.rs`: `ModelCache` (TTL, background refresh), snapping a reasoning level to the closest the model has.
 - [ ] **Mock harness**: scripted turn using the same handle (text, reasoning, tool calls, a question, a background task, interrupt). This is your test bed for everything above it.
-- [ ] `hive-run` CLI: drive any harness from the terminal, print events (`--json`), answer questions from stdin, Ctrl+C = interrupt.
+- [ ] `outcode-run` CLI: drive any harness from the terminal, print events (`--json`), answer questions from stdin, Ctrl+C = interrupt.
 
-Done when: `hive-run --mock "hi"` streams a full turn, a question is answerable, Ctrl+C interrupts.
+Done when: `outcode-run --mock "hi"` streams a full turn, a question is answerable, Ctrl+C interrupts.
 
 ---
 
@@ -83,7 +83,7 @@ Done when: `hive-run --mock "hi"` streams a full turn, a question is answerable,
 - [ ] `normalize.rs`: agent messages/plans → text, reasoning summaries, commands (strip shell wrapper; lone read/search → ReadFile/Search), file changes (one call per file, old/new from hunks), MCP, web search, `turn/plan/updated` → Todo, token usage → ContextUsage, spawned agent threads → Subagent.
 - [ ] Access: full = `approvalPolicy: never`, else `untrusted` + answer approvals by mode or ask; `item/tool/requestUserInput` asked as is.
 - [ ] Plan mode = `plan` collaboration mode every turn; plan ending → ask to implement → "Implement the plan." in default mode.
-- [ ] MCP via `mcp_servers.hive.*` config overrides, `default_tools_approval_mode = approve`, `tool_timeout_sec`.
+- [ ] MCP via `mcp_servers.outcode.*` config overrides, `default_tools_approval_mode = approve`, `tool_timeout_sec`.
 - [ ] Models: `model/list` (cache 10 min), fallback `models_cache.json`.
 - [ ] `$skill` → `skill` input; images → `localImage`.
 
@@ -110,7 +110,7 @@ Done when: `hive-run --mock "hi"` streams a full turn, a question is answerable,
 - [ ] `pi --mode rpc`, JSONL. Startup: `set_model`, `set_thinking_level`, `get_state`, `get_commands`; first prompt waits for `get_state`. Resume = `--session-id`.
 - [ ] Prompt ends at `agent_settled` (or its response when `handled`); self-started runs → `BackgroundTurn`. Stop = `abort`; `/compact` → `compact`; `$skill` → `/skill:name`.
 - [ ] ⚠ Windows shim is cmd → node → node: stop with `kill_tree`.
-- [ ] `extension.mjs` (temp file, `-e`): `tool_call` hook asks via `confirm` titled `hive:approval` (call as JSON) → approval question; launches the MCP bridge, registers `mcp__hive__<tool>`.
+- [ ] `extension.mjs` (temp file, `-e`): `tool_call` hook asks via `confirm` titled `outcode:approval` (call as JSON) → approval question; launches the MCP bridge, registers `mcp__outcode__<tool>`.
 - [ ] Other extension dialogs (`select`/`confirm`/`input`/`editor`) → questions; `notify` warn/error → Error.
 - [ ] Models `get_available_models`, thinking off/on option. No plan mode.
 
@@ -144,10 +144,10 @@ Done when: `hive-run --mock "hi"` streams a full turn, a question is answerable,
 
 ---
 
-## Phase 9 — Hive MCP server
+## Phase 9 — Outcode MCP server
 
 - [ ] Host: loopback TCP, one JSON line per call, token file.
-- [ ] Bridge: the app's own exe as `hive mcp` (stdio MCP: initialize, ping, tools/list, tools/call), tagged with `HIVE_CHAT_ID`.
+- [ ] Bridge: the app's own exe as `outcode mcp` (stdio MCP: initialize, ping, tools/list, tools/call), tagged with `OUTCODE_CHAT_ID`.
 - [ ] Injected per harness (see phases 3–6); tool timeout ~65 min on every CLI.
 - [ ] Tools: whoami, request_secret, show_image, show_svg, preview_html, render_html.
 - [ ] Remote: the bridge must reach the host, not the client — runs on the host side.
@@ -177,6 +177,6 @@ Done when: `hive-run --mock "hi"` streams a full turn, a question is answerable,
 - [ ] Compaction
 - [ ] Subagent events nest correctly
 - [ ] Background task survives turn end, can be stopped
-- [ ] Hive MCP tool call (and a long wait > CLI's default timeout)
+- [ ] Outcode MCP tool call (and a long wait > CLI's default timeout)
 - [ ] Attachments (file + image)
 - [ ] Title run

@@ -36,7 +36,7 @@ impl Default for Settings {
     }
 }
 
-pub const DEFAULT_THEME: &str = "Hive Slate";
+pub const DEFAULT_THEME: &str = "Outcode Slate";
 
 /// Read by the frontend (`src/features/theme/`).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

@@ -124,7 +124,7 @@ async fn newest_release_manifest() -> Result<Url, String> {
 }
 
 /// Downloads the update `update_check` found and installs it. On Windows the
-/// installer closes Hive and opens it again; elsewhere Hive restarts itself.
+/// installer closes Outcode and opens it again; elsewhere Outcode restarts itself.
 /// Only returns on failure.
 #[tauri::command]
 pub async fn update_install(
