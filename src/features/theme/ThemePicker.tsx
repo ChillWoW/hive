@@ -1,12 +1,11 @@
-import { CheckIcon } from "@phosphor-icons/react";
+import { Select } from "@base-ui/react/select";
+import { CaretUpDownIcon, CheckIcon } from "@phosphor-icons/react";
 import { cn } from "@/lib/cn";
+import { usePortalContainer } from "@/ui/PortalContainer";
 import { allThemes, useThemesStore } from "./store";
 import type { Theme } from "./themes";
 
-/**
- * One card per theme, built-in and user: a miniature of the app drawn in the
- * theme's own colours, so it's the one place a component sets colours inline.
- */
+/** A dropdown of every theme, built-in and user, each with a colour swatch. */
 export function ThemePicker({
     value,
     onChange
@@ -16,85 +15,89 @@ export function ThemePicker({
 }) {
     const user = useThemesStore((s) => s.user);
     const themes = allThemes(user);
+    const portalContainer = usePortalContainer();
+    const current = themes[value];
 
     return (
-        <div role="radiogroup" aria-label="Theme" className="grid grid-cols-3 gap-3 p-4">
-            {Object.entries(themes).map(([name, theme]) => {
-                const selected = name === value;
-                return (
-                    <button
-                        key={name}
-                        type="button"
-                        role="radio"
-                        aria-checked={selected}
-                        onClick={() => onChange(name)}
+        <Select.Root
+            value={value}
+            onValueChange={(next) => {
+                if (typeof next === "string") onChange(next);
+            }}
+        >
+            <Select.Trigger
+                aria-label="Theme"
+                className={cn(
+                    "flex h-8 w-full items-center justify-between gap-2 rounded-md px-2.5 text-sm",
+                    "border border-border bg-raised text-text outline-none",
+                    "transition-[border-color] hover:border-muted/60 focus-visible:border-muted/60",
+                    "data-[popup-open]:border-muted/60"
+                )}
+            >
+                <span className="flex min-w-0 items-center gap-2">
+                    {current && <Swatch theme={current} />}
+                    <Select.Value className="min-w-0 truncate">{value}</Select.Value>
+                </span>
+                <Select.Icon className="shrink-0 text-muted">
+                    <CaretUpDownIcon className="size-3.5" />
+                </Select.Icon>
+            </Select.Trigger>
+
+            <Select.Portal container={portalContainer ?? undefined}>
+                <Select.Positioner
+                    align="end"
+                    sideOffset={6}
+                    alignItemWithTrigger={false}
+                    className="z-50 outline-none"
+                >
+                    <Select.Popup
                         className={cn(
-                            "group flex flex-col gap-2 rounded-lg p-1 text-left text-xs outline-none",
-                            "focus-visible:ring-2 focus-visible:ring-accent/60"
+                            "pointer-events-auto w-[var(--anchor-width)] min-w-56 outline-none",
+                            "max-h-[min(22rem,var(--available-height))] overflow-y-auto overscroll-contain p-1",
+                            "rounded-md border border-border bg-surface text-text shadow-lg shadow-black/40",
+                            "[transform-origin:var(--transform-origin)]",
+                            "transition-[opacity,scale] duration-150 ease-out",
+                            "data-[starting-style]:scale-95 data-[starting-style]:opacity-0",
+                            "data-[ending-style]:scale-95 data-[ending-style]:opacity-0"
                         )}
                     >
-                        <span
-                            className={cn(
-                                "block overflow-hidden rounded-md border transition-[border-color,box-shadow] duration-150",
-                                selected
-                                    ? "border-accent ring-1 ring-accent"
-                                    : "border-border group-hover:border-muted/60"
-                            )}
-                        >
-                            <Preview theme={theme} />
-                        </span>
-                        <span className="flex items-center gap-1.5 px-0.5">
-                            <span
+                        {Object.entries(themes).map(([name, theme]) => (
+                            <Select.Item
+                                key={name}
+                                value={name}
                                 className={cn(
-                                    "min-w-0 flex-1 truncate transition-colors",
-                                    selected ? "text-text" : "text-muted group-hover:text-text"
+                                    "flex cursor-pointer items-center gap-2 rounded-sm py-1.5 pr-2 pl-2 text-[13px] outline-none select-none",
+                                    "data-[highlighted]:bg-hover"
                                 )}
                             >
-                                {name}
-                                {name in user && <span className="text-muted"> · custom</span>}
-                            </span>
-                            {selected && <CheckIcon weight="bold" className="size-3 shrink-0 text-accent" />}
-                        </span>
-                    </button>
-                );
-            })}
-        </div>
+                                <Swatch theme={theme} />
+                                <Select.ItemText className="min-w-0 flex-1 truncate">
+                                    {name}
+                                    {name in user && <span className="text-muted"> · custom</span>}
+                                </Select.ItemText>
+                                <Select.ItemIndicator className="shrink-0 text-accent">
+                                    <CheckIcon weight="bold" className="size-3" />
+                                </Select.ItemIndicator>
+                            </Select.Item>
+                        ))}
+                    </Select.Popup>
+                </Select.Positioner>
+            </Select.Portal>
+        </Select.Root>
     );
 }
 
-/** A tiny sidebar + transcript + composer, in the theme's colours. */
-function Preview({ theme: t }: { theme: Theme }) {
-    const line = (width: string, color: string, opacity = 1) => (
-        <i className="block h-[3px] rounded-full" style={{ width, background: color, opacity }} />
-    );
-
+/** Background, surface and accent side by side, in the theme's own colours. */
+function Swatch({ theme: t }: { theme: Theme }) {
     return (
-        <span className="flex aspect-[16/10] w-full" style={{ background: t.bg }}>
-            <span
-                className="flex w-[28%] flex-col gap-1.5 p-1.5"
-                style={{ background: t.surface, borderRight: `1px solid ${t.border}` }}
-            >
-                <i className="block h-2 rounded-sm" style={{ background: t.hover }} />
-                {line("80%", t.muted, 0.7)}
-                {line("60%", t.muted, 0.7)}
-                {line("70%", t.muted, 0.7)}
-            </span>
-            <span className="flex flex-1 flex-col gap-1.5 p-2">
-                {line("70%", t.text)}
-                {line("90%", t.muted)}
-                {line("55%", t.muted)}
-                <span className="flex gap-1">
-                    <i className="block size-1 rounded-full" style={{ background: t.success }} />
-                    <i className="block size-1 rounded-full" style={{ background: t.warning }} />
-                    <i className="block size-1 rounded-full" style={{ background: t.danger }} />
-                </span>
-                <span
-                    className="mt-auto flex h-3.5 items-center justify-end rounded-sm px-0.5"
-                    style={{ background: t.raised, border: `1px solid ${t.border}` }}
-                >
-                    <i className="block h-2 w-3 rounded-[2px]" style={{ background: t.accent }} />
-                </span>
-            </span>
+        <span
+            aria-hidden
+            className="flex h-3.5 w-6 shrink-0 overflow-hidden rounded-[3px] border"
+            style={{ borderColor: t.border }}
+        >
+            <i className="block flex-1" style={{ background: t.bg }} />
+            <i className="block flex-1" style={{ background: t.surface }} />
+            <i className="block flex-1" style={{ background: t.accent }} />
         </span>
     );
 }

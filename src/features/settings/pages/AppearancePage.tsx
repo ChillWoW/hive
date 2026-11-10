@@ -4,7 +4,6 @@ import { ThemePicker } from "@/features/theme/ThemePicker";
 import { themesApi } from "@/features/theme/store";
 import { isTauri } from "@/lib/platform";
 import { Button } from "@/ui";
-import { matchesQuery, useSettingsQuery } from "../search";
 import { SettingRow, SettingsSection } from "../SettingsSection";
 import { useSetting } from "../store";
 
@@ -19,16 +18,17 @@ export function AppearancePage() {
 
 function ThemeSection() {
     const theme = useSetting("appearance", "theme");
-    const query = useSettingsQuery();
-    const showPicker = matchesQuery(query, "Theme", "colors colours dark light palette appearance");
 
     return (
         <SettingsSection title="Theme">
-            {showPicker && (
-                <div data-setting-row>
-                    <ThemePicker value={theme.value} onChange={theme.set} />
-                </div>
-            )}
+            <SettingRow
+                label="Theme"
+                description="Colours for the whole app"
+                keywords="theme colors colours dark light palette appearance"
+                setting={theme}
+                controlClassName="w-56"
+                control={<ThemePicker value={theme.value} onChange={theme.set} />}
+            />
             <SettingRow
                 label="Custom themes"
                 description="Drop a theme's .json file in the themes folder"
