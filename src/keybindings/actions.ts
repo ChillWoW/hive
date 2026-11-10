@@ -37,5 +37,13 @@ export const ACTIONS: readonly Action[] = [
         description: "Shows or hides the project list",
         keywords: "sidebar projects panel left show hide",
         scope: "global"
+    },
+    {
+        id: "toggleRightSidebar",
+        category: "general",
+        label: "Toggle right sidebar",
+        description: "Shows or hides the tabs panel",
+        keywords: "right sidebar tabs panel show hide collapse",
+        scope: "global"
     }
 ];

@@ -4,7 +4,7 @@ import { useShortcut } from "@/keybindings";
 import { isMac } from "@/lib/platform";
 import { IconButton } from "@/ui";
 import { cn } from "@/lib/cn";
-import { useLayoutStore, useSidebarWidth } from "./store";
+import { useLayoutStore, useSidebarOpen, useSidebarWidth } from "./store";
 import { useWindowState } from "./useWindowState";
 import { WindowControls } from "./WindowControls";
 
@@ -18,16 +18,20 @@ const MAC_TRAFFIC_LIGHTS = "w-[72px]";
 /**
  * The frameless window's title strip, laid over the top of every column:
  * draggable, the sidebar toggle at its start (its section as wide as the
- * sidebar), the update icon and, on Windows/Linux, the window controls at
- * its end.
+ * sidebar), the update icon, the right sidebar toggle and, on Windows/Linux,
+ * the window controls at its end.
  */
 export function TopBar() {
     const { fullscreen } = useWindowState();
-    const sidebarOpen = useLayoutStore((s) => s.sidebarOpen);
-    const sidebarWidth = useSidebarWidth();
+    const sidebarOpen = useSidebarOpen("left");
+    const rightOpen = useSidebarOpen("right");
+    const sidebarWidth = useSidebarWidth("left");
     const resizing = useLayoutStore((s) => s.resizing);
-    const toggleSidebar = useLayoutStore((s) => s.toggleSidebar);
+    const toggle = useLayoutStore((s) => s.toggle);
+    const toggleSidebar = () => toggle("left");
+    const toggleRightSidebar = () => toggle("right");
     useShortcut("toggleSidebar", toggleSidebar);
+    useShortcut("toggleRightSidebar", toggleRightSidebar);
 
     return (
         <header
@@ -58,8 +62,19 @@ export function TopBar() {
             {/* An empty strip to grab the window by. */}
             <div data-tauri-drag-region className="h-full min-w-0 flex-1" />
 
-            <div className="flex h-full shrink-0 items-center gap-0.5 px-2 empty:hidden">
+            <div data-tauri-drag-region className="flex h-full shrink-0 items-center gap-0.5 px-2">
                 <UpdateButton />
+                <IconButton
+                    label="Toggle right sidebar"
+                    shortcut="toggleRightSidebar"
+                    onClick={toggleRightSidebar}
+                    aria-pressed={rightOpen}
+                >
+                    <SidebarSimpleIcon
+                        weight={rightOpen ? "fill" : "regular"}
+                        className="size-4 -scale-x-100"
+                    />
+                </IconButton>
             </div>
 
             {!isMac && <WindowControls />}
