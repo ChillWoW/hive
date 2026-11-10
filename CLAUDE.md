@@ -10,8 +10,36 @@ A desktop UI for driving coding-agent CLIs (Claude Code, Codex, OpenCode, …) f
 - Each CLI's output is normalized into one common event stream: text, reasoning, tool calls/results, questions, done.
 - The UI renders that stream as a live transcript.
 
+## Status
+
+Branch `rework/app` is a from-scratch rebuild. So far: app shell (top bar, window controls, resizable sidebar), settings, themes, fonts, keybindings, updater, toasts, UI kit. The harness/agent layer isn't built yet — `HARNESS_REBUILD.md` is the phased plan for it (with ⚠ gotchas from the old code); follow it and tick boxes as phases land.
+
+## Stack
+
+- Tauri 2 (Rust, `src-tauri/`, Cargo workspace at the root) + React 19 / TypeScript / Vite 8, React Compiler, Tailwind 4, Zustand, Base UI, Phosphor icons.
+- Package manager: bun. Lint: `bun run lint` (oxlint). Typecheck/build: `bun run build`.
+- `@/` aliases `src/`.
+
+## Commands
+
+- `bun run dev:local` — run the app with the dev config (`com.outcode.dev`, "Outcode Dev", data in `~/.outcode.dev`).
+- `bun run dev:prod` — run with the prod config (data in `~/.outcode`).
+- `bun run dev` — Vite only, no backend; `backend()` calls reject unless given a dev fallback.
+- `bun run release <version>` then `git push --follow-tags` — bumps package.json / tauri.conf.json / Cargo.toml, tags `v*`; `.github/workflows/release.yml` builds and publishes the release the updater reads.
+
+## Layout
+
+- `src/features/<name>/` — feature modules (settings, theme, fonts, updater). Each mounts a `use*Runtime()` hook in `App.tsx`.
+- `src/layout/` — app chrome (TopBar, Sidebar, WindowControls).
+- `src/ui/` — shared UI kit; reuse these before writing new primitives.
+- `src/keybindings/` — action registry (`actions.ts`) + runtime; bindings live in settings.
+- `src/lib/backend.ts` — use `backend(command, args, devFallback?)` instead of raw `invoke`.
+- `src-tauri/src/` — Tauri commands, registered in `lib.rs`: `settings/`, `themes.rs`, `fonts.rs`, `updater.rs`, `http.rs`.
+
 ## Conventions
 
+- Settings: `src-tauri/src/settings/schema.rs` is the source of truth, mirrored in `src/features/settings/types.ts` — change both together. Add a setting only once something reads it; keep sections to plain leaves.
+- Themes: built-ins in `src/features/theme/themes.ts`; user themes are JSON files in `<data dir>/themes/` (files starting with `_` are skipped).
 - Commit messages follow Conventional Commits (`feat:`, `chore:`, `fix:`, …) with short subjects. Keep messages brief — a short subject line, body only when truly needed.
 - Never add a `Co-Authored-By` trailer (or any other attribution footer) to commit messages.
 - Never commit unless the user explicitly asks for it.
