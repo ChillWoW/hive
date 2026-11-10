@@ -2,6 +2,7 @@ import { SettingsModal, useSettingsRuntime } from "@/features/settings";
 import { useThemeRuntime } from "@/features/theme/useThemeRuntime";
 import { useUpdaterRuntime } from "@/features/updater";
 import { useKeybindingsRuntime } from "@/keybindings";
+import { TopBar } from "@/layout";
 
 export function App() {
     useSettingsRuntime();
@@ -10,7 +11,8 @@ export function App() {
     useUpdaterRuntime();
 
     return (
-        <div className="h-screen bg-bg text-text">
+        <div className="flex h-screen flex-col bg-bg text-text">
+            <TopBar />
             <SettingsModal />
         </div>
     );
