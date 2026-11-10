@@ -50,7 +50,7 @@ export const COLOR_KEYS = [
 ] as const satisfies readonly (keyof Theme)[];
 
 export const BUILTIN_THEMES: Record<string, Theme> = {
-    "Outcode Slate": { bg: "#0b0d11", surface: "#12151a", raised: "#1a1e25", hover: "#222730", border: "#252a33", text: "#e6e8ed", muted: "#8a919f", accent: "#6b8cff", accentFg: "#ffffff", success: "#3fb27f", danger: "#ef5b5b", warning: "#e5a443" },
+    "Outcode Slate": { bg: "#141517", surface: "#19191b", raised: "#1e1f20", hover: "#242527", border: "#2d2e30", text: "#e4e4e6", muted: "#8e8f92", accent: "#e4e4e6", accentFg: "#141517", success: "#a5e075", danger: "#ff616e", warning: "#f0a45d" },
     Midnight: { bg: "#09070f", surface: "#110e1b", raised: "#1a1628", hover: "#231e35", border: "#2a2440", text: "#ece8f6", muted: "#948ba8", accent: "#a78bfa", accentFg: "#140f22", success: "#4ade9f", danger: "#f87171", warning: "#fbbf24" },
     Ember: { bg: "#0e0907", surface: "#17100d", raised: "#211814", hover: "#2b201a", border: "#33261f", text: "#f3ebe6", muted: "#a1928a", accent: "#ff7a45", accentFg: "#1a0d07", success: "#7fcf74", danger: "#ff5d5d", warning: "#f2b53c" },
     Forest: { bg: "#070c09", surface: "#0e1611", raised: "#152019", hover: "#1c2a21", border: "#223228", text: "#e5efe8", muted: "#86998c", accent: "#4ade80", accentFg: "#06140b", success: "#4ade80", danger: "#f87171", warning: "#facc15" },

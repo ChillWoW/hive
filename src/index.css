@@ -27,18 +27,18 @@
 /* Outcode Slate, until the theme is applied on a first launch. */
 :root {
     color-scheme: dark;
-    --bg: #0b0d11;
-    --surface: #12151a;
-    --raised: #1a1e25;
-    --hover: #222730;
-    --border: #252a33;
-    --text: #e6e8ed;
-    --muted: #8a919f;
-    --accent: #6b8cff;
-    --accent-fg: #ffffff;
-    --success: #3fb27f;
-    --danger: #ef5b5b;
-    --warning: #e5a443;
+    --bg: #141517;
+    --surface: #19191b;
+    --raised: #1e1f20;
+    --hover: #242527;
+    --border: #2d2e30;
+    --text: #e4e4e6;
+    --muted: #8e8f92;
+    --accent: #e4e4e6;
+    --accent-fg: #141517;
+    --success: #a5e075;
+    --danger: #ff616e;
+    --warning: #f0a45d;
 }
 
 @layer base {
