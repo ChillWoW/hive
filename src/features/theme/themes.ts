@@ -51,10 +51,10 @@ export const COLOR_KEYS = [
 
 export const BUILTIN_THEMES: Record<string, Theme> = {
     "Outcode Slate": { bg: "#141517", surface: "#19191b", raised: "#1e1f20", hover: "#242527", border: "#2d2e30", text: "#e4e4e6", muted: "#8e8f92", accent: "#e4e4e6", accentFg: "#141517", success: "#a5e075", danger: "#ff616e", warning: "#f0a45d" },
-    Midnight: { bg: "#09070f", surface: "#110e1b", raised: "#1a1628", hover: "#231e35", border: "#2a2440", text: "#ece8f6", muted: "#948ba8", accent: "#a78bfa", accentFg: "#140f22", success: "#4ade9f", danger: "#f87171", warning: "#fbbf24" },
-    Ember: { bg: "#0e0907", surface: "#17100d", raised: "#211814", hover: "#2b201a", border: "#33261f", text: "#f3ebe6", muted: "#a1928a", accent: "#ff7a45", accentFg: "#1a0d07", success: "#7fcf74", danger: "#ff5d5d", warning: "#f2b53c" },
-    Forest: { bg: "#070c09", surface: "#0e1611", raised: "#152019", hover: "#1c2a21", border: "#223228", text: "#e5efe8", muted: "#86998c", accent: "#4ade80", accentFg: "#06140b", success: "#4ade80", danger: "#f87171", warning: "#facc15" },
-    Paper: { bg: "#ecebe7", surface: "#fbfaf8", raised: "#f0eee9", hover: "#e6e3dc", border: "#dcd8cf", text: "#1d1c1a", muted: "#6f6b63", accent: "#2f6fec", accentFg: "#ffffff", success: "#18915a", danger: "#d6453d", warning: "#b7791f", light: true },
+    "Outcode Chalk": { bg: "#ebebee", surface: "#ffffff", raised: "#f4f4f6", hover: "#e0e0e5", border: "#d6d6dc", text: "#18181b", muted: "#62626b", accent: "#27272a", accentFg: "#fafafa", success: "#1f8a4c", danger: "#cf3443", warning: "#a96410", light: true },
+    Fjord: { bg: "#0f1217", surface: "#14181f", raised: "#1a1f28", hover: "#212732", border: "#272e3a", text: "#dfe4ec", muted: "#8691a2", accent: "#86a8e0", accentFg: "#0f1217", success: "#93cf9e", danger: "#ec7b86", warning: "#e5b97c" },
+    Moss: { bg: "#111310", surface: "#161914", raised: "#1c2019", hover: "#232820", border: "#2a3026", text: "#e2e6da", muted: "#8e9585", accent: "#b4c97c", accentFg: "#121509", success: "#9ccf72", danger: "#e5786d", warning: "#e3b462" },
+    Dusk: { bg: "#140f1a", surface: "#1b1522", raised: "#231c2c", hover: "#2c2337", border: "#342a40", text: "#eee6f4", muted: "#a093b0", accent: "#f0a3c8", accentFg: "#1e0f1a", success: "#a2d49c", danger: "#f07a7a", warning: "#f0b87a" },
     Mono: { bg: "#000000", surface: "#0a0a0a", raised: "#151515", hover: "#1f1f1f", border: "#262626", text: "#f5f5f5", muted: "#8a8a8a", accent: "#f5f5f5", accentFg: "#000000", success: "#a3a3a3", danger: "#f5f5f5", warning: "#d4d4d4" }
 };
 
