@@ -47,6 +47,10 @@
         color: var(--color-text);
     }
 
+    ::selection {
+        background-color: color-mix(in srgb, var(--accent) 30%, transparent);
+    }
+
     button:not(:disabled),
     [role="button"]:not([aria-disabled="true"]) {
         cursor: pointer;
