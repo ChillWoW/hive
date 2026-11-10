@@ -1,4 +1,5 @@
 import { SidebarSimpleIcon } from "@phosphor-icons/react";
+import { UpdateButton } from "@/features/updater";
 import { useShortcut } from "@/keybindings";
 import { isMac } from "@/lib/platform";
 import { IconButton } from "@/ui";
@@ -17,7 +18,8 @@ const MAC_TRAFFIC_LIGHTS = "w-[72px]";
 /**
  * The frameless window's title strip, laid over the top of every column:
  * draggable, the sidebar toggle at its start (its section as wide as the
- * sidebar), the window controls at its end on Windows/Linux.
+ * sidebar), the update icon and, on Windows/Linux, the window controls at
+ * its end.
  */
 export function TopBar() {
     const { fullscreen } = useWindowState();
@@ -55,6 +57,10 @@ export function TopBar() {
 
             {/* An empty strip to grab the window by. */}
             <div data-tauri-drag-region className="h-full min-w-0 flex-1" />
+
+            <div className="flex h-full shrink-0 items-center gap-0.5 px-2 empty:hidden">
+                <UpdateButton />
+            </div>
 
             {!isMac && <WindowControls />}
         </header>

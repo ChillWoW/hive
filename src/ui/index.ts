@@ -8,6 +8,7 @@ export { Modal, useLastNonNull } from "./Modal";
 export { MorphHeight } from "./MorphHeight";
 export { NumberInput } from "./NumberInput";
 export { Popover } from "./Popover";
+export { Ring } from "./Ring";
 export { PortalContainerProvider } from "./PortalContainer";
 export { SegmentedControl } from "./SegmentedControl";
 export { Select } from "./Select";

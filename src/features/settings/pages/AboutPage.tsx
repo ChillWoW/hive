@@ -6,7 +6,7 @@ import {
     ArrowCounterClockwiseIcon,
     FolderOpenIcon
 } from "@phosphor-icons/react";
-import { checkNow, install, isInstalling, useUpdaterStore } from "@/features/updater";
+import { checkNow, isInstalling, UpdateDialog, useUpdaterStore } from "@/features/updater";
 import { tildify, useHomeDir } from "@/lib/home";
 import { isTauri } from "@/lib/platform";
 import { agoLabel, useMinuteClock } from "@/lib/time";
@@ -74,6 +74,7 @@ function StatusRow() {
     const { state, checking, checkedAt, error } = useUpdaterStore();
     const now = useMinuteClock();
     const [version, setVersion] = useState<string | null>(null);
+    const [confirming, setConfirming] = useState(false);
 
     useEffect(() => {
         if (isTauri) getVersion().then(setVersion, () => {});
@@ -115,7 +116,7 @@ function StatusRow() {
                             variant="primary"
                             loading={working}
                             leftIcon={<ArrowCircleUpIcon className="size-3.5" weight="fill" />}
-                            onClick={() => void install()}
+                            onClick={() => setConfirming(true)}
                         >
                             Update
                         </Button>
@@ -130,6 +131,7 @@ function StatusRow() {
                     >
                         Check now
                     </Button>
+                    <UpdateDialog open={confirming} onClose={() => setConfirming(false)} />
                 </>
             }
         />

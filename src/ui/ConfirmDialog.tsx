@@ -5,7 +5,8 @@ import { Modal } from "./Modal";
 
 /**
  * A small dialog asking before something destructive: `children` say what
- * happens, then Cancel and the red `confirmLabel` button. Confirming runs
+ * happens, then Cancel and the `confirmLabel` button (red unless `variant`
+ * says otherwise). Confirming runs
  * `onConfirm` (the button spinning meanwhile) and closes once it's done; a
  * failure stays open with its message. The confirm button has focus unless
  * `focusCancel`, for when Enter mustn't be the one that destroys.
@@ -17,6 +18,7 @@ export function ConfirmDialog({
     onConfirm,
     onClose,
     focusCancel = false,
+    variant = "destructive",
     children
 }: {
     open: boolean;
@@ -25,6 +27,7 @@ export function ConfirmDialog({
     onConfirm: () => Promise<unknown>;
     onClose: () => void;
     focusCancel?: boolean;
+    variant?: "destructive" | "primary";
     children?: ReactNode;
 }) {
     const [busy, setBusy] = useState(false);
@@ -59,7 +62,7 @@ export function ConfirmDialog({
                 </Modal.Close>
                 <Button
                     size="sm"
-                    variant="destructive"
+                    variant={variant}
                     loading={busy}
                     onClick={() => void confirm()}
                     autoFocus={!focusCancel}
