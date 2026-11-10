@@ -28,9 +28,7 @@ pub fn run() {
         .setup(|app| {
             let data_dir = data_dir(app)?;
             app.manage(settings::SettingsFile::open(&data_dir)?);
-            let themes_dir = data_dir.join("themes");
-            std::fs::create_dir_all(&themes_dir)?;
-            app.manage(themes::ThemesDir(themes_dir));
+            app.manage(themes::ThemesDir::open(data_dir.join("themes"))?);
             app.manage(updater::Updates::default());
             Ok(())
         })
