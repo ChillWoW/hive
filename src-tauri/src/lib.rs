@@ -1,3 +1,4 @@
+mod fonts;
 mod http;
 mod settings;
 mod themes;
@@ -40,6 +41,7 @@ pub fn run() {
             settings::settings_reload,
             settings::settings_path,
             settings::settings_reveal,
+            fonts::fonts_list,
             themes::themes_list,
             themes::themes_open_dir,
             updater::update_check,

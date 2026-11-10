@@ -1,4 +1,11 @@
 @import "tailwindcss";
+@import "@fontsource-variable/geist";
+
+/* `--font-ui` is the interface font setting (src/features/fonts/); a family
+   that isn't installed falls through to the system UI font. */
+@theme {
+    --font-sans: var(--font-ui), ui-sans-serif, system-ui, sans-serif;
+}
 
 /* The theme's colours, by their own names (bg-surface, text-muted,
    border-border, bg-accent, …) and nothing else: Tailwind's palette is
@@ -26,6 +33,7 @@
 
 /* Outcode Slate, until the theme is applied on a first launch. */
 :root {
+    --font-ui: "Geist Variable";
     color-scheme: dark;
     --bg: #141517;
     --surface: #19191b;

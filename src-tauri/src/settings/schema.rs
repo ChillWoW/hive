@@ -37,6 +37,8 @@ impl Default for Settings {
 }
 
 pub const DEFAULT_THEME: &str = "Outcode Slate";
+/// Bundled with the frontend, so always available.
+pub const DEFAULT_FONT_FAMILY: &str = "Geist";
 
 /// Read by the frontend (`src/features/theme/`).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -45,12 +47,16 @@ pub struct AppearanceSettings {
     /// A theme's name: a built-in one, or a file in `<data dir>/themes/`.
     /// One that no longer exists shows the default.
     pub theme: String,
+    /// The interface font's family name: the bundled default or an installed
+    /// one. One that isn't installed falls back to the system UI font.
+    pub font_family: String,
 }
 
 impl Default for AppearanceSettings {
     fn default() -> Self {
         Self {
             theme: DEFAULT_THEME.into(),
+            font_family: DEFAULT_FONT_FAMILY.into(),
         }
     }
 }
@@ -106,13 +112,18 @@ impl Settings {
     pub fn sanitize(base: &Settings, input: &Value) -> Settings {
         let mut settings = sanitize(base, input);
         settings.version = SETTINGS_VERSION;
-        let theme = settings.appearance.theme.trim();
-        settings.appearance.theme = if theme.is_empty() {
-            DEFAULT_THEME.into()
-        } else {
-            theme.into()
-        };
+        let appearance = &mut settings.appearance;
+        appearance.theme = non_empty(&appearance.theme, DEFAULT_THEME);
+        appearance.font_family = non_empty(&appearance.font_family, DEFAULT_FONT_FAMILY);
         settings
+    }
+}
+
+/// `value` trimmed, or `fallback` when that leaves nothing.
+fn non_empty(value: &str, fallback: &str) -> String {
+    match value.trim() {
+        "" => fallback.into(),
+        trimmed => trimmed.into(),
     }
 }
 
@@ -206,6 +217,17 @@ mod tests {
         assert_eq!(s.appearance.theme, "Ember");
         let s = Settings::sanitize(&s, &json!({ "appearance": { "theme": "  " } }));
         assert_eq!(s.appearance.theme, DEFAULT_THEME);
+    }
+
+    #[test]
+    fn font_family_is_trimmed_and_never_empty() {
+        let s = Settings::sanitize(
+            &Settings::default(),
+            &json!({ "appearance": { "fontFamily": " Inter " } }),
+        );
+        assert_eq!(s.appearance.font_family, "Inter");
+        let s = Settings::sanitize(&s, &json!({ "appearance": { "fontFamily": "" } }));
+        assert_eq!(s.appearance.font_family, DEFAULT_FONT_FAMILY);
     }
 
     #[test]

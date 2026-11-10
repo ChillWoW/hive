@@ -5,6 +5,8 @@
 export type AppearanceSettings = {
     /** A theme's name; see `src/features/theme/themes.ts`. */
     theme: string;
+    /** A font family: the bundled default or an installed one; see `src/features/fonts/`. */
+    fontFamily: string;
 };
 
 export type UpdateChannel = "stable" | "prerelease";
@@ -32,7 +34,8 @@ export type Settings = {
 export const DEFAULT_SETTINGS: Settings = {
     version: 1,
     appearance: {
-        theme: "Outcode Slate"
+        theme: "Outcode Slate",
+        fontFamily: "Geist"
     },
     updates: {
         autoCheck: true,
