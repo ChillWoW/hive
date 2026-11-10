@@ -1,4 +1,5 @@
 export { Button } from "./Button";
+export { FolderTreeIcon } from "./FolderTreeIcon";
 export { ConfirmDialog } from "./ConfirmDialog";
 export { ContextMenu } from "./ContextMenu";
 export { IconButton, iconButtonClassName } from "./IconButton";

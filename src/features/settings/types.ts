@@ -24,6 +24,7 @@ export type KeyboardSettings = {
     openSettings: string;
     toggleSidebar: string;
     toggleRightSidebar: string;
+    toggleFilePanel: string;
 };
 
 export type Settings = {
@@ -46,6 +47,7 @@ export const DEFAULT_SETTINGS: Settings = {
     keyboard: {
         openSettings: "Mod+,",
         toggleSidebar: "Mod+B",
-        toggleRightSidebar: "Mod+Alt+B"
+        toggleRightSidebar: "Mod+Alt+B",
+        toggleFilePanel: "Mod+Shift+E"
     }
 };

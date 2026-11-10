@@ -2,9 +2,9 @@ import { SidebarSimpleIcon } from "@phosphor-icons/react";
 import { UpdateButton } from "@/features/updater";
 import { useShortcut } from "@/keybindings";
 import { isMac } from "@/lib/platform";
-import { IconButton } from "@/ui";
+import { FolderTreeIcon, IconButton } from "@/ui";
 import { cn } from "@/lib/cn";
-import { useLayoutStore, useSidebarOpen, useSidebarWidth } from "./store";
+import { useLayoutStore, usePanelOpen, usePanelWidth } from "./store";
 import { useWindowState } from "./useWindowState";
 import { WindowControls } from "./WindowControls";
 
@@ -18,20 +18,23 @@ const MAC_TRAFFIC_LIGHTS = "w-[72px]";
 /**
  * The frameless window's title strip, laid over the top of every column:
  * draggable, the sidebar toggle at its start (its section as wide as the
- * sidebar), the update icon, the right sidebar toggle and, on Windows/Linux,
- * the window controls at its end.
+ * sidebar), the update icon, the right sidebar and file panel toggles and,
+ * on Windows/Linux, the window controls at its end.
  */
 export function TopBar() {
     const { fullscreen } = useWindowState();
-    const sidebarOpen = useSidebarOpen("left");
-    const rightOpen = useSidebarOpen("right");
-    const sidebarWidth = useSidebarWidth("left");
+    const sidebarOpen = usePanelOpen("left");
+    const rightOpen = usePanelOpen("right");
+    const filesOpen = usePanelOpen("files");
+    const sidebarWidth = usePanelWidth("left");
     const resizing = useLayoutStore((s) => s.resizing);
     const toggle = useLayoutStore((s) => s.toggle);
     const toggleSidebar = () => toggle("left");
     const toggleRightSidebar = () => toggle("right");
+    const toggleFilePanel = () => toggle("files");
     useShortcut("toggleSidebar", toggleSidebar);
     useShortcut("toggleRightSidebar", toggleRightSidebar);
+    useShortcut("toggleFilePanel", toggleFilePanel);
 
     return (
         <header
@@ -74,6 +77,14 @@ export function TopBar() {
                         weight={rightOpen ? "fill" : "regular"}
                         className="size-4 -scale-x-100"
                     />
+                </IconButton>
+                <IconButton
+                    label="Toggle file panel"
+                    shortcut="toggleFilePanel"
+                    onClick={toggleFilePanel}
+                    aria-pressed={filesOpen}
+                >
+                    <FolderTreeIcon weight={filesOpen ? "fill" : "regular"} className="size-4" />
                 </IconButton>
             </div>
 

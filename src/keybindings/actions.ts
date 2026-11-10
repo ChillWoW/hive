@@ -45,5 +45,13 @@ export const ACTIONS: readonly Action[] = [
         description: "Shows or hides the tabs panel",
         keywords: "right sidebar tabs panel show hide collapse",
         scope: "global"
+    },
+    {
+        id: "toggleFilePanel",
+        category: "general",
+        label: "Toggle file panel",
+        description: "Shows or hides the file tree",
+        keywords: "files file panel tree explorer hide show",
+        scope: "global"
     }
 ];

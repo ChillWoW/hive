@@ -99,6 +99,7 @@ pub struct KeyboardSettings {
     pub open_settings: String,
     pub toggle_sidebar: String,
     pub toggle_right_sidebar: String,
+    pub toggle_file_panel: String,
 }
 
 impl Default for KeyboardSettings {
@@ -107,6 +108,7 @@ impl Default for KeyboardSettings {
             open_settings: "Mod+,".into(),
             toggle_sidebar: "Mod+B".into(),
             toggle_right_sidebar: "Mod+Alt+B".into(),
+            toggle_file_panel: "Mod+Shift+E".into(),
         }
     }
 }

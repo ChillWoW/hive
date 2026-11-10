@@ -1,50 +1,68 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 
-export type Side = "left" | "right";
+/**
+ * A column beside the main one: the sidebar on the left; the right sidebar,
+ * then the file panel at the window's edge, on the right.
+ */
+export type Panel = "left" | "right" | "files";
 
-/** Each sidebar's widths in px. */
-export const SIDEBAR_WIDTHS: Record<Side, { min: number; max: number; default: number }> = {
+export const PANELS: readonly Panel[] = ["left", "right", "files"];
+
+/** Which window edge a panel hangs off. */
+export const edgeOf = (panel: Panel): "left" | "right" => (panel === "left" ? "left" : "right");
+
+/** Each panel's widths in px. */
+export const PANEL_WIDTHS: Record<Panel, { min: number; max: number; default: number }> = {
     left: { min: 220, max: 480, default: 280 },
-    right: { min: 360, max: 960, default: 520 }
+    right: { min: 360, max: 960, default: 520 },
+    files: { min: 220, max: 440, default: 286 }
 };
 
 /** A drag never squeezes the main column narrower than this. */
 export const MAIN_MIN_WIDTH = 300;
 
-const clampWidth = (side: Side, width: number) => {
-    const { min, max } = SIDEBAR_WIDTHS[side];
+const clampWidth = (panel: Panel, width: number) => {
+    const { min, max } = PANEL_WIDTHS[panel];
     return Math.round(Math.min(Math.max(width, min), max));
 };
 
-const OPEN_KEY = { left: "sidebarOpen", right: "rightSidebarOpen" } as const;
-const WIDTH_KEY = { left: "sidebarWidth", right: "rightSidebarWidth" } as const;
+const OPEN_KEY = { left: "sidebarOpen", right: "rightSidebarOpen", files: "filesOpen" } as const;
+const WIDTH_KEY = {
+    left: "sidebarWidth",
+    right: "rightSidebarWidth",
+    files: "filesWidth"
+} as const;
 
 type LayoutState = {
     sidebarOpen: boolean;
     rightSidebarOpen: boolean;
+    filesOpen: boolean;
     /** Widths while open. */
     sidebarWidth: number;
     rightSidebarWidth: number;
+    filesWidth: number;
     /** An edge is being dragged: widths follow the pointer, unanimated. */
     resizing: boolean;
-    toggle: (side: Side) => void;
-    /** Clamped to the side's min and max. */
-    setWidth: (side: Side, width: number) => void;
+    toggle: (panel: Panel) => void;
+    /** Clamped to the panel's min and max. */
+    setWidth: (panel: Panel, width: number) => void;
     setResizing: (resizing: boolean) => void;
 };
 
-/** Which sidebars are open and how wide; persisted per device. */
+/** Which panels are open and how wide; persisted per device. */
 export const useLayoutStore = create<LayoutState>()(
     persist(
         (set) => ({
             sidebarOpen: true,
             rightSidebarOpen: false,
-            sidebarWidth: SIDEBAR_WIDTHS.left.default,
-            rightSidebarWidth: SIDEBAR_WIDTHS.right.default,
+            filesOpen: false,
+            sidebarWidth: PANEL_WIDTHS.left.default,
+            rightSidebarWidth: PANEL_WIDTHS.right.default,
+            filesWidth: PANEL_WIDTHS.files.default,
             resizing: false,
-            toggle: (side) => set((s) => ({ [OPEN_KEY[side]]: !s[OPEN_KEY[side]] })),
-            setWidth: (side, width) => set({ [WIDTH_KEY[side]]: clampWidth(side, width) }),
+            toggle: (panel) => set((s) => ({ [OPEN_KEY[panel]]: !s[OPEN_KEY[panel]] })),
+            setWidth: (panel, width) => set({ [WIDTH_KEY[panel]]: clampWidth(panel, width) }),
             setResizing: (resizing) => set({ resizing })
         }),
         {
@@ -53,8 +71,10 @@ export const useLayoutStore = create<LayoutState>()(
             partialize: (s) => ({
                 sidebarOpen: s.sidebarOpen,
                 rightSidebarOpen: s.rightSidebarOpen,
+                filesOpen: s.filesOpen,
                 sidebarWidth: s.sidebarWidth,
-                rightSidebarWidth: s.rightSidebarWidth
+                rightSidebarWidth: s.rightSidebarWidth,
+                filesWidth: s.filesWidth
             }),
             // A saved width from before the limits changed snaps into them.
             merge: (saved, current) => {
@@ -62,21 +82,24 @@ export const useLayoutStore = create<LayoutState>()(
                 return {
                     ...merged,
                     sidebarWidth: clampWidth("left", merged.sidebarWidth),
-                    rightSidebarWidth: clampWidth("right", merged.rightSidebarWidth)
+                    rightSidebarWidth: clampWidth("right", merged.rightSidebarWidth),
+                    filesWidth: clampWidth("files", merged.filesWidth)
                 };
             }
         }
     )
 );
 
-export const isSidebarOpen = (side: Side) => useLayoutStore.getState()[OPEN_KEY[side]];
-export const getSidebarWidth = (side: Side) => useLayoutStore.getState()[WIDTH_KEY[side]];
+export const isPanelOpen = (panel: Panel) => useLayoutStore.getState()[OPEN_KEY[panel]];
+export const getPanelWidth = (panel: Panel) => useLayoutStore.getState()[WIDTH_KEY[panel]];
+/** A panel's shown width right now: 0 while closed. */
+export const getShownWidth = (panel: Panel) => (isPanelOpen(panel) ? getPanelWidth(panel) : 0);
 
-export const useSidebarOpen = (side: Side) => useLayoutStore((s) => s[OPEN_KEY[side]]);
+export const usePanelOpen = (panel: Panel) => useLayoutStore((s) => s[OPEN_KEY[panel]]);
 
-/** A sidebar's width while open, even while closed. */
-export const useSidebarContentWidth = (side: Side) => useLayoutStore((s) => s[WIDTH_KEY[side]]);
+/** A panel's width while open, even while closed. */
+export const usePanelContentWidth = (panel: Panel) => useLayoutStore((s) => s[WIDTH_KEY[panel]]);
 
-/** A sidebar's shown width: 0 while closed. */
-export const useSidebarWidth = (side: Side) =>
-    useLayoutStore((s) => (s[OPEN_KEY[side]] ? s[WIDTH_KEY[side]] : 0));
+/** A panel's shown width: 0 while closed. */
+export const usePanelWidth = (panel: Panel) =>
+    useLayoutStore((s) => (s[OPEN_KEY[panel]] ? s[WIDTH_KEY[panel]] : 0));
