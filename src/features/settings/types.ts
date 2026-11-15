@@ -37,8 +37,8 @@ export type ChatSettings = {
     idleTimeoutMinutes: number;
     /** Name a chat with a short text run on its first prompt; off, its first words name it. */
     autoTitle: boolean;
-    /** The model that writes titles (a Claude alias or id); empty: Claude's default. */
-    titleModel: string;
+    /** The model for text runs (chat titles, other short labels): a Claude alias or id; empty: Claude's default. */
+    textGenerationModel: string;
 };
 
 export type Settings = {
@@ -72,6 +72,6 @@ export const DEFAULT_SETTINGS: Settings = {
     chat: {
         idleTimeoutMinutes: 15,
         autoTitle: true,
-        titleModel: "haiku"
+        textGenerationModel: "haiku"
     }
 };

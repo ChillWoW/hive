@@ -113,7 +113,7 @@ Done when: typing "hi" streams Claude's reply.
 ## 14. Titles (done early, after 4)
 
 - [x] `run_text`: one turn, no tools/MCP/settings, no initialize, nothing saved. Fallback: first words.
-- [x] Settings: `chat.autoTitle`, `chat.titleModel`.
+- [x] Settings › Chats: `chat.autoTitle`, `chat.textGenerationModel` (used by every text run).
 
 ## 15. Claude provider management
 

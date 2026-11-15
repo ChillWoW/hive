@@ -18,7 +18,7 @@ use crate::settings::SettingsFile;
 /// Opens the store under `data_dir`, closes turns a crash left open, and
 /// starts the engine: Claude runs from `claude.binaryPath` (else found), and
 /// closes after `chat.idleTimeoutMinutes` between prompts; chats are titled
-/// by `chat.titleModel` while `chat.autoTitle` is on.
+/// by `chat.textGenerationModel` while `chat.autoTitle` is on.
 pub fn engine(app: &AppHandle, data_dir: &Path) -> Result<Engine, Box<dyn std::error::Error>> {
     let store = Store::open(data_dir)?;
     let closed = store.recover()?;
@@ -39,7 +39,7 @@ pub fn engine(app: &AppHandle, data_dir: &Path) -> Result<Engine, Box<dyn std::e
                     return None;
                 }
                 let binary = binary(&text);
-                let model = Some(chat.title_model.as_str());
+                let model = Some(chat.text_generation_model.as_str());
                 Some(outcode_harness::claude::run_text(prompt, model, binary.as_deref()))
             }),
             idle: Box::new(move || {

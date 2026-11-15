@@ -2,8 +2,8 @@ import { useState } from "react";
 import { FolderOpenIcon } from "@phosphor-icons/react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { isTauri } from "@/lib/platform";
-import { Input, NumberInput, Select, type SelectOption } from "@/ui";
-import { SettingRow, SettingsSection, SwitchRow } from "../SettingsSection";
+import { Input, NumberInput } from "@/ui";
+import { SettingRow, SettingsSection } from "../SettingsSection";
 import { useSetting } from "../store";
 
 export function ClaudePage() {
@@ -11,53 +11,7 @@ export function ClaudePage() {
         <>
             <BinarySection />
             <SessionsSection />
-            <TitlesSection />
         </>
-    );
-}
-
-/** Title models: Claude's aliases, its default as "default". */
-const TITLE_MODELS: SelectOption[] = [
-    { value: "haiku", label: "Haiku" },
-    { value: "sonnet", label: "Sonnet" },
-    { value: "opus", label: "Opus" },
-    { value: "default", label: "Claude's default" }
-];
-
-function TitlesSection() {
-    const autoTitle = useSetting("chat", "autoTitle");
-    const titleModel = useSetting("chat", "titleModel");
-    const value = titleModel.value || "default";
-    // An id typed into settings.json is offered as it is.
-    const options = TITLE_MODELS.some((o) => o.value === value)
-        ? TITLE_MODELS
-        : [...TITLE_MODELS, { value }];
-
-    return (
-        <SettingsSection title="Titles">
-            <SwitchRow
-                label="Name chats automatically"
-                description="Titled from its first prompt; off, its first words name it"
-                keywords="title auto name chat rename generate"
-                setting={autoTitle}
-            />
-            <SettingRow
-                label="Title model"
-                description="Which model writes titles; a small one is quick and cheap"
-                keywords="title model haiku sonnet opus"
-                setting={titleModel}
-                controlClassName="w-44"
-                control={
-                    <Select
-                        aria-label="Title model"
-                        value={value}
-                        disabled={!autoTitle.value}
-                        options={options}
-                        onValueChange={(next) => titleModel.set(next === "default" ? "" : next)}
-                    />
-                }
-            />
-        </SettingsSection>
     );
 }
 

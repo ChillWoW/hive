@@ -136,9 +136,9 @@ pub struct ChatSettings {
     /// Name a chat with a short text run on its first prompt; off, its
     /// first words name it.
     pub auto_title: bool,
-    /// The model that writes titles (a Claude alias or id); empty: Claude's
-    /// default.
-    pub title_model: String,
+    /// The model for text runs (chat titles and other short labels): a
+    /// Claude alias or id; empty: Claude's default.
+    pub text_generation_model: String,
 }
 
 impl Default for ChatSettings {
@@ -146,7 +146,7 @@ impl Default for ChatSettings {
         Self {
             idle_timeout_minutes: 15,
             auto_title: true,
-            title_model: "haiku".into(),
+            text_generation_model: "haiku".into(),
         }
     }
 }
@@ -162,7 +162,8 @@ impl Settings {
         settings.claude.binary_path = settings.claude.binary_path.trim().into();
         let idle = &mut settings.chat.idle_timeout_minutes;
         *idle = (*idle).clamp(1, 24 * 60);
-        settings.chat.title_model = settings.chat.title_model.trim().into();
+        let model = &mut settings.chat.text_generation_model;
+        *model = model.trim().into();
         settings
     }
 }

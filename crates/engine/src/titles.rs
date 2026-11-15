@@ -1,6 +1,6 @@
 //! Chat titles: as a chat's first prompt is sent, a throwaway text run names
 //! it from that prompt, alongside the turn (`Hooks::text`: no tools, no
-//! project, the title model). If that's off or yields nothing, the prompt's
+//! project, the text generation model). If that's off or yields nothing, the prompt's
 //! first words stand in. A rename by the user always wins.
 
 use std::time::Duration;
@@ -54,7 +54,7 @@ impl Engine {
         });
     }
 
-    /// The title model's answer, cleaned; `None` while titles are off or
+    /// The text generation model's title, cleaned; `None` while titles are off or
     /// when every attempt failed.
     async fn generate_title(&self, prompt: &str) -> Option<String> {
         let body = format!(
