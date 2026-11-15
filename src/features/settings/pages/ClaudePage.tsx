@@ -2,12 +2,44 @@ import { useState } from "react";
 import { FolderOpenIcon } from "@phosphor-icons/react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { isTauri } from "@/lib/platform";
-import { Input } from "@/ui";
+import { Input, NumberInput } from "@/ui";
 import { SettingRow, SettingsSection } from "../SettingsSection";
 import { useSetting } from "../store";
 
 export function ClaudePage() {
-    return <BinarySection />;
+    return (
+        <>
+            <BinarySection />
+            <SessionsSection />
+        </>
+    );
+}
+
+function SessionsSection() {
+    const idle = useSetting("chat", "idleTimeoutMinutes");
+
+    return (
+        <SettingsSection title="Sessions">
+            <SettingRow
+                label="Close idle sessions after"
+                description="A chat's Claude process stops after this long without a prompt; the next one picks the conversation back up"
+                keywords="idle timeout minutes session process close resume"
+                setting={idle}
+                controlClassName="w-28"
+                control={
+                    <NumberInput
+                        size="sm"
+                        value={idle.value}
+                        min={1}
+                        max={1440}
+                        decimalPlaces={0}
+                        suffix="min"
+                        onValueChange={(value) => value != null && idle.set(value)}
+                    />
+                }
+            />
+        </SettingsSection>
+    );
 }
 
 function BinarySection() {

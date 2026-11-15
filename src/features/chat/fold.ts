@@ -54,6 +54,7 @@ export function foldEvent(parts: MessagePart[], event: AgentEvent): MessagePart[
         case "error":
             return [...parts, { kind: "error", id: `e${parts.length}`, message: event.message }];
 
+        case "sessionStarted":
         case "done":
             return parts;
 

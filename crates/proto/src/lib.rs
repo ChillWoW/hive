@@ -4,10 +4,12 @@
 //! by `cargo test -p outcode-proto`; never edit it by hand.
 
 pub mod agent;
+pub mod chat;
 pub mod fold;
 pub mod message;
 
 pub use agent::*;
+pub use chat::*;
 pub use fold::fold_event;
 pub use message::*;
 
@@ -34,6 +36,8 @@ mod export {
         RunRequest::export_all(&cfg).unwrap();
         AgentEvent::export_all(&cfg).unwrap();
         Message::export_all(&cfg).unwrap();
+        ChatsUpdate::export_all(&cfg).unwrap();
+        MessagesUpdate::export_all(&cfg).unwrap();
 
         let mut modules = Vec::new();
         collect_modules(&dir, "", &mut modules);

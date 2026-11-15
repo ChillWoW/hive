@@ -22,3 +22,6 @@ export type { ToastType } from "./toastManager";
 export { Tooltip } from "./Tooltip";
 export { DotMatrixSpinner, DOT_MATRIX_FULL } from "./DotMatrixSpinner";
 export { FileIcon } from "./FileIcon";
+export { ComboboxCard, ComboboxCardSearch } from "./ComboboxCard";
+export { RowMenu } from "./RowMenu";
+export { useInlineRename } from "./useInlineRename";

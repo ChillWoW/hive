@@ -43,13 +43,13 @@ Done when: typing "hi" streams Claude's reply.
 
 ## 4. Chats + projects + persistence
 
-- [ ] `crates/store`: SQLite (projects, chats, messages) + per-chat JSONL event journal.
-- [ ] Session id from `system:init`; resume with `--resume <id>`.
-- [ ] Engine (minimal): one live run per chat, started on first send, closed after idle timeout.
-- [ ] `watch_chats` / `watch_messages` (snapshot then updates).
-- [ ] UI: sidebar project + chat list, new chat, open folder, rename/delete.
-- [ ] `recover()` at boot: rebuild half-streamed messages from journals.
-- [ ] Settings: `chat.idleTimeoutMinutes`.
+- [x] `crates/store`: SQLite (chats, messages) + per-chat JSONL event journal. Projects live in localStorage for now.
+- [x] Session id from `system:init`; resume with `--resume <id>`.
+- [x] Engine (minimal): one live run per chat, started on first send, closed after idle timeout.
+- [x] `watch_chats` / `watch_messages` (snapshot then updates).
+- [x] UI: sidebar project + chat list, new chat, open folder, rename/delete.
+- [x] `recover()` at boot: rebuild half-streamed messages from journals.
+- [x] Settings: `chat.idleTimeoutMinutes`.
 
 ## 5. Models + effort
 

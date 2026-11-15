@@ -11,6 +11,7 @@ fn start_in(cwd: &str, prompt: &str) -> Run {
     let request = RunRequest {
         cwd: cwd.into(),
         prompt: prompt.into(),
+        resume: None,
     };
     claude::run(request, None).expect("claude starts")
 }
@@ -110,4 +111,35 @@ async fn interrupt_stops_the_turn_and_keeps_the_session() {
     let (text, status) = turn(&mut run).await;
     assert_eq!(status, DoneStatus::Completed);
     assert!(text.to_lowercase().contains("pong"), "{text:?}");
+}
+
+#[tokio::test]
+#[ignore = "runs the real Claude CLI"]
+async fn a_new_run_resumes_the_session() {
+    let mut run = start("Remember the word otter. Reply with just OK.");
+    let mut session = None;
+    loop {
+        match run.events.recv().await.expect("event") {
+            AgentEvent::SessionStarted { session_id } => session = Some(session_id),
+            AgentEvent::Error { message } => panic!("error: {message}"),
+            AgentEvent::Done { status } => {
+                assert_eq!(status, DoneStatus::Completed);
+                break;
+            }
+            _ => {}
+        }
+    }
+    let session = session.expect("the run reports its session");
+    run.handle.close();
+    assert_eq!(run.events.recv().await, None);
+
+    let request = RunRequest {
+        cwd: String::new(),
+        prompt: "Which word did I ask you to remember? Reply with just the word.".into(),
+        resume: Some(session),
+    };
+    let mut run = claude::run(request, None).expect("claude starts");
+    let (text, status) = turn(&mut run).await;
+    assert_eq!(status, DoneStatus::Completed);
+    assert!(text.to_lowercase().contains("otter"), "{text:?}");
 }

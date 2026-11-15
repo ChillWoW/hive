@@ -101,6 +101,9 @@ pub fn run(request: RunRequest, binary: Option<&Path>) -> Result<Run, HarnessErr
     if let Some(cwd) = cwd {
         cmd.current_dir(cwd);
     }
+    if let Some(session) = request.resume.as_deref().filter(|s| !s.is_empty()) {
+        cmd.args(["--resume", session]);
+    }
     let mut child = cmd.spawn().map_err(|e| HarnessError::Spawn(NAME, e))?;
     let stdin = child.stdin.take().expect("piped stdin");
     let stdout = child.stdout.take().expect("piped stdout");

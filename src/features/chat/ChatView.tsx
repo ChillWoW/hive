@@ -1,13 +1,15 @@
 import { useLayoutEffect, useMemo, useRef, type ReactNode } from "react";
 import type { Message } from "@/proto";
 import { cn } from "@/lib/cn";
+import { useActiveChat, useChatsStore } from "@/features/chats/store";
 import { Composer } from "./Composer";
+import { FolderPicker } from "./FolderPicker";
 import { AssistantMessage } from "./transcript/AssistantMessage";
 import { ChatCwd, KnownFiles } from "./transcript/context";
 import { foldPath, fullPath, parseFileRef, resolveFileRef } from "./transcript/filePaths";
 import { pathOf } from "./transcript/tools";
 import { UserMessage } from "./transcript/UserMessage";
-import { useChatBusy, useChatStore } from "./store";
+import { send, stop, useChatBusy, useChatStore } from "./store";
 
 /**
  * The column the transcript and the composer share: centred, at most
@@ -20,16 +22,42 @@ export const laneClassName = "mx-auto w-full max-w-3xl";
 const FOLLOW_SLACK = 48;
 
 /**
- * The main pane: the chat's transcript with the composer under it, or,
- * before its first prompt, the composer centred under a heading.
+ * The main pane: the open chat's transcript with the composer under it, or,
+ * in the new-chat view (and before a chat's first prompt), the composer
+ * centred under a heading. Under the composer sits the folder the chat
+ * works in: picked in the new-chat view, fixed once the chat exists.
  */
 export function ChatView() {
+    const chat = useActiveChat();
     const messages = useChatStore((s) => s.messages);
-    const send = useChatStore((s) => s.send);
-    const stop = useChatStore((s) => s.stop);
+    const loaded = useChatStore((s) => s.loaded);
     const busy = useChatBusy();
-    const cwd = useChatStore((s) => s.cwd);
+    const newChatCwd = useChatsStore((s) => s.newChatCwd);
+    const cwd = chat?.cwd ?? newChatCwd ?? "";
     const known = useMemo(() => knownFiles(messages, cwd), [messages, cwd]);
+
+    const composer = (
+        <>
+            <Composer
+                // A fresh draft per chat.
+                key={chat?.id ?? "new"}
+                onSend={(prompt) => void send(prompt)}
+                onStop={stop}
+                busy={busy}
+                autoFocus
+            />
+            <div className="mt-1.5 flex items-center gap-1">
+                <FolderPicker
+                    cwd={cwd || null}
+                    locked={!!chat}
+                    onChange={(path) => useChatsStore.getState().setNewChatCwd(path)}
+                />
+            </div>
+        </>
+    );
+
+    // A chat opening: its messages are on their way.
+    if (chat && !loaded) return <div className="h-full w-full" />;
 
     if (messages.length === 0) {
         return (
@@ -38,9 +66,7 @@ export function ChatView() {
                     What should we build?
                 </h1>
                 <div className="w-full">
-                    <Bottom>
-                        <Composer onSend={send} onStop={stop} busy={busy} autoFocus />
-                    </Bottom>
+                    <Bottom>{composer}</Bottom>
                 </div>
             </div>
         );
@@ -50,16 +76,14 @@ export function ChatView() {
         <div className="flex h-full w-full flex-col">
             <ChatCwd value={cwd || undefined}>
                 <KnownFiles value={known}>
-                    <TranscriptScroller follow={messages}>
+                    <TranscriptScroller key={chat?.id} follow={messages}>
                         {messages.map((message) => (
                             <MessageView key={message.id} message={message} />
                         ))}
                     </TranscriptScroller>
                 </KnownFiles>
             </ChatCwd>
-            <Bottom>
-                <Composer onSend={send} onStop={stop} busy={busy} autoFocus />
-            </Bottom>
+            <Bottom>{composer}</Bottom>
         </div>
     );
 }

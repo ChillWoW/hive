@@ -38,15 +38,18 @@ pub struct RunHandle {
     commands: mpsc::UnboundedSender<RunCommand>,
 }
 
-#[derive(Debug)]
-pub(crate) enum RunCommand {
+/// What a [`RunHandle`] asks of its session.
+#[derive(Debug, PartialEq)]
+pub enum RunCommand {
     Send { prompt: String },
     Interrupt,
     Close,
 }
 
 impl RunHandle {
-    pub(crate) fn new() -> (Self, mpsc::UnboundedReceiver<RunCommand>) {
+    /// A handle and the commands it sends, for a driver (or a test double)
+    /// to serve.
+    pub fn new() -> (Self, mpsc::UnboundedReceiver<RunCommand>) {
         let (commands, rx) = mpsc::unbounded_channel();
         (Self { commands }, rx)
     }

@@ -7,4 +7,9 @@ export type RunRequest = {
 /**
  * The folder the agent works in. Empty: the user's home folder.
  */
-cwd: string, prompt: string, };
+cwd: string, prompt: string, 
+/**
+ * A session to pick up (the CLI's own id, from [`AgentEvent::SessionStarted`]),
+ * so the agent remembers the chat so far.
+ */
+resume?: string, };

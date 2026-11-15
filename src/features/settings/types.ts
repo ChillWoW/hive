@@ -32,12 +32,18 @@ export type ClaudeSettings = {
     binaryPath: string;
 };
 
+export type ChatSettings = {
+    /** Minutes an agent process is kept between prompts (1–1440); the next prompt resumes it. */
+    idleTimeoutMinutes: number;
+};
+
 export type Settings = {
     version: number;
     appearance: AppearanceSettings;
     updates: UpdatesSettings;
     keyboard: KeyboardSettings;
     claude: ClaudeSettings;
+    chat: ChatSettings;
 };
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -58,5 +64,8 @@ export const DEFAULT_SETTINGS: Settings = {
     },
     claude: {
         binaryPath: ""
+    },
+    chat: {
+        idleTimeoutMinutes: 15
     }
 };

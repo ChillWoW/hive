@@ -1,5 +1,6 @@
 mod chat;
 mod files;
+mod folders;
 mod fonts;
 mod http;
 mod settings;
@@ -8,7 +9,9 @@ mod updater;
 
 use std::path::PathBuf;
 
+use outcode_engine::Engine;
 use tauri::Manager;
+use tauri::webview::PageLoadEvent;
 use tauri_plugin_window_state::StateFlags;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -27,17 +30,39 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
+        // A reload takes the page's channels (and so its watchers) with it.
+        .on_page_load(|webview, payload| {
+            if payload.event() == PageLoadEvent::Started {
+                let app = webview.app_handle();
+                if let (Some(watches), Some(engine)) =
+                    (app.try_state::<chat::Watches>(), app.try_state::<Engine>())
+                {
+                    watches.clear(&engine, webview.label());
+                }
+            }
+        })
         .setup(|app| {
             let data_dir = data_dir(app)?;
             app.manage(settings::SettingsFile::open(&data_dir)?);
             app.manage(themes::ThemesDir::open(data_dir.join("themes"))?);
             app.manage(updater::Updates::default());
-            app.manage(chat::Chats::default());
+            let engine = chat::engine(app.handle(), &data_dir)?;
+            app.manage(engine);
+            app.manage(chat::Watches::default());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            chat::chat_create,
             chat::chat_send,
             chat::chat_interrupt,
+            chat::chat_rename,
+            chat::chat_set_pinned,
+            chat::chat_set_archived,
+            chat::chat_delete,
+            chat::chat_watch,
+            chat::chat_watch_messages,
+            chat::chat_unwatch,
+            folders::folder_icon,
             files::file_open,
             settings::settings_get,
             settings::settings_update,
@@ -57,10 +82,10 @@ pub fn run() {
             // ⚠ Exiting closes Claude's stdin, and a CLI mid login refresh
             // then logs the user out: close the runs and wait it out first.
             if let tauri::RunEvent::ExitRequested { api, .. } = event {
-                let chats = app.state::<chat::Chats>();
-                if chats.any() {
+                let engine = app.state::<Engine>();
+                if engine.any_live() {
                     api.prevent_exit();
-                    chats.close_all();
+                    engine.close_all();
                     let app = app.clone();
                     tauri::async_runtime::spawn(async move {
                         outcode_harness::claude::settle_refresh().await;

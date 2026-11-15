@@ -1,0 +1,17 @@
+[package]
+name = "outcode-store"
+version = "0.0.1"
+edition = "2024"
+license = "GPL-3.0-only"
+publish = false
+
+[dependencies]
+outcode-proto.workspace = true
+rusqlite.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

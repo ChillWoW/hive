@@ -1,0 +1,16 @@
+[package]
+name = "outcode-engine"
+version = "0.0.1"
+edition = "2024"
+license = "GPL-3.0-only"
+publish = false
+
+[dependencies]
+outcode-proto.workspace = true
+outcode-harness.workspace = true
+outcode-store.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

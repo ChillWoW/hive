@@ -32,3 +32,10 @@ rustls = { version = "0.23", default-features = false, features = ["ring", "std"
 fontdb = "0.24.0"
 outcode-proto.workspace = true
 outcode-harness.workspace = true
+outcode-store.workspace = true
+outcode-engine.workspace = true
+base64 = "0.22"
+tokio = { workspace = true }
+
+[dev-dependencies]
+tempfile.workspace = true

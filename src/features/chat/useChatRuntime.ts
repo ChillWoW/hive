@@ -1,21 +1,11 @@
 import { useEffect } from "react";
-import { chatApi } from "./api";
-import { useChatStore } from "./store";
+import { useChatsStore } from "@/features/chats/store";
+import { attach } from "./store";
 
-/** Feeds runs' events into the chat store. */
+/** Watches the open chat's messages, following the selection. */
 export function useChatRuntime() {
+    const chatId = useChatsStore((s) => s.activeChatId);
     useEffect(() => {
-        let cancelled = false;
-        let unlisten: (() => void) | undefined;
-        void chatApi
-            .onEvent(({ chatId, event }) => useChatStore.getState().apply(chatId, event))
-            .then((stop) => {
-                if (cancelled) stop();
-                else unlisten = stop;
-            });
-        return () => {
-            cancelled = true;
-            unlisten?.();
-        };
-    }, []);
+        void attach(chatId);
+    }, [chatId]);
 }

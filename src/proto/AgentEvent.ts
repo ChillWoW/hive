@@ -6,4 +6,4 @@ import type { ToolCall } from "./ToolCall";
  * One step of an agent's turn, normalized across CLIs. A turn ends with
  * [`AgentEvent::Done`]; a failed one reports [`AgentEvent::Error`] first.
  */
-export type AgentEvent = { "type": "textDelta", text: string, } | { "type": "reasoningDelta", text: string, } | { "type": "toolCall", id: string, call: ToolCall, } | { "type": "toolResult", id: string, isError: boolean, output?: string, } | { "type": "error", message: string, } | { "type": "done", status: DoneStatus, };
+export type AgentEvent = { "type": "sessionStarted", sessionId: string, } | { "type": "textDelta", text: string, } | { "type": "reasoningDelta", text: string, } | { "type": "toolCall", id: string, call: ToolCall, } | { "type": "toolResult", id: string, isError: boolean, output?: string, } | { "type": "error", message: string, } | { "type": "done", status: DoneStatus, };

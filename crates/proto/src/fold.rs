@@ -12,7 +12,8 @@ use crate::message::MessagePart;
 ///   is something else (a tool call in between splits a text block).
 /// - A `ToolCall` with a known id refreshes that part in place, which is how
 ///   a live todo list updates; `ToolResult` resolves it.
-/// - `Done` adds nothing: how the turn ended is the message's status.
+/// - `Done` adds nothing: how the turn ended is the message's status;
+///   `SessionStarted` adds nothing either.
 pub fn fold_event(parts: &mut Vec<MessagePart>, event: &AgentEvent) {
     match event {
         AgentEvent::TextDelta { text } => {
@@ -79,7 +80,7 @@ pub fn fold_event(parts: &mut Vec<MessagePart>, event: &AgentEvent) {
             });
         }
 
-        AgentEvent::Done { .. } => {}
+        AgentEvent::SessionStarted { .. } | AgentEvent::Done { .. } => {}
     }
 }
 

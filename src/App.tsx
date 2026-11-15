@@ -1,4 +1,5 @@
 import { ChatView, useChatRuntime } from "@/features/chat";
+import { useChatsRuntime } from "@/features/chats";
 import { SettingsModal, useSettingsRuntime } from "@/features/settings";
 import { useFontRuntime } from "@/features/fonts/useFontRuntime";
 import { useThemeRuntime } from "@/features/theme/useThemeRuntime";
@@ -13,6 +14,7 @@ export function App() {
     useFontRuntime();
     useKeybindingsRuntime();
     useUpdaterRuntime();
+    useChatsRuntime();
     useChatRuntime();
 
     return (

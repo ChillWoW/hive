@@ -8,10 +8,15 @@ use ts_rs::TS;
 /// What starts a run: a prompt for an agent working in `cwd`.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(optional_fields)]
 pub struct RunRequest {
     /// The folder the agent works in. Empty: the user's home folder.
     pub cwd: String,
     pub prompt: String,
+    /// A session to pick up (the CLI's own id, from [`AgentEvent::SessionStarted`]),
+    /// so the agent remembers the chat so far.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resume: Option<String>,
 }
 
 /// A decoded tool invocation, reduced to the fields each kind renders.
@@ -116,6 +121,9 @@ pub enum DoneStatus {
 #[serde(tag = "type", rename_all = "camelCase", rename_all_fields = "camelCase")]
 #[ts(optional_fields)]
 pub enum AgentEvent {
+    /// The CLI's session id, reported as each turn starts; a later run
+    /// resumes it ([`RunRequest::resume`]).
+    SessionStarted { session_id: String },
     /// More of the reply's text, to append.
     TextDelta { text: String },
     /// More of the agent's thinking, to append.

@@ -27,6 +27,11 @@ impl Normalizer {
             return (Vec::new(), None);
         }
         let events = match frame["type"].as_str() {
+            Some("system") if frame["subtype"] == "init" => frame["session_id"]
+                .as_str()
+                .map(|id| AgentEvent::SessionStarted { session_id: id.into() })
+                .into_iter()
+                .collect(),
             Some("stream_event") => self.stream_event(&frame["event"]),
             Some("assistant") => assistant(frame),
             Some("user") => tool_results(frame),
@@ -287,6 +292,12 @@ mod tests {
 
     fn success(result: &str) -> Value {
         json!({ "type": "result", "subtype": "success", "is_error": false, "result": result })
+    }
+
+    #[test]
+    fn init_reports_the_session() {
+        let (events, _) = feed(&[json!({ "type": "system", "subtype": "init", "session_id": "s1" })]);
+        assert_eq!(events, vec![AgentEvent::SessionStarted { session_id: "s1".into() }]);
     }
 
     #[test]
