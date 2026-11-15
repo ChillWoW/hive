@@ -21,6 +21,7 @@ const FOLLOW_SLACK = 48;
 export function ChatView() {
     const messages = useChatStore((s) => s.messages);
     const send = useChatStore((s) => s.send);
+    const stop = useChatStore((s) => s.stop);
     const busy = useChatBusy();
 
     if (messages.length === 0) {
@@ -31,7 +32,7 @@ export function ChatView() {
                 </h1>
                 <div className="w-full">
                     <Bottom>
-                        <Composer onSend={send} busy={busy} autoFocus />
+                        <Composer onSend={send} onStop={stop} busy={busy} autoFocus />
                     </Bottom>
                 </div>
             </div>
@@ -46,7 +47,7 @@ export function ChatView() {
                 ))}
             </TranscriptScroller>
             <Bottom>
-                <Composer onSend={send} busy={busy} autoFocus />
+                <Composer onSend={send} onStop={stop} busy={busy} autoFocus />
             </Bottom>
         </div>
     );
@@ -116,6 +117,7 @@ function AssistantView({ message }: { message: AssistantMessage }) {
         <div className="flex flex-col gap-2">
             {waiting && <span className="animate-pulse text-sm leading-6 text-muted">Thinking…</span>}
             {message.text && <Markdown streaming={message.streaming}>{message.text}</Markdown>}
+            {message.stopped && <span className="text-xs leading-5 text-muted">Stopped</span>}
             {message.error && (
                 <div className="rounded-lg border border-danger/40 bg-danger/10 px-3 py-2 font-mono text-xs leading-5 break-words whitespace-pre-wrap text-danger">
                     {message.error}

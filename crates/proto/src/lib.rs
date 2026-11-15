@@ -23,7 +23,18 @@ pub enum AgentEvent {
     /// More of the reply's text, to append.
     TextDelta { text: String },
     Error { message: String },
-    Done,
+    Done { status: DoneStatus },
+}
+
+/// How a turn ended.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub enum DoneStatus {
+    Completed,
+    /// Stopped by the user.
+    Interrupted,
+    /// Failed; an [`AgentEvent::Error`] said why.
+    Errored,
 }
 
 #[cfg(test)]

@@ -10,67 +10,80 @@ export type AssistantMessage = {
     text: string;
     /** Still being written. */
     streaming: boolean;
+    /** The user stopped it. */
+    stopped?: boolean;
     error?: string;
 };
 
 export type Message = UserMessage | AssistantMessage;
 
 type ChatState = {
+    /** The one chat there is for now; its Claude run lives across prompts. */
+    chatId: string;
     messages: Message[];
-    /** The run the last assistant message is streaming from. */
-    runId: string | null;
+    /** The assistant message the running turn writes. */
+    replyId: string | null;
     send: (prompt: string) => void;
-    apply: (runId: string, event: AgentEvent) => void;
+    stop: () => void;
+    apply: (chatId: string, event: AgentEvent) => void;
 };
 
-/**
- * The one chat there is for now. Each prompt starts its own Claude run, so
- * Claude doesn't yet see earlier turns.
- */
 export const useChatStore = create<ChatState>()((set, get) => {
-    /** `patch` applied to the assistant message `runId` is writing. */
-    const updateReply = (runId: string, patch: (m: AssistantMessage) => Partial<AssistantMessage>) =>
+    /** `patch` applied to the reply being written. */
+    const updateReply = (patch: (m: AssistantMessage) => Partial<AssistantMessage>) => {
+        const { replyId } = get();
+        if (!replyId) return;
         set((s) => ({
             messages: s.messages.map((m) =>
-                m.id === runId && m.role === "assistant" ? { ...m, ...patch(m) } : m
+                m.id === replyId && m.role === "assistant" ? { ...m, ...patch(m) } : m
             )
         }));
+    };
 
     return {
+        chatId: crypto.randomUUID(),
         messages: [],
-        runId: null,
+        replyId: null,
 
         send: (prompt) => {
             const text = prompt.trim();
-            if (!text || get().runId) return;
-            const runId = crypto.randomUUID();
+            if (!text || get().replyId) return;
+            const replyId = crypto.randomUUID();
             set((s) => ({
-                runId,
+                replyId,
                 messages: [
                     ...s.messages,
                     { id: crypto.randomUUID(), role: "user", text },
-                    { id: runId, role: "assistant", text: "", streaming: true }
+                    { id: replyId, role: "assistant", text: "", streaming: true }
                 ]
             }));
-            chatApi.send(runId, { cwd: "", prompt: text }).catch((error: unknown) => {
-                updateReply(runId, () => ({ streaming: false, error: String(error) }));
-                set({ runId: null });
+            chatApi.send(get().chatId, { cwd: "", prompt: text }).catch((error: unknown) => {
+                updateReply(() => ({ streaming: false, error: String(error) }));
+                set({ replyId: null });
             });
         },
 
-        apply: (runId, event) => {
+        stop: () => {
+            if (get().replyId) void chatApi.interrupt(get().chatId);
+        },
+
+        apply: (chatId, event) => {
+            if (chatId !== get().chatId) return;
             switch (event.type) {
                 case "textDelta":
-                    updateReply(runId, (m) => ({ text: m.text + event.text }));
+                    updateReply((m) => ({ text: m.text + event.text }));
                     break;
                 case "error":
-                    updateReply(runId, (m) => ({
+                    updateReply((m) => ({
                         error: m.error ? `${m.error}\n${event.message}` : event.message
                     }));
                     break;
                 case "done":
-                    updateReply(runId, () => ({ streaming: false }));
-                    if (get().runId === runId) set({ runId: null });
+                    updateReply(() => ({
+                        streaming: false,
+                        stopped: event.status === "interrupted"
+                    }));
+                    set({ replyId: null });
                     break;
             }
         }
@@ -78,4 +91,4 @@ export const useChatStore = create<ChatState>()((set, get) => {
 });
 
 /** A turn is running. */
-export const useChatBusy = () => useChatStore((s) => s.runId !== null);
+export const useChatBusy = () => useChatStore((s) => s.replyId !== null);

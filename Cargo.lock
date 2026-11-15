@@ -2624,6 +2624,7 @@ dependencies = [
 name = "outcode-harness"
 version = "0.0.1"
 dependencies = [
+ "filetime",
  "outcode-proto",
  "serde",
  "serde_json",

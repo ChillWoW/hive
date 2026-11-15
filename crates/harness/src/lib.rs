@@ -1,5 +1,11 @@
 //! outcode-harness — drives coding-agent CLIs and normalizes their output
 //! into [`AgentEvent`]s.
+//!
+//! A harness starts a [`Run`]: a live session that streams events and takes
+//! follow-up commands through its [`RunHandle`]. Each turn ends with
+//! [`AgentEvent::Done`]; the session stays open for the next prompt until
+//! the handle is closed or dropped, and the event stream ends when the
+//! process exits.
 
 use outcode_proto::AgentEvent;
 use tokio::sync::mpsc;
@@ -17,8 +23,52 @@ pub enum HarnessError {
     Spawn(&'static str, std::io::Error),
 }
 
-/// A started run: its events end with [`AgentEvent::Done`], then the stream
-/// closes. Dropping the receiver tears the run down.
 pub struct Run {
     pub events: mpsc::Receiver<AgentEvent>,
+    pub handle: RunHandle,
+}
+
+/// The consumer dropped a run's event stream; its session tears down.
+pub(crate) struct Gone;
+
+/// Controls a live run. Clones share the run; when the last one is dropped
+/// the session closes as if [`RunHandle::close`] were called.
+#[derive(Clone)]
+pub struct RunHandle {
+    commands: mpsc::UnboundedSender<RunCommand>,
+}
+
+#[derive(Debug)]
+pub(crate) enum RunCommand {
+    Send { prompt: String },
+    Interrupt,
+    Close,
+}
+
+impl RunHandle {
+    pub(crate) fn new() -> (Self, mpsc::UnboundedReceiver<RunCommand>) {
+        let (commands, rx) = mpsc::unbounded_channel();
+        (Self { commands }, rx)
+    }
+
+    /// Starts another turn with `prompt`. Sent mid-turn, the CLI takes it up
+    /// once the current turn ends. False once the session has ended.
+    pub fn send(&self, prompt: impl Into<String>) -> bool {
+        self.commands
+            .send(RunCommand::Send {
+                prompt: prompt.into(),
+            })
+            .is_ok()
+    }
+
+    /// Stops the in-flight turn, which ends with `Done { status: interrupted }`.
+    /// The session stays open.
+    pub fn interrupt(&self) {
+        let _ = self.commands.send(RunCommand::Interrupt);
+    }
+
+    /// Ends the session once the current turn finishes.
+    pub fn close(&self) {
+        let _ = self.commands.send(RunCommand::Close);
+    }
 }

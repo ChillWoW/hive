@@ -2,7 +2,7 @@
 //! window, writing their stdin and keeping the end of their stderr.
 
 use std::path::{Path, PathBuf};
-use std::process::ExitStatus;
+use std::process::{ExitStatus, Stdio};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -56,12 +56,51 @@ pub(crate) fn command(exe: &Path) -> Command {
         Command::new(exe)
     };
     #[cfg(windows)]
-    {
-        /// `CREATE_NO_WINDOW`: a console child opens no window of its own.
-        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-        cmd.creation_flags(CREATE_NO_WINDOW);
-    }
+    cmd.creation_flags(CREATE_NO_WINDOW);
+    // Leads its own process group, so `kill_tree` reaches what it starts.
+    #[cfg(unix)]
+    cmd.process_group(0);
     cmd
+}
+
+/// `CREATE_NO_WINDOW`: a console child opens no window of its own.
+#[cfg(windows)]
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
+/// Stops the process and everything it started (an npm shim's `cmd` →
+/// `node` chain): `taskkill /T` on Windows, the process group on unix.
+pub(crate) async fn kill_tree(child: &mut Child) {
+    if let Some(pid) = child.id() {
+        #[cfg(windows)]
+        {
+            let mut taskkill = Command::new("taskkill");
+            taskkill
+                .args(["/T", "/F", "/PID", &pid.to_string()])
+                .creation_flags(CREATE_NO_WINDOW)
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null());
+            let _ = tokio::time::timeout(Duration::from_secs(5), taskkill.status()).await;
+        }
+        #[cfg(unix)]
+        {
+            let group = format!("-{pid}");
+            let signal = |sig: &'static str| {
+                let mut kill = Command::new("kill");
+                kill.args([sig, "--", &group])
+                    .stdin(Stdio::null())
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::null());
+                kill
+            };
+            let _ = signal("-TERM").status().await;
+            if tokio::time::timeout(Duration::from_secs(2), child.wait()).await.is_ok() {
+                return;
+            }
+            let _ = signal("-KILL").status().await;
+        }
+    }
+    let _ = child.kill().await;
 }
 
 /// Writes lines in order; dropping every sender closes stdin.
@@ -126,13 +165,10 @@ pub(crate) fn exit_code(status: Option<ExitStatus>) -> String {
         .map_or("unknown".to_owned(), |c| c.to_string())
 }
 
-/// Waits [`EXIT_GRACE`] for `child` to exit, then kills it.
-pub(crate) async fn wait_or_kill(child: &mut Child) -> Option<ExitStatus> {
-    match tokio::time::timeout(EXIT_GRACE, child.wait()).await {
-        Ok(status) => status.ok(),
-        Err(_) => {
-            let _ = child.kill().await;
-            None
-        }
+/// Never wakes without a deadline.
+pub(crate) async fn sleep_until(deadline: Option<tokio::time::Instant>) {
+    match deadline {
+        Some(at) => tokio::time::sleep_until(at).await,
+        None => std::future::pending().await,
     }
 }

@@ -10,36 +10,57 @@ import { isTauri } from "@/lib/platform";
 
 const EVENT = "chat://event";
 
-export type RunEvent = { runId: string; event: AgentEvent };
+export type ChatEvent = { chatId: string; event: AgentEvent };
+
+const devListeners = new Set<(event: ChatEvent) => void>();
+/** `bun run dev`'s streaming replies, by chat. */
+const devTimers = new Map<string, number>();
+
+function devEmit(chatId: string, event: AgentEvent) {
+    devListeners.forEach((listener) => listener({ chatId, event }));
+}
 
 /** A reply streamed word by word, for `bun run dev` without a backend. */
-function devRun(runId: string, request: RunRequest) {
+function devSend(chatId: string, request: RunRequest) {
     const reply = `No backend under \`bun run dev\`, so here's an echo.\n\n> ${request.prompt}`;
     const words = reply.split(/(?<=\s)/);
     let i = 0;
     const timer = window.setInterval(() => {
-        const event: AgentEvent =
-            i < words.length ? { type: "textDelta", text: words[i++]! } : { type: "done" };
-        devListeners.forEach((listener) => listener({ runId, event }));
-        if (event.type === "done") window.clearInterval(timer);
+        if (i < words.length) return devEmit(chatId, { type: "textDelta", text: words[i++]! });
+        devStop(chatId, "completed");
     }, 30);
+    devTimers.set(chatId, timer);
 }
 
-const devListeners = new Set<(event: RunEvent) => void>();
+function devStop(chatId: string, status: "completed" | "interrupted") {
+    const timer = devTimers.get(chatId);
+    if (timer === undefined) return;
+    window.clearInterval(timer);
+    devTimers.delete(chatId);
+    devEmit(chatId, { type: "done", status });
+}
 
 export const chatApi = {
-    /** Starts a run; its events arrive through `onEvent`, ending with `done`. */
-    send(runId: string, request: RunRequest): Promise<void> {
-        return backend("chat_send", { runId, request }, () => devRun(runId, request));
+    /**
+     * Sends a prompt to the chat's live run, starting one when there's none.
+     * Its events arrive through `onEvent`, the turn ending with `done`.
+     */
+    send(chatId: string, request: RunRequest): Promise<void> {
+        return backend("chat_send", { chatId, request }, () => devSend(chatId, request));
     },
 
-    onEvent(handler: (event: RunEvent) => void): Promise<UnlistenFn> {
+    /** Stops the chat's running turn; it ends with `done` (interrupted). */
+    interrupt(chatId: string): Promise<void> {
+        return backend("chat_interrupt", { chatId }, () => devStop(chatId, "interrupted"));
+    },
+
+    onEvent(handler: (event: ChatEvent) => void): Promise<UnlistenFn> {
         if (!isTauri) {
             // Its own entry even when `handler` is one already added.
-            const listener = (event: RunEvent) => handler(event);
+            const listener = (event: ChatEvent) => handler(event);
             devListeners.add(listener);
             return Promise.resolve(() => void devListeners.delete(listener));
         }
-        return listen<RunEvent>(EVENT, (e) => handler(e.payload));
+        return listen<ChatEvent>(EVENT, (e) => handler(e.payload));
     }
 };

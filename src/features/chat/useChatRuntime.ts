@@ -8,7 +8,7 @@ export function useChatRuntime() {
         let cancelled = false;
         let unlisten: (() => void) | undefined;
         void chatApi
-            .onEvent(({ runId, event }) => useChatStore.getState().apply(runId, event))
+            .onEvent(({ chatId, event }) => useChatStore.getState().apply(chatId, event))
             .then((stop) => {
                 if (cancelled) stop();
                 else unlisten = stop;

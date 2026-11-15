@@ -27,11 +27,11 @@ Done when: typing "hi" streams Claude's reply.
 
 ## 2. Multi-turn + stop
 
-- [ ] Keep the process alive between prompts (`RunHandle::send`, `close`).
-- [ ] Control channel: `initialize`; first prompt waits for its answer. `interrupt`.
-- [ ] `kill_tree` (`taskkill /T` on Windows, process group on unix).
-- [ ] ⚠ **OAuth refresh lock**: never kill/close Claude while `.oauth_refresh.lock` (or legacy `<config>.lock`) is live — the refresh token is single-use and the user gets logged out.
-- [ ] UI: Stop button, busy state.
+- [x] Keep the process alive between prompts (`RunHandle::send`, `close`).
+- [x] Control channel: `initialize`; first prompt waits for its answer. `interrupt`.
+- [x] `kill_tree` (`taskkill /T` on Windows, process group on unix).
+- [x] ⚠ **OAuth refresh lock**: never kill/close Claude while `.oauth_refresh.lock` (or legacy `<config>.lock`) is live — the refresh token is single-use and the user gets logged out.
+- [x] UI: Stop button (Esc), busy state.
 
 ## 3. Rich transcript
 

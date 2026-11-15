@@ -31,10 +31,12 @@ pub fn run() {
             app.manage(settings::SettingsFile::open(&data_dir)?);
             app.manage(themes::ThemesDir::open(data_dir.join("themes"))?);
             app.manage(updater::Updates::default());
+            app.manage(chat::Chats::default());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             chat::chat_send,
+            chat::chat_interrupt,
             settings::settings_get,
             settings::settings_update,
             settings::settings_reset,
@@ -47,8 +49,24 @@ pub fn run() {
             updater::update_check,
             updater::update_install,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app, event| {
+            // ⚠ Exiting closes Claude's stdin, and a CLI mid login refresh
+            // then logs the user out: close the runs and wait it out first.
+            if let tauri::RunEvent::ExitRequested { api, .. } = event {
+                let chats = app.state::<chat::Chats>();
+                if chats.any() {
+                    api.prevent_exit();
+                    chats.close_all();
+                    let app = app.clone();
+                    tauri::async_runtime::spawn(async move {
+                        outcode_harness::claude::settle_refresh().await;
+                        app.exit(0);
+                    });
+                }
+            }
+        });
 }
 
 /// `~/.outcode`, or `~/.outcode.dev` for the dev config (`com.outcode.dev`).
