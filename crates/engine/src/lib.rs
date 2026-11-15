@@ -7,7 +7,7 @@
 //! the chat list, `watch_messages` one chat's transcript, each a snapshot
 //! first and then every change.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
@@ -15,6 +15,8 @@ use outcode_harness::{HarnessError, Run, RunHandle};
 use outcode_proto::{AgentEvent, Chat, ChatsUpdate, DoneStatus, MessagesUpdate, RunRequest};
 use outcode_store::{Store, StoreError, Turn, now_ms};
 use tokio::sync::mpsc;
+
+mod titles;
 
 pub type WatchId = u64;
 
@@ -30,8 +32,20 @@ pub enum EngineError {
 
 pub type Result<T> = std::result::Result<T, EngineError>;
 
-/// Starts a run for a request: the Claude driver in the app, a script in tests.
-pub type Spawner = dyn Fn(RunRequest) -> std::result::Result<Run, HarnessError> + Send + Sync;
+type Started = std::result::Result<Run, HarnessError>;
+
+/// What the engine runs things with: the Claude driver and the settings in
+/// the app, scripts in tests.
+pub struct Hooks {
+    /// Starts a chat's run.
+    pub spawn: Box<dyn Fn(RunRequest) -> Started + Send + Sync>,
+    /// Starts a one-turn text run answering a prompt (a chat's title);
+    /// `None` while automatic titles are off.
+    pub text: Box<dyn Fn(String) -> Option<Started> + Send + Sync>,
+    /// How long a run may sit between turns before it's closed; read as each
+    /// turn ends, so a settings change applies from the next one.
+    pub idle: Box<dyn Fn() -> Duration + Send + Sync>,
+}
 
 type ChatsSink = Box<dyn Fn(ChatsUpdate) -> bool + Send>;
 type MessagesSink = Box<dyn Fn(MessagesUpdate) -> bool + Send>;
@@ -43,10 +57,7 @@ pub struct Engine {
 
 struct Shared {
     store: Store,
-    spawn: Box<Spawner>,
-    /// How long a run may sit between turns before it's closed; read as each
-    /// turn ends, so a settings change applies from the next one.
-    idle: Box<dyn Fn() -> Duration + Send + Sync>,
+    hooks: Hooks,
     state: Mutex<State>,
 }
 
@@ -55,6 +66,8 @@ struct State {
     runs: HashMap<String, Live>,
     watchers: Watchers,
     next_run: u64,
+    /// Chats whose title is being written.
+    titling: HashSet<String>,
 }
 
 struct Live {
@@ -92,16 +105,11 @@ impl Watchers {
 }
 
 impl Engine {
-    pub fn new(
-        store: Store,
-        spawn: impl Fn(RunRequest) -> std::result::Result<Run, HarnessError> + Send + Sync + 'static,
-        idle: impl Fn() -> Duration + Send + Sync + 'static,
-    ) -> Self {
+    pub fn new(store: Store, hooks: Hooks) -> Self {
         Self {
             shared: Arc::new(Shared {
                 store,
-                spawn: Box::new(spawn),
-                idle: Box::new(idle),
+                hooks,
                 state: Mutex::default(),
             }),
         }
@@ -192,6 +200,7 @@ impl Engine {
             runs,
             watchers,
             next_run,
+            titling,
         } = &mut *state;
         if runs.get(chat_id).is_some_and(|live| live.turn.is_some()) {
             return Err(EngineError::Busy);
@@ -209,6 +218,9 @@ impl Engine {
             chat_id: chat_id.into(),
             working: true,
         });
+        if chat.title.is_none() {
+            self.maybe_title(titling, chat_id, &prompt);
+        }
 
         if let Some(live) = runs.get_mut(chat_id)
             && live.handle.send(prompt.clone())
@@ -222,7 +234,7 @@ impl Engine {
             prompt,
             resume: chat.session_id,
         };
-        match (self.shared.spawn)(request) {
+        match (self.shared.hooks.spawn)(request) {
             Ok(run) => {
                 *next_run += 1;
                 let id = *next_run;
@@ -325,7 +337,7 @@ impl Engine {
             live.turn = None;
             live.finished += 1;
             let finished = live.finished;
-            let idle = (self.shared.idle)();
+            let idle = (self.shared.hooks.idle)();
             let engine = self.clone();
             let chat_id = chat_id.to_owned();
             tokio::spawn(async move {

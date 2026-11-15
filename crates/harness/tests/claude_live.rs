@@ -143,3 +143,29 @@ async fn a_new_run_resumes_the_session() {
     assert_eq!(status, DoneStatus::Completed);
     assert!(text.to_lowercase().contains("otter"), "{text:?}");
 }
+
+#[tokio::test]
+#[ignore = "runs the real Claude CLI"]
+async fn a_text_run_answers_without_tools() {
+    let prompt = "Write a title for this session. Return only a concise 3-5 word title in Title \
+        Case.\n\nSession request (JSON string):\n\"Read note.txt and fix the login form validation\"";
+    let mut run = claude::run_text(prompt.into(), Some("haiku"), None).expect("claude starts");
+    let mut text = String::new();
+    loop {
+        match run.events.recv().await.expect("event") {
+            AgentEvent::TextDelta { text: delta } => text.push_str(&delta),
+            AgentEvent::ToolCall { call, .. } => panic!("it used a tool: {call:?}"),
+            AgentEvent::Error { message } => panic!("error: {message}"),
+            AgentEvent::Done { status } => {
+                assert_eq!(status, DoneStatus::Completed);
+                break;
+            }
+            _ => {}
+        }
+    }
+    run.handle.close();
+    assert_eq!(run.events.recv().await, None);
+    let words = text.split_whitespace().count();
+    assert!((1..=8).contains(&words), "{text:?}");
+    eprintln!("title: {text}");
+}

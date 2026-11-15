@@ -35,6 +35,10 @@ export type ClaudeSettings = {
 export type ChatSettings = {
     /** Minutes an agent process is kept between prompts (1–1440); the next prompt resumes it. */
     idleTimeoutMinutes: number;
+    /** Name a chat with a short text run on its first prompt; off, its first words name it. */
+    autoTitle: boolean;
+    /** The model that writes titles (a Claude alias or id); empty: Claude's default. */
+    titleModel: string;
 };
 
 export type Settings = {
@@ -66,6 +70,8 @@ export const DEFAULT_SETTINGS: Settings = {
         binaryPath: ""
     },
     chat: {
-        idleTimeoutMinutes: 15
+        idleTimeoutMinutes: 15,
+        autoTitle: true,
+        titleModel: "haiku"
     }
 };

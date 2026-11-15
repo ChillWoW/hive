@@ -133,12 +133,20 @@ pub struct ChatSettings {
     /// Minutes a chat's agent process is kept between prompts before it's
     /// closed; the next prompt starts a new one that resumes the session.
     pub idle_timeout_minutes: u32,
+    /// Name a chat with a short text run on its first prompt; off, its
+    /// first words name it.
+    pub auto_title: bool,
+    /// The model that writes titles (a Claude alias or id); empty: Claude's
+    /// default.
+    pub title_model: String,
 }
 
 impl Default for ChatSettings {
     fn default() -> Self {
         Self {
             idle_timeout_minutes: 15,
+            auto_title: true,
+            title_model: "haiku".into(),
         }
     }
 }
@@ -154,6 +162,7 @@ impl Settings {
         settings.claude.binary_path = settings.claude.binary_path.trim().into();
         let idle = &mut settings.chat.idle_timeout_minutes;
         *idle = (*idle).clamp(1, 24 * 60);
+        settings.chat.title_model = settings.chat.title_model.trim().into();
         settings
     }
 }

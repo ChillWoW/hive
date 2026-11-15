@@ -110,10 +110,10 @@ Done when: typing "hi" streams Claude's reply.
 - [ ] Never idle-close a run with live background tasks.
 - [ ] UI: nested subagent threads, background tasks panel.
 
-## 14. Titles
+## 14. Titles (done early, after 4)
 
-- [ ] `run_title`: one turn, no tools/MCP/settings, no initialize. Fallback: first words.
-- [ ] Settings: `chat.autoTitle`, `chat.titleModel`.
+- [x] `run_text`: one turn, no tools/MCP/settings, no initialize, nothing saved. Fallback: first words.
+- [x] Settings: `chat.autoTitle`, `chat.titleModel`.
 
 ## 15. Claude provider management
 
@@ -136,7 +136,7 @@ Done when: typing "hi" streams Claude's reply.
 ## 18. Git
 
 - [ ] Turn snapshots (git tree per prompted turn) → `turn_diff`, `revert_turn`.
-- [ ] Worktrees per chat (branch names via `run_title`).
+- [ ] Worktrees per chat (branch names via `run_text`).
 - [ ] UI: diff panel, revert turn.
 
 ---

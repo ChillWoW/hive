@@ -58,14 +58,36 @@ fn scripted(requests: Requests) -> impl Fn(RunRequest) -> std::result::Result<Ru
 }
 
 fn engine(idle: Duration) -> (tempfile::TempDir, Engine, Requests) {
+    engine_titled(idle, None)
+}
+
+/// With titles on when `title` is the text runs' answer.
+fn engine_titled(idle: Duration, title: Option<&'static str>) -> (tempfile::TempDir, Engine, Requests) {
     let dir = tempfile::tempdir().unwrap();
     let requests = Requests::default();
-    let engine = Engine::new(
-        Store::open(dir.path()).unwrap(),
-        scripted(requests.clone()),
-        move || idle,
-    );
+    let hooks = Hooks {
+        spawn: Box::new(scripted(requests.clone())),
+        text: Box::new(move |_| title.map(|answer| Ok(answering(answer)))),
+        idle: Box::new(move || idle),
+    };
+    let engine = Engine::new(Store::open(dir.path()).unwrap(), hooks);
     (dir, engine, requests)
+}
+
+/// A text run that answers `text` and exits once closed.
+fn answering(text: &'static str) -> Run {
+    let (handle, mut commands) = RunHandle::new();
+    let (tx, events) = mpsc::channel(8);
+    tokio::spawn(async move {
+        let _ = tx.send(AgentEvent::TextDelta { text: text.into() }).await;
+        let _ = tx.send(AgentEvent::Done { status: DoneStatus::Completed }).await;
+        while let Some(command) = commands.recv().await {
+            if command == RunCommand::Close {
+                break;
+            }
+        }
+    });
+    Run { events, handle }
 }
 
 /// Collects a watcher's updates.
@@ -166,11 +188,12 @@ async fn an_idle_run_closes_and_the_next_prompt_resumes_it() {
 #[tokio::test]
 async fn a_run_that_cant_start_ends_the_turn_with_its_error() {
     let dir = tempfile::tempdir().unwrap();
-    let engine = Engine::new(
-        Store::open(dir.path()).unwrap(),
-        |_| Err(HarnessError::NotInstalled("claude")),
-        || Duration::from_secs(60),
-    );
+    let hooks = Hooks {
+        spawn: Box::new(|_| Err(HarnessError::NotInstalled("claude"))),
+        text: Box::new(|_| None),
+        idle: Box::new(|| Duration::from_secs(60)),
+    };
+    let engine = Engine::new(Store::open(dir.path()).unwrap(), hooks);
     let chat = engine.create_chat("/a".into()).unwrap();
     engine.send(&chat.id, "hi".into()).unwrap();
     let messages = engine.store().messages(&chat.id).unwrap();
@@ -202,5 +225,52 @@ async fn chats_rename_pin_archive_and_delete() {
     assert_eq!(
         chats.lock().unwrap().last(),
         Some(&ChatsUpdate::Removed { id: chat.id })
+    );
+}
+
+/// Waits for the chat to get a title.
+async fn titled(engine: &Engine, chat_id: &str) -> Option<String> {
+    for _ in 0..200 {
+        let chat = engine.store().chat(chat_id).unwrap().unwrap();
+        if chat.title.is_some() {
+            return chat.title;
+        }
+        tokio::time::sleep(Duration::from_millis(5)).await;
+    }
+    None
+}
+
+#[tokio::test]
+async fn the_first_prompt_names_the_chat() {
+    let (_dir, engine, _) = engine_titled(Duration::from_secs(60), Some("\"Echo The Prompt\"\n"));
+    let (chats, sink) = collect();
+    engine.watch_chats(sink).unwrap();
+    let chat = engine.create_chat("/a".into()).unwrap();
+    engine.send(&chat.id, "say it back".into()).unwrap();
+    assert_eq!(titled(&engine, &chat.id).await.as_deref(), Some("Echo The Prompt"));
+    assert!(chats.lock().unwrap().iter().any(|u| matches!(
+        u,
+        ChatsUpdate::Upsert { chat } if chat.title.as_deref() == Some("Echo The Prompt")
+    )));
+
+    // Renamed, it keeps the user's title.
+    settle(&engine, &chat.id).await;
+    engine.rename(&chat.id, Some("Mine".into())).unwrap();
+    engine.send(&chat.id, "again".into()).unwrap();
+    settle(&engine, &chat.id).await;
+    tokio::time::sleep(Duration::from_millis(30)).await;
+    assert_eq!(titled(&engine, &chat.id).await.as_deref(), Some("Mine"));
+}
+
+#[tokio::test]
+async fn without_titles_the_prompts_first_words_stand_in() {
+    let (_dir, engine, _) = engine(Duration::from_secs(60));
+    let chat = engine.create_chat("/a".into()).unwrap();
+    engine
+        .send(&chat.id, "please fix the login flow on the settings page".into())
+        .unwrap();
+    assert_eq!(
+        titled(&engine, &chat.id).await.as_deref(),
+        Some("please fix the login flow on the")
     );
 }

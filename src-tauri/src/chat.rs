@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::Duration;
 
-use outcode_engine::{Engine, WatchId};
+use outcode_engine::{Engine, Hooks, WatchId};
 use outcode_proto::{Chat, ChatsUpdate, MessagesUpdate};
 use outcode_store::Store;
 use tauri::ipc::Channel;
@@ -17,27 +17,43 @@ use crate::settings::SettingsFile;
 
 /// Opens the store under `data_dir`, closes turns a crash left open, and
 /// starts the engine: Claude runs from `claude.binaryPath` (else found), and
-/// closes after `chat.idleTimeoutMinutes` between prompts.
+/// closes after `chat.idleTimeoutMinutes` between prompts; chats are titled
+/// by `chat.titleModel` while `chat.autoTitle` is on.
 pub fn engine(app: &AppHandle, data_dir: &Path) -> Result<Engine, Box<dyn std::error::Error>> {
     let store = Store::open(data_dir)?;
     let closed = store.recover()?;
     if !closed.is_empty() {
         log::info!("closed {} turns left running", closed.len());
     }
-    let settings = app.clone();
-    let idle = app.clone();
+    let (spawn, text, idle) = (app.clone(), app.clone(), app.clone());
     Ok(Engine::new(
         store,
-        move |request| {
-            let binary = settings.state::<SettingsFile>().get().claude.binary_path;
-            let binary = (!binary.is_empty()).then(|| PathBuf::from(binary));
-            outcode_harness::claude::run(request, binary.as_deref())
-        },
-        move || {
-            let minutes = idle.state::<SettingsFile>().get().chat.idle_timeout_minutes;
-            Duration::from_secs(u64::from(minutes) * 60)
+        Hooks {
+            spawn: Box::new(move |request| {
+                let binary = binary(&spawn);
+                outcode_harness::claude::run(request, binary.as_deref())
+            }),
+            text: Box::new(move |prompt| {
+                let chat = text.state::<SettingsFile>().get().chat;
+                if !chat.auto_title {
+                    return None;
+                }
+                let binary = binary(&text);
+                let model = Some(chat.title_model.as_str());
+                Some(outcode_harness::claude::run_text(prompt, model, binary.as_deref()))
+            }),
+            idle: Box::new(move || {
+                let minutes = idle.state::<SettingsFile>().get().chat.idle_timeout_minutes;
+                Duration::from_secs(u64::from(minutes) * 60)
+            }),
         },
     ))
+}
+
+/// `claude.binaryPath`, when set.
+fn binary(app: &AppHandle) -> Option<PathBuf> {
+    let binary = app.state::<SettingsFile>().get().claude.binary_path;
+    (!binary.is_empty()).then(|| PathBuf::from(binary))
 }
 
 /// Watch ids by the webview that opened them.

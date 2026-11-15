@@ -85,6 +85,33 @@ const ARGS: [&str; 7] = [
 /// `request.prompt` as its first turn. Must be called from inside a tokio
 /// runtime.
 pub fn run(request: RunRequest, binary: Option<&Path>) -> Result<Run, HarnessError> {
+    start(request, binary, None)
+}
+
+/// Starts a one-turn text run (a chat title, a branch name) that answers
+/// `prompt` with `model` (the CLI's default when `None`): [`TEXT_INSTRUCTIONS`]
+/// as its system prompt, no tools, MCP servers or settings, nothing saved,
+/// and no `initialize` round trip. It runs in an empty scratch folder, so no
+/// project instructions apply. Close it once its turn is done.
+///
+/// [`TEXT_INSTRUCTIONS`]: crate::TEXT_INSTRUCTIONS
+pub fn run_text(prompt: String, model: Option<&str>, binary: Option<&Path>) -> Result<Run, HarnessError> {
+    let scratch = std::env::temp_dir().join("outcode-text");
+    std::fs::create_dir_all(&scratch).map_err(|e| HarnessError::Spawn(NAME, e))?;
+    let request = RunRequest {
+        cwd: scratch.to_string_lossy().into_owned(),
+        prompt,
+        resume: None,
+    };
+    start(request, binary, Some(model))
+}
+
+/// `text`: a [`run_text`] run, with its model.
+fn start(
+    request: RunRequest,
+    binary: Option<&Path>,
+    text: Option<Option<&str>>,
+) -> Result<Run, HarnessError> {
     let exe = find(binary)?;
     let mut cmd = cli::command(&exe);
     cmd.args(ARGS)
@@ -104,6 +131,26 @@ pub fn run(request: RunRequest, binary: Option<&Path>) -> Result<Run, HarnessErr
     if let Some(session) = request.resume.as_deref().filter(|s| !s.is_empty()) {
         cmd.args(["--resume", session]);
     }
+    if let Some(model) = text {
+        cmd.args([
+            "--system-prompt",
+            crate::TEXT_INSTRUCTIONS,
+            "--tools",
+            "",
+            "--mcp-config",
+            r#"{"mcpServers":{}}"#,
+            "--setting-sources",
+            "",
+            "--no-session-persistence",
+        ]);
+        // An administrator's managed MCP config decides which servers run.
+        if !managed_mcp_config() {
+            cmd.arg("--strict-mcp-config");
+        }
+        if let Some(model) = model.filter(|m| !m.is_empty()) {
+            cmd.args(["--model", model]);
+        }
+    }
     let mut child = cmd.spawn().map_err(|e| HarnessError::Spawn(NAME, e))?;
     let stdin = child.stdin.take().expect("piped stdin");
     let stdout = child.stdout.take().expect("piped stdout");
@@ -111,7 +158,14 @@ pub fn run(request: RunRequest, binary: Option<&Path>) -> Result<Run, HarnessErr
 
     let (stdin_tx, stdin_rx) = mpsc::unbounded_channel::<String>();
     tokio::spawn(cli::write_stdin(stdin, stdin_rx));
-    let _ = stdin_tx.send(control_request_line(INITIALIZE_ID, json!({ "subtype": "initialize" })));
+    // A text run takes its prompt at once: it needs nothing `initialize` reports.
+    let (first, first_deadline) = if text.is_some() {
+        let _ = stdin_tx.send(user_line(&request.prompt));
+        (None, None)
+    } else {
+        let _ = stdin_tx.send(control_request_line(INITIALIZE_ID, json!({ "subtype": "initialize" })));
+        (Some(request.prompt), Some(Instant::now() + INITIALIZE_WAIT))
+    };
 
     let (events_tx, events) = mpsc::channel(256);
     let (handle, commands) = RunHandle::new();
@@ -126,11 +180,23 @@ pub fn run(request: RunRequest, binary: Option<&Path>) -> Result<Run, HarnessErr
         turns: 1,
         interrupts_sent: 0,
         interrupt_deadline: None,
-        first: Some(request.prompt),
-        first_deadline: Some(Instant::now() + INITIALIZE_WAIT),
+        first,
+        first_deadline,
     };
     tokio::spawn(session.run());
     Ok(Run { events, handle })
+}
+
+/// An administrator's `managed-mcp.json`, which the CLI insists on.
+fn managed_mcp_config() -> bool {
+    let path = if cfg!(target_os = "macos") {
+        "/Library/Application Support/ClaudeCode/managed-mcp.json"
+    } else if cfg!(windows) {
+        r"C:\Program Files\ClaudeCode\managed-mcp.json"
+    } else {
+        "/etc/claude-code/managed-mcp.json"
+    };
+    Path::new(path).is_file()
 }
 
 struct Session {

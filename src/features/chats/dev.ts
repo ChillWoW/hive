@@ -135,6 +135,16 @@ export const dev = {
         emitMessages(chatId, { kind: "upsert", message: { ...reply } });
         working.add(chatId);
         emitChats({ kind: "working", chatId, working: true });
+        // The title run, played by the prompt's first words in Title Case.
+        if (!chatOf(chatId).title) {
+            window.setTimeout(() => {
+                const chat = chats.find((c) => c.id === chatId);
+                if (!chat || chat.title) return;
+                const words = prompt.split(/\s+/).filter(Boolean).slice(0, 4);
+                const title = words.map((w) => w[0]!.toUpperCase() + w.slice(1)).join(" ");
+                save({ ...chat, title });
+            }, 700);
+        }
 
         const events = script(prompt);
         let i = 0;
