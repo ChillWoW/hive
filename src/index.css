@@ -29,10 +29,47 @@
     --color-success: var(--success);
     --color-danger: var(--danger);
     --color-warning: var(--warning);
+    --color-info: var(--info);
     --color-black: #000;
     --color-white: #fff;
     --color-transparent: transparent;
     --color-current: currentColor;
+}
+
+/* `shimmer`: a band of light sweeping across text, for labels of work in
+   progress ("Thinking", a running tool). The gradient is painted in
+   `currentColor`, so `text-*` still sets the base; the band is
+   `--shimmer-highlight`. Reduced motion gets plain text. */
+@theme {
+    --animate-shimmer: shimmer 1.2s linear infinite;
+
+    @keyframes shimmer {
+        from {
+            background-position: 100% 0;
+        }
+        to {
+            background-position: 0 0;
+        }
+    }
+}
+
+@utility shimmer {
+    background-image: linear-gradient(
+        90deg,
+        currentColor 40%,
+        var(--shimmer-highlight, var(--color-text)) 50%,
+        currentColor 60%
+    );
+    background-size: 250% 100%;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: var(--animate-shimmer);
+
+    @media (prefers-reduced-motion: reduce) {
+        animation: none;
+        background-image: none;
+        -webkit-text-fill-color: currentColor;
+    }
 }
 
 /* Outcode Slate, until the theme is applied on a first launch. */
@@ -51,6 +88,7 @@
     --success: #a5e075;
     --danger: #ff616e;
     --warning: #f0a45d;
+    --info: #6fb3f2;
 }
 
 @layer base {
@@ -284,11 +322,20 @@
     font-style: normal;
 }
 
-.markdown [data-streamdown="link"] {
-    color: var(--text);
-    text-decoration: underline;
-    text-decoration-color: var(--muted);
-    text-underline-offset: 2px;
+/* Reasoning: the same markdown a step quieter. */
+.markdown.markdown-muted {
+    color: var(--muted);
+}
+
+.markdown.markdown-muted [data-streamdown^="heading-"],
+.markdown.markdown-muted [data-streamdown="strong"] {
+    color: color-mix(in srgb, var(--text) 75%, var(--muted));
+}
+
+/* A thought inside a tool group, at the group's 12px. */
+.markdown.markdown-small {
+    font-size: 0.75rem;
+    line-height: 1.125rem;
 }
 
 .markdown [data-streamdown="inline-code"] {

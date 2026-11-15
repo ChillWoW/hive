@@ -1,25 +1,14 @@
 import { create } from "zustand";
-import type { AgentEvent } from "@/proto";
+import type { AgentEvent, Message, MessagePart } from "@/proto";
+import { getHomeDir } from "@/lib/home";
 import { chatApi } from "./api";
-
-export type UserMessage = { id: string; role: "user"; text: string };
-
-export type AssistantMessage = {
-    id: string;
-    role: "assistant";
-    text: string;
-    /** Still being written. */
-    streaming: boolean;
-    /** The user stopped it. */
-    stopped?: boolean;
-    error?: string;
-};
-
-export type Message = UserMessage | AssistantMessage;
+import { foldEvent } from "./fold";
 
 type ChatState = {
     /** The one chat there is for now; its Claude run lives across prompts. */
     chatId: string;
+    /** Where it works: the home folder, once known (empty: the backend picks it). */
+    cwd: string;
     messages: Message[];
     /** The assistant message the running turn writes. */
     replyId: string | null;
@@ -30,18 +19,23 @@ type ChatState = {
 
 export const useChatStore = create<ChatState>()((set, get) => {
     /** `patch` applied to the reply being written. */
-    const updateReply = (patch: (m: AssistantMessage) => Partial<AssistantMessage>) => {
+    const updateReply = (patch: (m: Message) => Partial<Message>) => {
         const { replyId } = get();
         if (!replyId) return;
         set((s) => ({
-            messages: s.messages.map((m) =>
-                m.id === replyId && m.role === "assistant" ? { ...m, ...patch(m) } : m
-            )
+            messages: s.messages.map((m) => (m.id === replyId ? { ...m, ...patch(m) } : m))
         }));
     };
+    const errorPart = (parts: MessagePart[], message: string) =>
+        foldEvent(parts, { type: "error", message });
+
+    void getHomeDir().then((home) => {
+        if (home && !get().cwd) set({ cwd: home });
+    });
 
     return {
         chatId: crypto.randomUUID(),
+        cwd: "",
         messages: [],
         replyId: null,
 
@@ -49,16 +43,26 @@ export const useChatStore = create<ChatState>()((set, get) => {
             const text = prompt.trim();
             if (!text || get().replyId) return;
             const replyId = crypto.randomUUID();
+            const now = Date.now();
             set((s) => ({
                 replyId,
                 messages: [
                     ...s.messages,
-                    { id: crypto.randomUUID(), role: "user", text },
-                    { id: replyId, role: "assistant", text: "", streaming: true }
+                    {
+                        id: crypto.randomUUID(),
+                        role: "user",
+                        parts: [{ kind: "text", id: "t0", text }],
+                        createdAt: now
+                    },
+                    { id: replyId, role: "assistant", parts: [], createdAt: now, status: "streaming" }
                 ]
             }));
-            chatApi.send(get().chatId, { cwd: "", prompt: text }).catch((error: unknown) => {
-                updateReply(() => ({ streaming: false, error: String(error) }));
+            const { chatId, cwd } = get();
+            chatApi.send(chatId, { cwd, prompt: text }).catch((error: unknown) => {
+                updateReply((m) => ({
+                    status: "complete",
+                    parts: errorPart(m.parts, String(error))
+                }));
                 set({ replyId: null });
             });
         },
@@ -69,23 +73,16 @@ export const useChatStore = create<ChatState>()((set, get) => {
 
         apply: (chatId, event) => {
             if (chatId !== get().chatId) return;
-            switch (event.type) {
-                case "textDelta":
-                    updateReply((m) => ({ text: m.text + event.text }));
-                    break;
-                case "error":
-                    updateReply((m) => ({
-                        error: m.error ? `${m.error}\n${event.message}` : event.message
-                    }));
-                    break;
-                case "done":
-                    updateReply(() => ({
-                        streaming: false,
-                        stopped: event.status === "interrupted"
-                    }));
-                    set({ replyId: null });
-                    break;
-            }
+            updateReply((m) => {
+                const parts = foldEvent(m.parts, event);
+                if (event.type !== "done") return { parts };
+                return {
+                    parts,
+                    status: event.status === "interrupted" ? "aborted" : "complete",
+                    durationMs: Date.now() - m.createdAt
+                };
+            });
+            if (event.type === "done") set({ replyId: null });
         }
     };
 });

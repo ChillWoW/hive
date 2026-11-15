@@ -12,6 +12,7 @@
 //!   ([`refresh_lock`]): stdin closes, and a kill happens, only once it has
 //!   settled.
 
+mod normalize;
 mod refresh_lock;
 
 use std::path::{Path, PathBuf};
@@ -27,6 +28,7 @@ use tokio::time::Instant;
 
 use crate::cli::{self, StderrTail, sleep_until};
 use crate::{Gone, HarnessError, Run, RunCommand, RunHandle};
+use normalize::Normalizer;
 
 const NAME: &str = "claude";
 const INITIALIZE_ID: &str = "outcode_initialize";
@@ -367,158 +369,3 @@ fn control_request_line(request_id: &str, request: Value) -> String {
     json!({ "type": "control_request", "request_id": request_id, "request": request }).to_string()
 }
 
-/// A `result` frame: the turn is over.
-#[derive(Debug, PartialEq)]
-struct TurnEnd {
-    /// Why it failed, when it did.
-    error: Option<String>,
-}
-
-/// Turns one turn's stdout frames into events.
-#[derive(Default)]
-struct Normalizer {
-    /// Text was streamed this turn: a later text block starts a new paragraph.
-    wrote_text: bool,
-}
-
-impl Normalizer {
-    /// The events `frame` makes, and the turn's end when it's the `result`.
-    fn frame(&mut self, frame: &Value) -> (Vec<AgentEvent>, Option<TurnEnd>) {
-        let str_at = |pointer: &str| frame.pointer(pointer).and_then(Value::as_str);
-        match str_at("/type") {
-            // Subagents' traffic carries the spawning tool call's id.
-            Some("stream_event") if !frame["parent_tool_use_id"].is_string() => {
-                match str_at("/event/type") {
-                    Some("content_block_start")
-                        if str_at("/event/content_block/type") == Some("text")
-                            && self.wrote_text =>
-                    {
-                        (vec![text("\n\n")], None)
-                    }
-                    Some("content_block_delta")
-                        if str_at("/event/delta/type") == Some("text_delta") =>
-                    {
-                        match str_at("/event/delta/text") {
-                            Some(delta) if !delta.is_empty() => {
-                                self.wrote_text = true;
-                                (vec![text(delta)], None)
-                            }
-                            _ => (Vec::new(), None),
-                        }
-                    }
-                    _ => (Vec::new(), None),
-                }
-            }
-            Some("result") => {
-                let failed = frame["is_error"].as_bool().unwrap_or(false)
-                    || str_at("/subtype").is_some_and(|s| s != "success");
-                let error = failed.then(|| result_error(frame));
-                (Vec::new(), Some(TurnEnd { error }))
-            }
-            _ => (Vec::new(), None),
-        }
-    }
-}
-
-fn text(text: &str) -> AgentEvent {
-    AgentEvent::TextDelta { text: text.into() }
-}
-
-/// What a failed `result` says went wrong.
-fn result_error(frame: &Value) -> String {
-    if let Some(result) = frame["result"].as_str().filter(|r| !r.trim().is_empty()) {
-        return result.trim().to_owned();
-    }
-    let errors: Vec<String> = frame["errors"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .map(|e| e.as_str().map_or_else(|| e.to_string(), str::to_owned))
-        .collect();
-    if !errors.is_empty() {
-        return errors.join("\n");
-    }
-    match frame["subtype"].as_str() {
-        Some(subtype) => format!("Claude's turn failed ({subtype})."),
-        None => "Claude's turn failed.".into(),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn feed(frames: &[Value]) -> (Vec<AgentEvent>, Option<TurnEnd>) {
-        let mut normalizer = Normalizer::default();
-        let mut events = Vec::new();
-        for frame in frames {
-            let (out, end) = normalizer.frame(frame);
-            events.extend(out);
-            if end.is_some() {
-                return (events, end);
-            }
-        }
-        (events, None)
-    }
-
-    fn delta(text: &str) -> Value {
-        json!({
-            "type": "stream_event",
-            "parent_tool_use_id": null,
-            "event": { "type": "content_block_delta", "index": 0,
-                       "delta": { "type": "text_delta", "text": text } },
-        })
-    }
-
-    fn text_start() -> Value {
-        json!({
-            "type": "stream_event",
-            "event": { "type": "content_block_start", "content_block": { "type": "text", "text": "" } },
-        })
-    }
-
-    #[test]
-    fn text_deltas_then_result() {
-        let (events, end) = feed(&[
-            json!({ "type": "system", "subtype": "init" }),
-            text_start(),
-            delta("Hel"),
-            delta("lo"),
-            json!({ "type": "assistant", "message": { "content": [] } }),
-            json!({ "type": "result", "subtype": "success", "is_error": false, "result": "Hello" }),
-        ]);
-        assert_eq!(end, Some(TurnEnd { error: None }));
-        assert_eq!(events, vec![text("Hel"), text("lo")]);
-    }
-
-    #[test]
-    fn later_text_blocks_start_a_paragraph() {
-        let (events, _) = feed(&[text_start(), delta("a"), text_start(), delta("b")]);
-        assert_eq!(events, vec![text("a"), text("\n\n"), text("b")]);
-    }
-
-    #[test]
-    fn subagent_text_is_skipped() {
-        let mut frame = delta("inner");
-        frame["parent_tool_use_id"] = "toolu_1".into();
-        assert_eq!(feed(&[frame]).0, vec![]);
-    }
-
-    #[test]
-    fn failed_result_carries_its_error() {
-        let (_, end) = feed(&[json!({
-            "type": "result", "subtype": "success", "is_error": true,
-            "result": "Invalid API key · Please run /login",
-        })]);
-        assert_eq!(
-            end,
-            Some(TurnEnd {
-                error: Some("Invalid API key · Please run /login".into())
-            })
-        );
-        let (_, end) = feed(&[json!({
-            "type": "result", "subtype": "error_during_execution", "errors": ["boom"],
-        })]);
-        assert_eq!(end, Some(TurnEnd { error: Some("boom".into()) }));
-    }
-}

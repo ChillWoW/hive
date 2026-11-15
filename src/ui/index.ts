@@ -20,3 +20,5 @@ export { Toaster } from "./Toast";
 export { toast } from "./toastManager";
 export type { ToastType } from "./toastManager";
 export { Tooltip } from "./Tooltip";
+export { DotMatrixSpinner, DOT_MATRIX_FULL } from "./DotMatrixSpinner";
+export { FileIcon } from "./FileIcon";

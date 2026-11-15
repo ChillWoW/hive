@@ -20,15 +20,53 @@ function devEmit(chatId: string, event: AgentEvent) {
     devListeners.forEach((listener) => listener({ chatId, event }));
 }
 
-/** A reply streamed word by word, for `bun run dev` without a backend. */
+/** Words of `text` as deltas of `type`, a word a tick. */
+const words = (type: "textDelta" | "reasoningDelta", text: string): AgentEvent[] =>
+    text.split(/(?<=\s)/).map((word) => ({ type, text: word }));
+
+/**
+ * A scripted turn for `bun run dev` without a backend: a thought, a run of
+ * tool calls (reads, edits, a command and a failed one), then a reply with
+ * links and the prompt echoed.
+ */
+function devScript(prompt: string): AgentEvent[] {
+    const call = (id: string, call: Extract<AgentEvent, { type: "toolCall" }>["call"]): AgentEvent => ({
+        type: "toolCall",
+        id,
+        call
+    });
+    const result = (id: string, output?: string, isError = false): AgentEvent => ({
+        type: "toolResult",
+        id,
+        isError,
+        output
+    });
+    return [
+        ...words("reasoningDelta", "**Looking around**\n\nNo backend under `bun run dev`, so this turn is scripted. "),
+        call("r1", { kind: "readFile", path: "src/main.tsx" }),
+        result("r1", '     1→import { createRoot } from "react-dom/client";\n     2→import { App } from "./App";\n'),
+        call("e1", { kind: "editFile", path: "src/App.tsx", oldString: "const a = 1;\n", newString: "const a = 2;\nconst b = 3;\n" }),
+        result("e1", "ok"),
+        call("e2", { kind: "editFile", path: "src/index.css", oldString: "a {}\n", newString: "a { color: red; }\n" }),
+        result("e2", "ok"),
+        call("x1", { kind: "exec", command: "bun run lint" }),
+        result("x1", "Found 0 warnings and 0 errors.\nFinished in 52ms on 64 files."),
+        call("x2", { kind: "exec", command: "cargo test -p nope" }),
+        result("x2", "error: package ID specification `nope` did not match any packages", true),
+        ...words(
+            "textDelta",
+            `Done. I touched \`src/App.tsx\` and [the styles](src/index.css:1); see [the docs](https://react.dev).\n\n> ${prompt}`
+        )
+    ];
+}
+
 function devSend(chatId: string, request: RunRequest) {
-    const reply = `No backend under \`bun run dev\`, so here's an echo.\n\n> ${request.prompt}`;
-    const words = reply.split(/(?<=\s)/);
+    const script = devScript(request.prompt);
     let i = 0;
     const timer = window.setInterval(() => {
-        if (i < words.length) return devEmit(chatId, { type: "textDelta", text: words[i++]! });
+        if (i < script.length) return devEmit(chatId, script[i++]!);
         devStop(chatId, "completed");
-    }, 30);
+    }, 40);
     devTimers.set(chatId, timer);
 }
 

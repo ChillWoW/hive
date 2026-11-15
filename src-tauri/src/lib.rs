@@ -1,4 +1,5 @@
 mod chat;
+mod files;
 mod fonts;
 mod http;
 mod settings;
@@ -37,6 +38,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             chat::chat_send,
             chat::chat_interrupt,
+            files::file_open,
             settings::settings_get,
             settings::settings_update,
             settings::settings_reset,

@@ -2,4 +2,12 @@
 
 export type { AgentEvent } from "./AgentEvent";
 export type { DoneStatus } from "./DoneStatus";
+export type { Message } from "./Message";
+export type { MessagePart } from "./MessagePart";
+export type { MessageRole } from "./MessageRole";
+export type { MessageStatus } from "./MessageStatus";
 export type { RunRequest } from "./RunRequest";
+export type { TodoItem } from "./TodoItem";
+export type { TodoStatus } from "./TodoStatus";
+export type { ToolCall } from "./ToolCall";
+export type { JsonValue } from "./serde_json/JsonValue";

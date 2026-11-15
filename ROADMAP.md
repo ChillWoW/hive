@@ -35,10 +35,10 @@ Done when: typing "hi" streams Claude's reply.
 
 ## 3. Rich transcript
 
-- [ ] `ReasoningDelta`, `ToolCall` (normalized: Exec, ReadFile, WriteFile, EditFile, Search, Glob, WebFetch, WebSearch, Todo, Unknown), `ToolResult`.
-- [ ] `Message` / `MessagePart` + pure `fold_event` (unit tests on scripted events).
-- [ ] UI: markdown, code blocks, reasoning block, tool cards (diff for edits, output for exec), todo list.
-- [ ] Turn with no streamed text → show `result` text.
+- [x] `ReasoningDelta`, `ToolCall` (normalized: Exec, ReadFile, WriteFile, EditFile, Search, Glob, WebFetch, WebSearch, Todo, Unknown), `ToolResult`.
+- [x] `Message` / `MessagePart` + pure `fold_event` (unit tests on scripted events).
+- [x] UI: markdown, code blocks (no highlighting yet), reasoning block, tool cards (diff for edits, output for exec), todo list. Tool rows grouped (consecutive edits on one line), thoughts with a preview line, long prompts collapse, file + web links clickable.
+- [x] Turn with no streamed text → show `result` text.
 - [ ] Settings: `chat.reasoningExpanded`, `chat.toolOutputExpanded`.
 
 ## 4. Chats + projects + persistence

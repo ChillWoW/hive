@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
@@ -50,4 +50,26 @@ function subscribe(listener: () => void) {
 
 export function useMinuteClock(): number {
     return useSyncExternalStore(subscribe, () => now);
+}
+
+/** Now, re-read every `ms`: a clock for something running. */
+export function useNow(ms = 1000): number {
+    const [now, setNow] = useState(Date.now);
+    useEffect(() => {
+        const id = setInterval(() => setNow(Date.now()), ms);
+        return () => clearInterval(id);
+    }, [ms]);
+    return now;
+}
+
+/**
+ * How long something ran: `12s`, `1m 5s`, `2h 3m`. `pad` zero-pads the
+ * smaller unit (`1m 05s`); `round` rounds to the second rather than flooring.
+ */
+export function formatElapsed(ms: number, { pad = false, round = false } = {}): string {
+    const s = Math.max(0, round ? Math.round(ms / 1000) : Math.floor(ms / 1000));
+    const two = (n: number) => (pad ? String(n).padStart(2, "0") : String(n));
+    if (s < 60) return `${s}s`;
+    const m = Math.floor(s / 60);
+    return m < 60 ? `${m}m ${two(s % 60)}s` : `${Math.floor(m / 60)}h ${two(m % 60)}m`;
 }

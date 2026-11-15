@@ -1,6 +1,7 @@
 /**
- * A theme is one flat object of 12 colours, each with one job. They become
- * CSS variables on `<html>` (`--bg`, …, `--accent-fg`) and Tailwind classes
+ * A theme is one flat object of 12 colours (plus an optional `info`), each
+ * with one job. They become CSS variables on `<html>` (`--bg`, …,
+ * `--accent-fg`) and Tailwind classes
  * of the same names (`bg-surface`, `text-muted`, `border-border`, …; see
  * `src/index.css`). Components use only those classes; lighter or darker
  * variants come from opacity (`bg-accent/90`), never new colours.
@@ -30,6 +31,8 @@ export interface Theme {
     danger: string;
     /** Orange/yellow states. */
     warning: string;
+    /** Links and live, informational states (blue). Optional: defaults by `light`. */
+    info?: string;
     /** True for light themes. */
     light?: boolean;
 }
@@ -67,8 +70,12 @@ export function parseTheme(raw: unknown): Theme | string {
     );
     if (missing.length) return `missing or invalid: ${missing.join(", ")}`;
     const theme = Object.fromEntries(COLOR_KEYS.map((key) => [key, input[key]])) as Omit<Theme, "light">;
-    return { ...theme, light: input.light === true };
+    const info = typeof input.info === "string" && CSS.supports("color", input.info) ? input.info : undefined;
+    return { ...theme, info, light: input.light === true };
 }
+
+const DEFAULT_INFO = "#6fb3f2";
+const DEFAULT_INFO_LIGHT = "#2563eb";
 
 const kebab = (s: string) => s.replace(/[A-Z]/g, (c) => "-" + c.toLowerCase());
 
@@ -78,7 +85,10 @@ const CACHE_KEY = "outcode.theme";
 /** Sets the theme's variables on `<html>`; nothing else changes. */
 export function applyTheme(theme: Theme) {
     const root = document.documentElement;
-    const vars = Object.fromEntries(COLOR_KEYS.map((key) => ["--" + kebab(key), theme[key]]));
+    const vars: Record<string, string> = Object.fromEntries(
+        COLOR_KEYS.map((key) => ["--" + kebab(key), theme[key]])
+    );
+    vars["--info"] = theme.info ?? (theme.light ? DEFAULT_INFO_LIGHT : DEFAULT_INFO);
     for (const [name, value] of Object.entries(vars)) root.style.setProperty(name, value);
     root.style.colorScheme = theme.light ? "light" : "dark";
     try {

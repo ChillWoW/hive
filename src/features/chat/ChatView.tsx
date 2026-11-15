@@ -1,8 +1,13 @@
-import { useLayoutEffect, useRef, type ReactNode } from "react";
+import { useLayoutEffect, useMemo, useRef, type ReactNode } from "react";
+import type { Message } from "@/proto";
 import { cn } from "@/lib/cn";
 import { Composer } from "./Composer";
-import { Markdown } from "./Markdown";
-import { useChatBusy, useChatStore, type AssistantMessage, type Message } from "./store";
+import { AssistantMessage } from "./transcript/AssistantMessage";
+import { ChatCwd, KnownFiles } from "./transcript/context";
+import { foldPath, fullPath, parseFileRef, resolveFileRef } from "./transcript/filePaths";
+import { pathOf } from "./transcript/tools";
+import { UserMessage } from "./transcript/UserMessage";
+import { useChatBusy, useChatStore } from "./store";
 
 /**
  * The column the transcript and the composer share: centred, at most
@@ -23,6 +28,8 @@ export function ChatView() {
     const send = useChatStore((s) => s.send);
     const stop = useChatStore((s) => s.stop);
     const busy = useChatBusy();
+    const cwd = useChatStore((s) => s.cwd);
+    const known = useMemo(() => knownFiles(messages, cwd), [messages, cwd]);
 
     if (messages.length === 0) {
         return (
@@ -41,11 +48,15 @@ export function ChatView() {
 
     return (
         <div className="flex h-full w-full flex-col">
-            <TranscriptScroller follow={messages}>
-                {messages.map((message) => (
-                    <MessageView key={message.id} message={message} />
-                ))}
-            </TranscriptScroller>
+            <ChatCwd value={cwd || undefined}>
+                <KnownFiles value={known}>
+                    <TranscriptScroller follow={messages}>
+                        {messages.map((message) => (
+                            <MessageView key={message.id} message={message} />
+                        ))}
+                    </TranscriptScroller>
+                </KnownFiles>
+            </ChatCwd>
             <Bottom>
                 <Composer onSend={send} onStop={stop} busy={busy} autoFocus />
             </Bottom>
@@ -98,31 +109,25 @@ export function TranscriptScroller({
     );
 }
 
-function MessageView({ message }: { message: Message }) {
-    if (message.role === "user") {
-        return (
-            <div className="flex justify-end">
-                <div className="max-w-[85%] rounded-xl bg-raised px-3.5 py-2 text-sm leading-6 break-words whitespace-pre-wrap text-text">
-                    {message.text}
-                </div>
-            </div>
-        );
+/** Every file the chat's agent read or changed, by `foldPath` of its absolute path. */
+function knownFiles(messages: Message[], cwd: string): Set<string> {
+    const known = new Set<string>();
+    for (const message of messages) {
+        for (const part of message.parts) {
+            if (part.kind !== "tool") continue;
+            const path = pathOf(part.call);
+            const ref = path && parseFileRef(path);
+            const target = ref && resolveFileRef(cwd || undefined, ref);
+            if (target) known.add(foldPath(fullPath(target)));
+        }
     }
-    return <AssistantView message={message} />;
+    return known;
 }
 
-function AssistantView({ message }: { message: AssistantMessage }) {
-    const waiting = message.streaming && !message.text;
-    return (
-        <div className="flex flex-col gap-2">
-            {waiting && <span className="animate-pulse text-sm leading-6 text-muted">Thinking…</span>}
-            {message.text && <Markdown streaming={message.streaming}>{message.text}</Markdown>}
-            {message.stopped && <span className="text-xs leading-5 text-muted">Stopped</span>}
-            {message.error && (
-                <div className="rounded-lg border border-danger/40 bg-danger/10 px-3 py-2 font-mono text-xs leading-5 break-words whitespace-pre-wrap text-danger">
-                    {message.error}
-                </div>
-            )}
-        </div>
+function MessageView({ message }: { message: Message }) {
+    return message.role === "user" ? (
+        <UserMessage message={message} />
+    ) : (
+        <AssistantMessage message={message} />
     );
 }
