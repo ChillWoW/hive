@@ -1,8 +1,15 @@
 import type { ComponentType } from "react";
-import { InfoIcon, KeyboardIcon, PaletteIcon, type Icon } from "@phosphor-icons/react";
+import {
+    InfoIcon,
+    KeyboardIcon,
+    PaletteIcon,
+    TerminalWindowIcon,
+    type Icon
+} from "@phosphor-icons/react";
 import type { SettingsPageId } from "../store";
 import { AboutPage } from "./AboutPage";
 import { AppearancePage } from "./AppearancePage";
+import { ClaudePage } from "./ClaudePage";
 import { KeyboardPage } from "./KeyboardPage";
 
 export type SettingsPage = {
@@ -16,6 +23,7 @@ export type SettingsPage = {
 export const SETTINGS_PAGES: readonly SettingsPage[] = [
     { id: "appearance", label: "Appearance", icon: PaletteIcon, Component: AppearancePage },
     { id: "keyboard", label: "Keyboard", icon: KeyboardIcon, Component: KeyboardPage },
+    { id: "claude", label: "Claude Code", icon: TerminalWindowIcon, Component: ClaudePage },
     { id: "about", label: "About", icon: InfoIcon, Component: AboutPage }
 ];
 

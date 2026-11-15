@@ -8,7 +8,7 @@ import {
 } from "./api";
 import { DEFAULT_SETTINGS, type Settings } from "./types";
 
-export type SettingsPageId = "appearance" | "keyboard" | "about";
+export type SettingsPageId = "appearance" | "keyboard" | "claude" | "about";
 
 type SettingsState = {
     settings: Settings;

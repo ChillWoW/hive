@@ -12,7 +12,7 @@ A desktop UI for driving coding-agent CLIs (Claude Code, Codex, OpenCode, …) f
 
 ## Status
 
-Branch `rework/app` is a from-scratch rebuild. So far: app shell (top bar, window controls, resizable sidebar), settings, themes, fonts, keybindings, updater, toasts, UI kit. The harness/agent layer isn't built yet — `HARNESS_REBUILD.md` is the phased plan for it (with ⚠ gotchas from the old code); follow it and tick boxes as phases land.
+Branch `rework/app` is a from-scratch rebuild. So far: app shell (top bar, window controls, resizable sidebar), settings, themes, fonts, keybindings, updater, toasts, UI kit. `ROADMAP.md` is the step-by-step plan (Claude Code first, vertical slices); follow it and tick boxes as steps land. `HARNESS_REBUILD.md` has the fuller harness design and ⚠ gotchas.
 
 ## Stack
 
@@ -34,7 +34,9 @@ Branch `rework/app` is a from-scratch rebuild. So far: app shell (top bar, windo
 - `src/ui/` — shared UI kit; reuse these before writing new primitives.
 - `src/keybindings/` — action registry (`actions.ts`) + runtime; bindings live in settings.
 - `src/lib/backend.ts` — use `backend(command, args, devFallback?)` instead of raw `invoke`.
-- `src-tauri/src/` — Tauri commands, registered in `lib.rs`: `settings/`, `themes.rs`, `fonts.rs`, `updater.rs`, `http.rs`.
+- `src-tauri/src/` — Tauri commands, registered in `lib.rs`: `chat.rs`, `settings/`, `themes.rs`, `fonts.rs`, `updater.rs`, `http.rs`.
+- `crates/proto` — wire types; `cargo test -p outcode-proto` regenerates `src/proto/` (never edit by hand).
+- `crates/harness` — spawns agent CLIs, normalizes output to `AgentEvent`s. Live tests: `cargo test -p outcode-harness -- --ignored`.
 
 ## Conventions
 

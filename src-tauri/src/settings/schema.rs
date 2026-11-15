@@ -23,6 +23,7 @@ pub struct Settings {
     pub appearance: AppearanceSettings,
     pub updates: UpdatesSettings,
     pub keyboard: KeyboardSettings,
+    pub claude: ClaudeSettings,
 }
 
 impl Default for Settings {
@@ -32,6 +33,7 @@ impl Default for Settings {
             appearance: AppearanceSettings::default(),
             updates: UpdatesSettings::default(),
             keyboard: KeyboardSettings::default(),
+            claude: ClaudeSettings::default(),
         }
     }
 }
@@ -113,6 +115,15 @@ impl Default for KeyboardSettings {
     }
 }
 
+/// Claude Code, read by `src-tauri/src/chat.rs`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct ClaudeSettings {
+    /// The `claude` executable to run. Empty: found on PATH or where its
+    /// installers put it.
+    pub binary_path: String,
+}
+
 impl Settings {
     /// Arbitrary JSON in, a valid document out; never fails.
     pub fn sanitize(base: &Settings, input: &Value) -> Settings {
@@ -121,6 +132,7 @@ impl Settings {
         let appearance = &mut settings.appearance;
         appearance.theme = non_empty(&appearance.theme, DEFAULT_THEME);
         appearance.font_family = non_empty(&appearance.font_family, DEFAULT_FONT_FAMILY);
+        settings.claude.binary_path = settings.claude.binary_path.trim().into();
         settings
     }
 }

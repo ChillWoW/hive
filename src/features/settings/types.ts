@@ -27,11 +27,17 @@ export type KeyboardSettings = {
     toggleFilePanel: string;
 };
 
+export type ClaudeSettings = {
+    /** The `claude` executable; empty finds it on PATH or in its install folders. */
+    binaryPath: string;
+};
+
 export type Settings = {
     version: number;
     appearance: AppearanceSettings;
     updates: UpdatesSettings;
     keyboard: KeyboardSettings;
+    claude: ClaudeSettings;
 };
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -49,5 +55,8 @@ export const DEFAULT_SETTINGS: Settings = {
         toggleSidebar: "Mod+B",
         toggleRightSidebar: "Mod+Alt+B",
         toggleFilePanel: "Mod+Shift+E"
+    },
+    claude: {
+        binaryPath: ""
     }
 };

@@ -1,6 +1,10 @@
 @import "tailwindcss";
 @import "@fontsource-variable/geist";
 
+/* Streamdown (src/features/chat/Markdown.tsx) styles itself with utility
+   classes compiled into its bundle; Tailwind skips node_modules unless told. */
+@source "../node_modules/streamdown/dist/*.js";
+
 /* `--font-ui` is the interface font setting (src/features/fonts/); a family
    that isn't installed falls through to the system UI font. */
 @theme {
@@ -206,4 +210,116 @@
     display: none;
     width: 0;
     height: 0;
+}
+
+/* The shadcn-style names Streamdown's classes are written against, pointed
+   at the theme. App code keeps using the theme's own names. `muted` is
+   taken (a text colour here); `.markdown` repoints it for Streamdown. */
+@theme inline {
+    --color-background: var(--bg);
+    --color-foreground: var(--text);
+    --color-muted-foreground: var(--muted);
+    --color-sidebar: var(--surface);
+    --color-primary: var(--accent);
+    --color-primary-foreground: var(--accent-fg);
+}
+
+/* Rendered markdown (src/features/chat/Markdown.tsx). Unlayered on purpose:
+   Streamdown's defaults are utility classes, and only rules outside the
+   layers outrank them. Its type scale is pulled down to the chat's 14px. */
+.markdown {
+    /* Streamdown's `bg-muted` is a fill. */
+    --color-muted: var(--hover);
+    font-size: 0.875rem;
+    line-height: 1.5rem;
+    color: var(--text);
+    overflow-wrap: anywhere;
+}
+
+.markdown > :first-child {
+    margin-top: 0;
+}
+
+.markdown > :last-child {
+    margin-bottom: 0;
+}
+
+.markdown [data-streamdown^="heading-"] {
+    margin-top: 1.25rem;
+    margin-bottom: 0.25rem;
+    line-height: 1.4;
+}
+
+.markdown [data-streamdown="heading-1"] {
+    font-size: 1.25rem;
+}
+
+.markdown [data-streamdown="heading-2"] {
+    font-size: 1.125rem;
+}
+
+.markdown [data-streamdown="heading-3"] {
+    font-size: 1rem;
+}
+
+.markdown [data-streamdown="heading-4"],
+.markdown [data-streamdown="heading-5"],
+.markdown [data-streamdown="heading-6"] {
+    font-size: 0.875rem;
+}
+
+.markdown [data-streamdown="ordered-list"],
+.markdown [data-streamdown="unordered-list"] {
+    list-style-position: outside;
+    padding-left: 1.25rem;
+}
+
+.markdown [data-streamdown="list-item"]::marker {
+    color: var(--muted);
+}
+
+.markdown [data-streamdown="blockquote"] {
+    border-left-width: 2px;
+    border-color: var(--border);
+    font-style: normal;
+}
+
+.markdown [data-streamdown="link"] {
+    color: var(--text);
+    text-decoration: underline;
+    text-decoration-color: var(--muted);
+    text-underline-offset: 2px;
+}
+
+.markdown [data-streamdown="inline-code"] {
+    font-size: 0.8125rem;
+    padding: 0.0625rem 0.3125rem;
+    border-radius: 0.25rem;
+    background-color: var(--raised);
+    border: 1px solid var(--border);
+}
+
+/* Code blocks: one rounded frame, a slim header with the language and the
+   copy button, then the code. Highlighting comes later. */
+.markdown [data-streamdown="code-block"] {
+    gap: 0;
+    padding: 0;
+    margin: 0.75rem 0;
+    border-radius: 0.5rem;
+    border: 1px solid var(--border);
+    background-color: var(--surface);
+}
+
+.markdown [data-streamdown="code-block-header"] {
+    height: 1.75rem;
+    padding: 0 0.75rem;
+}
+
+.markdown [data-streamdown="code-block-body"] {
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    padding: 0 0.75rem 0.625rem;
+    font-size: 0.78125rem;
+    line-height: 1.125rem;
 }

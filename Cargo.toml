@@ -1,3 +1,12 @@
 [workspace]
 resolver = "3"
-members = ["src-tauri"]
+members = ["src-tauri", "crates/proto", "crates/harness"]
+
+[workspace.dependencies]
+outcode-proto = { path = "crates/proto" }
+outcode-harness = { path = "crates/harness" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+tokio = { version = "1", features = ["io-util", "macros", "process", "rt-multi-thread", "sync", "time"] }
+ts-rs = { version = "12", features = ["serde-json-impl", "no-serde-warnings"] }

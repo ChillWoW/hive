@@ -1,4 +1,4 @@
-import { ChatView } from "@/features/chat";
+import { ChatView, useChatRuntime } from "@/features/chat";
 import { SettingsModal, useSettingsRuntime } from "@/features/settings";
 import { useFontRuntime } from "@/features/fonts/useFontRuntime";
 import { useThemeRuntime } from "@/features/theme/useThemeRuntime";
@@ -13,6 +13,7 @@ export function App() {
     useFontRuntime();
     useKeybindingsRuntime();
     useUpdaterRuntime();
+    useChatRuntime();
 
     return (
         <div className="relative flex h-screen bg-bg text-text">

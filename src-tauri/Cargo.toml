@@ -30,3 +30,5 @@ semver = "1"
 reqwest = { version = "0.13", default-features = false, features = ["json", "rustls-no-provider"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 fontdb = "0.24.0"
+outcode-proto.workspace = true
+outcode-harness.workspace = true

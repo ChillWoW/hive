@@ -1,3 +1,4 @@
+mod chat;
 mod fonts;
 mod http;
 mod settings;
@@ -33,6 +34,7 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            chat::chat_send,
             settings::settings_get,
             settings::settings_update,
             settings::settings_reset,
