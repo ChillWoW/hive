@@ -11,21 +11,39 @@ export function ThemePicker({
     onChange: (name: string) => void;
 }) {
     const user = useThemesStore((s) => s.user);
-    const options = Object.entries(allThemes(user)).map(([name, theme]) => ({
-        value: name,
-        icon: <Swatch theme={theme} />,
-        label:
-            name in user ? (
-                <>
-                    {name}
-                    <span className="text-muted"> · custom</span>
-                </>
-            ) : (
-                name
-            )
-    }));
+    const themes = allThemes(user);
 
-    return <Select aria-label="Theme" value={value} onValueChange={onChange} options={options} />;
+    const label = (name: string) => (
+        <>
+            {themes[name] && <Swatch theme={themes[name]} />}
+            <span className="truncate">
+                {name}
+                {name in user && <span className="text-muted"> · custom</span>}
+            </span>
+        </>
+    );
+
+    return (
+        <Select
+            value={value}
+            onValueChange={(next) => {
+                if (next !== null) onChange(next);
+            }}
+        >
+            <Select.Trigger aria-label="Theme">
+                <Select.Value className="flex items-center gap-2">
+                    {(name: string) => label(name)}
+                </Select.Value>
+            </Select.Trigger>
+            <Select.Content>
+                {Object.keys(themes).map((name) => (
+                    <Select.Item key={name} value={name}>
+                        {label(name)}
+                    </Select.Item>
+                ))}
+            </Select.Content>
+        </Select>
+    );
 }
 
 /** Background, surface and accent side by side, in the theme's own colours. */

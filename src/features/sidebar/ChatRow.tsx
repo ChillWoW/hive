@@ -141,26 +141,26 @@ function ChatMenuItems({
     return (
         <>
             <Menu.Item onClick={onRename}>
-                <PencilSimpleIcon className="size-3.5" />
+                <PencilSimpleIcon />
                 Rename
             </Menu.Item>
             {!chat.archived && (
                 <Menu.Item onClick={() => chats.setPinned(chat.id, !pinned).catch(warn)}>
-                    {pinned ? <PushPinSlashIcon className="size-3.5" /> : <PushPinIcon className="size-3.5" />}
+                    {pinned ? <PushPinSlashIcon /> : <PushPinIcon />}
                     {pinned ? "Unpin" : "Pin"}
                 </Menu.Item>
             )}
             <Menu.Item onClick={() => chats.setArchived(chat.id, !chat.archived).catch(warn)}>
                 {chat.archived ? (
-                    <ArrowCounterClockwiseIcon className="size-3.5" />
+                    <ArrowCounterClockwiseIcon />
                 ) : (
-                    <ArchiveIcon className="size-3.5" />
+                    <ArchiveIcon />
                 )}
                 {chat.archived ? "Unarchive" : "Archive"}
             </Menu.Item>
             <Menu.Separator />
-            <Menu.Item variant="danger" onClick={onDelete}>
-                <TrashIcon className="size-3.5" />
+            <Menu.Item variant="destructive" onClick={onDelete}>
+                <TrashIcon />
                 Delete…
             </Menu.Item>
         </>

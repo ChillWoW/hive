@@ -9,7 +9,6 @@ import {
     XIcon
 } from "@phosphor-icons/react";
 import { cn } from "@/lib/cn";
-import { usePortalContainer } from "./PortalContainer";
 import { toastManager } from "./toastManager";
 import type { ToastType } from "./toastManager";
 
@@ -65,10 +64,9 @@ function ToastList() {
 
 /** Mount once near the app root; toasts stack in the bottom-right corner. */
 export function Toaster() {
-    const portalContainer = usePortalContainer();
     return (
         <BaseToast.Provider toastManager={toastManager}>
-            <BaseToast.Portal container={portalContainer ?? undefined}>
+            <BaseToast.Portal>
                 <BaseToast.Viewport className="fixed right-4 bottom-4 z-[60] w-[22rem] outline-none">
                     <ToastList />
                 </BaseToast.Viewport>

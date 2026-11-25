@@ -1,175 +1,146 @@
-import { useEffect, useState, type ComponentProps, type ReactNode } from "react";
-import { createPortal } from "react-dom";
-import { Dialog as BaseDialog } from "@base-ui/react/dialog";
+import type { ComponentProps } from "react";
+import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
 import { XIcon } from "@phosphor-icons/react";
 import { cn } from "@/lib/cn";
-import { iconButtonClassName } from "./IconButton";
-import { useChromeLayer, usePortalContainer } from "./PortalContainer";
+import { Button } from "./Button";
 
-type Size = "sm" | "md" | "xl";
+type ClassName<State> = string | ((state: State) => string | undefined) | undefined;
 
-const sizeStyles: Record<Size, string> = {
-    sm: "max-w-sm",
-    md: "max-w-md",
-    xl: "max-w-2xl"
-};
-
-type BaseDialogRootProps = ComponentProps<typeof BaseDialog.Root>;
-type OpenChangeHandler = NonNullable<BaseDialogRootProps["onOpenChange"]>;
-
-export interface ModalProps
-    extends Omit<BaseDialogRootProps, "children" | "render"> {
-    title?: ReactNode;
-    size?: Size;
-    showClose?: boolean;
-    children?: ReactNode;
-    className?: string;
-    backdropClassName?: string;
-    bodyClassName?: string;
-    /** Called when the dialog asks to close (Escape, backdrop, ✕). */
-    onClose?: () => void;
-    /** Where focus goes on close (Base UI's `Popup.finalFocus`); default: back where it was. */
-    finalFocus?: ComponentProps<typeof BaseDialog.Popup>["finalFocus"];
+function withBase<State>(base: string, className: ClassName<State>) {
+    return (state: State) => cn(base, typeof className === "function" ? className(state) : className);
 }
 
-const backdropClassNames = cn(
-    "bg-black/40 transition-opacity duration-200 ease-out",
-    "data-[starting-style]:opacity-0 data-[ending-style]:opacity-0"
-);
+const sizes = {
+    sm: "max-w-sm",
+    md: "max-w-lg",
+    lg: "max-w-2xl",
+    xl: "max-w-4xl",
+} as const;
 
-function ModalRoot({
-    title,
+export type ModalSize = keyof typeof sizes;
+
+/**
+ * Dialog that blocks the page until closed (Base UI's `Dialog`). Compose with
+ * `Modal.Trigger` and `Modal.Content` (holding `Modal.Header`, `Modal.Body`, `Modal.Footer`).
+ * Control it with `open`/`onOpenChange`; `disablePointerDismissal` keeps it open on outside clicks.
+ */
+export function Modal(props: DialogPrimitive.Root.Props) {
+    return <DialogPrimitive.Root {...props} />;
+}
+
+export interface ModalContentProps extends DialogPrimitive.Popup.Props {
+    /** Max width of the popup. Default `md`. */
+    size?: ModalSize;
+    /** Renders an X button in the top-right corner. Default `true`. */
+    showCloseButton?: boolean;
+    /** Where to portal the modal. Defaults to `document.body`. */
+    container?: DialogPrimitive.Portal.Props["container"];
+}
+
+/**
+ * The backdrop and centered popup. Grows with its content up to the viewport height;
+ * past that, `Modal.Body` scrolls while the header and footer stay put.
+ */
+function ModalContent({
     size = "md",
-    showClose = true,
-    modal = "trap-focus",
-    onOpenChange,
-    onClose,
-    children,
+    showCloseButton = true,
+    container,
     className,
-    backdropClassName,
-    bodyClassName,
-    finalFocus,
-    ...rootProps
-}: ModalProps) {
-    // Mounts into the shell's overlay layer, which starts below the top bar, so the backdrop dims
-    // only the content area. Base UI reads an explicit `null` as "the container hasn't resolved
-    // yet" and renders nothing, so fall through to `undefined` — its own default — when no
-    // provider is in the tree.
-    const portalContainer = usePortalContainer();
-    const chromeLayer = useChromeLayer();
-
-    // `modal={true}` makes Base UI render its own `position: fixed; inset: 0` backdrop over the
-    // whole viewport, which swallows presses on the top bar and kills window dragging.
-    // `"trap-focus"` keeps the focus trap and drops that backdrop.
-    const handleOpenChange: OpenChangeHandler = (nextOpen, details) => {
-        // With the chrome left interactive, presses on it now reach the dismiss logic. Only a
-        // press landing inside the overlay layer — the backdrop — should close the dialog;
-        // dragging the window or hitting a window control must not.
-        if (!nextOpen && details.reason === "outside-press" && portalContainer) {
-            const target = details.event.target;
-            if (target instanceof Node && !portalContainer.contains(target)) {
-                details.cancel();
-                return;
-            }
-        }
-
-        onOpenChange?.(nextOpen, details);
-        if (!nextOpen) onClose?.();
-    };
-
+    children,
+    ...props
+}: ModalContentProps) {
     return (
-        <BaseDialog.Root modal={modal} onOpenChange={handleOpenChange} {...rootProps}>
-            <BaseDialog.Portal container={portalContainer ?? undefined}>
-                {/* The top bar dims too, only to look: the strip under the dim is a drag region,
-                    so the window still moves, and it stops short of the window controls
-                    (`--chrome-controls`), which stay clickable. Presses here land outside the
-                    overlay layer, so they never dismiss the dialog. It's a plain div mirroring
-                    the backdrop's state: a second `Dialog.Backdrop` would take over the
-                    dialog's backdrop ref, and presses on the real one would stop closing it. */}
-                <BaseDialog.Backdrop
-                    className={cn(
-                        "pointer-events-auto absolute inset-0 z-50",
-                        backdropClassNames,
-                        backdropClassName
+        <DialogPrimitive.Portal container={container}>
+            <DialogPrimitive.Backdrop
+                className={cn(
+                    "fixed inset-0 bg-black/60 transition-opacity duration-150 ease-out",
+                    "data-starting-style:opacity-0 data-ending-style:opacity-0",
+                )}
+            />
+            <DialogPrimitive.Viewport className="fixed inset-0 flex items-center justify-center p-4">
+                <DialogPrimitive.Popup
+                    className={withBase(
+                        cn(
+                            "relative flex max-h-full w-full flex-col gap-4 rounded-md border border-border bg-surface p-4 text-text shadow-2xl shadow-black/50 outline-none",
+                            "transition-[opacity,scale] duration-150 ease-out",
+                            "data-starting-style:scale-95 data-starting-style:opacity-0",
+                            "data-ending-style:scale-95 data-ending-style:opacity-0",
+                            // A nested modal pushes this one back: shrink it and dim it (nested backdrops don't render).
+                            "data-nested-dialog-open:scale-[calc(1-0.04*var(--nested-dialogs))]",
+                            "after:pointer-events-none after:absolute after:inset-0 after:rounded-[inherit] after:bg-black/0 after:transition-colors after:duration-150",
+                            "data-nested-dialog-open:after:bg-black/40",
+                            // Keep the header text clear of the close button.
+                            showCloseButton && "[&_[data-slot=modal-header]]:pr-8",
+                            sizes[size],
+                        ),
+                        className,
                     )}
-                    render={(props, state) => (
-                        <>
-                            <div {...props} />
-                            {chromeLayer &&
-                                createPortal(
-                                    <div
-                                        hidden={props.hidden}
-                                        data-starting-style={
-                                            state.transitionStatus === "starting" ? "" : undefined
-                                        }
-                                        data-ending-style={
-                                            state.transitionStatus === "ending" ? "" : undefined
-                                        }
-                                        className={cn(
-                                            "pointer-events-none absolute inset-0",
-                                            backdropClassNames,
-                                            backdropClassName
-                                        )}
-                                    >
-                                        <div
-                                            data-tauri-drag-region
-                                            className="pointer-events-auto absolute inset-y-0 left-0 right-(--chrome-controls)"
-                                        />
-                                    </div>,
-                                    chromeLayer
-                                )}
-                        </>
-                    )}
-                />
-                <BaseDialog.Popup
-                    finalFocus={finalFocus}
-                    className={cn(
-                        "pointer-events-auto absolute top-1/2 left-1/2 z-50 w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2",
-                        "bg-surface text-text border border-border",
-                        "rounded-md shadow-lg shadow-black/40",
-                        "p-4 outline-none",
-                        "transition-[opacity,transform,scale] duration-200 ease-out",
-                        "data-[starting-style]:opacity-0 data-[starting-style]:scale-95",
-                        "data-[ending-style]:opacity-0 data-[ending-style]:scale-95",
-                        sizeStyles[size],
-                        className
-                    )}
+                    {...props}
                 >
-                    {(title || showClose) && (
-                        <div className="mb-3 flex items-start justify-between gap-4">
-                            {title ? (
-                                <BaseDialog.Title className="text-base leading-tight font-semibold text-text">
-                                    {title}
-                                </BaseDialog.Title>
-                            ) : (
-                                <span />
-                            )}
-                            {showClose && (
-                                <BaseDialog.Close className={cn(iconButtonClassName, "-m-0.5")}>
-                                    <XIcon className="size-4" />
-                                </BaseDialog.Close>
-                            )}
-                        </div>
+                    {children}
+                    {showCloseButton && (
+                        <DialogPrimitive.Close
+                            render={<Button variant="ghost" size="icon-sm" />}
+                            aria-label="Close"
+                            className="absolute top-2 right-2 text-muted hover:text-text"
+                        >
+                            <XIcon />
+                        </DialogPrimitive.Close>
                     )}
-                    <div className={cn("text-sm text-text", bodyClassName)}>{children}</div>
-                </BaseDialog.Popup>
-            </BaseDialog.Portal>
-        </BaseDialog.Root>
+                </DialogPrimitive.Popup>
+            </DialogPrimitive.Viewport>
+        </DialogPrimitive.Portal>
     );
 }
 
-export const Modal = Object.assign(ModalRoot, {
-    Close: BaseDialog.Close
-});
-
-/**
- * `value`, or the last non-null one while it's null: a dialog driven by a
- * nullable subject keeps showing it while it animates out.
- */
-export function useLastNonNull<T>(value: T | null): T | null {
-    const [last, setLast] = useState(value);
-    useEffect(() => {
-        if (value !== null) setLast(value);
-    }, [value]);
-    return value ?? last;
+/** Holds `Modal.Title` and `Modal.Description`. */
+function ModalHeader({ className, ...props }: ComponentProps<"div">) {
+    return <div data-slot="modal-header" className={cn("flex flex-col gap-1.5", className)} {...props} />;
 }
+
+/** Labels the modal for screen readers. */
+function ModalTitle({ className, ...props }: DialogPrimitive.Title.Props) {
+    return (
+        <DialogPrimitive.Title
+            className={withBase("text-base leading-tight font-semibold text-text", className)}
+            {...props}
+        />
+    );
+}
+
+/** Describes the modal for screen readers. */
+function ModalDescription({ className, ...props }: DialogPrimitive.Description.Props) {
+    return <DialogPrimitive.Description className={withBase("text-sm text-muted", className)} {...props} />;
+}
+
+/** Main content. Scrolls when the modal hits the viewport height. */
+function ModalBody({ className, ...props }: ComponentProps<"div">) {
+    return (
+        <div
+            data-slot="modal-body"
+            className={cn("-mx-4 min-h-0 flex-1 overflow-y-auto px-4 text-sm", className)}
+            {...props}
+        />
+    );
+}
+
+/** Action row, right-aligned. Stacks (primary on top) on narrow screens. */
+function ModalFooter({ className, ...props }: ComponentProps<"div">) {
+    return (
+        <div
+            data-slot="modal-footer"
+            className={cn("flex flex-col-reverse gap-2 sm:flex-row sm:justify-end", className)}
+            {...props}
+        />
+    );
+}
+
+Modal.Trigger = DialogPrimitive.Trigger;
+Modal.Content = ModalContent;
+Modal.Header = ModalHeader;
+Modal.Title = ModalTitle;
+Modal.Description = ModalDescription;
+Modal.Body = ModalBody;
+Modal.Footer = ModalFooter;
+/** Closes the modal. Use `render={<Button />}` for a styled button. */
+Modal.Close = DialogPrimitive.Close;

@@ -1,181 +1,225 @@
-import { useContext } from "react";
-import type { ComponentProps } from "react";
-import { Menu as BaseMenu } from "@base-ui/react/menu";
-import { CaretRightIcon, CheckIcon, CircleIcon } from "@phosphor-icons/react";
-import { MenuSideOffsetContext } from "./MenuSideOffsetContext";
-import { usePortalContainer } from "./PortalContainer";
-import { cn, mergeClassName } from "@/lib/cn";
+import { useContext, type ComponentProps, type ReactNode } from "react";
+import { Menu as MenuPrimitive } from "@base-ui/react/menu";
+import { CaretRightIcon, CheckIcon } from "@phosphor-icons/react";
+import { cn } from "@/lib/cn";
+import { MenuKindContext } from "./menu-kind";
 
-type ItemVariant = "default" | "danger";
+type ClassName<State> = string | ((state: State) => string | undefined) | undefined;
 
-// `pointer-events-auto` because the overlay layer popups portal into is
-// click-through (`PortalContainerProvider`).
-const popupBaseClassName = cn(
-    "pointer-events-auto min-w-[10rem] max-h-[var(--available-height)] overflow-y-auto outline-none p-1",
-    "bg-surface text-text border border-border",
-    "rounded-md shadow-lg shadow-black/40",
-    "[transform-origin:var(--transform-origin)]",
-    "transition-[opacity,transform,scale] duration-150 ease-out",
-    "data-[starting-style]:opacity-0 data-[starting-style]:scale-95",
-    "data-[ending-style]:opacity-0 data-[ending-style]:scale-95"
+function withBase<State>(base: string, className: ClassName<State>) {
+    return (state: State) => cn(base, typeof className === "function" ? className(state) : className);
+}
+
+const itemBase = cn(
+    "relative flex cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm text-text outline-none select-none",
+    "data-highlighted:bg-hover data-disabled:pointer-events-none data-disabled:opacity-50",
+    "[&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 [&_svg:not([class*='text-'])]:text-muted",
 );
 
-const itemBaseClassName = cn(
-    "relative flex w-full cursor-pointer select-none items-center gap-2",
-    "rounded-sm px-2.5 py-1.5 text-xs text-text outline-none transition-colors",
-    "data-[highlighted]:bg-hover",
-    "data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
-);
-
-const itemVariantStyles: Record<ItemVariant, string> = {
+const itemVariants = {
     default: "",
-    danger: "data-[highlighted]:bg-danger/15 data-[highlighted]:text-danger"
-};
+    destructive: "text-danger data-highlighted:bg-danger/10 [&_svg:not([class*='text-'])]:text-danger",
+} as const;
 
-/** Items with a check or radio indicator reserve the inset gutter the indicator sits in. */
-const indicatorItemClassName = cn(itemBaseClassName, "pl-7");
+export type MenuItemVariant = keyof typeof itemVariants;
 
-const indicatorWrapperClassName = cn(
-    "absolute left-1.5 inline-flex size-4 shrink-0 items-center justify-center text-text",
-    "data-[unchecked]:hidden",
-    "transition-opacity",
-    "data-[starting-style]:opacity-0 data-[ending-style]:opacity-0"
-);
+/**
+ * Dropdown menu opened from a trigger. Compose with `Menu.Trigger` and `Menu.Content`;
+ * every part except the root and trigger is shared with `ContextMenu`.
+ */
+export function Menu(props: MenuPrimitive.Root.Props) {
+    return (
+        <MenuKindContext value="dropdown">
+            <MenuPrimitive.Root {...props} />
+        </MenuKindContext>
+    );
+}
 
-export type MenuProps<Payload = unknown> = BaseMenu.Root.Props<Payload>;
+export interface MenuContentProps
+    extends MenuPrimitive.Popup.Props,
+        Pick<
+            MenuPrimitive.Positioner.Props,
+            "side" | "align" | "sideOffset" | "alignOffset" | "collisionPadding"
+        > {
+    /** Where to portal the popup. Defaults to `document.body`. */
+    container?: MenuPrimitive.Portal.Props["container"];
+}
 
-type MenuPositionerProps = ComponentProps<typeof BaseMenu.Positioner>;
-
-type MenuContentProps = ComponentProps<typeof BaseMenu.Popup> &
-    Pick<MenuPositionerProps, "side" | "align" | "sideOffset" | "alignOffset" | "collisionPadding">;
-
-/** Portal (the shell's overlay layer), positioner and popup in one. */
+/**
+ * The popup. Positioning defaults depend on where it's used: below the trigger and
+ * start-aligned in a `Menu`, at the pointer in a `ContextMenu`, beside its trigger
+ * (first items lined up) inside `Menu.Sub`.
+ */
 function MenuContent({
     side,
     align,
     sideOffset,
     alignOffset,
-    collisionPadding,
+    collisionPadding = 8,
+    container,
     className,
-    ...popupProps
-}: MenuContentProps) {
-    const portalContainer = usePortalContainer();
-    const defaultSideOffset = useContext(MenuSideOffsetContext);
-    return (
-        <BaseMenu.Portal container={portalContainer ?? undefined}>
-            <BaseMenu.Positioner
-                side={side}
-                align={align}
-                sideOffset={sideOffset ?? defaultSideOffset}
-                alignOffset={alignOffset}
-                collisionPadding={collisionPadding}
-                className="z-50 outline-none"
-            >
-                <BaseMenu.Popup
-                    className={mergeClassName(popupBaseClassName, className)}
-                    {...popupProps}
-                />
-            </BaseMenu.Positioner>
-        </BaseMenu.Portal>
-    );
-}
-
-type MenuItemProps = ComponentProps<typeof BaseMenu.Item> & {
-    /** `danger` keeps the normal text colour at rest and turns red only while highlighted. */
-    variant?: ItemVariant;
-};
-
-function MenuItem({ variant = "default", className, ...props }: MenuItemProps) {
-    return (
-        <BaseMenu.Item
-            className={mergeClassName([itemBaseClassName, itemVariantStyles[variant]], className)}
-            {...props}
-        />
-    );
-}
-
-function MenuSeparator({ className, ...props }: ComponentProps<typeof BaseMenu.Separator>) {
-    return (
-        <BaseMenu.Separator
-            className={mergeClassName("-mx-1 my-1 h-px bg-border", className)}
-            {...props}
-        />
-    );
-}
-
-function MenuGroupLabel({ className, ...props }: ComponentProps<typeof BaseMenu.GroupLabel>) {
-    return (
-        <BaseMenu.GroupLabel
-            className={mergeClassName("px-2.5 py-1 text-[11px] font-medium text-muted", className)}
-            {...props}
-        />
-    );
-}
-
-function MenuRadioItem({ className, children, ...props }: ComponentProps<typeof BaseMenu.RadioItem>) {
-    return (
-        <BaseMenu.RadioItem className={mergeClassName(indicatorItemClassName, className)} {...props}>
-            <BaseMenu.RadioItemIndicator className={indicatorWrapperClassName}>
-                <CircleIcon className="size-2" weight="fill" aria-hidden />
-            </BaseMenu.RadioItemIndicator>
-            {children}
-        </BaseMenu.RadioItem>
-    );
-}
-
-function MenuCheckboxItem({ className, children, ...props }: ComponentProps<typeof BaseMenu.CheckboxItem>) {
-    return (
-        <BaseMenu.CheckboxItem className={mergeClassName(indicatorItemClassName, className)} {...props}>
-            <BaseMenu.CheckboxItemIndicator className={indicatorWrapperClassName}>
-                <CheckIcon className="size-3.5" weight="bold" aria-hidden />
-            </BaseMenu.CheckboxItemIndicator>
-            {children}
-        </BaseMenu.CheckboxItem>
-    );
-}
-
-/** Sets the gap back for its popup, inside either kind of menu. */
-function MenuSubmenuRoot(props: ComponentProps<typeof BaseMenu.SubmenuRoot>) {
-    return (
-        <MenuSideOffsetContext value={6}>
-            <BaseMenu.SubmenuRoot {...props} />
-        </MenuSideOffsetContext>
-    );
-}
-
-function MenuSubmenuTrigger({
-    className,
-    children,
     ...props
-}: ComponentProps<typeof BaseMenu.SubmenuTrigger>) {
+}: MenuContentProps) {
+    const kind = useContext(MenuKindContext);
+    // Undefined lets Base UI apply its own defaults (context menus offset from the pointer).
+    const defaults =
+        kind === "dropdown"
+            ? { align: "start" as const, sideOffset: 4 }
+            : kind === "submenu"
+              ? // Popup is p-1 + 1px border: overlap the parent's border and align first items.
+                { sideOffset: 4, alignOffset: -5 }
+              : {};
+
     return (
-        <BaseMenu.SubmenuTrigger
-            className={mergeClassName([itemBaseClassName, "data-[popup-open]:bg-hover"], className)}
+        <MenuPrimitive.Portal container={container}>
+            <MenuPrimitive.Positioner
+                side={side}
+                align={align ?? defaults.align}
+                sideOffset={sideOffset ?? defaults.sideOffset}
+                alignOffset={alignOffset ?? defaults.alignOffset}
+                collisionPadding={collisionPadding}
+            >
+                <MenuPrimitive.Popup
+                    className={withBase(
+                        cn(
+                            "max-h-(--available-height) min-w-40 overflow-y-auto rounded-md border border-border bg-raised p-1 text-text shadow-lg shadow-black/40 outline-none",
+                            "origin-(--transform-origin) transition-[opacity,scale] duration-150 ease-out",
+                            "data-starting-style:scale-95 data-starting-style:opacity-0",
+                            "data-ending-style:scale-95 data-ending-style:opacity-0",
+                        ),
+                        className,
+                    )}
+                    {...props}
+                />
+            </MenuPrimitive.Positioner>
+        </MenuPrimitive.Portal>
+    );
+}
+
+export interface MenuItemProps extends MenuPrimitive.Item.Props {
+    variant?: MenuItemVariant;
+    /** Indents the text to line up with checkbox/radio items. */
+    inset?: boolean;
+}
+
+function MenuItem({ variant = "default", inset, className, ...props }: MenuItemProps) {
+    return (
+        <MenuPrimitive.Item
+            className={withBase(cn(itemBase, itemVariants[variant], inset && "pl-8"), className)}
+            {...props}
+        />
+    );
+}
+
+export interface MenuLinkItemProps extends MenuPrimitive.LinkItem.Props {
+    variant?: MenuItemVariant;
+    inset?: boolean;
+}
+
+/** An item that renders an `<a>`; pass `href`. */
+function MenuLinkItem({ variant = "default", inset, className, ...props }: MenuLinkItemProps) {
+    return (
+        <MenuPrimitive.LinkItem
+            className={withBase(cn(itemBase, itemVariants[variant], inset && "pl-8"), className)}
+            {...props}
+        />
+    );
+}
+
+function ItemIndicator({ children }: { children: ReactNode }) {
+    return (
+        <span className="pointer-events-none absolute left-2 flex size-4 items-center justify-center">
+            {children}
+        </span>
+    );
+}
+
+/** Toggle item with a check mark. Stays open on click (`closeOnClick` to change). */
+function MenuCheckboxItem({ className, children, ...props }: MenuPrimitive.CheckboxItem.Props) {
+    return (
+        <MenuPrimitive.CheckboxItem className={withBase(cn(itemBase, "pl-8"), className)} {...props}>
+            <ItemIndicator>
+                <MenuPrimitive.CheckboxItemIndicator>
+                    <CheckIcon weight="bold" className="size-3.5 text-text" />
+                </MenuPrimitive.CheckboxItemIndicator>
+            </ItemIndicator>
+            {children}
+        </MenuPrimitive.CheckboxItem>
+    );
+}
+
+/** Use inside `Menu.RadioGroup`. Stays open on click (`closeOnClick` to change). */
+function MenuRadioItem({ className, children, ...props }: MenuPrimitive.RadioItem.Props) {
+    return (
+        <MenuPrimitive.RadioItem className={withBase(cn(itemBase, "pl-8"), className)} {...props}>
+            <ItemIndicator>
+                <MenuPrimitive.RadioItemIndicator className="size-1.5 rounded-full bg-text" />
+            </ItemIndicator>
+            {children}
+        </MenuPrimitive.RadioItem>
+    );
+}
+
+export interface MenuLabelProps extends MenuPrimitive.GroupLabel.Props {
+    inset?: boolean;
+}
+
+/** Heading for a group. Must be inside `Menu.Group` or `Menu.RadioGroup`. */
+function MenuLabel({ inset, className, ...props }: MenuLabelProps) {
+    return (
+        <MenuPrimitive.GroupLabel
+            className={withBase(cn("px-2 py-1.5 text-xs font-medium text-muted select-none", inset && "pl-8"), className)}
+            {...props}
+        />
+    );
+}
+
+function MenuSeparator({ className, ...props }: MenuPrimitive.Separator.Props) {
+    return (
+        <MenuPrimitive.Separator className={withBase("-mx-1 my-1 h-px bg-border", className)} {...props} />
+    );
+}
+
+/** Right-aligned hint inside an item, e.g. `<Menu.Shortcut>Ctrl C</Menu.Shortcut>`. */
+function MenuShortcut({ className, ...props }: ComponentProps<"span">) {
+    return <span className={cn("ml-auto pl-4 text-xs tracking-wide text-muted", className)} {...props} />;
+}
+
+/** Nested menu: `Menu.SubTrigger` + `Menu.Content`. Opens on hover by default. */
+function MenuSub(props: MenuPrimitive.SubmenuRoot.Props) {
+    return (
+        <MenuKindContext value="submenu">
+            <MenuPrimitive.SubmenuRoot {...props} />
+        </MenuKindContext>
+    );
+}
+
+export interface MenuSubTriggerProps extends MenuPrimitive.SubmenuTrigger.Props {
+    inset?: boolean;
+}
+
+function MenuSubTrigger({ inset, className, children, ...props }: MenuSubTriggerProps) {
+    return (
+        <MenuPrimitive.SubmenuTrigger
+            className={withBase(cn(itemBase, "data-popup-open:bg-hover", inset && "pl-8"), className)}
             {...props}
         >
             {children}
-            <CaretRightIcon className="ml-auto size-3.5 shrink-0 text-text" aria-hidden />
-        </BaseMenu.SubmenuTrigger>
+            <CaretRightIcon className="ml-auto size-3.5" />
+        </MenuPrimitive.SubmenuTrigger>
     );
 }
 
-/** Own function rather than `BaseMenu.Root` itself, so `Object.assign` below attaches the parts to
- *  this wrapper instead of mutating Base UI's shared export. */
-function MenuRoot<Payload>(props: MenuProps<Payload>) {
-    return <BaseMenu.Root {...props} />;
-}
-
-/** Base UI's ContextMenu is built from these same parts, so ContextMenu reuses them. */
-export const Menu = Object.assign(MenuRoot, {
-    Trigger: BaseMenu.Trigger,
-    Content: MenuContent,
-    Item: MenuItem,
-    Separator: MenuSeparator,
-    GroupLabel: MenuGroupLabel,
-    Group: BaseMenu.Group,
-    RadioGroup: BaseMenu.RadioGroup,
-    RadioItem: MenuRadioItem,
-    CheckboxItem: MenuCheckboxItem,
-    SubmenuRoot: MenuSubmenuRoot,
-    SubmenuTrigger: MenuSubmenuTrigger
-});
+Menu.Trigger = MenuPrimitive.Trigger;
+Menu.Content = MenuContent;
+Menu.Item = MenuItem;
+Menu.LinkItem = MenuLinkItem;
+Menu.CheckboxItem = MenuCheckboxItem;
+Menu.RadioGroup = MenuPrimitive.RadioGroup;
+Menu.RadioItem = MenuRadioItem;
+Menu.Group = MenuPrimitive.Group;
+Menu.Label = MenuLabel;
+Menu.Separator = MenuSeparator;
+Menu.Shortcut = MenuShortcut;
+Menu.Sub = MenuSub;
+Menu.SubTrigger = MenuSubTrigger;

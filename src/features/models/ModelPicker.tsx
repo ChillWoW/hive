@@ -8,7 +8,8 @@ import {
 } from "@phosphor-icons/react";
 import type { ChatConfig, Model, ReasoningLevel } from "@/proto";
 import { cn } from "@/lib/cn";
-import { Popover, Tooltip } from "@/ui";
+import { Popover } from "@base-ui/react/popover";
+import { Tooltip } from "@/ui";
 import {
     footerButtonClassName,
     pickerTriggerClassName,
@@ -85,7 +86,7 @@ export function ModelPicker({
     }
 
     return (
-        <Popover
+        <Popover.Root
             open={open}
             onOpenChange={(next) => {
                 setOpen(next);
@@ -167,7 +168,7 @@ export function ModelPicker({
                     )}
                 </Popover.Positioner>
             </Popover.Portal>
-        </Popover>
+        </Popover.Root>
     );
 }
 

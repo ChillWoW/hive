@@ -1,60 +1,95 @@
-import type { ComponentProps, ReactNode } from "react";
-import { Button as BaseButton } from "@base-ui/react/button";
+import { Button as ButtonPrimitive } from "@base-ui/react/button";
 import { cn } from "@/lib/cn";
-import { CircleNotchIcon } from "@phosphor-icons/react";
+import { Spinner } from "./Spinner";
 
-const variantStyles = {
-    default: "bg-raised text-text hover:bg-hover active:bg-border",
-    primary:
-        "bg-accent text-accent-fg hover:bg-accent/90 active:bg-accent/80",
-    ghost: "bg-transparent text-text hover:bg-hover active:bg-hover",
-    destructive:
-        "bg-danger/15 text-danger hover:bg-danger/25 active:bg-danger/35"
+const variants = {
+    default: "bg-accent text-accent-fg hover:bg-accent/85",
+    destructive: "bg-danger text-white hover:bg-danger/85 focus-visible:outline-danger",
+    "destructive-outline":
+        "border border-danger/50 bg-transparent text-danger hover:bg-danger/10 focus-visible:outline-danger",
+    secondary: "bg-raised text-text hover:bg-hover",
+    outline: "border border-border bg-transparent text-text hover:bg-raised",
+    ghost: "bg-transparent text-text hover:bg-raised",
+    link: "bg-transparent text-text underline-offset-4 hover:underline",
 } as const;
 
-const sizeStyles = {
-    sm: "h-6 px-2.5 text-xs gap-1",
-    md: "h-8 px-3.5 text-sm gap-2"
+// Heights step by 4px (28-44). Icons and the loading spinner share one size per step.
+const sizes = {
+    xs: "h-7 gap-1 px-2.5 text-xs [&_svg:not([class*='size-'])]:size-3.5",
+    sm: "h-8 gap-1.5 px-3 text-sm [&_svg:not([class*='size-'])]:size-4",
+    md: "h-9 gap-2 px-4 text-sm [&_svg:not([class*='size-'])]:size-4",
+    lg: "h-10 gap-2 px-5 text-sm [&_svg:not([class*='size-'])]:size-4.5",
+    xl: "h-11 gap-2 px-6 text-base [&_svg:not([class*='size-'])]:size-5",
+    "icon-xs": "size-7 [&_svg:not([class*='size-'])]:size-3.5",
+    "icon-sm": "size-8 [&_svg:not([class*='size-'])]:size-4",
+    "icon-md": "size-9 [&_svg:not([class*='size-'])]:size-4",
+    "icon-lg": "size-10 [&_svg:not([class*='size-'])]:size-4.5",
+    "icon-xl": "size-11 [&_svg:not([class*='size-'])]:size-5",
 } as const;
 
-type ButtonProps = ComponentProps<typeof BaseButton> & {
-    variant?: keyof typeof variantStyles;
-    size?: keyof typeof sizeStyles;
-    /** Disables the button and puts a spinner in `leftIcon`'s place. */
-    loading?: boolean;
-    leftIcon?: ReactNode;
-    className?: string;
+const spinnerSizes: Record<ButtonSize, string> = {
+    xs: "size-3.5",
+    sm: "size-4",
+    md: "size-4",
+    lg: "size-4.5",
+    xl: "size-5",
+    "icon-xs": "size-3.5",
+    "icon-sm": "size-4",
+    "icon-md": "size-4",
+    "icon-lg": "size-4.5",
+    "icon-xl": "size-5",
 };
+
+export type ButtonVariant = keyof typeof variants;
+export type ButtonSize = keyof typeof sizes;
+
+export interface ButtonProps extends ButtonPrimitive.Props {
+    variant?: ButtonVariant;
+    size?: ButtonSize;
+    /** Shows a spinner and disables the button (it stays focusable). */
+    loading?: boolean;
+}
 
 export function Button({
     variant = "default",
-    size = "md",
-    disabled = false,
+    size = "sm",
     loading = false,
-    children,
-    leftIcon,
+    disabled,
+    focusableWhenDisabled,
     className,
+    children,
     ...props
 }: ButtonProps) {
+    const isIcon = size.startsWith("icon-");
+    const spinner = (
+        <Spinner label="Loading" className={cn("text-current", spinnerSizes[size])} />
+    );
+
     return (
-        <BaseButton
-            className={cn(
-                "inline-flex items-center justify-center font-medium transition-colors rounded-md",
-                "active:scale-[0.98]",
-                "data-[disabled]:opacity-50 data-[disabled]:active:scale-100 data-[disabled]:pointer-events-none",
-                variantStyles[variant],
-                sizeStyles[size],
-                className
-            )}
+        <ButtonPrimitive
             disabled={disabled || loading}
+            focusableWhenDisabled={focusableWhenDisabled ?? loading}
+            aria-busy={loading || undefined}
+            className={(state) =>
+                cn(
+                    "inline-flex shrink-0 cursor-pointer select-none items-center justify-center whitespace-nowrap rounded-md font-medium transition-[color,background-color,border-color,scale] duration-150 ease-out",
+                    variant !== "link" && "motion-safe:active:scale-97",
+                    "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
+                    "data-disabled:pointer-events-none data-disabled:not-aria-busy:opacity-50",
+                    "[&_svg]:pointer-events-none [&_svg]:shrink-0",
+                    variants[variant],
+                    sizes[size],
+                    typeof className === "function" ? className(state) : className,
+                )
+            }
             {...props}
         >
-            {loading ? (
-                <CircleNotchIcon className="size-3 animate-spin" weight="bold" />
-            ) : (
-                leftIcon && <span className="-ml-0.5 inline-flex shrink-0">{leftIcon}</span>
+            {loading && isIcon ? spinner : (
+                <>
+                    {loading && spinner}
+                    {children}
+                </>
             )}
-            {children}
-        </BaseButton>
+        </ButtonPrimitive>
     );
 }

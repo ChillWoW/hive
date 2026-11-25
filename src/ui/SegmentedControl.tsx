@@ -1,93 +1,161 @@
-import { createContext, useContext } from "react";
-import type { ComponentProps } from "react";
-import { ToggleGroup as BaseToggleGroup } from "@base-ui/react/toggle-group";
-import { Toggle as BaseToggle } from "@base-ui/react/toggle";
+import { createContext, useContext, useLayoutEffect, useRef } from "react";
+import { Radio } from "@base-ui/react/radio";
+import { RadioGroup } from "@base-ui/react/radio-group";
 import { cn } from "@/lib/cn";
 
-type Size = "sm" | "md" | "lg";
+// Root heights match Button (28-44); items fill the root minus its 1px border and 2px padding.
+const sizes = {
+    xs: { root: "h-7", item: "gap-1 px-2 text-xs [&_svg:not([class*='size-'])]:size-3.5" },
+    sm: { root: "h-8", item: "gap-1.5 px-2.5 text-sm [&_svg:not([class*='size-'])]:size-4" },
+    md: { root: "h-9", item: "gap-2 px-3 text-sm [&_svg:not([class*='size-'])]:size-4" },
+    lg: { root: "h-10", item: "gap-2 px-4 text-sm [&_svg:not([class*='size-'])]:size-4.5" },
+    xl: { root: "h-11", item: "gap-2 px-5 text-base [&_svg:not([class*='size-'])]:size-5" },
+} as const;
 
-const SegmentedControlSizeContext = createContext<Size>("md");
+export type SegmentedControlSize = keyof typeof sizes;
 
-const rootSizeStyles: Record<Size, string> = {
-    sm: "h-6 p-0.5 gap-0.5",
-    md: "h-8 p-1 gap-1",
-    lg: "h-10 p-1 gap-1"
-};
+const SizeContext = createContext<SegmentedControlSize>("sm");
 
-const itemSizeStyles: Record<Size, string> = {
-    sm: "gap-1 px-2 text-xs",
-    md: "gap-1.5 px-2.5 text-sm",
-    lg: "gap-2 px-3 text-sm"
-};
+const ITEM_SELECTOR = ':scope > [data-slot="segmented-control-item"]';
 
-export interface SegmentedControlProps
-    extends Omit<
-        ComponentProps<typeof BaseToggleGroup>,
-        "className" | "value" | "defaultValue" | "onValueChange" | "multiple"
-    > {
-    value?: string;
-    onValueChange?: (value: string) => void;
-    size?: Size;
-    className?: string;
+/**
+ * Keeps the indicator over the checked item. Base UI owns the checked state (controlled or
+ * not), so this watches `data-checked` instead of the value. Selection changes slide the
+ * indicator; resizes, the first paint and reappearing after nothing was checked snap it.
+ */
+function useIndicator() {
+    const ref = useRef<HTMLSpanElement>(null);
+
+    useLayoutEffect(() => {
+        const indicator = ref.current;
+        const root = indicator?.parentElement;
+        if (!indicator || !root) return;
+
+        let visible = false;
+
+        const update = (animate: boolean) => {
+            const item = root.querySelector<HTMLElement>(`${ITEM_SELECTOR}[data-checked]`);
+            if (!item || root.offsetWidth === 0) {
+                indicator.style.visibility = "hidden";
+                visible = false;
+                return;
+            }
+
+            // Rects include ancestor transforms (e.g. a modal's open scale); divide them out.
+            const rootRect = root.getBoundingClientRect();
+            const itemRect = item.getBoundingClientRect();
+            // offsetWidth is rounded, so only treat a difference of a pixel or more as a transform.
+            const scale = Math.abs(rootRect.width - root.offsetWidth) < 1 ? 1 : rootRect.width / root.offsetWidth;
+            const x = (itemRect.left - rootRect.left) / scale - root.clientLeft;
+            const y = (itemRect.top - rootRect.top) / scale - root.clientTop;
+
+            const instant = !animate || !visible;
+            if (instant) indicator.style.transition = "none";
+            indicator.style.width = `${itemRect.width / scale}px`;
+            indicator.style.height = `${itemRect.height / scale}px`;
+            indicator.style.translate = `${x}px ${y}px`;
+            indicator.style.visibility = "visible";
+            if (instant) {
+                void indicator.offsetWidth; // commit the jump before re-enabling the transition
+                indicator.style.transition = "";
+            }
+            visible = true;
+        };
+
+        const resizeObserver = new ResizeObserver(() => update(false));
+        const observeItems = () => {
+            resizeObserver.observe(root);
+            root.querySelectorAll(ITEM_SELECTOR).forEach((item) => resizeObserver.observe(item));
+        };
+        const mutationObserver = new MutationObserver((records) => {
+            if (records.some((r) => r.type === "childList")) observeItems();
+            update(true);
+        });
+
+        update(false);
+        observeItems();
+        mutationObserver.observe(root, { subtree: true, childList: true, attributes: true, attributeFilter: ["data-checked"] });
+
+        return () => {
+            resizeObserver.disconnect();
+            mutationObserver.disconnect();
+        };
+    }, []);
+
+    return ref;
 }
 
-/** A single-choice toggle group: one item always pressed (pressing it again keeps it). */
-function SegmentedControlRoot({
-    size = "md",
-    value,
-    onValueChange,
-    className,
-    ...props
-}: SegmentedControlProps) {
+export interface SegmentedControlProps<Value = string> extends RadioGroup.Props<Value> {
+    size?: SegmentedControlSize;
+}
+
+/**
+ * Single-choice row of segments with a sliding indicator (Base UI's `RadioGroup`, so it
+ * always holds one value, supports `name` for forms, and moves the selection with the arrow
+ * keys). Control it with `value`/`onValueChange` or seed it with `defaultValue`; give it an
+ * `aria-label`. Segments share the width evenly, so `className="w-full"` stretches them.
+ */
+export function SegmentedControl<Value = string>({ size = "sm", className, children, ...props }: SegmentedControlProps<Value>) {
+    const indicatorRef = useIndicator();
+
     return (
-        <SegmentedControlSizeContext value={size}>
-            <BaseToggleGroup
-                value={value !== undefined ? [value] : undefined}
-                onValueChange={(next: string[]) => {
-                    const selected = next[next.length - 1];
-                    if (selected !== undefined) onValueChange?.(selected);
-                }}
-                className={cn(
-                    "inline-flex select-none items-stretch rounded-md",
-                    "border border-border bg-raised",
-                    "data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
-                    rootSizeStyles[size],
-                    className
-                )}
+        <SizeContext.Provider value={size}>
+            <RadioGroup<Value>
+                data-slot="segmented-control"
+                className={(state) =>
+                    cn(
+                        "group/segmented-control relative isolate inline-flex w-fit items-stretch rounded-md border border-border bg-bg p-0.5",
+                        sizes[size].root,
+                        typeof className === "function" ? className(state) : className,
+                    )
+                }
                 {...props}
-            />
-        </SegmentedControlSizeContext>
+            >
+                <span
+                    ref={indicatorRef}
+                    aria-hidden
+                    data-slot="segmented-control-indicator"
+                    className={cn(
+                        "pointer-events-none invisible absolute top-0 left-0 rounded-sm bg-hover shadow-sm shadow-black/30",
+                        "transition-[translate,width,height] duration-200 ease-out motion-reduce:transition-none",
+                        // Disabled items dim themselves; a disabled group dims the indicator too.
+                        "group-data-disabled/segmented-control:opacity-50",
+                    )}
+                />
+                {children}
+            </RadioGroup>
+        </SizeContext.Provider>
     );
 }
 
-interface SegmentedControlItemProps
-    extends Omit<ComponentProps<typeof BaseToggle>, "className"> {
-    className?: string;
+export interface SegmentedControlItemProps<Value = string> extends Radio.Root.Props<Value> {
+    /** Square segment for a lone icon; pair it with an `aria-label`. */
+    iconOnly?: boolean;
 }
 
-function SegmentedControlItem({ className, ...props }: SegmentedControlItemProps) {
-    const size = useContext(SegmentedControlSizeContext);
+/** One segment. Needs a `value` unique within its `SegmentedControl`. */
+function SegmentedControlItem<Value = string>({ iconOnly, className, ...props }: SegmentedControlItemProps<Value>) {
+    const size = useContext(SizeContext);
 
     return (
-        <BaseToggle
-            nativeButton
-            render={<button type="button" />}
-            className={cn(
-                "relative inline-flex min-w-0 shrink-0 items-center justify-center rounded-sm",
-                "font-medium whitespace-nowrap text-muted",
-                "transition-[background-color,color,box-shadow,transform]",
-                "hover:text-text active:scale-[0.98]",
-                "data-[pressed]:bg-border data-[pressed]:text-text data-[pressed]:shadow-sm data-[pressed]:shadow-black/10",
-                "data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[disabled]:active:scale-100",
-                "disabled:pointer-events-none disabled:opacity-50 disabled:active:scale-100",
-                itemSizeStyles[size],
-                className
-            )}
+        <Radio.Root<Value>
+            data-slot="segmented-control-item"
+            className={(state) =>
+                cn(
+                    "relative inline-flex flex-1 cursor-pointer select-none items-center justify-center whitespace-nowrap rounded-sm font-medium text-muted",
+                    "transition-[color] duration-150 ease-out hover:text-text data-checked:text-text",
+                    "focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent",
+                    "data-readonly:cursor-default data-readonly:hover:text-muted data-readonly:data-checked:hover:text-text",
+                    "data-disabled:cursor-not-allowed data-disabled:opacity-50 data-disabled:hover:text-muted data-disabled:data-checked:hover:text-text",
+                    "[&_svg]:pointer-events-none [&_svg]:shrink-0",
+                    sizes[size].item,
+                    iconOnly && "aspect-square flex-none px-0",
+                    typeof className === "function" ? className(state) : className,
+                )
+            }
             {...props}
         />
     );
 }
 
-export const SegmentedControl = Object.assign(SegmentedControlRoot, {
-    Item: SegmentedControlItem
-});
+SegmentedControl.Item = SegmentedControlItem;

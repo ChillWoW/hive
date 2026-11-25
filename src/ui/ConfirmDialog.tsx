@@ -6,10 +6,10 @@ import { Modal } from "./Modal";
 /**
  * A small dialog asking before something destructive: `children` say what
  * happens, then Cancel and the `confirmLabel` button (red unless `variant`
- * says otherwise). Confirming runs
- * `onConfirm` (the button spinning meanwhile) and closes once it's done; a
- * failure stays open with its message. The confirm button has focus unless
- * `focusCancel`, for when Enter mustn't be the one that destroys.
+ * says otherwise). Confirming runs `onConfirm` (the button spinning
+ * meanwhile) and closes once it's done; a failure stays open with its
+ * message. The confirm button has focus unless `focusCancel`, for when Enter
+ * mustn't be the one that destroys.
  */
 export function ConfirmDialog({
     open,
@@ -27,7 +27,7 @@ export function ConfirmDialog({
     onConfirm: () => Promise<unknown>;
     onClose: () => void;
     focusCancel?: boolean;
-    variant?: "destructive" | "primary";
+    variant?: "destructive" | "default";
     children?: ReactNode;
 }) {
     const [busy, setBusy] = useState(false);
@@ -51,25 +51,31 @@ export function ConfirmDialog({
     };
 
     return (
-        <Modal open={open} onClose={onClose} title={title} size="sm">
-            {children}
-            {error && (
-                <p className="mt-2 text-xs break-words whitespace-pre-wrap text-danger">{error}</p>
-            )}
-            <div className="mt-4 flex justify-end gap-2">
-                <Modal.Close render={<Button size="sm" variant="ghost" autoFocus={focusCancel} />}>
-                    Cancel
-                </Modal.Close>
-                <Button
-                    size="sm"
-                    variant={variant}
-                    loading={busy}
-                    onClick={() => void confirm()}
-                    autoFocus={!focusCancel}
-                >
-                    {confirmLabel}
-                </Button>
-            </div>
+        <Modal open={open} onOpenChange={(next) => !next && onClose()}>
+            <Modal.Content size="sm">
+                <Modal.Header>
+                    <Modal.Title>{title}</Modal.Title>
+                </Modal.Header>
+                <Modal.Body className="text-muted">
+                    {children}
+                    {error && (
+                        <p className="mt-2 text-xs break-words whitespace-pre-wrap text-danger">{error}</p>
+                    )}
+                </Modal.Body>
+                <Modal.Footer>
+                    <Modal.Close render={<Button variant="ghost" autoFocus={focusCancel} />}>
+                        Cancel
+                    </Modal.Close>
+                    <Button
+                        variant={variant}
+                        loading={busy}
+                        onClick={() => void confirm()}
+                        autoFocus={!focusCancel}
+                    >
+                        {confirmLabel}
+                    </Button>
+                </Modal.Footer>
+            </Modal.Content>
         </Modal>
     );
 }

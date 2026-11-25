@@ -53,6 +53,29 @@
     }
 }
 
+/* Skeleton (src/ui/Skeleton.tsx). The shimmer's gradient tile is 200vw wide
+   with the highlight at its center: it sweeps across the viewport, then
+   rests offscreen. */
+@theme {
+    --animate-skeleton-shimmer: skeleton-shimmer 2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+    --animate-skeleton-pulse: skeleton-pulse 1.6s ease-in-out infinite;
+
+    @keyframes skeleton-shimmer {
+        from {
+            background-position: -200vw 0;
+        }
+        to {
+            background-position: 0 0;
+        }
+    }
+
+    @keyframes skeleton-pulse {
+        50% {
+            opacity: 0.45;
+        }
+    }
+}
+
 @utility shimmer {
     background-image: linear-gradient(
         90deg,
@@ -89,6 +112,11 @@
     --danger: #ff616e;
     --warning: #f0a45d;
     --info: #6fb3f2;
+}
+
+/* Base UI: portalled popups stack above app content. */
+#root {
+    isolation: isolate;
 }
 
 @layer base {

@@ -113,22 +113,22 @@ function StatusRow() {
                     {state.phase !== "none" && (
                         <Button
                             size="sm"
-                            variant="primary"
+                            variant="default"
                             loading={working}
-                            leftIcon={<ArrowCircleUpIcon className="size-3.5" weight="fill" />}
                             onClick={() => setConfirming(true)}
                         >
+                            {!working && <ArrowCircleUpIcon weight="fill" />}
                             Update
                         </Button>
                     )}
                     <Button
                         size="sm"
-                        variant="default"
+                        variant="secondary"
                         loading={checking}
                         disabled={working}
-                        leftIcon={<ArrowClockwiseIcon className="size-3.5" />}
                         onClick={() => void checkNow()}
                     >
+                        {!checking && <ArrowClockwiseIcon />}
                         Check now
                     </Button>
                     <UpdateDialog open={confirming} onClose={() => setConfirming(false)} />
@@ -167,10 +167,10 @@ function SettingsFileSection() {
                             <CopyButton text={path} />
                             <Button
                                 size="sm"
-                                variant="default"
-                                leftIcon={<FolderOpenIcon className="size-3.5" />}
+                                variant="secondary"
                                 onClick={() => void settingsApi.reveal()}
                             >
+                                <FolderOpenIcon />
                                 Reveal
                             </Button>
                         </>
@@ -196,11 +196,11 @@ function ResetRow() {
             control={
                 <Button
                     size="sm"
-                    variant="destructive"
-                    leftIcon={<ArrowCounterClockwiseIcon className="size-3.5" />}
+                    variant="destructive-outline"
                     onClick={onClick}
                     onBlur={onBlur}
                 >
+                    <ArrowCounterClockwiseIcon />
                     {armed ? "Click to confirm" : "Reset"}
                 </Button>
             }

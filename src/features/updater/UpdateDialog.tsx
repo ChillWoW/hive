@@ -15,7 +15,7 @@ export function UpdateDialog({ open, onClose }: { open: boolean; onClose: () => 
             onClose={onClose}
             title={version ? `Update to Outcode ${version}?` : "Update Outcode?"}
             confirmLabel="Update and restart"
-            variant="primary"
+            variant="default"
             onConfirm={async () => void install()}
         >
             <p className="text-sm text-muted">

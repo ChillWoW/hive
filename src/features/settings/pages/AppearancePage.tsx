@@ -38,10 +38,10 @@ function ThemeSection() {
                     isTauri && (
                         <Button
                             size="sm"
-                            variant="default"
-                            leftIcon={<FolderOpenIcon className="size-3.5" />}
+                            variant="secondary"
                             onClick={() => void themesApi.openDir()}
                         >
+                            <FolderOpenIcon />
                             Open folder
                         </Button>
                     )

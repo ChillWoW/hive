@@ -31,7 +31,7 @@ Branch `rework/app` is a from-scratch rebuild. So far: app shell (top bar, windo
 
 - `src/features/<name>/` — feature modules (settings, theme, fonts, updater). Each mounts a `use*Runtime()` hook in `App.tsx`.
 - `src/layout/` — app chrome (TopBar, Sidebar, WindowControls).
-- `src/ui/` — shared UI kit; reuse these before writing new primitives.
+- `src/ui/` — shared UI kit (from the `vite-template` repo); reuse these before writing new primitives. Compound components: sub-parts hang off the root (`Modal.Content`, `Menu.Item`, `Input.Group`); sizes share one scale (`xs`–`xl`, 28–44px). Hooks live in their own `use*.ts`. The app is wrapped in `Tooltip.Provider` and `ModalStack` (`useModalStack()`) in `main.tsx`.
 - `src/keybindings/` — action registry (`actions.ts`) + runtime; bindings live in settings.
 - `src/lib/backend.ts` — use `backend(command, args, devFallback?)` instead of raw `invoke`.
 - `src-tauri/src/` — Tauri commands, registered in `lib.rs`: `chat.rs` (engine commands, watchers), `folders.rs`, `files.rs`, `settings/`, `themes.rs`, `fonts.rs`, `updater.rs`, `http.rs`.

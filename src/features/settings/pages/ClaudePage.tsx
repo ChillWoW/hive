@@ -2,7 +2,7 @@ import { useState } from "react";
 import { FolderOpenIcon } from "@phosphor-icons/react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { isTauri } from "@/lib/platform";
-import { Input, NumberInput } from "@/ui";
+import { Button, Input, NumberField } from "@/ui";
 import { SettingRow, SettingsSection } from "../SettingsSection";
 import { useSetting } from "../store";
 
@@ -25,15 +25,15 @@ function SessionsSection() {
                 description="An idle chat's Claude process stops; the next prompt resumes it"
                 keywords="idle timeout minutes session process close resume"
                 setting={idle}
-                controlClassName="w-28"
+                controlClassName="w-36"
                 control={
-                    <NumberInput
-                        size="sm"
+                    <NumberField
+                        aria-label="Idle timeout in minutes"
                         value={idle.value}
                         min={1}
                         max={1440}
-                        decimalPlaces={0}
-                        suffix="min"
+                        step={1}
+                        format={{ style: "unit", unit: "minute", unitDisplay: "short", maximumFractionDigits: 0 }}
                         onValueChange={(value) => value != null && idle.set(value)}
                     />
                 }
@@ -72,30 +72,33 @@ function PathInput({ value, onCommit }: { value: string; onCommit: (value: strin
     };
 
     return (
-        <Input
-            size="sm"
-            value={draft ?? value}
-            placeholder="Auto-detect"
-            spellCheck={false}
-            onChange={(e) => setDraft(e.target.value)}
-            onBlur={commit}
-            onKeyDown={(e) => {
-                if (e.key === "Enter") e.currentTarget.blur();
-                if (e.key === "Escape") setDraft(null);
-            }}
-            className="font-mono"
-            rightIcon={
-                isTauri && (
-                    <button
-                        type="button"
+        <Input.Group>
+            <Input
+                value={draft ?? value}
+                placeholder="Auto-detect"
+                aria-label="Claude binary"
+                spellCheck={false}
+                onChange={(e) => setDraft(e.target.value)}
+                onBlur={commit}
+                onKeyDown={(e) => {
+                    if (e.key === "Enter") e.currentTarget.blur();
+                    if (e.key === "Escape") setDraft(null);
+                }}
+                className="font-mono text-xs"
+            />
+            {isTauri && (
+                <Input.Addon>
+                    <Button
+                        variant="ghost"
+                        size="icon-xs"
                         aria-label="Browse"
                         onClick={() => void browse()}
-                        className="inline-flex size-4 items-center justify-center hover:text-text"
+                        className="size-6 text-muted hover:text-text"
                     >
-                        <FolderOpenIcon className="size-3.5" />
-                    </button>
-                )
-            }
-        />
+                        <FolderOpenIcon />
+                    </Button>
+                </Input.Addon>
+            )}
+        </Input.Group>
     );
 }

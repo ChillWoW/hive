@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { MagnifyingGlassIcon, XIcon } from "@phosphor-icons/react";
 import { cn } from "@/lib/cn";
-import { iconButtonClassName, Modal } from "@/ui";
+import { Button, Input, Modal } from "@/ui";
 import { getSettingsPage, SETTINGS_PAGES } from "./pages";
 import { SettingsQueryContext } from "./search";
 import { useSettingsStore, type SettingsPageId } from "./store";
@@ -34,60 +34,58 @@ export function SettingsModal() {
     };
 
     return (
-        <Modal
-            open={isOpen}
-            onOpenChange={setOpen}
-            showClose={false}
-            className="flex h-[min(38rem,calc(100%-3rem))] w-[calc(100%-3rem)] max-w-4xl overflow-hidden p-0"
-            bodyClassName="flex h-full w-full"
-        >
-            <aside className="flex w-52 shrink-0 flex-col border-r border-border bg-bg">
-                <div className="p-2.5">
-                    <SearchInput query={query} onChange={setQuery} />
+        <Modal open={isOpen} onOpenChange={setOpen}>
+            <Modal.Content
+                size="xl"
+                showCloseButton={false}
+                className="h-[min(38rem,100%)] flex-row gap-0 overflow-hidden p-0"
+            >
+                <aside className="flex w-52 shrink-0 flex-col border-r border-border bg-bg">
+                    <div className="p-2.5">
+                        <SearchInput query={query} onChange={setQuery} />
+                    </div>
+
+                    <SettingsNav activeId={searching ? null : pageId} onSelect={go} />
+                </aside>
+
+                <div className="flex min-w-0 flex-1 flex-col">
+                    <header className="flex shrink-0 items-center gap-3 px-6 pt-5 pb-4">
+                        <Modal.Title className="min-w-0 flex-1 truncate">
+                            {searching ? "Search results" : page.label}
+                        </Modal.Title>
+                        <Modal.Close
+                            aria-label="Close settings"
+                            render={<Button variant="ghost" size="icon-sm" />}
+                            className="-mr-2 text-muted hover:text-text"
+                        >
+                            <XIcon />
+                        </Modal.Close>
+                    </header>
+
+                    <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto px-6 pb-6">
+                        <SettingsQueryContext.Provider value={query.trim().toLowerCase()}>
+                            {searching ? (
+                                <SearchResults onOpenPage={go} />
+                            ) : (
+                                <div key={page.id} className="flex flex-col gap-7">
+                                    <Page />
+                                </div>
+                            )}
+                        </SettingsQueryContext.Provider>
+                    </div>
                 </div>
-
-                <SettingsNav activeId={searching ? null : pageId} onSelect={go} />
-            </aside>
-
-            <div className="flex min-w-0 flex-1 flex-col">
-                <header className="flex shrink-0 items-center gap-3 px-6 pt-5 pb-4">
-                    <h2 className="min-w-0 flex-1 truncate text-base font-semibold text-text">
-                        {searching ? "Search results" : page.label}
-                    </h2>
-                    <Modal.Close
-                        aria-label="Close settings"
-                        className={cn(iconButtonClassName, "-mr-2")}
-                    >
-                        <XIcon className="size-4" />
-                    </Modal.Close>
-                </header>
-
-                <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto px-6 pb-6">
-                    <SettingsQueryContext.Provider value={query.trim().toLowerCase()}>
-                        {searching ? (
-                            <SearchResults onOpenPage={go} />
-                        ) : (
-                            <div key={page.id} className="flex flex-col gap-7">
-                                <Page />
-                            </div>
-                        )}
-                    </SettingsQueryContext.Provider>
-                </div>
-            </div>
+            </Modal.Content>
         </Modal>
     );
 }
 
 function SearchInput({ query, onChange }: { query: string; onChange: (query: string) => void }) {
     return (
-        <label
-            className={cn(
-                "flex h-7 items-center gap-1.5 rounded-md border border-border bg-raised px-2",
-                "transition-colors focus-within:border-muted/60 hover:border-muted/40"
-            )}
-        >
-            <MagnifyingGlassIcon className="size-3.5 shrink-0 text-muted" />
-            <input
+        <Input.Group size="xs">
+            <Input.Addon>
+                <MagnifyingGlassIcon />
+            </Input.Addon>
+            <Input
                 value={query}
                 placeholder="Search settings"
                 aria-label="Search settings"
@@ -100,19 +98,21 @@ function SearchInput({ query, onChange }: { query: string; onChange: (query: str
                         onChange("");
                     }
                 }}
-                className="min-w-0 flex-1 bg-transparent text-xs text-text outline-none placeholder:text-muted"
             />
             {query && (
-                <button
-                    type="button"
-                    aria-label="Clear search"
-                    onClick={() => onChange("")}
-                    className="text-muted transition-colors hover:text-text"
-                >
-                    <XIcon className="size-3" weight="bold" />
-                </button>
+                <Input.Addon>
+                    <Button
+                        variant="ghost"
+                        size="icon-xs"
+                        aria-label="Clear search"
+                        onClick={() => onChange("")}
+                        className="size-5 text-muted hover:text-text"
+                    >
+                        <XIcon className="size-3" weight="bold" />
+                    </Button>
+                </Input.Addon>
             )}
-        </label>
+        </Input.Group>
     );
 }
 

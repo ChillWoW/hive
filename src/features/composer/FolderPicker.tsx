@@ -233,16 +233,16 @@ function ProjectMenu({
                 onClick={() => void revealItemInDir(path).catch(() => {})}
                 className={sideMenuItemClassName}
             >
-                <FolderOpenIcon className="size-3.5" />
+                <FolderOpenIcon />
                 {REVEAL_LABEL}
             </Menu.Item>
             <Menu.Item onClick={() => void copyText(path)} className={sideMenuItemClassName}>
-                <CopyIcon className="size-3.5" />
+                <CopyIcon />
                 Copy path
             </Menu.Item>
             <Menu.Separator />
-            <Menu.Item variant="danger" onClick={onRemove} className={sideMenuItemClassName}>
-                <TrashIcon className="size-3.5" />
+            <Menu.Item variant="destructive" onClick={onRemove} className={sideMenuItemClassName}>
+                <TrashIcon />
                 Remove
             </Menu.Item>
         </RowMenu>

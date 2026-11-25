@@ -1,7 +1,7 @@
 import type { ChatConfig } from "@/proto";
 import { useComposerStore } from "@/features/composer/store";
 import { defaultConfig, ModelPicker } from "@/features/models";
-import { Select, type SelectOption } from "@/ui";
+import { Select } from "@/ui";
 import { SettingRow, SettingsSection, SwitchRow } from "../SettingsSection";
 import { useSetting, useSettingsStore } from "../store";
 import { DEFAULT_SETTINGS } from "../types";
@@ -84,7 +84,7 @@ function TitlesSection() {
 }
 
 /** Claude's aliases; its default as "default" (stored empty). */
-const MODELS: SelectOption[] = [
+const MODELS: { value: string; label: string }[] = [
     { value: "haiku", label: "Haiku" },
     { value: "sonnet", label: "Sonnet" },
     { value: "opus", label: "Opus" },
@@ -95,7 +95,7 @@ function TextGenerationSection() {
     const model = useSetting("chat", "textGenerationModel");
     const value = model.value || "default";
     // An id typed into settings.json is offered as it is.
-    const options = MODELS.some((o) => o.value === value) ? MODELS : [...MODELS, { value }];
+    const options = MODELS.some((o) => o.value === value) ? MODELS : [...MODELS, { value, label: value }];
 
     return (
         <SettingsSection title="Text generation">
@@ -107,11 +107,23 @@ function TextGenerationSection() {
                 controlClassName="w-44"
                 control={
                     <Select
-                        aria-label="Text generation model"
+                        items={options}
                         value={value}
-                        options={options}
-                        onValueChange={(next) => model.set(next === "default" ? "" : next)}
-                    />
+                        onValueChange={(next) => {
+                            if (next !== null) model.set(next === "default" ? "" : next);
+                        }}
+                    >
+                        <Select.Trigger aria-label="Text generation model">
+                            <Select.Value />
+                        </Select.Trigger>
+                        <Select.Content>
+                            {options.map((option) => (
+                                <Select.Item key={option.value} value={option.value}>
+                                    {option.label}
+                                </Select.Item>
+                            ))}
+                        </Select.Content>
+                    </Select>
                 }
             />
         </SettingsSection>
