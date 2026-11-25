@@ -2,6 +2,8 @@
  * Mirror of `src-tauri/src/settings/schema.rs`; change both together.
  */
 
+import type { ReasoningLevel } from "@/proto";
+
 export type AppearanceSettings = {
     /** A theme's name; see `src/features/theme/themes.ts`. */
     theme: string;
@@ -33,6 +35,12 @@ export type ClaudeSettings = {
 };
 
 export type ChatSettings = {
+    /** The model a new chat starts on (a catalog id). */
+    defaultModel: string;
+    /** The effort a new chat starts at, where its model takes one. */
+    defaultEffort: ReasoningLevel;
+    /** New chats on a model with fast mode start with it on. */
+    defaultFastMode: boolean;
     /** Minutes an agent process is kept between prompts (1–1440); the next prompt resumes it. */
     idleTimeoutMinutes: number;
     /** Name a chat with a short text run on its first prompt; off, its first words name it. */
@@ -70,6 +78,9 @@ export const DEFAULT_SETTINGS: Settings = {
         binaryPath: ""
     },
     chat: {
+        defaultModel: "claude-opus-5-5",
+        defaultEffort: "high",
+        defaultFastMode: false,
         idleTimeoutMinutes: 15,
         autoTitle: true,
         textGenerationModel: "haiku"

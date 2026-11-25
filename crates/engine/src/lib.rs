@@ -12,7 +12,7 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
 use outcode_harness::{HarnessError, Run, RunHandle};
-use outcode_proto::{AgentEvent, Chat, ChatsUpdate, DoneStatus, MessagesUpdate, RunRequest};
+use outcode_proto::{AgentEvent, Chat, ChatConfig, ChatsUpdate, DoneStatus, MessagesUpdate, RunRequest};
 use outcode_store::{Store, StoreError, Turn, now_ms};
 use tokio::sync::mpsc;
 
@@ -78,6 +78,9 @@ struct Live {
     turn: Option<Turn>,
     /// Turns finished, so an idle timer can tell whether another came since.
     finished: u64,
+    /// The chat's config changed mid-turn: the run closes once the turn ends,
+    /// and the next prompt resumes the session with the new one.
+    stale: bool,
 }
 
 #[derive(Default)]
@@ -130,8 +133,8 @@ impl Engine {
         Ok(self.store().chats()?)
     }
 
-    pub fn create_chat(&self, cwd: String) -> Result<Chat> {
-        let chat = self.store().create_chat(cwd)?;
+    pub fn create_chat(&self, cwd: String, config: ChatConfig) -> Result<Chat> {
+        let chat = self.store().create_chat(cwd, config)?;
         self.state()
             .watchers
             .chats(ChatsUpdate::Upsert { chat: chat.clone() });
@@ -174,6 +177,32 @@ impl Engine {
                 chat.pinned_at = pinned.then(now_ms);
             }
         })
+    }
+
+    /// Sets what the chat runs on. A CLI takes its model and effort only as
+    /// it starts, so the live run closes (once a running turn ends) and the
+    /// next prompt resumes the session with the new config.
+    pub fn set_config(&self, chat_id: &str, config: ChatConfig) -> Result<Chat> {
+        let before = self
+            .store()
+            .chat(chat_id)?
+            .ok_or_else(|| EngineError::NotFound(chat_id.into()))?
+            .config;
+        let chat = self.update(chat_id, |chat| chat.config = config)?;
+        if chat.config == before {
+            return Ok(chat);
+        }
+        let mut state = self.state();
+        match state.runs.get_mut(chat_id) {
+            Some(live) if live.turn.is_some() => live.stale = true,
+            Some(_) => {
+                if let Some(live) = state.runs.remove(chat_id) {
+                    live.handle.close();
+                }
+            }
+            None => {}
+        }
+        Ok(chat)
     }
 
     /// Deletes the chat and its transcript, stopping its run.
@@ -233,6 +262,7 @@ impl Engine {
             cwd: chat.cwd,
             prompt,
             resume: chat.session_id,
+            config: chat.config,
         };
         match (self.shared.hooks.spawn)(request) {
             Ok(run) => {
@@ -245,6 +275,7 @@ impl Engine {
                         handle: run.handle,
                         turn: Some(turn),
                         finished: 0,
+                        stale: false,
                     },
                 );
                 tokio::spawn(self.clone().pump(chat_id.into(), id, run.events));
@@ -335,6 +366,12 @@ impl Engine {
         };
         if self.record(watchers, turn, event) {
             live.turn = None;
+            if live.stale {
+                if let Some(live) = runs.remove(chat_id) {
+                    live.handle.close();
+                }
+                return;
+            }
             live.finished += 1;
             let finished = live.finished;
             let idle = (self.shared.hooks.idle)();

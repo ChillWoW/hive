@@ -9,8 +9,8 @@ import { useSetting } from "../store";
 export function ClaudePage() {
     return (
         <>
-            <BinarySection />
             <SessionsSection />
+            <BinarySection />
         </>
     );
 }

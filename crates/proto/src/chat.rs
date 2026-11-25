@@ -5,6 +5,7 @@ use ts_rs::TS;
 
 use crate::agent::AgentEvent;
 use crate::message::Message;
+use crate::model::ChatConfig;
 
 /// A conversation with an agent in one folder.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
@@ -17,6 +18,9 @@ pub struct Chat {
     pub title: Option<String>,
     /// The folder the agent works in.
     pub cwd: String,
+    /// The model and effort its turns run on.
+    #[serde(default)]
+    pub config: ChatConfig,
     /// The CLI's own session id, resumed by the next run so the agent keeps
     /// the conversation (`RunRequest::resume`).
     #[serde(default, skip_serializing_if = "Option::is_none")]

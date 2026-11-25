@@ -9,6 +9,7 @@
 //! the document still deserializes, so a bad field falls back to its previous
 //! value instead of failing the whole file.
 
+use outcode_proto::ReasoningLevel;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -126,10 +127,17 @@ pub struct ClaudeSettings {
     pub binary_path: String,
 }
 
-/// Chats' runs, read by `src-tauri/src/chat.rs`.
+/// Chats: their runs, read by `src-tauri/src/chat.rs`, and the defaults the
+/// frontend's new-chat config starts from (`src/features/chat/config.ts`).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct ChatSettings {
+    /// The model a new chat starts on (a catalog id).
+    pub default_model: String,
+    /// The effort a new chat starts at, where its model takes one.
+    pub default_effort: ReasoningLevel,
+    /// New chats on a model with fast mode start with it on.
+    pub default_fast_mode: bool,
     /// Minutes a chat's agent process is kept between prompts before it's
     /// closed; the next prompt starts a new one that resumes the session.
     pub idle_timeout_minutes: u32,
@@ -144,6 +152,9 @@ pub struct ChatSettings {
 impl Default for ChatSettings {
     fn default() -> Self {
         Self {
+            default_model: "claude-opus-5-5".into(),
+            default_effort: ReasoningLevel::High,
+            default_fast_mode: false,
             idle_timeout_minutes: 15,
             auto_title: true,
             text_generation_model: "haiku".into(),
@@ -160,6 +171,8 @@ impl Settings {
         appearance.theme = non_empty(&appearance.theme, DEFAULT_THEME);
         appearance.font_family = non_empty(&appearance.font_family, DEFAULT_FONT_FAMILY);
         settings.claude.binary_path = settings.claude.binary_path.trim().into();
+        let model = &mut settings.chat.default_model;
+        *model = non_empty(model, &ChatSettings::default().default_model);
         let idle = &mut settings.chat.idle_timeout_minutes;
         *idle = (*idle).clamp(1, 24 * 60);
         let model = &mut settings.chat.text_generation_model;

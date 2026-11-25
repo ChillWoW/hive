@@ -3,6 +3,7 @@ import type { Message, MessagesUpdate } from "@/proto";
 import { chatsApi, type Unwatch } from "@/features/chats/api";
 import { chats, useChatsStore } from "@/features/chats/store";
 import { toast } from "@/ui";
+import { newChatConfig } from "./config";
 import { foldEvent } from "./fold";
 
 type ChatState = {
@@ -89,7 +90,7 @@ export async function send(prompt: string) {
             return;
         }
         try {
-            chatId = (await chatsApi.create(cwd)).id;
+            chatId = (await chatsApi.create(cwd, newChatConfig())).id;
         } catch (error) {
             return warn("Couldn't start a chat")(error);
         }

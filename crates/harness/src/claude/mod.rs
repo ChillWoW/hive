@@ -12,6 +12,7 @@
 //!   ([`refresh_lock`]): stdin closes, and a kill happens, only once it has
 //!   settled.
 
+mod models;
 mod normalize;
 mod refresh_lock;
 
@@ -19,7 +20,7 @@ use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::time::Duration;
 
-use outcode_proto::{AgentEvent, DoneStatus, RunRequest};
+use outcode_proto::{AgentEvent, ChatConfig, DoneStatus, RunRequest};
 use serde_json::{Value, json};
 use tokio::io::{AsyncBufReadExt, AsyncRead, BufReader, Lines};
 use tokio::process::{Child, ChildStdout};
@@ -28,7 +29,10 @@ use tokio::time::Instant;
 
 use crate::cli::{self, StderrTail, sleep_until};
 use crate::{Gone, HarnessError, Run, RunCommand, RunHandle};
+use models::config_args;
 use normalize::Normalizer;
+
+pub use models::catalog;
 
 const NAME: &str = "claude";
 const INITIALIZE_ID: &str = "outcode_initialize";
@@ -85,7 +89,7 @@ const ARGS: [&str; 7] = [
 /// `request.prompt` as its first turn. Must be called from inside a tokio
 /// runtime.
 pub fn run(request: RunRequest, binary: Option<&Path>) -> Result<Run, HarnessError> {
-    start(request, binary, None)
+    start(request, binary, false)
 }
 
 /// Starts a one-turn text run (a chat title, a branch name) that answers
@@ -102,16 +106,16 @@ pub fn run_text(prompt: String, model: Option<&str>, binary: Option<&Path>) -> R
         cwd: scratch.to_string_lossy().into_owned(),
         prompt,
         resume: None,
+        config: ChatConfig {
+            model: model.filter(|m| !m.is_empty()).map(Into::into),
+            ..ChatConfig::default()
+        },
     };
-    start(request, binary, Some(model))
+    start(request, binary, true)
 }
 
-/// `text`: a [`run_text`] run, with its model.
-fn start(
-    request: RunRequest,
-    binary: Option<&Path>,
-    text: Option<Option<&str>>,
-) -> Result<Run, HarnessError> {
+/// `text`: a [`run_text`] run.
+fn start(request: RunRequest, binary: Option<&Path>, text: bool) -> Result<Run, HarnessError> {
     let exe = find(binary)?;
     let mut cmd = cli::command(&exe);
     cmd.args(ARGS)
@@ -131,7 +135,8 @@ fn start(
     if let Some(session) = request.resume.as_deref().filter(|s| !s.is_empty()) {
         cmd.args(["--resume", session]);
     }
-    if let Some(model) = text {
+    cmd.args(config_args(&request.config));
+    if text {
         cmd.args([
             "--system-prompt",
             crate::TEXT_INSTRUCTIONS,
@@ -147,9 +152,6 @@ fn start(
         if !managed_mcp_config() {
             cmd.arg("--strict-mcp-config");
         }
-        if let Some(model) = model.filter(|m| !m.is_empty()) {
-            cmd.args(["--model", model]);
-        }
     }
     let mut child = cmd.spawn().map_err(|e| HarnessError::Spawn(NAME, e))?;
     let stdin = child.stdin.take().expect("piped stdin");
@@ -159,7 +161,7 @@ fn start(
     let (stdin_tx, stdin_rx) = mpsc::unbounded_channel::<String>();
     tokio::spawn(cli::write_stdin(stdin, stdin_rx));
     // A text run takes its prompt at once: it needs nothing `initialize` reports.
-    let (first, first_deadline) = if text.is_some() {
+    let (first, first_deadline) = if text {
         let _ = stdin_tx.send(user_line(&request.prompt));
         (None, None)
     } else {

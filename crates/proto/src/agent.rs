@@ -5,6 +5,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use ts_rs::TS;
 
+use crate::model::ChatConfig;
+
 /// What starts a run: a prompt for an agent working in `cwd`.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
@@ -17,6 +19,9 @@ pub struct RunRequest {
     /// so the agent remembers the chat so far.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub resume: Option<String>,
+    /// Model, effort and options; unset ones are the CLI's own.
+    #[serde(default)]
+    pub config: ChatConfig,
 }
 
 /// A decoded tool invocation, reduced to the fields each kind renders.

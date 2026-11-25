@@ -2,8 +2,9 @@ import { useLayoutEffect, useMemo, useRef, type ReactNode } from "react";
 import type { Message } from "@/proto";
 import { cn } from "@/lib/cn";
 import { useActiveChat, useChatsStore } from "@/features/chats/store";
-import { Composer } from "./Composer";
-import { FolderPicker } from "./FolderPicker";
+import { Composer, FolderPicker } from "@/features/composer";
+import { toast } from "@/ui";
+import { useChatConfig } from "./config";
 import { AssistantMessage } from "./transcript/AssistantMessage";
 import { ChatCwd, KnownFiles } from "./transcript/context";
 import { foldPath, fullPath, parseFileRef, resolveFileRef } from "./transcript/filePaths";
@@ -35,16 +36,26 @@ export function ChatView() {
     const newChatCwd = useChatsStore((s) => s.newChatCwd);
     const cwd = chat?.cwd ?? newChatCwd ?? "";
     const known = useMemo(() => knownFiles(messages, cwd), [messages, cwd]);
+    const [config, setConfig] = useChatConfig();
+
+    const onSend = (prompt: string) => {
+        // The draft stays until there's somewhere to send it.
+        if (!chat && !newChatCwd) {
+            toast.error({ title: "Choose a folder first", description: "Pick where the agent should work." });
+            return false;
+        }
+        void send(prompt);
+    };
 
     const composer = (
         <>
             <Composer
-                // A fresh draft per chat.
-                key={chat?.id ?? "new"}
-                onSend={(prompt) => void send(prompt)}
+                chatId={chat?.id ?? null}
+                config={config}
+                onConfigChange={setConfig}
+                onSend={onSend}
                 onStop={stop}
                 busy={busy}
-                autoFocus
             />
             <div className="mt-1.5 flex items-center gap-1">
                 <FolderPicker

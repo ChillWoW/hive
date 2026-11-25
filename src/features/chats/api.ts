@@ -1,5 +1,5 @@
 import { Channel } from "@tauri-apps/api/core";
-import type { Chat, ChatsUpdate, MessagesUpdate } from "@/proto";
+import type { Chat, ChatConfig, ChatsUpdate, MessagesUpdate } from "@/proto";
 import { backend } from "@/lib/backend";
 import { isTauri } from "@/lib/platform";
 import { dev } from "./dev";
@@ -36,7 +36,12 @@ async function watch<T>(
  * turns scripted.
  */
 export const chatsApi = {
-    create: (cwd: string) => backend<Chat>("chat_create", { cwd }, () => dev.create(cwd)),
+    create: (cwd: string, config: ChatConfig) =>
+        backend<Chat>("chat_create", { cwd, config }, () => dev.create(cwd, config)),
+
+    /** What the chat runs on; its live run picks it up from the next prompt. */
+    setConfig: (chatId: string, config: ChatConfig) =>
+        backend<Chat>("chat_set_config", { chatId, config }, () => dev.update(chatId, { config })),
 
     /** The reply streams to the chat's message watchers. */
     send: (chatId: string, prompt: string) =>

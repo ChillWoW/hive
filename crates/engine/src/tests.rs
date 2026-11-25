@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use outcode_harness::{HarnessError, Run, RunCommand, RunHandle};
 use outcode_proto::{
-    AgentEvent, ChatsUpdate, DoneStatus, MessagePart, MessageStatus, MessagesUpdate, RunRequest,
+    AgentEvent, ChatConfig, ChatsUpdate, DoneStatus, MessagePart, MessageStatus, MessagesUpdate, RunRequest,
 };
 use outcode_store::Store;
 use tokio::sync::mpsc;
@@ -134,7 +134,7 @@ async fn turns_stream_to_watchers_and_share_one_run() {
     let (_dir, engine, requests) = engine(Duration::from_secs(60));
     let (chats, sink) = collect();
     engine.watch_chats(sink).unwrap();
-    let chat = engine.create_chat("/a".into()).unwrap();
+    let chat = engine.create_chat("/a".into(), ChatConfig::default()).unwrap();
     let (updates, sink) = collect();
     engine.watch_messages(&chat.id, sink).unwrap();
 
@@ -170,7 +170,7 @@ async fn turns_stream_to_watchers_and_share_one_run() {
 #[tokio::test]
 async fn an_idle_run_closes_and_the_next_prompt_resumes_it() {
     let (_dir, engine, requests) = engine(Duration::from_millis(30));
-    let chat = engine.create_chat("/a".into()).unwrap();
+    let chat = engine.create_chat("/a".into(), ChatConfig::default()).unwrap();
     engine.send(&chat.id, "one".into()).unwrap();
     settle(&engine, &chat.id).await;
     tokio::time::sleep(Duration::from_millis(100)).await;
@@ -194,7 +194,7 @@ async fn a_run_that_cant_start_ends_the_turn_with_its_error() {
         idle: Box::new(|| Duration::from_secs(60)),
     };
     let engine = Engine::new(Store::open(dir.path()).unwrap(), hooks);
-    let chat = engine.create_chat("/a".into()).unwrap();
+    let chat = engine.create_chat("/a".into(), ChatConfig::default()).unwrap();
     engine.send(&chat.id, "hi".into()).unwrap();
     let messages = engine.store().messages(&chat.id).unwrap();
     assert_eq!(messages.len(), 2);
@@ -206,7 +206,7 @@ async fn a_run_that_cant_start_ends_the_turn_with_its_error() {
 #[tokio::test]
 async fn chats_rename_pin_archive_and_delete() {
     let (_dir, engine, _) = engine(Duration::from_secs(60));
-    let chat = engine.create_chat("/a".into()).unwrap();
+    let chat = engine.create_chat("/a".into(), ChatConfig::default()).unwrap();
     assert_eq!(
         engine.rename(&chat.id, Some("  Mine ".into())).unwrap().title.as_deref(),
         Some("Mine")
@@ -245,7 +245,7 @@ async fn the_first_prompt_names_the_chat() {
     let (_dir, engine, _) = engine_titled(Duration::from_secs(60), Some("\"Echo The Prompt\"\n"));
     let (chats, sink) = collect();
     engine.watch_chats(sink).unwrap();
-    let chat = engine.create_chat("/a".into()).unwrap();
+    let chat = engine.create_chat("/a".into(), ChatConfig::default()).unwrap();
     engine.send(&chat.id, "say it back".into()).unwrap();
     assert_eq!(titled(&engine, &chat.id).await.as_deref(), Some("Echo The Prompt"));
     assert!(chats.lock().unwrap().iter().any(|u| matches!(
@@ -265,7 +265,7 @@ async fn the_first_prompt_names_the_chat() {
 #[tokio::test]
 async fn without_titles_the_prompts_first_words_stand_in() {
     let (_dir, engine, _) = engine(Duration::from_secs(60));
-    let chat = engine.create_chat("/a".into()).unwrap();
+    let chat = engine.create_chat("/a".into(), ChatConfig::default()).unwrap();
     engine
         .send(&chat.id, "please fix the login flow on the settings page".into())
         .unwrap();
@@ -273,4 +273,46 @@ async fn without_titles_the_prompts_first_words_stand_in() {
         titled(&engine, &chat.id).await.as_deref(),
         Some("please fix the login flow on the")
     );
+}
+
+fn haiku() -> ChatConfig {
+    ChatConfig {
+        model: Some("claude-haiku-5-5".into()),
+        ..ChatConfig::default()
+    }
+}
+
+#[tokio::test]
+async fn a_new_config_restarts_the_run_and_resumes_the_session() {
+    let (_dir, engine, requests) = engine(Duration::from_secs(60));
+    let chat = engine.create_chat("/a".into(), ChatConfig::default()).unwrap();
+    engine.send(&chat.id, "one".into()).unwrap();
+    settle(&engine, &chat.id).await;
+    assert!(engine.any_live());
+
+    assert_eq!(engine.set_config(&chat.id, haiku()).unwrap().config, haiku());
+    assert!(!engine.any_live(), "an idle run closes at once");
+    engine.send(&chat.id, "two".into()).unwrap();
+    settle(&engine, &chat.id).await;
+
+    let requests = requests.lock().unwrap();
+    assert_eq!(requests.len(), 2);
+    assert_eq!(requests[1].config, haiku());
+    assert_eq!(requests[1].resume.as_deref(), Some("s1"));
+}
+
+#[tokio::test]
+async fn a_config_changed_mid_turn_applies_from_the_next_prompt() {
+    let (_dir, engine, requests) = engine(Duration::from_secs(60));
+    let chat = engine.create_chat("/a".into(), ChatConfig::default()).unwrap();
+    engine.send(&chat.id, "one".into()).unwrap();
+    engine.set_config(&chat.id, haiku()).unwrap();
+    assert!(engine.any_live(), "the running turn goes on");
+    settle(&engine, &chat.id).await;
+    assert_eq!(reply_text(&engine, &chat.id), "echo: one");
+    assert!(!engine.any_live(), "closed once it ended");
+
+    engine.send(&chat.id, "two".into()).unwrap();
+    settle(&engine, &chat.id).await;
+    assert_eq!(requests.lock().unwrap()[1].config, haiku());
 }

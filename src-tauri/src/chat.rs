@@ -8,7 +8,7 @@ use std::sync::Mutex;
 use std::time::Duration;
 
 use outcode_engine::{Engine, Hooks, WatchId};
-use outcode_proto::{Chat, ChatsUpdate, MessagesUpdate};
+use outcode_proto::{Catalog, Chat, ChatConfig, ChatsUpdate, MessagesUpdate};
 use outcode_store::Store;
 use tauri::ipc::Channel;
 use tauri::{AppHandle, Manager, State, Webview};
@@ -90,8 +90,29 @@ fn err(error: impl std::fmt::Display) -> String {
 }
 
 #[tauri::command]
-pub fn chat_create(engine: State<'_, Engine>, cwd: String) -> Result<Chat, String> {
-    engine.create_chat(cwd).map_err(err)
+pub fn chat_create(
+    engine: State<'_, Engine>,
+    cwd: String,
+    config: ChatConfig,
+) -> Result<Chat, String> {
+    engine.create_chat(cwd, config).map_err(err)
+}
+
+/// Sets what the chat runs on; a live run picks it up from the next prompt.
+#[tauri::command]
+pub fn chat_set_config(
+    engine: State<'_, Engine>,
+    chat_id: String,
+    config: ChatConfig,
+) -> Result<Chat, String> {
+    engine.set_config(&chat_id, config).map_err(err)
+}
+
+/// Claude's models, and whether its CLI is installed.
+#[tauri::command]
+pub async fn claude_catalog(app: AppHandle) -> Catalog {
+    let binary = binary(&app);
+    outcode_harness::claude::catalog(binary.as_deref())
 }
 
 /// Sends a prompt; the reply streams to the chat's message watchers.

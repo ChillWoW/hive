@@ -1,4 +1,4 @@
-import type { AgentEvent, Chat, ChatsUpdate, Message, MessagesUpdate } from "@/proto";
+import type { AgentEvent, Chat, ChatConfig, ChatsUpdate, Message, MessagesUpdate } from "@/proto";
 import { foldEvent } from "@/features/chat/fold";
 
 /**
@@ -21,7 +21,7 @@ function seed() {
     const now = Date.now();
     const chat = (cwd: string, title: string | undefined, ago: number, extra: Partial<Chat> = {}) => {
         const at = now - ago;
-        chats.push({ id: crypto.randomUUID(), cwd, title, archived: false, createdAt: at, lastMessageAt: at, ...extra });
+        chats.push({ id: crypto.randomUUID(), cwd, title, config: { modelOptions: {} }, archived: false, createdAt: at, lastMessageAt: at, ...extra });
     };
     chat("C:\\dev\\outcode", "Sidebar chat list", 0.2 * HOUR);
     chat("C:\\dev\\outcode", "Fix the resize handle", 5 * HOUR, { pinnedAt: now - HOUR });
@@ -104,8 +104,8 @@ function finish(chatId: string, status: "completed" | "interrupted") {
 }
 
 export const dev = {
-    create(cwd: string): Chat {
-        const chat: Chat = { id: crypto.randomUUID(), cwd, archived: false, createdAt: Date.now() };
+    create(cwd: string, config: ChatConfig): Chat {
+        const chat: Chat = { id: crypto.randomUUID(), cwd, config, archived: false, createdAt: Date.now() };
         chats.unshift(chat);
         emitChats({ kind: "upsert", chat });
         return chat;

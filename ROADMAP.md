@@ -51,13 +51,13 @@ Done when: typing "hi" streams Claude's reply.
 - [x] `recover()` at boot: rebuild half-streamed messages from journals.
 - [x] Settings: `chat.idleTimeoutMinutes`.
 
-## 5. Models + effort
+## 5. Models + effort + fast mode
 
-- [ ] `Model` (id, label, reasoning levels, options like fast mode), `HarnessCatalog`.
-- [ ] Pass `--model`, effort, `--settings` JSON (fastMode).
-- [ ] Changing model mid-chat: close run, next prompt resumes with new config.
-- [ ] UI: model/effort picker in composer.
-- [ ] Settings: `claude.defaultModel`, `claude.defaultEffort`, `claude.fastMode`.
+- [x] `Model` (id, label, reasoning levels, options like fast mode), `Catalog` (one harness for now).
+- [x] Pass `--model`, effort, `--settings` JSON (fastMode).
+- [x] Changing model mid-chat: close run, next prompt resumes with new config.
+- [x] UI: model picker with reasoning and fast mode merged in, in main's composer (textarea field for now; tags and paste chips come with slash commands and mentions).
+- [x] Settings › Chats › Defaults: `chat.defaultModel`, `chat.defaultEffort`, `chat.defaultFastMode` (any provider's model once there are more).
 
 ## 6. Access modes + approvals
 

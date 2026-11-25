@@ -53,6 +53,8 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             chat::chat_create,
+            chat::chat_set_config,
+            chat::claude_catalog,
             chat::chat_send,
             chat::chat_interrupt,
             chat::chat_rename,

@@ -7,11 +7,13 @@ pub mod agent;
 pub mod chat;
 pub mod fold;
 pub mod message;
+pub mod model;
 
 pub use agent::*;
 pub use chat::*;
 pub use fold::fold_event;
 pub use message::*;
+pub use model::*;
 
 #[cfg(test)]
 mod export {
@@ -38,6 +40,7 @@ mod export {
         Message::export_all(&cfg).unwrap();
         ChatsUpdate::export_all(&cfg).unwrap();
         MessagesUpdate::export_all(&cfg).unwrap();
+        Catalog::export_all(&cfg).unwrap();
 
         let mut modules = Vec::new();
         collect_modules(&dir, "", &mut modules);

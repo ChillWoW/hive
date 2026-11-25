@@ -17,7 +17,7 @@ use std::sync::{Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
 
 use outcode_proto::{
-    AgentEvent, Chat, DoneStatus, Message, MessagePart, MessageRole, MessageStatus, fold_event,
+    AgentEvent, Chat, ChatConfig, DoneStatus, Message, MessagePart, MessageRole, MessageStatus, fold_event,
 };
 use rusqlite::{Connection, OptionalExtension, params};
 
@@ -100,11 +100,12 @@ impl Store {
 
     // Chats
 
-    pub fn create_chat(&self, cwd: impl Into<String>) -> Result<Chat> {
+    pub fn create_chat(&self, cwd: impl Into<String>, config: ChatConfig) -> Result<Chat> {
         let chat = Chat {
             id: new_id(),
             title: None,
             cwd: cwd.into(),
+            config,
             session_id: None,
             archived: false,
             pinned_at: None,
@@ -403,8 +404,8 @@ mod tests {
     #[test]
     fn chats_round_trip_and_sort_by_activity() {
         let (_dir, store) = store();
-        let a = store.create_chat("/a").unwrap();
-        let mut b = store.create_chat("/b").unwrap();
+        let a = store.create_chat("/a", ChatConfig::default()).unwrap();
+        let mut b = store.create_chat("/b", ChatConfig::default()).unwrap();
         b.created_at = a.created_at - 10;
         b.title = Some("B".into());
         store.save_chat(&b).unwrap();
@@ -423,7 +424,7 @@ mod tests {
     #[test]
     fn a_turn_unarchives_its_chat() {
         let (_dir, store) = store();
-        let chat = store.create_chat("/a").unwrap();
+        let chat = store.create_chat("/a", ChatConfig::default()).unwrap();
         store.update_chat(&chat.id, |c| c.archived = true).unwrap();
         let (_, chat) = store.start_turn(&chat.id, "hi").unwrap();
         assert!(!chat.archived);
@@ -432,7 +433,7 @@ mod tests {
     #[test]
     fn a_recorded_turn_folds_journals_and_finishes() {
         let (_dir, store) = store();
-        let chat = store.create_chat("/a").unwrap();
+        let chat = store.create_chat("/a", ChatConfig::default()).unwrap();
         let (mut turn, _) = store.start_turn(&chat.id, "hello").unwrap();
         let session = AgentEvent::SessionStarted {
             session_id: "s1".into(),
@@ -474,7 +475,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let message_id = {
             let store = Store::open(dir.path()).unwrap();
-            let chat = store.create_chat("/a").unwrap();
+            let chat = store.create_chat("/a", ChatConfig::default()).unwrap();
             let (mut turn, _) = store.start_turn(&chat.id, "hello").unwrap();
             store.record(&mut turn, &text("partial ")).unwrap();
             // Within the save interval: journaled, not yet saved.

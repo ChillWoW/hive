@@ -1,5 +1,13 @@
 import type { ReactNode } from "react";
 import { activity } from "@/features/chats";
+import {
+    ClaudeMark,
+    isFastMode,
+    REASONING_LABELS,
+    resolveModel,
+    resolveReasoning,
+    useCatalog
+} from "@/features/models";
 import { ProjectIcon } from "@/features/projects";
 import { baseName } from "@/lib/paths";
 import { agoLabel, useMinuteClock } from "@/lib/time";
@@ -9,10 +17,14 @@ import { StatusMark } from "./StatusMark";
 
 /**
  * What a sidebar row has no room for, shown in its hover card: the whole
- * title and its age, then the folder it works in and whether it's working.
+ * title and its age, then the folder it works in, its model and whether it's working.
  */
 export function ChatCard({ chat, title, working }: { chat: Chat; title: string; working: boolean }) {
     const now = useMinuteClock();
+    const catalog = useCatalog();
+    const model = resolveModel(catalog, chat.config);
+    const reasoning = resolveReasoning(model, chat.config);
+    const fast = isFastMode(model, chat.config);
     return (
         <div className="flex flex-col gap-2.5">
             <div className="flex flex-col gap-0.5">
@@ -25,6 +37,13 @@ export function ChatCard({ chat, title, working }: { chat: Chat; title: string; 
                     <span className="text-text/85">{baseName(chat.cwd)}</span>
                     <span className="text-muted/75"> · {chat.cwd}</span>
                 </Meta>
+                {model && (
+                    <Meta icon={<ClaudeMark className="size-3.5" />}>
+                        <span className="text-text/85">{model.label}</span>
+                        {reasoning && <span className="text-muted/75"> · {REASONING_LABELS[reasoning]}</span>}
+                        {fast && <span className="text-muted/75"> · Fast</span>}
+                    </Meta>
+                )}
                 {working && (
                     <Meta icon={<StatusMark status="working" />}>
                         <span className="text-text/85">{STATUS.working.label}</span>

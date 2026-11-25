@@ -12,6 +12,7 @@ fn start_in(cwd: &str, prompt: &str) -> Run {
         cwd: cwd.into(),
         prompt: prompt.into(),
         resume: None,
+        config: Default::default(),
     };
     claude::run(request, None).expect("claude starts")
 }
@@ -137,6 +138,7 @@ async fn a_new_run_resumes_the_session() {
         cwd: String::new(),
         prompt: "Which word did I ask you to remember? Reply with just the word.".into(),
         resume: Some(session),
+        config: Default::default(),
     };
     let mut run = claude::run(request, None).expect("claude starts");
     let (text, status) = turn(&mut run).await;
@@ -168,4 +170,23 @@ async fn a_text_run_answers_without_tools() {
     let words = text.split_whitespace().count();
     assert!((1..=8).contains(&words), "{text:?}");
     eprintln!("title: {text}");
+}
+
+#[tokio::test]
+#[ignore = "runs the real Claude CLI"]
+async fn model_and_effort_are_honored() {
+    let request = RunRequest {
+        cwd: String::new(),
+        prompt: "Reply with exactly the word pong and nothing else.".into(),
+        resume: None,
+        config: outcode_proto::ChatConfig {
+            model: Some("claude-haiku-5-5".into()),
+            reasoning: Some(outcode_proto::ReasoningLevel::Low),
+            ..Default::default()
+        },
+    };
+    let mut run = claude::run(request, None).expect("claude starts");
+    let (text, status) = turn(&mut run).await;
+    assert_eq!(status, DoneStatus::Completed);
+    assert!(text.to_lowercase().contains("pong"), "{text:?}");
 }
