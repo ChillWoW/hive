@@ -383,8 +383,10 @@ export function Composer({
             }}
             className={cn(
                 "@container/composer relative flex w-full flex-col gap-1.5 rounded-[22px] border border-border bg-surface p-1.5",
-                "transition-colors focus-within:border-muted/40",
-                dragging && "border-accent/60 bg-accent/5",
+                "transition-colors",
+                dragging
+                    ? "border-accent/60 bg-accent/5"
+                    : "focus-within:border-[color-mix(in_srgb,var(--border)_75%,var(--muted))]",
                 className
             )}
         >
