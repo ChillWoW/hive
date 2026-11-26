@@ -9,6 +9,7 @@ import {
     TrashIcon
 } from "@phosphor-icons/react";
 import { activity, chats, useChatsStore, useWorking } from "@/features/chats";
+import { ClaudeMark } from "@/features/models";
 import { cn } from "@/lib/cn";
 import { timeAgo, useMinuteClock } from "@/lib/time";
 import type { Chat } from "@/proto";
@@ -24,8 +25,8 @@ export const UNTITLED = "New chat";
 export const CARD_DWELL = 300;
 
 /**
- * One chat in the sidebar: status mark, title and time since its last
- * activity. The "⋯" button (on hover) and a right-click open the same menu:
+ * One chat in the sidebar: status mark, title, its provider's mark and time
+ * since its last activity. The "⋯" button (on hover) and a right-click open the same menu:
  * Rename (in place), Pin, Archive, Delete. Resting on it shows its card
  * (`ChatCard`) beside the sidebar; a click or a menu hides it.
  */
@@ -76,6 +77,8 @@ export function ChatRow({ chat, onDelete }: { chat: Chat; onDelete: (chat: Chat)
                             <span className={cn("min-w-0 flex-1 truncate", !chat.title && "text-muted")}>
                                 {title}
                             </span>
+                            {/* The chat's provider; Claude's is the only one yet. */}
+                            <ClaudeMark className="size-3 shrink-0" />
                             <span
                                 className={cn(
                                     "flex w-7 shrink-0 justify-end text-[11px] text-muted/75 tabular-nums",
