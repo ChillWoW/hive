@@ -2,7 +2,6 @@ export * from "./Autocomplete";
 export * from "./Button";
 export * from "./Checkbox";
 export * from "./Collapsible";
-export * from "./ComboboxCard";
 export * from "./ConfirmDialog";
 export * from "./ContextMenu";
 export * from "./DotMatrixSpinner";

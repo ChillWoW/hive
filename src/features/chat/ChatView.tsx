@@ -2,8 +2,8 @@ import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, use
 import type { Attachment, BackgroundTask, Message } from "@/proto";
 import { cn } from "@/lib/cn";
 import { chats, useActiveChat, useChatsStore, useSession, workDir } from "@/features/chats/store";
-import { Composer, ContextMeter, FolderPicker, useComposerStore } from "@/features/composer";
-import { BranchPicker, WorkspaceChip, WorkspacePicker } from "@/features/git";
+import { Composer, ContextMeter, useComposerStore } from "@/features/composer";
+import { WorkspacePicker } from "@/features/git";
 import { HarnessMark } from "@/features/models";
 import { UNTITLED } from "@/features/sidebar/ChatRow";
 import { toast } from "@/ui";
@@ -111,33 +111,21 @@ export function ChatView() {
                 busy={busy}
             />
             <div className="mt-1.5 flex items-center gap-1">
-                <FolderPicker
-                    cwd={(chat?.cwd ?? newChatCwd) || null}
-                    locked={!!chat || making}
-                    onChange={(path) => {
+                <WorkspacePicker
+                    chat={chat ?? null}
+                    folder={(chat?.cwd ?? newChatCwd) || null}
+                    cwd={cwd || null}
+                    frozen={making}
+                    onFolderChange={(path) => {
                         useChatsStore.getState().setNewChatCwd(path);
                         useComposerStore.getState().setNewChatBase(null);
                         setups.dismiss();
                     }}
+                    workspace={workspace}
+                    onWorkspaceChange={(next) => useComposerStore.getState().setNewChatWorkspace(next)}
+                    base={base}
+                    onBaseChange={(next) => useComposerStore.getState().setNewChatBase(next)}
                 />
-                {chat ? (
-                    <>
-                        <BranchPicker cwd={cwd || null} />
-                        <WorkspaceChip chat={chat} />
-                    </>
-                ) : (
-                    <>
-                        {/* A worktree's base is picked in the workspace chip. */}
-                        {workspace !== "worktree" && <BranchPicker cwd={cwd || null} />}
-                        <WorkspacePicker
-                            cwd={cwd || null}
-                            value={workspace}
-                            onChange={(next) => useComposerStore.getState().setNewChatWorkspace(next)}
-                            base={base}
-                            onBaseChange={(next) => useComposerStore.getState().setNewChatBase(next)}
-                        />
-                    </>
-                )}
                 <span className="ml-auto flex items-center gap-1">
                     {session && (
                         <BackgroundTasks tasks={session.tasks} messages={messages} onStop={queue.stopTask} />
