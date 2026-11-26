@@ -158,6 +158,7 @@ function TranscriptSection() {
 
 const BUSY_SEND: { value: BusySend; label: string }[] = [
     { value: "queue", label: "Queue it" },
+    { value: "after-tool", label: "After tool call" },
     { value: "interrupt", label: "Stop and send" }
 ];
 
@@ -168,8 +169,8 @@ function SendingSection() {
         <SettingsSection title="Sending">
             <SettingRow
                 label="While the agent works"
-                description="Queue a mid-turn prompt, or stop the turn and send it now"
-                keywords="busy send queue steer interrupt follow up while working"
+                description="When a prompt sent mid-turn reaches the agent"
+                keywords="busy send queue steer interrupt follow up while working after tool call"
                 setting={busySend}
                 controlClassName="w-44"
                 control={

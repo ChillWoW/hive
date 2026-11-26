@@ -44,7 +44,7 @@ export type ClaudeSettings = {
     configDir: string;
 };
 
-export type BusySend = "queue" | "interrupt";
+export type BusySend = "queue" | "after-tool" | "interrupt";
 
 export type ChatSettings = {
     /** The model a new chat starts on (a catalog id). */
@@ -63,7 +63,7 @@ export type ChatSettings = {
     reasoningExpanded: boolean;
     /** Tool rows start expanded, showing their output. */
     toolOutputExpanded: boolean;
-    /** What sending does while a turn runs: queue it, or stop the turn and send now. */
+    /** What sending does while a turn runs: queue it, stop the turn after its running tool call and send, or stop it and send now. */
     busySend: BusySend;
 };
 

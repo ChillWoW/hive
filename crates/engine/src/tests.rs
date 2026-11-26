@@ -284,6 +284,80 @@ async fn send_now_stops_the_turn_and_jumps_the_queue() {
     assert_eq!(queued(&engine, &chat.id), ["a"]);
 }
 
+/// A run whose first turn calls tools `t1` and `t2` and waits; each answer
+/// finishes the next of them, an interrupt ends the turn, and later prompts
+/// echo.
+fn tool_run(request: RunRequest) -> std::result::Result<Run, HarnessError> {
+    let (handle, mut commands) = RunHandle::new();
+    let (tx, events) = mpsc::channel(64);
+    tokio::spawn(async move {
+        drop(request);
+        for id in ["t1", "t2"] {
+            let call = outcode_proto::ToolCall::Exec { command: "ls".into() };
+            let _ = tx.send(AgentEvent::ToolCall { id: id.into(), call }).await;
+        }
+        let mut pending = vec!["t1", "t2"].into_iter();
+        while let Some(command) = commands.recv().await {
+            match command {
+                RunCommand::Answer { .. } => {
+                    if let Some(id) = pending.next() {
+                        let _ = tx.send(AgentEvent::ToolResult { id: id.into(), is_error: false, output: None }).await;
+                    }
+                }
+                RunCommand::Interrupt => {
+                    let _ = tx.send(AgentEvent::Done { status: DoneStatus::Interrupted }).await;
+                }
+                RunCommand::Send { prompt, .. } => {
+                    let _ = tx.send(AgentEvent::TextDelta { text: format!("echo: {prompt}") }).await;
+                    let _ = tx.send(AgentEvent::Done { status: DoneStatus::Completed }).await;
+                }
+                RunCommand::Close => break,
+                _ => {}
+            }
+        }
+    });
+    Ok(Run { events, handle })
+}
+
+#[tokio::test]
+async fn after_tool_stops_the_turn_once_its_tool_calls_finish() {
+    let dir = tempfile::tempdir().unwrap();
+    let hooks = Hooks {
+        spawn: Box::new(tool_run),
+        text: Box::new(|_| None),
+        idle: Box::new(|| Duration::from_secs(60)),
+    };
+    let engine = Engine::new(Store::open(dir.path()).unwrap(), hooks);
+    let chat = engine.create_chat("/a".into(), ChatConfig::default()).unwrap();
+    engine.send(&chat.id, "one".into(), Vec::new()).unwrap();
+    engine.send(&chat.id, "later".into(), Vec::new()).unwrap();
+    engine
+        .send_with(&chat.id, "steer".into(), Vec::new(), SendMode::AfterTool)
+        .unwrap();
+    until(|| {
+        engine.state().runs[&chat.id]
+            .turn
+            .as_ref()
+            .is_some_and(|t| t.assistant.parts.len() == 2)
+    })
+    .await;
+
+    // "t1" finishes but "t2" still runs: the turn goes on.
+    engine.answer(&chat.id, "r", approve()).unwrap();
+    tokio::time::sleep(Duration::from_millis(20)).await;
+    assert_eq!(queued(&engine, &chat.id), ["later", "steer"]);
+    assert!(engine.state().working(&chat.id));
+
+    // "t2" finishes: the turn stops and "steer" goes, ahead of "later".
+    engine.answer(&chat.id, "r", approve()).unwrap();
+    until(|| queued(&engine, &chat.id).is_empty()).await;
+    settle(&engine, &chat.id).await;
+    let messages = engine.store().messages(&chat.id).unwrap();
+    assert!(matches!(&messages[2].parts[0], MessagePart::Text { text, .. } if text == "steer"));
+    assert_eq!(reply_at(&engine, &chat.id, 3), "echo: steer");
+    assert_eq!(reply_at(&engine, &chat.id, 5), "echo: later");
+}
+
 /// Waits until `done` holds.
 async fn until(done: impl Fn() -> bool) {
     for _ in 0..200 {

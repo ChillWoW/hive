@@ -164,7 +164,8 @@ pub struct ChatSettings {
     pub reasoning_expanded: bool,
     /// Tool rows start expanded, showing their output.
     pub tool_output_expanded: bool,
-    /// What sending does while a turn runs: wait for it, or stop it.
+    /// What sending does while a turn runs: wait for it, stop it after the
+    /// running tool call, or stop it now.
     pub busy_send: BusySend,
 }
 
@@ -175,6 +176,8 @@ pub enum BusySend {
     /// Queue it; it goes once the turn ends.
     #[default]
     Queue,
+    /// Stop the turn once its running tool calls finish, and send it.
+    AfterTool,
     /// Stop the turn and send it now.
     Interrupt,
 }

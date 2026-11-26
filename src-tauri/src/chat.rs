@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::Duration;
 
-use outcode_engine::{Engine, Hooks, WatchId};
+use outcode_engine::{Engine, Hooks, SendMode, WatchId};
 use outcode_proto::{Attachment, Catalog, Chat, ChatConfig, ChatsUpdate, InputResponse, MessagesUpdate, SlashCommand};
 use outcode_store::Store;
 use tauri::ipc::Channel;
@@ -129,7 +129,8 @@ pub async fn claude_commands(app: AppHandle, cwd: String) -> Result<Vec<SlashCom
 
 /// Sends a prompt with the files attached to it ([`attachment_save`]); the
 /// reply streams to the chat's message watchers. While a turn runs it
-/// waits in the chat's queue, or stops it (`chat.busySend`).
+/// waits in the chat's queue, or stops it after its running tool call or at
+/// once (`chat.busySend`).
 #[tauri::command]
 pub async fn chat_send(
     app: AppHandle,
@@ -146,8 +147,12 @@ pub async fn chat_send(
         return Err(format!("{} isn't an attachment", stray.path));
     }
     // `chat.busySend`: a prompt sent mid-turn waits, or stops the turn.
-    let now = app.state::<SettingsFile>().get().chat.busy_send == BusySend::Interrupt;
-    engine.send_with(&chat_id, prompt, attachments, now).map_err(err)
+    let mode = match app.state::<SettingsFile>().get().chat.busy_send {
+        BusySend::Queue => SendMode::Queue,
+        BusySend::AfterTool => SendMode::AfterTool,
+        BusySend::Interrupt => SendMode::Now,
+    };
+    engine.send_with(&chat_id, prompt, attachments, mode).map_err(err)
 }
 
 /// Stops the chat's running turn; its run stays up for the next prompt.

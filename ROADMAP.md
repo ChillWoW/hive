@@ -77,7 +77,7 @@ Done when: typing "hi" streams Claude's reply.
 - [x] Command ledger: send mid-turn queues; cancel / reorder / send-now.
 - [x] Held after a user stop until the next turn ends.
 - [x] UI: queued prompts above composer.
-- [x] Settings: `chat.busySend` (queue / stop and send; Claude takes a mid-turn prompt only after the turn).
+- [x] Settings: `chat.busySend` (queue / after tool call / stop and send; Claude takes a mid-turn prompt only after the turn, so "after tool call" stops the turn once its running tools finish).
 
 ## 9. Plan mode
 

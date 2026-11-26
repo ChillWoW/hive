@@ -10,8 +10,8 @@
 //! every change.
 //!
 //! A prompt sent while a turn runs waits in the chat's queue and goes once
-//! the turn ends. After the user stops a turn the queue is held until a turn
-//! they start ends, or one is sent now.
+//! the turn ends, or stops it ([`SendMode`]). After the user stops a turn the
+//! queue is held until a turn they start ends, or one is sent now.
 
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
@@ -20,7 +20,7 @@ use std::time::Duration;
 use outcode_harness::{HarnessError, Run, RunHandle};
 use outcode_proto::{
     AgentEvent, Attachment, Chat, ChatConfig, ChatsUpdate, ContextWindow, DoneStatus, InputResponse, MessagesUpdate,
-    McpServer, SecretRequest, has_running_spawn, has_spawn,
+    McpServer, MessagePart, SecretRequest, has_running_spawn, has_spawn,
     QueuedPrompt, RunRequest, Session,
 };
 use outcode_store::{Store, StoreError, Turn, new_id, now_ms};
@@ -58,6 +58,18 @@ pub struct Hooks {
     /// How long a run may sit between turns before it's closed; read as each
     /// turn ends, so a settings change applies from the next one.
     pub idle: Box<dyn Fn() -> Duration + Send + Sync>,
+}
+
+/// What sending does while the chat's turn runs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SendMode {
+    /// Queue it; it goes once the turn ends.
+    Queue,
+    /// Queue it; once the turn's running tool calls finish, the turn is
+    /// stopped and it goes next. A turn that ends first just starts it.
+    AfterTool,
+    /// Stop the turn and send it next.
+    Now,
 }
 
 type ChatsSink = Box<dyn Fn(ChatsUpdate) -> bool + Send>;
@@ -98,6 +110,9 @@ struct Live {
     ended: Vec<Turn>,
     /// The user stopped the turn in flight.
     stopped: bool,
+    /// Queued prompts ([`SendMode::AfterTool`]) that stop the turn in flight
+    /// once its running tool calls finish.
+    after_tool: Vec<String>,
     /// Turns finished, so an idle timer can tell whether another came since.
     finished: u64,
     /// The chat's config changed mid-turn: the run closes once the turn ends,
@@ -293,12 +308,11 @@ impl Engine {
     /// reply streams to watchers from there. A run that can't start ends the
     /// reply with the error. Must be called inside a tokio runtime.
     pub fn send(&self, chat_id: &str, prompt: String, attachments: Vec<Attachment>) -> Result<()> {
-        self.send_with(chat_id, prompt, attachments, false)
+        self.send_with(chat_id, prompt, attachments, SendMode::Queue)
     }
 
-    /// [`Engine::send`]; with `now`, a running turn is stopped instead and
-    /// the prompt goes next, ahead of the queue.
-    pub fn send_with(&self, chat_id: &str, prompt: String, attachments: Vec<Attachment>, now: bool) -> Result<()> {
+    /// [`Engine::send`], with `mode` saying what happens to a running turn.
+    pub fn send_with(&self, chat_id: &str, prompt: String, attachments: Vec<Attachment>, mode: SendMode) -> Result<()> {
         if self.store().chat(chat_id)?.is_none() {
             return Err(EngineError::NotFound(chat_id.into()));
         }
@@ -311,9 +325,14 @@ impl Engine {
             };
             let id = queued.id.clone();
             state.update_session(chat_id, |s| s.queued.push(queued));
-            drop(state);
-            if now {
-                self.send_queued_now(chat_id, &id)?;
+            match mode {
+                SendMode::Queue => {}
+                SendMode::AfterTool => {
+                    if let Some(live) = state.runs.get_mut(chat_id) {
+                        live.after_tool.push(id);
+                    }
+                }
+                SendMode::Now => self.send_now(&mut state, chat_id, &id)?,
             }
             return Ok(());
         }
@@ -384,6 +403,7 @@ impl Engine {
                         turn: Some(turn),
                         ended: Vec::new(),
                         stopped: false,
+                        after_tool: Vec::new(),
                         finished: 0,
                         stale: false,
                     },
@@ -476,7 +496,10 @@ impl Engine {
     /// Sends a queued prompt now: the running turn is stopped and it goes
     /// next, ahead of the rest, which then follow without a hold.
     pub fn send_queued_now(&self, chat_id: &str, id: &str) -> Result<()> {
-        let mut state = self.state();
+        self.send_now(&mut self.state(), chat_id, id)
+    }
+
+    fn send_now(&self, state: &mut State, chat_id: &str, id: &str) -> Result<()> {
         let Some(at) = state.sessions.get(chat_id).and_then(|s| s.queued.iter().position(|q| q.id == id)) else {
             return Ok(());
         };
@@ -490,9 +513,10 @@ impl Engine {
             Some(live) => {
                 live.handle.interrupt();
                 live.stopped = false;
+                live.after_tool.clear();
                 Ok(())
             }
-            None => self.next_queued(&mut state, chat_id),
+            None => self.next_queued(state, chat_id),
         }
     }
 
@@ -621,10 +645,15 @@ impl Engine {
         let Some(turn) = live.turn.as_mut() else {
             return;
         };
+        let tool_done = matches!(event, AgentEvent::ToolResult { .. });
         if !self.record(watchers, turn, event) {
+            if tool_done {
+                self.after_tool(&mut state, chat_id);
+            }
             return;
         }
         let ended = live.turn.take().expect("recorded into it");
+        live.after_tool.clear();
         // Its subagents still working in the background report into it.
         if has_running_spawn(&ended.assistant.parts) {
             live.ended.push(ended);
@@ -650,6 +679,41 @@ impl Engine {
         }
         if !stale {
             self.close_when_idle(chat_id.to_owned(), id, finished);
+        }
+    }
+
+    /// A tool call of the turn in flight finished: once none still runs, the
+    /// first prompt sent to go after one stops the turn and goes next.
+    fn after_tool(&self, state: &mut State, chat_id: &str) {
+        let Some(live) = state.runs.get(chat_id).filter(|live| !live.after_tool.is_empty() && !live.stopped) else {
+            return;
+        };
+        let running = live.turn.as_ref().is_some_and(|turn| {
+            turn.assistant
+                .parts
+                .iter()
+                .any(|p| matches!(p, MessagePart::Tool { resolved: false, .. }))
+        });
+        if running {
+            return;
+        }
+        let next = state
+            .sessions
+            .get(chat_id)
+            .and_then(|s| s.queued.iter().find(|q| live.after_tool.contains(&q.id)))
+            .map(|q| q.id.clone());
+        let result = match next {
+            Some(id) => self.send_now(state, chat_id, &id),
+            // Cancelled since.
+            None => {
+                if let Some(live) = state.runs.get_mut(chat_id) {
+                    live.after_tool.clear();
+                }
+                Ok(())
+            }
+        };
+        if let Err(error) = result {
+            eprintln!("[engine] queue of {chat_id}: {error}");
         }
     }
 

@@ -3,7 +3,7 @@ import { ArrowUpIcon, PaperclipIcon, StopIcon } from "@phosphor-icons/react";
 import type { Attachment, ChatConfig, SlashCommand } from "@/proto";
 import { AttachmentChip, attachFile } from "@/features/chats";
 import { ModelPicker } from "@/features/models";
-import { useSettingsStore } from "@/features/settings";
+import { useSettingsStore, type BusySend } from "@/features/settings";
 import { cn } from "@/lib/cn";
 import { useResizeObserver } from "@/lib/useResizeObserver";
 import { Spinner, toast, Tooltip } from "@/ui";
@@ -25,6 +25,17 @@ type Mode = "send" | "stop";
 const MODES: Record<Mode, { label: string; icon: typeof ArrowUpIcon }> = {
     send: { label: "Send", icon: ArrowUpIcon },
     stop: { label: "Stop", icon: StopIcon }
+};
+
+/** What sending while a turn runs is called, by `chat.busySend`. */
+const BUSY_COPY: Record<BusySend, { placeholder: string; action: string; tooltip: string }> = {
+    queue: { placeholder: "Queue a follow-up", action: "Queue", tooltip: "Queue: sends when this turn ends" },
+    "after-tool": {
+        placeholder: "Send after the current tool call",
+        action: "Send after tool call",
+        tooltip: "Sends once the running tool call finishes"
+    },
+    interrupt: { placeholder: "Stop and send a new prompt", action: "Stop and send", tooltip: "Stop the turn and send" }
 };
 
 /**
@@ -68,8 +79,9 @@ export function Composer({
     placeholder?: string;
     className?: string;
 }) {
-    const interrupts = useSettingsStore((s) => s.settings.chat.busySend === "interrupt");
-    placeholder ??= busy ? (interrupts ? "Stop and send a new prompt" : "Queue a follow-up") : "Ask anything";
+    const busySend = useSettingsStore((s) => s.settings.chat.busySend);
+    const busyCopy = BUSY_COPY[busySend];
+    placeholder ??= busy ? busyCopy.placeholder : "Ask anything";
     const draft = useDraft(chatId);
     const setDraft = (text: string) => composer.setDraft(chatId, text);
     const attachments = useDraftAttachments(chatId);
@@ -521,7 +533,7 @@ export function Composer({
                                     <button
                                         key={mode}
                                         type="submit"
-                                        aria-label={busy && mode === "send" ? (interrupts ? "Stop and send" : "Queue") : label}
+                                        aria-label={busy && mode === "send" ? busyCopy.action : label}
                                         disabled={disabled}
                                         className={cn(
                                             "ml-1 inline-flex size-8 shrink-0 items-center justify-center rounded-full outline-none select-none",
@@ -539,11 +551,7 @@ export function Composer({
                                 }
                             />
                             <Tooltip.Content side="top" shortcut={mode === "stop" ? "Escape" : "Enter"}>
-                                {busy && mode === "send"
-                                    ? interrupts
-                                        ? "Stop the turn and send"
-                                        : "Queue: sends when this turn ends"
-                                    : label}
+                                {busy && mode === "send" ? busyCopy.tooltip : label}
                             </Tooltip.Content>
                         </Tooltip>
                     </div>
