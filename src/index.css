@@ -5,10 +5,13 @@
    classes compiled into its bundle; Tailwind skips node_modules unless told. */
 @source "../node_modules/streamdown/dist/*.js";
 
-/* `--font-ui` is the interface font setting (src/features/fonts/); a family
-   that isn't installed falls through to the system UI font. */
-@theme {
+/* `--font-ui` and `--font-code` are the font settings (src/features/fonts/); a
+   family that isn't installed, or no code font, falls through to the
+   system's. Static: the diff views read `--font-mono` too. */
+@theme static {
     --font-sans: var(--font-ui), ui-sans-serif, system-ui, sans-serif;
+    --font-mono: var(--font-code, ui-monospace), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+        "Liberation Mono", "Courier New", monospace;
 }
 
 /* The theme's colours, by their own names (bg-surface, text-muted,

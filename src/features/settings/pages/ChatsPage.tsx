@@ -1,10 +1,10 @@
 import type { Catalog, ChatConfig, HarnessId } from "@/proto";
 import { useComposerStore } from "@/features/composer/store";
 import { defaultConfig, ModelPicker, useCatalog } from "@/features/models";
-import { Select } from "@/ui";
+import { SegmentedControl, Select } from "@/ui";
 import { SettingRow, SettingsSection, SwitchRow } from "../SettingsSection";
 import { useSetting, useSettingsStore } from "../store";
-import { DEFAULT_SETTINGS, type BusySend } from "../types";
+import { DEFAULT_SETTINGS, type BusySend, type DiffIndicators, type InlineChanges } from "../types";
 
 export function ChatsPage() {
     return (
@@ -12,6 +12,7 @@ export function ChatsPage() {
             <DefaultsSection />
             <SendingSection />
             <TranscriptSection />
+            <DiffsSection />
             <TitlesSection />
             <TextGenerationSection />
         </>
@@ -157,6 +158,61 @@ function TranscriptSection() {
                 description="Show each tool call's output, diff or command open"
                 keywords="tool output expand collapse transcript diff command"
                 setting={toolOutput}
+            />
+        </SettingsSection>
+    );
+}
+
+function DiffsSection() {
+    const wrap = useSetting("diffs", "wrapLines");
+    const indicators = useSetting("diffs", "indicators");
+    const inline = useSetting("diffs", "inlineChanges");
+
+    return (
+        <SettingsSection title="Diffs">
+            <SwitchRow
+                label="Wrap lines"
+                description="Long lines wrap rather than scroll sideways"
+                keywords="diff wrap lines overflow scroll long"
+                setting={wrap}
+            />
+            <SettingRow
+                label="Change markers"
+                description="How added and removed lines are marked"
+                keywords="diff indicators markers plus minus bars gutter"
+                setting={indicators}
+                controlClassName="w-auto"
+                control={
+                    <SegmentedControl
+                        size="xs"
+                        value={indicators.value}
+                        onValueChange={(value) => indicators.set(value as DiffIndicators)}
+                        aria-label="Change markers"
+                    >
+                        <SegmentedControl.Item value="classic">+ / −</SegmentedControl.Item>
+                        <SegmentedControl.Item value="bars">Bars</SegmentedControl.Item>
+                        <SegmentedControl.Item value="none">None</SegmentedControl.Item>
+                    </SegmentedControl>
+                }
+            />
+            <SettingRow
+                label="Inline changes"
+                description="Highlight what changed inside a line"
+                keywords="diff inline word character highlight changes"
+                setting={inline}
+                controlClassName="w-auto"
+                control={
+                    <SegmentedControl
+                        size="xs"
+                        value={inline.value}
+                        onValueChange={(value) => inline.set(value as InlineChanges)}
+                        aria-label="Inline changes"
+                    >
+                        <SegmentedControl.Item value="word">Words</SegmentedControl.Item>
+                        <SegmentedControl.Item value="char">Characters</SegmentedControl.Item>
+                        <SegmentedControl.Item value="off">Off</SegmentedControl.Item>
+                    </SegmentedControl>
+                }
             />
         </SettingsSection>
     );

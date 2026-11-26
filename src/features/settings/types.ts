@@ -9,6 +9,8 @@ export type AppearanceSettings = {
     theme: string;
     /** A font family: the bundled default or an installed one; see `src/features/fonts/`. */
     fontFamily: string;
+    /** The code font (code blocks, diffs): an installed family; empty: the system monospace font. */
+    codeFontFamily: string;
     /** The window's columns, left to right; each once, the dock at an end. See `src/layout/placement.ts`. */
     layout: LayoutColumn[];
 };
@@ -109,6 +111,19 @@ export type WorktreesSettings = {
     deleteBranch: boolean;
 };
 
+/** How a diff marks changed lines: `+`/`−`, a bar at the edge, or only the tint. */
+export type DiffIndicators = "classic" | "bars" | "none";
+
+/** What a diff highlights inside a changed line. */
+export type InlineChanges = "word" | "char" | "off";
+
+export type DiffsSettings = {
+    /** Long lines wrap rather than scroll sideways. */
+    wrapLines: boolean;
+    indicators: DiffIndicators;
+    inlineChanges: InlineChanges;
+};
+
 export type Settings = {
     version: number;
     appearance: AppearanceSettings;
@@ -118,6 +133,7 @@ export type Settings = {
     codex: CodexSettings;
     chat: ChatSettings;
     worktrees: WorktreesSettings;
+    diffs: DiffsSettings;
 };
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -125,6 +141,7 @@ export const DEFAULT_SETTINGS: Settings = {
     appearance: {
         theme: "Outcode Slate",
         fontFamily: "Geist",
+        codeFontFamily: "",
         layout: ["dock", "chats", "main", "tabs", "files"]
     },
     updates: {
@@ -181,5 +198,10 @@ export const DEFAULT_SETTINGS: Settings = {
         branchNaming: "static",
         branchPrefix: "outcode",
         deleteBranch: false
+    },
+    diffs: {
+        wrapLines: false,
+        indicators: "classic",
+        inlineChanges: "word"
     }
 };

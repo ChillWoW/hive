@@ -55,6 +55,7 @@ function ThemeSection() {
 
 function FontSection() {
     const fontFamily = useSetting("appearance", "fontFamily");
+    const codeFont = useSetting("appearance", "codeFontFamily");
 
     return (
         <SettingsSection title="Font">
@@ -65,6 +66,22 @@ function FontSection() {
                 setting={fontFamily}
                 controlClassName="w-56"
                 control={<FontPicker value={fontFamily.value} onChange={fontFamily.set} />}
+            />
+            <SettingRow
+                label="Code font"
+                description="The typeface for code blocks and diffs"
+                keywords="font family typeface monospace mono code diff editor"
+                setting={codeFont}
+                controlClassName="w-56"
+                control={
+                    <FontPicker
+                        value={codeFont.value}
+                        onChange={codeFont.set}
+                        label="Code font"
+                        fallback="ui-monospace, monospace"
+                        empty="System monospace"
+                    />
+                }
             />
         </SettingsSection>
     );

@@ -28,6 +28,7 @@ pub struct Settings {
     pub codex: CodexSettings,
     pub chat: ChatSettings,
     pub worktrees: WorktreesSettings,
+    pub diffs: DiffsSettings,
 }
 
 impl Default for Settings {
@@ -41,6 +42,7 @@ impl Default for Settings {
             codex: CodexSettings::default(),
             chat: ChatSettings::default(),
             worktrees: WorktreesSettings::default(),
+            diffs: DiffsSettings::default(),
         }
     }
 }
@@ -59,6 +61,9 @@ pub struct AppearanceSettings {
     /// The interface font's family name: the bundled default or an installed
     /// one. One that isn't installed falls back to the system UI font.
     pub font_family: String,
+    /// The code font's family name (code blocks, diffs). Empty: the system
+    /// monospace font.
+    pub code_font_family: String,
     /// The window's columns, left to right (read by `src/layout/placement.ts`).
     /// Each appears once; the dock is always at one end.
     pub layout: Vec<LayoutColumn>,
@@ -69,6 +74,7 @@ impl Default for AppearanceSettings {
         Self {
             theme: DEFAULT_THEME.into(),
             font_family: DEFAULT_FONT_FAMILY.into(),
+            code_font_family: String::new(),
             layout: LayoutColumn::DEFAULT.to_vec(),
         }
     }
@@ -357,6 +363,39 @@ impl Default for WorktreesSettings {
     }
 }
 
+/// How a diff marks its changed lines.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum DiffIndicators {
+    /// `+` / `−` in the gutter.
+    #[default]
+    Classic,
+    /// A coloured bar at the line's edge.
+    Bars,
+    /// Only the line's tint.
+    None,
+}
+
+/// What a diff highlights inside a changed line.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum InlineChanges {
+    #[default]
+    Word,
+    Char,
+    Off,
+}
+
+/// Diff views, read by the frontend (`src/features/chat/transcript/DiffView.tsx`).
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct DiffsSettings {
+    /// Long lines wrap rather than scroll sideways.
+    pub wrap_lines: bool,
+    pub indicators: DiffIndicators,
+    pub inline_changes: InlineChanges,
+}
+
 impl Settings {
     /// Arbitrary JSON in, a valid document out; never fails.
     pub fn sanitize(base: &Settings, input: &Value) -> Settings {
@@ -365,6 +404,7 @@ impl Settings {
         let appearance = &mut settings.appearance;
         appearance.theme = non_empty(&appearance.theme, DEFAULT_THEME);
         appearance.font_family = non_empty(&appearance.font_family, DEFAULT_FONT_FAMILY);
+        appearance.code_font_family = appearance.code_font_family.trim().into();
         appearance.layout = LayoutColumn::normalize(&appearance.layout);
         settings.claude.binary_path = settings.claude.binary_path.trim().into();
         settings.claude.config_dir = settings.claude.config_dir.trim().into();

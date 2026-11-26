@@ -32,12 +32,12 @@ export const useFontsStore = create<FontsState>()((set, get) => ({
     }
 }));
 
-/** The bundled font first, then installed ones, plus `current` if it's gone. */
-export function fontChoices(installed: string[], current: string): string[] {
-    const rest = installed.filter((name) => name.toLowerCase() !== DEFAULT_FONT.toLowerCase());
-    if (current !== DEFAULT_FONT && !rest.includes(current)) {
+/** `first` (the default: the bundled font), then installed ones, plus `current` if it's gone. */
+export function fontChoices(installed: string[], current: string, first: string = DEFAULT_FONT): string[] {
+    const rest = installed.filter((name) => name.toLowerCase() !== first.toLowerCase());
+    if (current !== first && !rest.includes(current)) {
         rest.push(current);
         rest.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
     }
-    return [DEFAULT_FONT, ...rest];
+    return [first, ...rest];
 }
