@@ -16,3 +16,4 @@ tokio.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
+outcode-harness = { workspace = true, features = ["mock"] }

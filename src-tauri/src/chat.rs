@@ -4,10 +4,11 @@
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use outcode_engine::{Engine, Hooks, SendMode, TextUse, WatchId, WorktreeOptions};
+use outcode_harness::claude::{Claude, Options as ClaudeOptions};
 use outcode_proto::{
     Attachment, Catalog, Chat, ChatConfig, ChatsUpdate, InputResponse, MessagesUpdate, NewWorktree, SlashCommand,
     WorktreeStep,
@@ -28,25 +29,23 @@ pub fn engine(app: &AppHandle, data_dir: &Path) -> Result<Engine, Box<dyn std::e
     if !closed.is_empty() {
         log::info!("closed {} turns left running", closed.len());
     }
-    let (spawn, text, idle, worktrees) = (app.clone(), app.clone(), app.clone(), app.clone());
+    let (claude, text, idle, worktrees) = (app.clone(), app.clone(), app.clone(), app.clone());
     let data_dir = data_dir.to_path_buf();
+    let harness = Claude::new(move || {
+        let settings = claude.state::<SettingsFile>().get().claude;
+        let window = settings.auto_compact_window;
+        ClaudeOptions {
+            binary: (!settings.binary_path.is_empty()).then(|| PathBuf::from(settings.binary_path)),
+            auto_compact_window: (window != 0).then_some(window),
+        }
+    });
     Ok(Engine::new(
         store,
         Hooks {
-            spawn: Box::new(move |mut request| {
-                let binary = binary(&spawn);
-                let window = spawn.state::<SettingsFile>().get().claude.auto_compact_window;
-                request.auto_compact_window = (window != 0).then_some(window);
-                outcode_harness::claude::run(request, binary.as_deref())
-            }),
-            text: Box::new(move |purpose, prompt| {
+            harness: Arc::new(harness),
+            text_model: Box::new(move |purpose| {
                 let chat = text.state::<SettingsFile>().get().chat;
-                if purpose == TextUse::Title && !chat.auto_title {
-                    return None;
-                }
-                let binary = binary(&text);
-                let model = Some(chat.text_generation_model.as_str());
-                Some(outcode_harness::claude::run_text(prompt, model, binary.as_deref()))
+                (purpose != TextUse::Title || chat.auto_title).then_some(chat.text_generation_model)
             }),
             idle: Box::new(move || {
                 let minutes = idle.state::<SettingsFile>().get().chat.idle_timeout_minutes;
@@ -94,12 +93,6 @@ pub fn worktrees_default_dir(dir: State<'_, DataDir>) -> String {
 
 /// The app's data folder (`~/.outcode`, or `~/.outcode.dev`).
 pub struct DataDir(pub PathBuf);
-
-/// `claude.binaryPath`, when set.
-fn binary(app: &AppHandle) -> Option<PathBuf> {
-    let binary = app.state::<SettingsFile>().get().claude.binary_path;
-    (!binary.is_empty()).then(|| PathBuf::from(binary))
-}
 
 /// Watch ids by the webview that opened them.
 #[derive(Default)]
@@ -168,19 +161,16 @@ pub fn chat_set_config(
 
 /// Claude's models, and whether its CLI is installed.
 #[tauri::command]
-pub async fn claude_catalog(app: AppHandle) -> Catalog {
-    let binary = binary(&app);
-    outcode_harness::claude::catalog(binary.as_deref())
+pub async fn claude_catalog(engine: State<'_, Engine>) -> Result<Catalog, String> {
+    Ok(engine.harness().catalog())
 }
 
 /// The commands and skills Claude offers in `cwd` (a chat's run lists its
 /// own in its session once it starts).
 #[tauri::command]
-pub async fn claude_commands(app: AppHandle, cwd: String) -> Result<Vec<SlashCommand>, String> {
-    let binary = binary(&app);
-    outcode_harness::claude::commands(&cwd, binary.as_deref())
-        .await
-        .map_err(err)
+pub async fn claude_commands(engine: State<'_, Engine>, cwd: String) -> Result<Vec<SlashCommand>, String> {
+    let harness = engine.harness().clone();
+    harness.commands(&cwd).await.map_err(err)
 }
 
 /// Sends a prompt with the files attached to it ([`attachment_save`]); the

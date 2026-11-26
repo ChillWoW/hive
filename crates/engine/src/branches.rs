@@ -37,7 +37,7 @@ impl Engine {
             "{BRANCH_TASK}\n\nSession request (JSON string):\n{}",
             serde_json::to_string(prompt).unwrap_or_default()
         );
-        let run = match (self.shared.hooks.text)(TextUse::Branch, body)? {
+        let run = match self.run_text(TextUse::Branch, body)? {
             Ok(run) => run,
             Err(error) => {
                 eprintln!("[engine] branch name run: {error}");

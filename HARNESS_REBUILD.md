@@ -37,7 +37,7 @@ Done when: unit tests fold a scripted event list into the expected parts (text m
 
 ## Phase 2 — Harness core
 
-- [ ] `Harness` trait: `id()`, `catalog()`, `run(RunRequest) -> Run { events, handle }`, `commands(cwd)`, `supports_titles()`, `run_title()`.
+- [x] `Harness` trait: `id()`, `catalog()`, `run(RunRequest) -> Run { events, handle }`, `run_text(prompt, model)`, `commands(cwd)`.
 - [ ] `RunHandle`: `send`, `send_with(attachments)`, `answer(request_id, answers)`, `interrupt`, `stop_task`, `task_output`, `close`. Commands over an unbounded channel; events over a bounded one (`emit` returns `Gone` when the receiver dropped → stop).
 - [ ] **Process abstraction** (for remote): `spawn(program, args, env, cwd) -> {stdin, stdout, stderr, kill_tree}`. Local impl first; SSH/remote impl later plugs in here.
 - [ ] `cli.rs`: `find(name)` on PATH then known install dirs; console hidden on Windows; `StderrTail` (last N lines for error messages); `kill_tree` (`taskkill /T` on Windows, process group on unix).
@@ -140,7 +140,7 @@ Done when: `outcode-run --mock "hi"` streams a full turn, a question is answerab
 - [ ] Titles (background title run, fallback first words), handoff summaries, branch names — all through `run_title`.
 - [ ] Turn snapshots (git tree per prompted turn) → `turn_diff`, `revert_turn`.
 - [ ] `shutdown(grace)`: interrupt + close all runs; next start recovers and optionally resumes.
-- [ ] Engine tests on the mock harness.
+- [x] Engine tests on the mock harness.
 
 ---
 

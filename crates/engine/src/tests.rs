@@ -1,94 +1,41 @@
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use outcode_harness::{HarnessError, Run, RunCommand, RunHandle};
+use outcode_harness::mock::{Mock, Seen, Step, echo};
+use outcode_harness::{HarnessError, RunCommand};
 use outcode_proto::{
-    AgentEvent, ChatConfig, ChatsUpdate, DoneStatus, InputResponse, MessagePart, MessageStatus, MessagesUpdate, RunRequest,
+    AgentEvent, ChatConfig, ChatsUpdate, DoneStatus, InputResponse, MessagePart, MessageStatus, MessagesUpdate,
 };
 use outcode_store::Store;
-use tokio::sync::mpsc;
 
 use super::*;
 
-/// What the scripted runs were asked to start with.
-type Requests = Arc<Mutex<Vec<RunRequest>>>;
-
-/// A run that answers each prompt with "echo: <prompt>" under session `s<n>`
-/// (n counting runs), until closed.
-fn scripted(requests: Requests) -> impl Fn(RunRequest) -> std::result::Result<Run, HarnessError> {
-    move |request: RunRequest| {
-        let n = {
-            let mut requests = requests.lock().unwrap();
-            requests.push(request.clone());
-            requests.len()
-        };
-        let (handle, mut commands) = RunHandle::new();
-        let (tx, events) = mpsc::channel(64);
-        tokio::spawn(async move {
-            let reply = |prompt: String| {
-                vec![
-                    AgentEvent::SessionStarted {
-                        session_id: format!("s{n}"),
-                    },
-                    AgentEvent::TextDelta {
-                        text: format!("echo: {prompt}"),
-                    },
-                    AgentEvent::Done {
-                        status: DoneStatus::Completed,
-                    },
-                ]
-            };
-            for event in reply(request.prompt) {
-                let _ = tx.send(event).await;
-            }
-            while let Some(command) = commands.recv().await {
-                match command {
-                    RunCommand::Send { prompt, .. } => {
-                        for event in reply(prompt) {
-                            let _ = tx.send(event).await;
-                        }
-                    }
-                    RunCommand::Close => break,
-                    _ => {}
-                }
-            }
-        });
-        Ok(Run { events, handle })
-    }
-}
-
-fn engine(idle: Duration) -> (tempfile::TempDir, Engine, Requests) {
-    engine_titled(idle, None)
-}
-
-/// With titles on when `title` is the text runs' answer.
-fn engine_titled(idle: Duration, title: Option<&'static str>) -> (tempfile::TempDir, Engine, Requests) {
+/// An engine over `mock`, with text runs on for the uses `text_model` names.
+fn engine_with(
+    mock: Mock,
+    idle: Duration,
+    text_model: impl Fn(TextUse) -> Option<String> + Send + Sync + 'static,
+) -> (tempfile::TempDir, Engine, Arc<Seen>) {
     let dir = tempfile::tempdir().unwrap();
-    let requests = Requests::default();
+    let seen = mock.seen();
     let hooks = Hooks {
-        spawn: Box::new(scripted(requests.clone())),
-        text: Box::new(move |_, _| title.map(|answer| Ok(answering(answer)))),
+        harness: Arc::new(mock),
+        text_model: Box::new(text_model),
         idle: Box::new(move || idle),
         worktrees: Box::new(WorktreeOptions::default),
     };
     let engine = Engine::new(Store::open(dir.path()).unwrap(), hooks);
-    (dir, engine, requests)
+    (dir, engine, seen)
 }
 
-/// A text run that answers `text` and exits once closed.
-fn answering(text: &'static str) -> Run {
-    let (handle, mut commands) = RunHandle::new();
-    let (tx, events) = mpsc::channel(8);
-    tokio::spawn(async move {
-        let _ = tx.send(AgentEvent::TextDelta { text: text.into() }).await;
-        let _ = tx.send(AgentEvent::Done { status: DoneStatus::Completed }).await;
-        while let Some(command) = commands.recv().await {
-            if command == RunCommand::Close {
-                break;
-            }
-        }
-    });
-    Run { events, handle }
+/// Turns echo their prompts; text runs are off.
+fn engine(idle: Duration) -> (tempfile::TempDir, Engine, Arc<Seen>) {
+    engine_with(Mock::new(), idle, |_| None)
+}
+
+/// With titles on, the text runs answering `title`.
+fn engine_titled(idle: Duration, title: &str) -> (tempfile::TempDir, Engine, Arc<Seen>) {
+    engine_with(Mock::new().text(title), idle, |_| Some(String::new()))
 }
 
 /// Collects a watcher's updates.
@@ -142,7 +89,7 @@ fn reply_at(engine: &Engine, chat_id: &str, index: usize) -> String {
 
 #[tokio::test]
 async fn turns_stream_to_watchers_and_share_one_run() {
-    let (_dir, engine, requests) = engine(Duration::from_secs(60));
+    let (_dir, engine, seen) = engine(Duration::from_secs(60));
     let (chats, sink) = collect();
     engine.watch_chats(sink).unwrap();
     let chat = engine.create_chat("/a".into(), ChatConfig::default()).unwrap();
@@ -160,7 +107,7 @@ async fn turns_stream_to_watchers_and_share_one_run() {
     engine.send(&chat.id, "two".into(), Vec::new()).unwrap();
     settle(&engine, &chat.id).await;
 
-    assert_eq!(requests.lock().unwrap().len(), 1, "one run serves every turn");
+    assert_eq!(seen.runs().len(), 1, "one run serves every turn");
     assert_eq!(reply_text(&engine, &chat.id), "echo: two");
     assert_eq!(engine.store().messages(&chat.id).unwrap().len(), 6);
     let chat = engine.store().chat(&chat.id).unwrap().unwrap();
@@ -191,51 +138,11 @@ fn queued(engine: &Engine, chat_id: &str) -> Vec<String> {
         .unwrap_or_default()
 }
 
-/// A run whose turns wait to be ended: each prompt answers once the test
-/// sends on `release` (or the run is interrupted).
-fn held_run(
-    commands_seen: Arc<Mutex<Vec<String>>>,
-) -> impl Fn(RunRequest) -> std::result::Result<Run, HarnessError> {
-    move |request: RunRequest| {
-        let (handle, mut commands) = RunHandle::new();
-        let (tx, events) = mpsc::channel(64);
-        let seen = commands_seen.clone();
-        tokio::spawn(async move {
-            let mut prompt = Some(request.prompt);
-            while let Some(command) = commands.recv().await {
-                seen.lock().unwrap().push(format!("{command:?}"));
-                match command {
-                    RunCommand::Send { prompt: p, .. } => prompt = Some(p),
-                    RunCommand::Interrupt => {
-                        prompt = None;
-                        let _ = tx.send(AgentEvent::Done { status: DoneStatus::Interrupted }).await;
-                    }
-                    RunCommand::Answer { request_id, response } => {
-                        let _ = tx.send(AgentEvent::InputResolved { request_id, response: Some(response) }).await;
-                        let text = format!("echo: {}", prompt.take().unwrap_or_default());
-                        let _ = tx.send(AgentEvent::TextDelta { text }).await;
-                        let _ = tx.send(AgentEvent::Done { status: DoneStatus::Completed }).await;
-                    }
-                    RunCommand::Close => break,
-                    _ => {}
-                }
-            }
-        });
-        Ok(Run { events, handle })
-    }
-}
-
-fn held_engine() -> (tempfile::TempDir, Engine, Arc<Mutex<Vec<String>>>) {
-    let dir = tempfile::tempdir().unwrap();
-    let seen = Arc::new(Mutex::new(Vec::new()));
-    let hooks = Hooks {
-        spawn: Box::new(held_run(seen.clone())),
-        text: Box::new(|_, _| None),
-        idle: Box::new(|| Duration::from_secs(60)),
-        worktrees: Box::new(WorktreeOptions::default),
-    };
-    let engine = Engine::new(Store::open(dir.path()).unwrap(), hooks);
-    (dir, engine, seen)
+/// Turns that wait to be ended: each echoes its prompt once answered (or
+/// ends when interrupted).
+fn held_engine() -> (tempfile::TempDir, Engine, Arc<Seen>) {
+    let held = Mock::new().script(|turn| vec![Step::Wait, Step::text(format!("echo: {}", turn.prompt))]);
+    engine_with(held, Duration::from_secs(60), |_| None)
 }
 
 fn approve() -> InputResponse {
@@ -286,51 +193,31 @@ async fn send_now_stops_the_turn_and_jumps_the_queue() {
     assert_eq!(queued(&engine, &chat.id), ["a"]);
 }
 
-/// A run whose first turn calls tools `t1` and `t2` and waits; each answer
-/// finishes the next of them, an interrupt ends the turn, and later prompts
-/// echo.
-fn tool_run(request: RunRequest) -> std::result::Result<Run, HarnessError> {
-    let (handle, mut commands) = RunHandle::new();
-    let (tx, events) = mpsc::channel(64);
-    tokio::spawn(async move {
-        drop(request);
-        for id in ["t1", "t2"] {
-            let call = outcode_proto::ToolCall::Exec { command: "ls".into() };
-            let _ = tx.send(AgentEvent::ToolCall { id: id.into(), call }).await;
-        }
-        let mut pending = vec!["t1", "t2"].into_iter();
-        while let Some(command) = commands.recv().await {
-            match command {
-                RunCommand::Answer { .. } => {
-                    if let Some(id) = pending.next() {
-                        let _ = tx.send(AgentEvent::ToolResult { id: id.into(), is_error: false, output: None }).await;
-                    }
-                }
-                RunCommand::Interrupt => {
-                    let _ = tx.send(AgentEvent::Done { status: DoneStatus::Interrupted }).await;
-                }
-                RunCommand::Send { prompt, .. } => {
-                    let _ = tx.send(AgentEvent::TextDelta { text: format!("echo: {prompt}") }).await;
-                    let _ = tx.send(AgentEvent::Done { status: DoneStatus::Completed }).await;
-                }
-                RunCommand::Close => break,
-                _ => {}
-            }
-        }
-    });
-    Ok(Run { events, handle })
+/// The first turn calls tools `t1` and `t2` and waits; each answer finishes
+/// the next of them, and then it waits to be stopped. Later turns echo.
+fn tool_script(turn: &outcode_harness::mock::Turn) -> Vec<Step> {
+    if turn.turn > 1 {
+        return echo(turn);
+    }
+    let call = |id: &str| {
+        Step::Emit(AgentEvent::ToolCall {
+            id: id.into(),
+            call: outcode_proto::ToolCall::Exec { command: "ls".into() },
+        })
+    };
+    let result = |id: &str| {
+        Step::Emit(AgentEvent::ToolResult {
+            id: id.into(),
+            is_error: false,
+            output: None,
+        })
+    };
+    vec![call("t1"), call("t2"), Step::Wait, result("t1"), Step::Wait, result("t2"), Step::Wait]
 }
 
 #[tokio::test]
 async fn after_tool_stops_the_turn_once_its_tool_calls_finish() {
-    let dir = tempfile::tempdir().unwrap();
-    let hooks = Hooks {
-        spawn: Box::new(tool_run),
-        text: Box::new(|_, _| None),
-        idle: Box::new(|| Duration::from_secs(60)),
-        worktrees: Box::new(WorktreeOptions::default),
-    };
-    let engine = Engine::new(Store::open(dir.path()).unwrap(), hooks);
+    let (_dir, engine, _) = engine_with(Mock::new().script(tool_script), Duration::from_secs(60), |_| None);
     let chat = engine.create_chat("/a".into(), ChatConfig::default()).unwrap();
     engine.send(&chat.id, "one".into(), Vec::new()).unwrap();
     engine.send(&chat.id, "later".into(), Vec::new()).unwrap();
@@ -400,13 +287,15 @@ async fn approving_a_plan_leaves_plan_mode_and_modes_switch_in_place() {
     settle(&engine, &chat.id).await;
     let chat = engine.store().chat(&chat.id).unwrap().unwrap();
     assert!(!chat.config.plan);
-    let seen = seen.lock().unwrap();
-    assert!(seen.iter().any(|c| c.starts_with("SetModes { access: Supervised, plan: true }")));
+    assert!(seen.commands().contains(&RunCommand::SetModes {
+        access: outcode_proto::AccessMode::Supervised,
+        plan: true
+    }));
 }
 
 #[tokio::test]
 async fn an_idle_run_closes_and_the_next_prompt_resumes_it() {
-    let (_dir, engine, requests) = engine(Duration::from_millis(30));
+    let (_dir, engine, seen) = engine(Duration::from_millis(30));
     let chat = engine.create_chat("/a".into(), ChatConfig::default()).unwrap();
     engine.send(&chat.id, "one".into(), Vec::new()).unwrap();
     settle(&engine, &chat.id).await;
@@ -415,7 +304,7 @@ async fn an_idle_run_closes_and_the_next_prompt_resumes_it() {
 
     engine.send(&chat.id, "two".into(), Vec::new()).unwrap();
     settle(&engine, &chat.id).await;
-    let requests = requests.lock().unwrap();
+    let requests = seen.runs();
     assert_eq!(requests.len(), 2);
     assert_eq!(requests[1].resume.as_deref(), Some("s1"));
     assert_eq!(requests[1].cwd, "/a");
@@ -424,14 +313,8 @@ async fn an_idle_run_closes_and_the_next_prompt_resumes_it() {
 
 #[tokio::test]
 async fn a_run_that_cant_start_ends_the_turn_with_its_error() {
-    let dir = tempfile::tempdir().unwrap();
-    let hooks = Hooks {
-        spawn: Box::new(|_| Err(HarnessError::NotInstalled("claude"))),
-        text: Box::new(|_, _| None),
-        idle: Box::new(|| Duration::from_secs(60)),
-        worktrees: Box::new(WorktreeOptions::default),
-    };
-    let engine = Engine::new(Store::open(dir.path()).unwrap(), hooks);
+    let broken = Mock::new().failing(|| HarnessError::NotInstalled("claude"));
+    let (_dir, engine, _) = engine_with(broken, Duration::from_secs(60), |_| None);
     let chat = engine.create_chat("/a".into(), ChatConfig::default()).unwrap();
     engine.send(&chat.id, "hi".into(), Vec::new()).unwrap();
     let messages = engine.store().messages(&chat.id).unwrap();
@@ -480,7 +363,7 @@ async fn titled(engine: &Engine, chat_id: &str) -> Option<String> {
 
 #[tokio::test]
 async fn the_first_prompt_names_the_chat() {
-    let (_dir, engine, _) = engine_titled(Duration::from_secs(60), Some("\"Echo The Prompt\"\n"));
+    let (_dir, engine, _) = engine_titled(Duration::from_secs(60), "\"Echo The Prompt\"\n");
     let (chats, sink) = collect();
     engine.watch_chats(sink).unwrap();
     let chat = engine.create_chat("/a".into(), ChatConfig::default()).unwrap();
@@ -522,7 +405,7 @@ fn haiku() -> ChatConfig {
 
 #[tokio::test]
 async fn a_new_config_restarts_the_run_and_resumes_the_session() {
-    let (_dir, engine, requests) = engine(Duration::from_secs(60));
+    let (_dir, engine, seen) = engine(Duration::from_secs(60));
     let chat = engine.create_chat("/a".into(), ChatConfig::default()).unwrap();
     engine.send(&chat.id, "one".into(), Vec::new()).unwrap();
     settle(&engine, &chat.id).await;
@@ -533,7 +416,7 @@ async fn a_new_config_restarts_the_run_and_resumes_the_session() {
     engine.send(&chat.id, "two".into(), Vec::new()).unwrap();
     settle(&engine, &chat.id).await;
 
-    let requests = requests.lock().unwrap();
+    let requests = seen.runs();
     assert_eq!(requests.len(), 2);
     assert_eq!(requests[1].config, haiku());
     assert_eq!(requests[1].resume.as_deref(), Some("s1"));
@@ -541,7 +424,7 @@ async fn a_new_config_restarts_the_run_and_resumes_the_session() {
 
 #[tokio::test]
 async fn a_config_changed_mid_turn_applies_from_the_next_prompt() {
-    let (_dir, engine, requests) = engine(Duration::from_secs(60));
+    let (_dir, engine, seen) = engine(Duration::from_secs(60));
     let chat = engine.create_chat("/a".into(), ChatConfig::default()).unwrap();
     engine.send(&chat.id, "one".into(), Vec::new()).unwrap();
     engine.set_config(&chat.id, haiku()).unwrap();
@@ -552,61 +435,43 @@ async fn a_config_changed_mid_turn_applies_from_the_next_prompt() {
 
     engine.send(&chat.id, "two".into(), Vec::new()).unwrap();
     settle(&engine, &chat.id).await;
-    assert_eq!(requests.lock().unwrap()[1].config, haiku());
+    assert_eq!(seen.runs()[1].config, haiku());
 }
 
 #[tokio::test]
 async fn a_background_subagent_reports_into_the_reply_that_spawned_it() {
-    let dir = tempfile::tempdir().unwrap();
-    let hooks = Hooks {
-        spawn: Box::new(|_request: RunRequest| {
-            let (handle, mut commands) = RunHandle::new();
-            let (tx, events) = mpsc::channel(64);
-            tokio::spawn(async move {
-                let spawn = AgentEvent::ToolCall {
-                    id: "s1".into(),
-                    call: outcode_proto::ToolCall::Subagent {
-                        description: "scan".into(),
-                        model: None,
-                        prompt: None,
-                        agent: None,
-                    },
-                };
-                let inner = |event| AgentEvent::Subagent {
-                    parent_tool_id: "s1".into(),
-                    event: Box::new(event),
-                };
-                for event in [
-                    spawn,
-                    AgentEvent::ToolResult { id: "s1".into(), is_error: false, output: Some("Async agent launched".into()) },
-                    AgentEvent::Done { status: DoneStatus::Completed },
-                ] {
-                    let _ = tx.send(event).await;
-                }
-                while let Some(command) = commands.recv().await {
-                    match command {
-                        RunCommand::Send { .. } => {
-                            for event in [
-                                AgentEvent::TextDelta { text: "second".into() },
-                                inner(AgentEvent::TextDelta { text: "found it".into() }),
-                                inner(AgentEvent::Done { status: DoneStatus::Completed }),
-                                AgentEvent::Done { status: DoneStatus::Completed },
-                            ] {
-                                let _ = tx.send(event).await;
-                            }
-                        }
-                        RunCommand::Close => break,
-                        _ => {}
-                    }
-                }
-            });
-            Ok(Run { events, handle })
-        }),
-        text: Box::new(|_, _| None),
-        idle: Box::new(|| Duration::from_secs(60)),
-        worktrees: Box::new(WorktreeOptions::default),
-    };
-    let engine = Engine::new(Store::open(dir.path()).unwrap(), hooks);
+    // The first turn launches a subagent in the background; it reports
+    // during the second.
+    let mock = Mock::new().script(|turn| {
+        let inner = |event| {
+            Step::Emit(AgentEvent::Subagent {
+                parent_tool_id: "s1".into(),
+                event: Box::new(event),
+            })
+        };
+        if turn.turn > 1 {
+            return vec![
+                Step::text("second"),
+                inner(AgentEvent::TextDelta { text: "found it".into() }),
+                inner(AgentEvent::Done { status: DoneStatus::Completed }),
+            ];
+        }
+        let call = outcode_proto::ToolCall::Subagent {
+            description: "scan".into(),
+            model: None,
+            prompt: None,
+            agent: None,
+        };
+        vec![
+            Step::Emit(AgentEvent::ToolCall { id: "s1".into(), call }),
+            Step::Emit(AgentEvent::ToolResult {
+                id: "s1".into(),
+                is_error: false,
+                output: Some("Async agent launched".into()),
+            }),
+        ]
+    });
+    let (_dir, engine, _) = engine_with(mock, Duration::from_secs(60), |_| None);
     let chat = engine.create_chat("/a".into(), ChatConfig::default()).unwrap();
     engine.send(&chat.id, "one".into(), Vec::new()).unwrap();
     settle(&engine, &chat.id).await;
@@ -648,17 +513,18 @@ async fn a_worktree_chat_runs_in_its_worktree_and_takes_it_when_deleted() {
     }
     let worktrees = tempfile::tempdir().unwrap();
     let dir = tempfile::tempdir().unwrap();
-    let requests = Requests::default();
     let options = WorktreeOptions {
         dir: worktrees.path().to_path_buf(),
         semantic: true,
         prefix: String::new(),
         delete_branch: true,
     };
+    let mock = Mock::new().text("fix/login-redirect");
+    let seen = mock.seen();
     let hooks = Hooks {
-        spawn: Box::new(scripted(requests.clone())),
-        // Only the branch run answers; titles are off.
-        text: Box::new(|kind, _| (kind == TextUse::Branch).then(|| Ok(answering("fix/login-redirect")))),
+        harness: Arc::new(mock),
+        // Only branch names; titles are off.
+        text_model: Box::new(|kind| (kind == TextUse::Branch).then(String::new)),
         idle: Box::new(|| Duration::from_secs(60)),
         worktrees: Box::new(move || options.clone()),
     };
@@ -691,7 +557,7 @@ async fn a_worktree_chat_runs_in_its_worktree_and_takes_it_when_deleted() {
     std::fs::remove_dir_all(&worktree.root).unwrap();
     engine.send(&chat.id, "go".into(), Vec::new()).unwrap();
     settle(&engine, &chat.id).await;
-    assert_eq!(requests.lock().unwrap()[0].cwd, worktree.path);
+    assert_eq!(seen.runs()[0].cwd, worktree.path);
     assert!(std::path::Path::new(&worktree.root).join(".git").exists());
 
     engine.delete_chat(&chat.id).unwrap();

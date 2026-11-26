@@ -149,7 +149,7 @@ Done when: typing "hi" streams Claude's reply.
 - **Pi** — `pi --mode rpc`. ⚠ Windows shim is cmd → node → node: stop with `kill_tree`.
 - **Remote hosts** — host daemon (engine + store + harnesses) over WebSocket/SSH; client connects to N hosts.
 
-Before adding a harness, extract a `Harness` trait from the Claude code and add a mock harness for engine tests.
+- [x] `Harness` trait (`crates/harness/src/lib.rs`, `claude::Claude`) and a mock harness (`mock::Mock`, feature `mock`); engine tests run on it. Add the next harness as another `impl Harness`.
 
 ## Test checklist per harness
 

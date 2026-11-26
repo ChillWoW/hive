@@ -6,13 +6,45 @@
 //! [`AgentEvent::Done`]; the session stays open for the next prompt until
 //! the handle is closed or dropped, and the event stream ends when the
 //! process exits.
+//!
+//! Each CLI is a [`Harness`]; [`claude::Claude`] is the first, and
+//! `mock::Mock` (feature `mock`) scripts turns for tests.
 
-use outcode_proto::{AccessMode, AgentEvent, InputResponse};
+use std::future::Future;
+use std::pin::Pin;
+
+use outcode_proto::{AccessMode, AgentEvent, Catalog, InputResponse, RunRequest, SlashCommand};
 use tokio::sync::mpsc;
 
 pub mod attachments;
 pub mod claude;
 mod cli;
+#[cfg(any(test, feature = "mock"))]
+pub mod mock;
+
+pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
+
+/// A coding-agent CLI the engine drives. Each call reads the harness's
+/// settings afresh, so a change applies from the next one.
+pub trait Harness: Send + Sync {
+    /// Stable id (`"claude"`).
+    fn id(&self) -> &'static str;
+
+    /// Its models, and whether its CLI is installed.
+    fn catalog(&self) -> Catalog;
+
+    /// Starts a session with `request.prompt` as its first turn. Must be
+    /// called from inside a tokio runtime.
+    fn run(&self, request: RunRequest) -> Result<Run, HarnessError>;
+
+    /// Starts a one-turn text run (a chat title, a branch name) answering
+    /// `prompt` with `model` (the CLI's default when `None` or empty): no
+    /// tools, no project, nothing saved. Close it once its turn is done.
+    fn run_text(&self, prompt: String, model: Option<&str>) -> Result<Run, HarnessError>;
+
+    /// The commands and skills it offers in `cwd`.
+    fn commands<'a>(&'a self, cwd: &'a str) -> BoxFuture<'a, Result<Vec<SlashCommand>, HarnessError>>;
+}
 
 #[derive(Debug, thiserror::Error)]
 pub enum HarnessError {
@@ -42,7 +74,7 @@ pub struct RunHandle {
 }
 
 /// What a [`RunHandle`] asks of its session.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum RunCommand {
     Send {
         prompt: String,

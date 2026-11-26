@@ -43,7 +43,7 @@ use std::sync::{LazyLock, Mutex};
 use std::time::Duration;
 
 use outcode_proto::{
-    AccessMode, AgentEvent, ApprovalDecision, ChatConfig, DoneStatus, InputResponse, RunRequest,
+    AccessMode, AgentEvent, ApprovalDecision, Catalog, ChatConfig, DoneStatus, InputResponse, RunRequest,
     SlashCommand, UserInputAnswer, UserInputQuestion,
 };
 use serde_json::Value;
@@ -54,7 +54,7 @@ use tokio::time::Instant;
 
 use crate::attachments;
 use crate::cli::{self, StderrTail, sleep_until};
-use crate::{Gone, HarnessError, Run, RunCommand, RunHandle};
+use crate::{BoxFuture, Gone, Harness, HarnessError, Run, RunCommand, RunHandle};
 use approval::Pending;
 use models::config_args;
 use normalize::Normalizer;
@@ -85,6 +85,54 @@ static KNOWN_SKILLS: LazyLock<Mutex<Option<HashSet<String>>>> = LazyLock::new(Mu
 type Probed = (std::time::Instant, Vec<commands::Advertised>);
 static PROBES: LazyLock<Mutex<HashMap<String, Probed>>> =
     LazyLock::new(Mutex::default);
+
+/// Claude Code as a [`Harness`], over [`run`], [`run_text`], [`catalog`] and
+/// [`commands`]. Its [`Options`] are read as each call starts.
+pub struct Claude {
+    options: Box<dyn Fn() -> Options + Send + Sync>,
+}
+
+/// What each Claude run starts with, beyond its request.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Options {
+    /// The `claude` binary; else [`find`] finds it.
+    pub binary: Option<PathBuf>,
+    /// [`RunRequest::auto_compact_window`] for chats' runs.
+    pub auto_compact_window: Option<u32>,
+}
+
+impl Claude {
+    pub fn new(options: impl Fn() -> Options + Send + Sync + 'static) -> Self {
+        Self {
+            options: Box::new(options),
+        }
+    }
+}
+
+impl Harness for Claude {
+    fn id(&self) -> &'static str {
+        NAME
+    }
+
+    fn catalog(&self) -> Catalog {
+        catalog((self.options)().binary.as_deref())
+    }
+
+    fn run(&self, mut request: RunRequest) -> Result<Run, HarnessError> {
+        let options = (self.options)();
+        request.auto_compact_window = options.auto_compact_window;
+        run(request, options.binary.as_deref())
+    }
+
+    fn run_text(&self, prompt: String, model: Option<&str>) -> Result<Run, HarnessError> {
+        run_text(prompt, model, (self.options)().binary.as_deref())
+    }
+
+    fn commands<'a>(&'a self, cwd: &'a str) -> BoxFuture<'a, Result<Vec<SlashCommand>, HarnessError>> {
+        let binary = (self.options)().binary;
+        Box::pin(async move { commands(cwd, binary.as_deref()).await })
+    }
+}
 
 /// The `claude` binary: `binary` when given, else on PATH or where its
 /// installers put it.

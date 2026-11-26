@@ -1,5 +1,5 @@
 //! Chat titles: as a chat's first prompt is sent, a throwaway text run names
-//! it from that prompt, alongside the turn (`Hooks::text`: no tools, no
+//! it from that prompt, alongside the turn (`Hooks::text_model`: no tools, no
 //! project, the text generation model). If that's off or yields nothing, the prompt's
 //! first words stand in. A rename by the user always wins.
 
@@ -62,7 +62,7 @@ impl Engine {
             serde_json::to_string(prompt).unwrap_or_default()
         );
         for attempt in 0..=RETRY_DELAYS.len() {
-            match (self.shared.hooks.text)(TextUse::Title, body.clone())? {
+            match self.run_text(TextUse::Title, body.clone())? {
                 Ok(run) => match collect_text(run, ATTEMPT_TIMEOUT).await {
                     Ok(text) => {
                         let title = clean_title(&text);

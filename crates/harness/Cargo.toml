@@ -16,3 +16,7 @@ base64 = "0.22"
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
 filetime = "0.2"
+
+[features]
+# `mock::Mock`: a scripted harness for tests.
+mock = []

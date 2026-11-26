@@ -19,7 +19,7 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
 use outcode_git::GitError;
-use outcode_harness::{HarnessError, Run, RunHandle};
+use outcode_harness::{Harness, HarnessError, Run, RunHandle};
 use outcode_proto::{
     AgentEvent, Attachment, Chat, ChatConfig, ChatsUpdate, ContextWindow, DoneStatus, InputResponse, MessagesUpdate,
     McpServer, MessagePart, NewWorktree, SecretRequest, WorktreeStep, has_running_spawn, has_spawn,
@@ -50,16 +50,15 @@ pub enum EngineError {
 
 pub type Result<T> = std::result::Result<T, EngineError>;
 
-type Started = std::result::Result<Run, HarnessError>;
-
-/// What the engine runs things with: the Claude driver and the settings in
-/// the app, scripts in tests.
+/// What the engine runs things with: the Claude harness and the settings in
+/// the app, a mock harness in tests.
 pub struct Hooks {
-    /// Starts a chat's run.
-    pub spawn: Box<dyn Fn(RunRequest) -> Started + Send + Sync>,
-    /// Starts a one-turn text run answering a prompt (a chat's title, a
-    /// worktree's branch name); `None` while that use is off.
-    pub text: Box<dyn Fn(TextUse, String) -> Option<Started> + Send + Sync>,
+    /// Runs chats' agents, and the text runs.
+    pub harness: Arc<dyn Harness>,
+    /// The model a text run for this use (a chat's title, a worktree's
+    /// branch name) answers with, empty for the harness's default; `None`
+    /// while that use is off. Read as each one starts.
+    pub text_model: Box<dyn Fn(TextUse) -> Option<String> + Send + Sync>,
     /// How long a run may sit between turns before it's closed; read as each
     /// turn ends, so a settings change applies from the next one.
     pub idle: Box<dyn Fn() -> Duration + Send + Sync>,
@@ -236,6 +235,17 @@ impl Engine {
 
     pub fn store(&self) -> &Store {
         &self.shared.store
+    }
+
+    pub fn harness(&self) -> &Arc<dyn Harness> {
+        &self.shared.hooks.harness
+    }
+
+    /// Starts a text run for `purpose` answering `prompt`; `None` while
+    /// that use is off.
+    pub(crate) fn run_text(&self, purpose: TextUse, prompt: String) -> Option<std::result::Result<Run, HarnessError>> {
+        let model = (self.shared.hooks.text_model)(purpose)?;
+        Some(self.harness().run_text(prompt, Some(&model)))
     }
 
     // Chats
@@ -511,7 +521,7 @@ impl Engine {
             auto_compact_window: None,
             mcp: self.shared.mcp.lock().unwrap_or_else(PoisonError::into_inner).as_ref().map(|m| m.for_chat(chat_id)),
         };
-        match (self.shared.hooks.spawn)(request) {
+        match self.shared.hooks.harness.run(request) {
             Ok(run) => {
                 *next_run += 1;
                 let id = *next_run;
