@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { MagnifyingGlassIcon, XIcon } from "@phosphor-icons/react";
 import { cn } from "@/lib/cn";
 import { Button, Input, Modal } from "@/ui";
-import { getSettingsPage, SETTINGS_PAGES } from "./pages";
+import { getSettingsPage, SETTINGS_CATEGORIES, SETTINGS_PAGES } from "./pages";
 import { SettingsQueryContext } from "./search";
 import { useSettingsStore, type SettingsPageId } from "./store";
 
@@ -150,32 +150,50 @@ function SettingsNav({
         <nav
             aria-label="Settings pages"
             onKeyDown={onKeyDown}
-            className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-2"
+            className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-2 pb-2"
         >
-            {SETTINGS_PAGES.map(({ id, label, icon: Icon }) => {
-                const active = activeId === id;
-                return (
-                    <button
-                        key={id}
-                        type="button"
-                        aria-current={active ? "page" : undefined}
-                        onClick={() => onSelect(id)}
-                        className={cn(
-                            "flex h-7 w-full items-center gap-2 rounded-md px-2 text-left text-xs",
-                            "transition-colors duration-150",
-                            active
-                                ? "bg-hover text-text"
-                                : "text-muted hover:bg-raised hover:text-text focus-visible:bg-raised"
-                        )}
+            {SETTINGS_CATEGORIES.map((category) => (
+                <div
+                    key={category.id}
+                    role="group"
+                    aria-labelledby={`settings-category-${category.id}`}
+                    className="flex flex-col gap-0.5"
+                >
+                    <div
+                        id={`settings-category-${category.id}`}
+                        className="px-2 pb-1 text-[11px] font-medium text-muted select-none"
                     >
-                        <Icon
-                            className={cn("size-3.5 shrink-0", active ? "text-text" : "text-muted")}
-                            weight={active ? "fill" : "regular"}
-                        />
-                        <span className="min-w-0 truncate">{label}</span>
-                    </button>
-                );
-            })}
+                        {category.label}
+                    </div>
+                    {category.pages.map(({ id, label, icon: Icon }) => {
+                        const active = activeId === id;
+                        return (
+                            <button
+                                key={id}
+                                type="button"
+                                aria-current={active ? "page" : undefined}
+                                onClick={() => onSelect(id)}
+                                className={cn(
+                                    "flex h-7 w-full items-center gap-2 rounded-md px-2 text-left text-xs",
+                                    "transition-colors duration-150",
+                                    active
+                                        ? "bg-hover text-text"
+                                        : "text-muted hover:bg-raised hover:text-text focus-visible:bg-raised"
+                                )}
+                            >
+                                <Icon
+                                    className={cn(
+                                        "size-3.5 shrink-0",
+                                        active ? "text-text" : "text-muted"
+                                    )}
+                                    weight={active ? "fill" : "regular"}
+                                />
+                                <span className="min-w-0 truncate">{label}</span>
+                            </button>
+                        );
+                    })}
+                </div>
+            ))}
         </nav>
     );
 }
