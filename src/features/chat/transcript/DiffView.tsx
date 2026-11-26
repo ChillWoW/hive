@@ -1,77 +1,55 @@
+import type { FileContents, FileDiffMetadata } from "@pierre/diffs";
+import { File, FileDiff, Virtualizer, type FileDiffOptions, type FileOptions } from "@pierre/diffs/react";
+import { useLightTheme } from "@/features/theme/useLightTheme";
 import { cn } from "@/lib/cn";
-import type { DiffRow, FileDiff } from "./diff";
+import { DIFF_THEMES } from "./diffsPool";
 
-/** Rows past this many are counted rather than drawn. */
-const MAX_ROWS = 400;
+/** A file change: its parsed diff and line counts, numbered only when it's a whole file. */
+export type FileChange = { diff: FileDiffMetadata; additions: number; deletions: number; numbered: boolean };
 
-/** Soft emerald and red washes, an accent bar, a marker (Tailwind's emerald-400, red-400). */
-const TONE: Record<DiffRow["kind"], { row: string; accent: string; marker: string; no: string }> = {
-    add: {
-        row: "bg-[#34d399]/[0.07]",
-        accent: "bg-[#34d399]/55",
-        marker: "text-[#34d399]",
-        no: "text-[#34d399]/90"
-    },
-    del: {
-        row: "bg-[#f87171]/[0.07]",
-        accent: "bg-[#f87171]/55",
-        marker: "text-[#f87171]",
-        no: "text-[#f87171]/90"
-    },
-    context: { row: "", accent: "", marker: "", no: "text-muted/70" }
-};
+/** A file as read: its lines, numbered only when they start at line 1. */
+export type FileRead = { file: FileContents; numbered: boolean };
 
-/**
- * A file change (or a file as read), unified: line numbers when known, a
- * `+`/`−` marker, the code unwrapped and scrolling sideways. Scrolls past
- * 20rem.
- */
-export function DiffView({ file, className }: { file: FileDiff; className?: string }) {
-    const gutter = file.maxLine ? Math.max(String(file.maxLine).length * 7 + 14, 36) : 0;
-    const marked = file.additions + file.deletions > 0;
-    const hidden = Math.max(0, file.rows.length - MAX_ROWS);
+/** The pool's themes (they must match it); the app's surface behind them. */
+const BASE = {
+    theme: DIFF_THEMES,
+    disableFileHeader: true,
+    overflow: "scroll",
+    unsafeCSS: ":host { --diffs-light-bg: var(--surface); --diffs-dark-bg: var(--surface); --diffs-font-size: 12px; }"
+} as const;
+
+/** Options by light/dark and numbered, kept stable so the views don't redraw. */
+const DIFF_OPTIONS = new Map<string, FileDiffOptions<undefined, undefined>>();
+const FILE_OPTIONS = new Map<string, FileOptions<undefined, undefined>>();
+
+function optionsOf<T>(cache: Map<string, T>, light: boolean, numbered: boolean, extra: object): T {
+    const key = `${light}|${numbered}`;
+    let options = cache.get(key);
+    if (!options) {
+        options = { ...BASE, ...extra, themeType: light ? "light" : "dark", disableLineNumbers: !numbered } as T;
+        cache.set(key, options);
+    }
+    return options;
+}
+
+const FRAME = "max-h-80 overflow-y-auto rounded-md bg-surface";
+
+/** A file change, unified. Scrolls past 20rem, drawing only the lines in view. */
+export function DiffView({ change, className }: { change: FileChange; className?: string }) {
+    const options = optionsOf(DIFF_OPTIONS, useLightTheme(), change.numbered, { diffStyle: "unified" });
     return (
-        <div className={cn("max-h-80 overflow-auto rounded-md bg-surface py-1 font-mono text-xs", className)}>
-            <div className="min-w-fit">
-                {file.rows.slice(0, MAX_ROWS).map((row, i) => {
-                    const tone = TONE[row.kind];
-                    const numbers = file.oneSide ? [row.newNo] : [row.oldNo, row.newNo];
-                    return (
-                        <div key={i} className={cn("relative flex min-h-5 leading-5", tone.row)}>
-                            {/* The numbers stay put while the code scrolls sideways. */}
-                            <div className="sticky left-0 z-[1] flex shrink-0 bg-surface">
-                                <span className={cn("absolute inset-0", tone.row)} />
-                                {tone.accent && (
-                                    <span className={cn("absolute inset-y-0 left-0 w-[3px]", tone.accent)} />
-                                )}
-                                {gutter > 0 &&
-                                    numbers.map((no, n) => (
-                                        <span
-                                            key={n}
-                                            style={{ width: gutter }}
-                                            className={cn("relative pr-2 text-right tabular-nums select-none", tone.no)}
-                                        >
-                                            {no ?? ""}
-                                        </span>
-                                    ))}
-                                {marked && (
-                                    <span className={cn("relative w-5 text-center select-none", tone.marker)}>
-                                        {row.kind === "add" ? "+" : row.kind === "del" ? "−" : ""}
-                                    </span>
-                                )}
-                            </div>
-                            <span className={cn("pr-3 whitespace-pre text-text/85", !marked && !gutter && "pl-3")}>
-                                {row.text || " "}
-                            </span>
-                        </div>
-                    );
-                })}
-                {hidden > 0 && (
-                    <div className="px-3 pt-0.5 font-sans text-muted/85">
-                        {hidden.toLocaleString()} more {hidden === 1 ? "line" : "lines"}
-                    </div>
-                )}
-            </div>
-        </div>
+        <Virtualizer className={cn(FRAME, className)}>
+            <FileDiff fileDiff={change.diff} options={options} />
+        </Virtualizer>
+    );
+}
+
+/** A file as read. Scrolls past 20rem, drawing only the lines in view. */
+export function FileView({ read, className }: { read: FileRead; className?: string }) {
+    const options = optionsOf(FILE_OPTIONS, useLightTheme(), read.numbered, {});
+    return (
+        <Virtualizer className={cn(FRAME, className)}>
+            <File file={read.file} options={options} />
+        </Virtualizer>
     );
 }

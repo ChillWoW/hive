@@ -1,5 +1,6 @@
 import { Fragment, use, useState, type ReactNode } from "react";
 import { Collapsible } from "@base-ui/react/collapsible";
+import { parseDiffFromFile } from "@pierre/diffs";
 import {
     CaretRightIcon,
     CheckIcon,
@@ -13,8 +14,8 @@ import { baseName } from "@/lib/paths";
 import { useSettingsStore } from "@/features/settings";
 import { FileIcon } from "@/ui";
 import { ChatCwd } from "./context";
-import { diffLines, toFileDiff, toFileView, type FileDiff } from "./diff";
-import { DiffView } from "./DiffView";
+import { DiffView, FileView, type FileChange, type FileRead } from "./DiffView";
+import { toFileRead } from "./fileRead";
 import { Markdown } from "./Markdown";
 import { ThoughtIcon } from "./ThoughtIcon";
 import {
@@ -262,13 +263,13 @@ function Item({ item, streaming }: { item: GroupItem; streaming: boolean }) {
 }
 
 /** Each part's change, worked out once: parts are immutable snapshots, replaced when they change. */
-const changes = new WeakMap<ToolPart, FileDiff | null>();
+const changes = new WeakMap<ToolPart, FileChange | null>();
 
 /**
  * Before → after of a file change, from what the call asked for. Line
  * numbers only for a new file's content, the whole file.
  */
-function changeOf(part: ToolPart): FileDiff | undefined {
+function changeOf(part: ToolPart): FileChange | undefined {
     let change = changes.get(part);
     if (change === undefined) {
         change = readChange(part) ?? null;
@@ -277,27 +278,33 @@ function changeOf(part: ToolPart): FileDiff | undefined {
     return change ?? undefined;
 }
 
-function readChange(part: ToolPart): FileDiff | undefined {
+function readChange(part: ToolPart): FileChange | undefined {
     const call = part.call;
-    if (call.kind === "editFile" && (call.oldString !== undefined || call.newString !== undefined)) {
-        return toFileDiff(call.path, diffLines(call.oldString ?? "", call.newString ?? ""), false);
+    const name = (call.kind === "editFile" || call.kind === "writeFile") && call.path.replace(/\\/g, "/");
+    if (!name) return undefined;
+    const [before, after, numbered] =
+        call.kind === "editFile" ? [call.oldString ?? "", call.newString ?? "", false] : ["", call.content ?? "", true];
+    if (!before && !after) return undefined;
+    const diff = parseDiffFromFile({ name, contents: before }, { name, contents: after });
+    let additions = 0;
+    let deletions = 0;
+    for (const hunk of diff.hunks) {
+        additions += hunk.additionLines;
+        deletions += hunk.deletionLines;
     }
-    if (call.kind === "writeFile" && call.content !== undefined) {
-        return toFileDiff(call.path, diffLines("", call.content), true);
-    }
-    return undefined;
+    return { diff, additions, deletions, numbered };
 }
 
 /** Each read's file view, worked out once, as `changes`. */
-const views = new WeakMap<ToolPart, FileDiff | null>();
+const views = new WeakMap<ToolPart, FileRead | null>();
 
 /** What a finished read came back with, as the file's lines; undefined for anything else. */
-function viewOf(part: ToolPart): FileDiff | undefined {
+function viewOf(part: ToolPart): FileRead | undefined {
     const call = part.call;
     if (call.kind !== "readFile" || part.isError || !part.output) return undefined;
     let view = views.get(part);
     if (view === undefined) {
-        view = toFileView(call.path, part.output) ?? null;
+        view = toFileRead(call.path, part.output) ?? null;
         views.set(part, view);
     }
     return view ?? undefined;
@@ -397,9 +404,9 @@ function CallBody({ part }: { part: ToolPart }): ReactNode {
         );
     }
     const change = changeOf(part);
-    if (change && change.rows.length > 0 && !part.isError) return <DiffView file={change} className="mt-0.5 mb-2" />;
+    if (change && !part.isError) return <DiffView change={change} className="mt-0.5 mb-2" />;
     const read = viewOf(part);
-    if (read) return <DiffView file={read} className="mt-0.5 mb-2" />;
+    if (read) return <FileView read={read} className="mt-0.5 mb-2" />;
 
     const invocation = invocationOf(part, cwd);
     const output = part.output?.trim() ? part.output : "";

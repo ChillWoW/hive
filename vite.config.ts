@@ -20,6 +20,8 @@ export default defineConfig({
     build: {
         outDir: "build"
     },
+    // ES workers can split: the diff worker loads Shiki's languages on demand.
+    worker: { format: "es" },
     server: {
         port: 1421,
         strictPort: true, // fail loudly instead of shifting ports
