@@ -285,7 +285,10 @@ function readChange(part: ToolPart): FileChange | undefined {
     const [before, after, numbered] =
         call.kind === "editFile" ? [call.oldString ?? "", call.newString ?? "", false] : ["", call.content ?? "", true];
     if (!before && !after) return undefined;
-    const diff = parseDiffFromFile({ name, contents: before }, { name, contents: after });
+    // An edit's strings are snippets, rarely ending in a newline: without
+    // one the diff marks "No newline at end of file" on both sides.
+    const eol = (text: string) => (text && !text.endsWith("\n") ? `${text}\n` : text);
+    const diff = parseDiffFromFile({ name, contents: eol(before) }, { name, contents: eol(after) });
     let additions = 0;
     let deletions = 0;
     for (const hunk of diff.hunks) {

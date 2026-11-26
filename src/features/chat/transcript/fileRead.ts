@@ -22,7 +22,8 @@ export function toFileRead(path: string, output: string): FileRead | undefined {
     const numbered = matches.every((m) => m !== null);
     const lines = numbered ? matches.map((m) => m![2]!) : raw;
     return {
-        file: { name: path.replace(/\\/g, "/"), contents: `${lines.join("\n")}\n` },
+        // No trailing newline: the file view draws one as an extra empty line.
+        file: { name: path.replace(/\\/g, "/"), contents: lines.join("\n") },
         numbered: numbered && Number(matches[0]![1]) === 1
     };
 }
