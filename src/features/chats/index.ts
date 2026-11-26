@@ -1,5 +1,6 @@
 export { chatsApi, type Unwatch } from "./api";
 export { activity, chats, useActiveChat, useChatsStore, useSession, useWorking, workDir } from "./store";
+export { history, useCanGo } from "./history";
 export { useChatsRuntime } from "./useChatsRuntime";
 export { AttachmentChip } from "./AttachmentChip";
 export { ImageViewer } from "./ImageViewer";

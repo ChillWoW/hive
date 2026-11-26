@@ -1,4 +1,6 @@
-import { SidebarSimpleIcon } from "@phosphor-icons/react";
+import { ArrowLeftIcon, ArrowRightIcon, SidebarSimpleIcon } from "@phosphor-icons/react";
+import { useEffect } from "react";
+import { history, useCanGo } from "@/features/chats";
 import { UpdateButton } from "@/features/updater";
 import { useShortcut, type ActionId } from "@/keybindings";
 import { isMac } from "@/lib/platform";
@@ -52,6 +54,7 @@ export function TopBar() {
                 {placement.left.map((panel) => (
                     <PanelToggle key={panel} panel={panel} side="left" />
                 ))}
+                <HistoryButtons />
             </div>
 
             {/* An empty strip to grab the window by. */}
@@ -72,6 +75,52 @@ export function TopBar() {
             <FakeTrafficLights />
             {!isMac && <WindowControls />}
         </header>
+    );
+}
+
+/**
+ * Back and forward through the chats the main pane showed, also on their
+ * shortcuts and the mouse's side buttons.
+ */
+function HistoryButtons() {
+    const canBack = useCanGo(-1);
+    const canForward = useCanGo(1);
+    useShortcut("goBack", history.back);
+    useShortcut("goForward", history.forward);
+    useEffect(() => {
+        // Buttons 3 and 4: a mouse's back and forward side buttons.
+        const onMouseUp = (event: MouseEvent) => {
+            if (event.button !== 3 && event.button !== 4) return;
+            event.preventDefault();
+            if (event.button === 3) history.back();
+            else history.forward();
+        };
+        // Without this the webview would run its own (empty) history.
+        const swallow = (event: MouseEvent) => {
+            if (event.button === 3 || event.button === 4) event.preventDefault();
+        };
+        window.addEventListener("mouseup", onMouseUp);
+        window.addEventListener("mousedown", swallow);
+        return () => {
+            window.removeEventListener("mouseup", onMouseUp);
+            window.removeEventListener("mousedown", swallow);
+        };
+    }, []);
+
+    return (
+        <>
+            <IconButton label="Go back" shortcut="goBack" onClick={history.back} disabled={!canBack}>
+                <ArrowLeftIcon className="size-4" />
+            </IconButton>
+            <IconButton
+                label="Go forward"
+                shortcut="goForward"
+                onClick={history.forward}
+                disabled={!canForward}
+            >
+                <ArrowRightIcon className="size-4" />
+            </IconButton>
+        </>
     );
 }
 

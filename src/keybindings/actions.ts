@@ -53,5 +53,21 @@ export const ACTIONS: readonly Action[] = [
         description: "Shows or hides the file tree",
         keywords: "files file panel tree explorer hide show",
         scope: "global"
+    },
+    {
+        id: "goBack",
+        category: "general",
+        label: "Go back",
+        description: "Shows the previously open chat",
+        keywords: "back previous history navigate chat",
+        scope: "global"
+    },
+    {
+        id: "goForward",
+        category: "general",
+        label: "Go forward",
+        description: "Shows the chat you went back from",
+        keywords: "forward next history navigate chat",
+        scope: "global"
     }
 ];
