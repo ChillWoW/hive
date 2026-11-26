@@ -170,6 +170,7 @@ const BUSY_SEND: { value: BusySend; label: string }[] = [
 
 function SendingSection() {
     const busySend = useSetting("chat", "busySend");
+    const suggestions = useSetting("chat", "promptSuggestions");
 
     return (
         <SettingsSection title="Sending">
@@ -197,6 +198,12 @@ function SendingSection() {
                         </Select.Content>
                     </Select>
                 }
+            />
+            <SwitchRow
+                label="Suggest next prompt"
+                description="Tab takes the agent's guess at your next message"
+                keywords="prompt suggestion tab complete autocomplete next message predict"
+                setting={suggestions}
             />
         </SettingsSection>
     );

@@ -281,6 +281,9 @@ pub struct ChatSettings {
     /// What sending does while a turn runs: wait for it, stop it after the
     /// running tool call, or stop it now.
     pub busy_send: BusySend,
+    /// After each completed turn the agent guesses the next prompt, shown in
+    /// the empty composer for Tab to take. Applies from a chat's next run.
+    pub prompt_suggestions: bool,
 }
 
 /// What sending a prompt does while the chat's turn runs.
@@ -308,6 +311,7 @@ impl Default for ChatSettings {
             reasoning_expanded: false,
             tool_output_expanded: false,
             busy_send: BusySend::Queue,
+            prompt_suggestions: true,
         }
     }
 }

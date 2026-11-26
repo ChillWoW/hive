@@ -92,6 +92,8 @@ export type ChatSettings = {
     toolOutputExpanded: boolean;
     /** What sending does while a turn runs: queue it, stop the turn after its running tool call and send, or stop it and send now. */
     busySend: BusySend;
+    /** After each completed turn the agent guesses the next prompt, shown in the empty composer for Tab to take. */
+    promptSuggestions: boolean;
 };
 
 /** How a new worktree's branch is named: `<prefix>/<slug>`, or `<type>/<slug>` by the text generation model. */
@@ -171,7 +173,8 @@ export const DEFAULT_SETTINGS: Settings = {
         textGenerationModel: "haiku",
         reasoningExpanded: false,
         toolOutputExpanded: false,
-        busySend: "queue"
+        busySend: "queue",
+        promptSuggestions: true
     },
     worktrees: {
         location: "",

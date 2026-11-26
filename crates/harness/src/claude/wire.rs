@@ -22,7 +22,15 @@ pub(crate) enum Frame {
     ControlRequest(ControlRequestFrame),
     /// The CLI's answer to one of our control requests.
     ControlResponse(ControlResponseFrame),
+    /// After a turn's `result`: the user's predicted next prompt.
+    PromptSuggestion(PromptSuggestionFrame),
     Other,
+}
+
+#[derive(Debug, Default, Deserialize)]
+pub(crate) struct PromptSuggestionFrame {
+    #[serde(default)]
+    pub suggestion: String,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -309,6 +317,7 @@ pub(crate) fn parse_frame(line: &str) -> Result<Frame, serde_json::Error> {
         "result" => Frame::Result(serde_json::from_value(value)?),
         "control_request" => Frame::ControlRequest(serde_json::from_value(value)?),
         "control_response" => Frame::ControlResponse(serde_json::from_value(value)?),
+        "prompt_suggestion" => Frame::PromptSuggestion(serde_json::from_value(value)?),
         _ => Frame::Other,
     })
 }
@@ -345,12 +354,14 @@ pub(crate) fn user_line(text: &str, images: &[InlineImage]) -> String {
 
 /// The session's opening control request. `perTaskStopAffordance` makes an
 /// interrupt spare background agents (background shells survive either way),
-/// since each can be stopped on its own (`stop_task`).
-pub(crate) fn initialize_line(request_id: &str) -> String {
-    control_request_line(
-        request_id,
-        json!({ "subtype": "initialize", "perTaskStopAffordance": true }),
-    )
+/// since each can be stopped on its own (`stop_task`). `promptSuggestions`
+/// sends a `prompt_suggestion` frame after each turn's `result`.
+pub(crate) fn initialize_line(request_id: &str, prompt_suggestions: bool) -> String {
+    let mut body = json!({ "subtype": "initialize", "perTaskStopAffordance": true });
+    if prompt_suggestions {
+        body["promptSuggestions"] = json!(true);
+    }
+    control_request_line(request_id, body)
 }
 
 /// Stops one background task.

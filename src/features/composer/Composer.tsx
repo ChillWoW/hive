@@ -6,7 +6,7 @@ import { harnessOf, ModelPicker } from "@/features/models";
 import { useSettingsStore, type BusySend } from "@/features/settings";
 import { cn } from "@/lib/cn";
 import { useResizeObserver } from "@/lib/useResizeObserver";
-import { Spinner, toast, Tooltip } from "@/ui";
+import { Kbd, Spinner, toast, Tooltip } from "@/ui";
 import { pickerTriggerClassName } from "@/ui/chip";
 import { AccessPicker } from "./AccessPicker";
 import { matchCommands, slashQuery, useCommands } from "./commands";
@@ -14,6 +14,7 @@ import { usePromptHistory } from "./history";
 import { PromptField, type PromptFieldHandle } from "./PromptField";
 import { SlashMenu } from "./SlashMenu";
 import { addDraftAttachments, composer, useComposerStore, useDraft, useDraftAttachments } from "./store";
+import { usePromptSuggestion } from "./suggestion";
 
 /** How long the box takes to reflow between its one-row and two-row shapes. */
 const MORPH_MS = 200;
@@ -26,6 +27,30 @@ const MODES: Record<Mode, { label: string; icon: typeof ArrowUpIcon }> = {
     send: { label: "Send", icon: ArrowUpIcon },
     stop: { label: "Stop", icon: StopIcon }
 };
+
+/**
+ * Trails a suggestion in the field's (invisible) placeholder, holding room for
+ * the Tab hint drawn after it: the field then sizes and wraps as the overlay.
+ */
+const HINT_ROOM = " ⇥ Tab ";
+
+/** The Tab key's mark, an arrow into a bar, drawn thin to sit with the key's text. */
+function TabKeyIcon() {
+    return (
+        <svg
+            viewBox="0 0 14 12"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={1.5}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+            className="size-3"
+        >
+            <path d="M1.5 6h8.5M7.75 3.75 10 6 7.75 8.25M12.5 3v6" />
+        </svg>
+    );
+}
 
 /** What sending while a turn runs is called, by `chat.busySend`. */
 const BUSY_COPY: Record<BusySend, { placeholder: string; action: string; tooltip: string }> = {
@@ -51,7 +76,9 @@ const BUSY_COPY: Record<BusySend, { placeholder: string; action: string; tooltip
  * rows and scrolls.
  *
  * Enter sends, Shift+Enter breaks the line, Escape stops a running turn,
- * ↑/↓ in an empty field walk the prompts sent before. The text lives in the
+ * ↑/↓ in an empty field walk the prompts sent before. After a turn the
+ * agent's guess at the next prompt stands in for the placeholder: Tab takes
+ * it, Escape dismisses it. The text lives in the
  * composer store, one draft per chat, so it survives the box unmounting.
  */
 export function Composer({
@@ -86,6 +113,11 @@ export function Composer({
     const setDraft = (text: string) => composer.setDraft(chatId, text);
     const attachments = useDraftAttachments(chatId);
     const viewer = useImageViewer(attachments);
+    // The agent's guess at the next prompt, in place of the placeholder.
+    const { suggestion, dismiss: dismissSuggestion } = usePromptSuggestion(chatId, {
+        busy,
+        empty: draft === "" && attachments.length === 0
+    });
     const [uploading, setUploading] = useState(0);
     const [dragging, setDragging] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -340,6 +372,18 @@ export function Composer({
     /** The field's keys, before its own; true when one was taken. */
     const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
         if (menuKey(event)) return true;
+        if (suggestion !== null && !event.nativeEvent.isComposing) {
+            const bare = !event.shiftKey && !event.ctrlKey && !event.altKey && !event.metaKey;
+            if (event.key === "Tab" && bare) {
+                fill(suggestion);
+                return true;
+            }
+            if (event.key === "Escape") {
+                dismissSuggestion();
+                event.stopPropagation();
+                return true;
+            }
+        }
         // Shift+Tab toggles plan mode, as in Claude Code.
         if (event.key === "Tab" && event.shiftKey && !event.ctrlKey && !event.altKey && !event.metaKey) {
             onConfigChange({ ...config, plan: !config.plan });
@@ -468,7 +512,7 @@ export function Composer({
                         >
                             {/* An empty field shows the placeholder, which has to
                                 fit on the one row too. */}
-                            {draft === "" ? placeholder : draft}
+                            {draft === "" ? (suggestion !== null ? suggestion + HINT_ROOM : placeholder) : draft}
                         </span>
 
                         {/* Left of the field on one row; the bottom row's first control on two. */}
@@ -494,15 +538,45 @@ export function Composer({
                         <PromptField
                             ref={fieldRef}
                             value={draft}
-                            placeholder={placeholder}
+                            placeholder={suggestion !== null ? suggestion + HINT_ROOM : placeholder}
                             onChange={(text) => {
                                 setDraft(text);
                                 if (dismissedAt !== undefined && text !== dismissedAt) setDismissedAt(undefined);
                             }}
                             onKeyDown={onKeyDown}
                             onPaste={onPaste}
-                            className="col-start-2 row-start-1 block w-full min-w-0 px-2 text-sm leading-6 text-text group-data-tall/deck:col-span-3 group-data-tall/deck:col-start-1 group-data-tall/deck:px-2.5"
+                            className={cn(
+                                "col-start-2 row-start-1 block w-full min-w-0 px-2 text-sm leading-6 text-text group-data-tall/deck:col-span-3 group-data-tall/deck:col-start-1 group-data-tall/deck:px-2.5",
+                                suggestion !== null && "placeholder:text-transparent"
+                            )}
                         />
+
+                        {suggestion !== null && (
+                            // Drawn over the field in its place and type, so the
+                            // hint can follow the text; only the hint takes clicks.
+                            <div
+                                className="pointer-events-none col-start-2 row-start-1 min-w-0 px-2 py-1 text-sm leading-6 break-words whitespace-pre-wrap text-muted/75 group-data-tall/deck:col-span-3 group-data-tall/deck:col-start-1 group-data-tall/deck:px-2.5"
+                            >
+                                <span aria-hidden="true">{suggestion}</span>
+                                <button
+                                    type="button"
+                                    tabIndex={-1}
+                                    aria-label="Use suggested prompt"
+                                    onPointerDown={(event) => event.preventDefault()}
+                                    onClick={() => {
+                                        fill(suggestion);
+                                        fieldRef.current?.focus();
+                                    }}
+                                    // As tall as the line and top-aligned in it, so the key centers on the text.
+                                    className="pointer-events-auto ml-1.5 inline-flex h-6 cursor-pointer items-center align-top [&:hover_kbd]:text-text"
+                                >
+                                    <Kbd className="h-[22px] px-1.5 text-xs">
+                                        <TabKeyIcon />
+                                        Tab
+                                    </Kbd>
+                                </button>
+                            </div>
+                        )}
 
                         <div
                             ref={controlsRef}

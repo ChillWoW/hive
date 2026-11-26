@@ -252,3 +252,28 @@ async fn plan_mode_asks_and_an_approved_plan_is_implemented() {
     let text = std::fs::read_to_string(dir.join("plan.txt")).unwrap();
     assert!(text.contains("ready"), "{text}");
 }
+
+#[tokio::test]
+#[ignore = "spends tokens on the real codex CLI"]
+async fn a_completed_turn_is_followed_by_a_prompt_suggestion() {
+    let dir = scratch("suggestion");
+    let request = request(
+        "I'm building a todo app in React. Give me a three-step plan in three short lines. Don't use tools.",
+        &dir,
+    );
+    let codex = Codex::new(|| Options {
+        prompt_suggestions: true,
+        ..Options::default()
+    });
+    let mut run = codex.run(request).unwrap();
+    let (_, status, _) = turn(&mut run).await;
+    assert_eq!(status, DoneStatus::Completed);
+    loop {
+        if let AgentEvent::PromptSuggestion { text } = next(&mut run).await {
+            assert!(!text.trim().is_empty());
+            eprintln!("suggestion: {text}");
+            break;
+        }
+    }
+    run.handle.close();
+}

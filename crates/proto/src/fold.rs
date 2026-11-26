@@ -202,7 +202,8 @@ pub fn fold_event(parts: &mut Vec<MessagePart>, event: &AgentEvent) {
         | AgentEvent::ContextUsage { .. }
         | AgentEvent::Usage { .. }
         | AgentEvent::AvailableCommands { .. }
-        | AgentEvent::BackgroundTasks { .. } => {}
+        | AgentEvent::BackgroundTasks { .. }
+        | AgentEvent::PromptSuggestion { .. } => {}
     }
 }
 

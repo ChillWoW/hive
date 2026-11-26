@@ -153,7 +153,11 @@ impl Normalizer {
                 }]
             }
             Frame::Result(f) => return self.result(&f),
-            Frame::RateLimit(_) | Frame::ControlRequest(_) | Frame::ControlResponse(_) | Frame::Other => {
+            Frame::RateLimit(_)
+            | Frame::ControlRequest(_)
+            | Frame::ControlResponse(_)
+            | Frame::PromptSuggestion(_)
+            | Frame::Other => {
                 Vec::new()
             }
         };

@@ -32,20 +32,26 @@ pub fn engine(app: &AppHandle, data_dir: &Path) -> Result<Engine, Box<dyn std::e
     if !closed.is_empty() {
         log::info!("closed {} turns left running", closed.len());
     }
-    let (claude, text, idle, worktrees) = (app.clone(), app.clone(), app.clone(), app.clone());
+    let (claude, codex, text, idle, worktrees) = (app.clone(), app.clone(), app.clone(), app.clone(), app.clone());
     let data_dir = data_dir.to_path_buf();
     let claude = Claude::new(move || {
-        let settings = claude.state::<SettingsFile>().get().claude;
+        let all = claude.state::<SettingsFile>().get();
+        let settings = all.claude;
         let window = settings.auto_compact_window;
         ClaudeOptions {
             binary: (!settings.binary_path.is_empty()).then(|| PathBuf::from(settings.binary_path)),
             auto_compact_window: (window != 0).then_some(window),
+            prompt_suggestions: all.chat.prompt_suggestions,
         }
+    });
+    let codex = Codex::new(move || CodexOptions {
+        prompt_suggestions: codex.state::<SettingsFile>().get().chat.prompt_suggestions,
+        ..CodexOptions::default()
     });
     Ok(Engine::new(
         store,
         Hooks {
-            harnesses: vec![Arc::new(claude), Arc::new(Codex::new(CodexOptions::default))],
+            harnesses: vec![Arc::new(claude), Arc::new(codex)],
             text_model: Box::new(move |purpose| {
                 let chat = text.state::<SettingsFile>().get().chat;
                 (purpose != TextUse::Title || chat.auto_title).then_some(TextModel {

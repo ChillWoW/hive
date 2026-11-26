@@ -139,6 +139,10 @@ pub struct Session {
     pub secrets: Vec<SecretRequest>,
     /// The commands and skills the agent last listed.
     pub commands: Vec<SlashCommand>,
+    /// The agent's guess at the user's next prompt, offered in the empty
+    /// composer after a turn; cleared as the next one starts.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub suggestion: Option<String>,
 }
 
 impl Session {
@@ -157,6 +161,7 @@ impl Session {
             && self.context.is_none()
             && self.commands.is_empty()
             && self.secrets.is_empty()
+            && self.suggestion.is_none()
     }
 }
 

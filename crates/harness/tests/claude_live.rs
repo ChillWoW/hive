@@ -584,3 +584,47 @@ async fn configured_environment_reaches_the_agent() {
     claude::configure("", "", "");
     assert!(text.contains("walrus-42"), "{text:?}");
 }
+
+#[tokio::test]
+#[ignore = "runs the real Claude CLI"]
+async fn a_completed_turn_is_followed_by_a_prompt_suggestion() {
+    let dir = std::env::temp_dir().join(format!("outcode-live-suggest-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let request = RunRequest {
+        cwd: dir.display().to_string(),
+        prompt: "I'm building a todo app in React. Give me a three-step plan in three short lines. Don't use tools."
+            .into(),
+        config: outcode_proto::ChatConfig {
+            model: Some("haiku".into()),
+            ..Default::default()
+        },
+        prompt_suggestions: true,
+        ..Default::default()
+    };
+    let mut run = claude::run(request, None).expect("claude starts");
+    // The model leaves some turns without one (no clear next step).
+    let follow_ups = ["Expand step 1 in two sentences.", "Now step 2, briefly.", "And step 3."];
+    let mut suggestion = None;
+    for follow_up in follow_ups {
+        assert_eq!(turn(&mut run).await.1, DoneStatus::Completed);
+        // It comes a few seconds after the turn's end, if at all.
+        let wait = tokio::time::timeout(std::time::Duration::from_secs(20), async {
+            while let Some(event) = run.events.recv().await {
+                if let AgentEvent::PromptSuggestion { text } = event {
+                    return Some(text);
+                }
+            }
+            None
+        });
+        if let Ok(Some(text)) = wait.await {
+            suggestion = Some(text);
+            break;
+        }
+        run.handle.send(follow_up, Vec::new());
+    }
+    let text = suggestion.expect("no turn was followed by a suggestion");
+    assert!(!text.trim().is_empty());
+    eprintln!("suggestion: {text}");
+    run.handle.close();
+    let _ = std::fs::remove_dir_all(&dir);
+}

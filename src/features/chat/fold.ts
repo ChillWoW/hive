@@ -125,6 +125,7 @@ export function foldEvent(parts: MessagePart[], event: AgentEvent): MessagePart[
         case "usage":
         case "availableCommands":
         case "backgroundTasks":
+        case "promptSuggestion":
             return parts;
 
         default:

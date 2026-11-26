@@ -23,6 +23,9 @@
 //!   `localImage` inputs. `$skill` mentions add `skill` inputs. `/compact`
 //!   and `/review [instructions]` become `thread/compact/start` and
 //!   `review/start`.
+//! - Prompt suggestions: after a completed turn, `thread/sample` (Codex
+//!   0.165+) guesses the next prompt, reported as
+//!   [`AgentEvent::PromptSuggestion`] unless another turn started first.
 //! - Interrupt is `turn/interrupt`; a turn that doesn't report its end within
 //!   a few seconds is reported interrupted anyway.
 //! - Models come from `model/list`, cached and refreshed in the background;
@@ -31,6 +34,7 @@
 //!   dies: they start one at a time, with retries ([`rpc::Server::start`]).
 //!
 //! [`AgentEvent::Subagent`]: outcode_proto::AgentEvent::Subagent
+//! [`AgentEvent::PromptSuggestion`]: outcode_proto::AgentEvent::PromptSuggestion
 //! [`InputRequest::Approval`]: outcode_proto::InputRequest::Approval
 //! [`InputRequest::Plan`]: outcode_proto::InputRequest::Plan
 
@@ -73,6 +77,8 @@ pub struct Codex {
 pub struct Options {
     /// The `codex` binary; else [`find`] finds it.
     pub binary: Option<PathBuf>,
+    /// [`RunRequest::prompt_suggestions`] for chats' runs.
+    pub prompt_suggestions: bool,
 }
 
 impl Codex {
@@ -134,7 +140,8 @@ impl Harness for Codex {
         }
     }
 
-    fn run(&self, request: RunRequest) -> Result<Run, HarnessError> {
+    fn run(&self, mut request: RunRequest) -> Result<Run, HarnessError> {
+        request.prompt_suggestions = (self.options)().prompt_suggestions;
         self.start(request, false)
     }
 
@@ -222,6 +229,7 @@ mod tests {
     fn a_missing_binary_is_reported_and_not_installed() {
         let codex = Codex::new(|| Options {
             binary: Some("/nowhere/codex".into()),
+            ..Options::default()
         });
         assert!(matches!(codex.exe(), Err(HarnessError::BinaryMissing(_))));
         assert!(!codex.catalog().installed);

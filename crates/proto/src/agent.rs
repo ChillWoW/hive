@@ -37,6 +37,12 @@ pub struct RunRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(skip)]
     pub mcp: Option<McpServer>,
+    /// Predict the user's next prompt after each completed turn
+    /// ([`AgentEvent::PromptSuggestion`]). Stamped on from the settings as
+    /// the run starts.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    #[ts(skip)]
+    pub prompt_suggestions: bool,
 }
 
 /// A stdio MCP server to launch beside the agent: `command args…` with `env`.
@@ -416,6 +422,9 @@ pub enum AgentEvent {
     /// The agent started a turn on its own, between the user's: background
     /// work it waited on ended. Opens a reply with no prompt.
     BackgroundTurn { finished: Vec<FinishedTask> },
+    /// A guess at the user's next prompt, after a completed turn (between
+    /// turns). Session state, not transcript.
+    PromptSuggestion { text: String },
     /// An event of a subagent's own transcript, under the
     /// [`ToolCall::Subagent`] call `parent_tool_id` that spawned it.
     Subagent {

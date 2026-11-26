@@ -26,6 +26,10 @@ use crate::{Gone, Run, RunCommand, RunHandle, attachments, cli};
 const INTERRUPT_SETTLE: Duration = Duration::from_secs(5);
 /// The turn an approved plan runs, in default mode.
 const IMPLEMENT_PROMPT: &str = "Implement the plan.";
+/// What `thread/sample` asks for after a completed turn: the user's next prompt.
+const SUGGESTION_PROMPT: &str = "Predict the next message the user will send in this conversation. Reply with \
+    only that message, written as the user would type it, in under 20 words. Do not use tools. If there is \
+    no clear next step, reply with nothing.";
 
 /// What the session was started for.
 pub(super) struct Launch {
@@ -107,6 +111,8 @@ enum ApprovalKind {
 enum Reply {
     TurnStarted(Result<Value, String>),
     Skills(Vec<Skill>),
+    /// `thread/sample`'s guess after the turn `turn_id`.
+    Suggestion { turn_id: String, text: String },
 }
 
 struct Session {
@@ -141,6 +147,11 @@ struct Session {
     replies_rx: mpsc::UnboundedReceiver<Reply>,
     closing: bool,
     plans: u64,
+    /// Sample a next-prompt suggestion after each completed turn.
+    suggest: bool,
+    /// The completed turn a suggestion is being sampled for; none once
+    /// another starts.
+    sampled: Option<String>,
 }
 
 /// A run in full access is never asked; otherwise every command that isn't
@@ -285,6 +296,8 @@ impl Session {
             replies_rx,
             closing: false,
             plans: 0,
+            suggest: request.prompt_suggestions && !launch.text,
+            sampled: None,
         };
         if !launch.text {
             session.list_skills();
@@ -341,6 +354,7 @@ impl Session {
                 self.emit(AgentEvent::Error { message }).await?;
             }
         }
+        self.sampled = None;
         self.normalizer.start_turn();
         self.turn = Some(Turn {
             id: None,
@@ -413,6 +427,34 @@ impl Session {
         params
     }
 
+    /// Asks for a guess at the user's next prompt after the completed turn
+    /// `turn_id`, best effort: older Codex lacks `thread/sample`, and it fails
+    /// once another turn starts.
+    fn sample_suggestion(&mut self, turn_id: &str) {
+        if !self.suggest || self.closing {
+            return;
+        }
+        self.sampled = Some(turn_id.to_owned());
+        let params = json!({
+            "threadId": self.thread_id,
+            "expectedTurnId": turn_id,
+            "prompt": SUGGESTION_PROMPT,
+            "effort": "low",
+        });
+        let sample = self.client.request("thread/sample", params);
+        let replies = self.replies.clone();
+        let turn_id = turn_id.to_owned();
+        tokio::spawn(async move {
+            let Ok(result) = sample.await else {
+                return;
+            };
+            let text = result["text"].as_str().unwrap_or_default().trim().to_owned();
+            if !text.is_empty() {
+                let _ = replies.send(Reply::Suggestion { turn_id, text });
+            }
+        });
+    }
+
     fn list_skills(&self) {
         let list = self.client.request("skills/list", json!({ "cwds": [self.folder] }));
         let replies = self.replies.clone();
@@ -432,6 +474,13 @@ impl Session {
                     .insert(self.folder.clone(), skills.clone());
                 self.skills = skills;
                 self.report_commands().await
+            }
+            Reply::Suggestion { turn_id, text } => {
+                if self.turn.is_none() && !self.closing && self.sampled.as_deref() == Some(turn_id.as_str()) {
+                    self.sampled = None;
+                    self.emit(AgentEvent::PromptSuggestion { text }).await?;
+                }
+                Ok(())
             }
             Reply::TurnStarted(Ok(result)) => {
                 if let Some(id) = result["turn"]["id"].as_str() {
@@ -517,7 +566,11 @@ impl Session {
                         .or_else(|| self.normalizer.last_error.clone())
                         .unwrap_or_else(|| "Codex couldn't finish this turn.".into())
                 });
-                self.on_turn_completed(status, error).await
+                self.on_turn_completed(status, error).await?;
+                if status == DoneStatus::Completed && self.turn.is_none() && !id.is_empty() {
+                    self.sample_suggestion(id);
+                }
+                Ok(())
             }
             "serverRequest/resolved" => {
                 let rpc = &params["requestId"];

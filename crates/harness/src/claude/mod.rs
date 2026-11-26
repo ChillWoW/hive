@@ -23,6 +23,9 @@
 //! - When background work ends between turns the CLI starts a turn on its
 //!   own (a `system:init` with no prompt in flight): that's
 //!   [`AgentEvent::BackgroundTurn`].
+//! - Prompt suggestions (`--prompt-suggestions`, and asked for in
+//!   `initialize`): the CLI's guess at the next prompt, a frame after a
+//!   completed turn's `result`, is [`AgentEvent::PromptSuggestion`].
 //! - ⚠ The process is never stopped while a login refresh is in flight
 //!   ([`refresh_lock`]): stdin closes, and a kill happens, only once it has
 //!   settled.
@@ -77,6 +80,8 @@ const INTERRUPT_SETTLE: Duration = Duration::from_secs(5);
 /// the same folder.
 const PROBE_TIMEOUT: Duration = Duration::from_secs(20);
 const PROBE_TTL: Duration = Duration::from_secs(60);
+/// Forces the CLI's prompt suggestions on, past its own gates and back-off.
+const SUGGESTIONS_ENV: &str = "CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION";
 
 /// The skills' names from the last `system:init` any run saw: the
 /// `initialize` list doesn't say which commands are skills.
@@ -99,6 +104,8 @@ pub struct Options {
     pub binary: Option<PathBuf>,
     /// [`RunRequest::auto_compact_window`] for chats' runs.
     pub auto_compact_window: Option<u32>,
+    /// [`RunRequest::prompt_suggestions`] for chats' runs.
+    pub prompt_suggestions: bool,
 }
 
 impl Claude {
@@ -121,6 +128,7 @@ impl Harness for Claude {
     fn run(&self, mut request: RunRequest) -> Result<Run, HarnessError> {
         let options = (self.options)();
         request.auto_compact_window = options.auto_compact_window;
+        request.prompt_suggestions = options.prompt_suggestions;
         run(request, options.binary.as_deref())
     }
 
@@ -235,6 +243,9 @@ fn launch_args(request: &RunRequest) -> Vec<String> {
     if let Some(mcp) = &request.mcp {
         args.extend(["--mcp-config".into(), mcp_config_arg(mcp)]);
     }
+    if request.prompt_suggestions {
+        args.extend(["--prompt-suggestions".into(), "true".into()]);
+    }
     args
 }
 
@@ -272,6 +283,13 @@ fn start(request: RunRequest, binary: Option<&Path>, text: bool) -> Result<Run, 
     } else {
         cmd.args(launch_args(&request));
         cmd.args(overrides::launch_args());
+        // Otherwise the CLI also gates them on a flag of its own and backs
+        // off once 20 in a row (across all the user's Claude Code sessions)
+        // went unused; the setting that asked for them wins, unless the user
+        // set this themselves.
+        if request.prompt_suggestions && overrides::env_var(SUGGESTIONS_ENV).is_none() {
+            cmd.env(SUGGESTIONS_ENV, "true");
+        }
     }
     let mut child = cmd.spawn().map_err(|e| HarnessError::Spawn(NAME, e))?;
     let stdin = child.stdin.take().expect("piped stdin");
@@ -281,7 +299,7 @@ fn start(request: RunRequest, binary: Option<&Path>, text: bool) -> Result<Run, 
     let (stdin_tx, stdin_rx) = mpsc::unbounded_channel::<String>();
     tokio::spawn(cli::write_stdin(stdin, stdin_rx));
     if !text {
-        let _ = stdin_tx.send(wire::initialize_line(INITIALIZE_ID));
+        let _ = stdin_tx.send(wire::initialize_line(INITIALIZE_ID, request.prompt_suggestions));
     }
 
     let (events_tx, events) = mpsc::channel(256);
@@ -308,6 +326,7 @@ fn start(request: RunRequest, binary: Option<&Path>, text: bool) -> Result<Run, 
         attachments: HashSet::new(),
         advertised: Vec::new(),
         listed: Vec::new(),
+        completed: false,
     };
     tokio::spawn(session.run());
     Ok(Run { events, handle })
@@ -377,7 +396,7 @@ async fn probe(exe: &Path, cwd: &str) -> Result<Vec<commands::Advertised>, Harne
     let mut stdin = child.stdin.take().expect("piped stdin");
     let mut lines = BufReader::new(child.stdout.take().expect("piped stdout")).lines();
     let answer = tokio::time::timeout(PROBE_TIMEOUT, async {
-        let mut line = wire::initialize_line(INITIALIZE_ID);
+        let mut line = wire::initialize_line(INITIALIZE_ID, false);
         line.push('\n');
         stdin
             .write_all(line.as_bytes())
@@ -434,6 +453,9 @@ struct Session {
     advertised: Vec<commands::Advertised>,
     /// The commands as last reported.
     listed: Vec<SlashCommand>,
+    /// The last turn completed and none runs now: a `prompt_suggestion` for
+    /// it is offered.
+    completed: bool,
 }
 
 impl Session {
@@ -506,6 +528,13 @@ impl Session {
                 if let Some(list) = &f.commands {
                     self.advertised = commands::parse(list);
                     self.report_commands().await?;
+                }
+                Ok(())
+            }
+            Frame::PromptSuggestion(f) => {
+                let text = f.suggestion.trim();
+                if self.completed && self.turns == 0 && self.stdin.is_some() && !text.is_empty() {
+                    self.emit(AgentEvent::PromptSuggestion { text: text.into() }).await?;
                 }
                 Ok(())
             }
@@ -735,6 +764,7 @@ impl Session {
 
     async fn end_turn(&mut self, status: DoneStatus) -> Result<(), Gone> {
         self.turns = self.turns.saturating_sub(1);
+        self.completed = status == DoneStatus::Completed && self.turns == 0;
         self.interrupt_deadline = None;
         self.normalizer.end_turn();
         // Nothing can answer these any more; `Done` settles their parts.
@@ -878,6 +908,22 @@ mod tests {
         assert!(launch_args(&request).join(" ").contains("--permission-mode acceptEdits"));
         request.config.plan = true;
         assert!(launch_args(&request).join(" ").contains("--permission-mode plan"));
+        assert!(!launch_args(&request).join(" ").contains("--prompt-suggestions"));
+        request.prompt_suggestions = true;
+        assert!(launch_args(&request).join(" ").contains("--prompt-suggestions true"));
+    }
+
+    #[test]
+    fn prompt_suggestions_are_asked_for_and_parsed() {
+        let init: Value = serde_json::from_str(&wire::initialize_line("i", true)).unwrap();
+        assert_eq!(init["request"]["promptSuggestions"], true);
+        let init: Value = serde_json::from_str(&wire::initialize_line("i", false)).unwrap();
+        assert!(init["request"].get("promptSuggestions").is_none());
+        let line = r#"{"type":"prompt_suggestion","suggestion":"expand step 2","uuid":"u","session_id":"s"}"#;
+        let Ok(Frame::PromptSuggestion(frame)) = wire::parse_frame(line) else {
+            panic!("not a prompt suggestion");
+        };
+        assert_eq!(frame.suggestion, "expand step 2");
     }
 
     #[test]

@@ -474,6 +474,8 @@ impl Engine {
     fn start(&self, state: &mut State, chat_id: &str, prompt: Option<String>, attachments: Vec<Attachment>) -> Result<()> {
         let paths: Vec<String> = attachments.iter().map(|a| a.path.clone()).collect();
         let (mut turn, chat) = self.store().start_turn(chat_id, prompt.as_deref(), attachments)?;
+        // The last turn's guess at this prompt is spent.
+        state.update_session(chat_id, |s| s.suggestion = None);
         let State {
             runs,
             watchers,
@@ -535,6 +537,7 @@ impl Engine {
             resume: chat.session_id,
             config: chat.config,
             auto_compact_window: None,
+            prompt_suggestions: false,
             mcp: self.shared.mcp.lock().unwrap_or_else(PoisonError::into_inner).as_ref().map(|m| m.for_chat(chat_id)),
         };
         let started = match self.harness(request.config.harness) {
@@ -758,6 +761,13 @@ impl Engine {
                     context.tokens = tokens.or(context.tokens);
                     context.window = window.or(context.window);
                 });
+            }
+            AgentEvent::PromptSuggestion { text } => {
+                // Only for the turn that just ended, not one started since.
+                if state.working(chat_id) {
+                    return;
+                }
+                return state.update_session(chat_id, |s| s.suggestion = Some(text));
             }
             AgentEvent::Usage { .. } => return,
             _ => {}

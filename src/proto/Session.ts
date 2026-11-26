@@ -34,4 +34,9 @@ secrets: Array<SecretRequest>,
 /**
  * The commands and skills the agent last listed.
  */
-commands: Array<SlashCommand>, };
+commands: Array<SlashCommand>, 
+/**
+ * The agent's guess at the user's next prompt, offered in the empty
+ * composer after a turn; cleared as the next one starts.
+ */
+suggestion?: string, };
