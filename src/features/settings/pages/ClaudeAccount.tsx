@@ -1,17 +1,21 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { ArrowClockwiseIcon, ArrowSquareOutIcon } from "@phosphor-icons/react";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import type { UsageWindow } from "@/proto";
-import { claudeApi } from "@/features/claude/api";
 import { availableUpdate, claudeProvider, useClaudeProvider } from "@/features/claude/store";
+import {
+    PLAN_LABELS,
+    refreshUsage,
+    resetsIn,
+    TONE_BG,
+    USAGE_FRESH_MS,
+    useClaudeUsage,
+    usageTone
+} from "@/features/claude/usage";
 import { cn } from "@/lib/cn";
 import { isTauri } from "@/lib/platform";
 import { Button, Input, Tooltip } from "@/ui";
-import { SettingRow, SettingsSection } from "../SettingsSection";
-
-const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
-
-const PLAN_LABELS: Record<string, string> = { pro: "Pro", max: "Max", team: "Team", enterprise: "Enterprise" };
+import { SettingRow, SettingsSection, SwitchRow } from "../SettingsSection";
+import { useSetting } from "../store";
 
 /**
  * Who is signed in to Claude, with sign in / sign out. Signing in runs the
@@ -124,39 +128,16 @@ export function LocationRow() {
     );
 }
 
-/** "in 2h 5m", "in 3d". */
-function resetsIn(iso: string | undefined): string | undefined {
-    if (!iso) return undefined;
-    const ms = Date.parse(iso) - Date.now();
-    if (!Number.isFinite(ms)) return undefined;
-    if (ms <= 0) return "Resets now";
-    const minutes = Math.round(ms / 60_000);
-    if (minutes < 60) return `Resets in ${minutes}m`;
-    const hours = Math.floor(minutes / 60);
-    if (hours < 24) return `Resets in ${hours}h ${minutes % 60}m`;
-    return `Resets in ${Math.round(hours / 24)}d`;
-}
-
-/** How much of the plan's limits is used: one bar per window. */
+/** How much of the plan's limits is used: one bar per window, and whether the dock shows it. */
 export function UsageSection() {
-    const [usage, setUsage] = useState<UsageWindow[] | null>();
-    const [error, setError] = useState<string>();
-    const [loading, setLoading] = useState(false);
-
-    const load = useCallback(async () => {
-        setLoading(true);
-        try {
-            setUsage(await claudeApi.usage());
-            setError(undefined);
-        } catch (e) {
-            setError(message(e));
-        } finally {
-            setLoading(false);
-        }
-    }, []);
+    const usage = useClaudeUsage((s) => s.windows);
+    const error = useClaudeUsage((s) => s.error);
+    const loading = useClaudeUsage((s) => s.loading);
+    const inDock = useSetting("claude", "showUsageInDock");
     useEffect(() => {
-        claudeApi.usage().then(setUsage, (e: unknown) => setError(message(e)));
+        void refreshUsage({ maxAge: USAGE_FRESH_MS });
     }, []);
+    const load = () => refreshUsage();
 
     return (
         <SettingsSection
@@ -199,9 +180,9 @@ export function UsageSection() {
                                         <div
                                             className={cn(
                                                 "h-full rounded-full transition-[width] duration-300",
-                                                window.used > 0.9 ? "bg-danger" : window.used > 0.7 ? "bg-warning" : "bg-accent"
+                                                TONE_BG[usageTone(window.used)]
                                             )}
-                                            style={{ width: `${percent}%` }}
+                                            style={{ width: `${Math.min(percent, 100)}%` }}
                                         />
                                     </div>
                                     <span className="w-9 text-right text-xs text-muted tabular-nums">{percent}%</span>
@@ -211,6 +192,12 @@ export function UsageSection() {
                     );
                 })
             )}
+            <SwitchRow
+                label="Show in dock"
+                description="A ring above Settings; rest on it for every limit"
+                keywords="usage dock ring sidebar limits plan show"
+                setting={inDock}
+            />
         </SettingsSection>
     );
 }

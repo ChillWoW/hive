@@ -47,6 +47,8 @@ export type ClaudeSettings = {
     env: string;
     /** Claude's settings and login folder (`CLAUDE_CONFIG_DIR`); empty: `~/.claude`. */
     configDir: string;
+    /** The plan's usage as a ring in the dock; see `src/layout/DockUsage.tsx`. */
+    showUsageInDock: boolean;
 };
 
 export type BusySend = "queue" | "after-tool" | "interrupt";
@@ -104,7 +106,8 @@ export const DEFAULT_SETTINGS: Settings = {
         autoCompactWindow: 0,
         launchArgs: "",
         env: "",
-        configDir: ""
+        configDir: "",
+        showUsageInDock: false
     },
     chat: {
         defaultModel: "claude-opus-5-5",

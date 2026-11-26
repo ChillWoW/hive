@@ -4,12 +4,14 @@ import { useSettingsStore } from "@/features/settings";
 import type { ShortcutRef } from "@/keybindings/runtime";
 import { cn } from "@/lib/cn";
 import { IconButton } from "@/ui";
+import { DockUsage } from "./DockUsage";
 import { usePlacement } from "./placement";
 import { DOCK_WIDTH, useLayoutStore, usePanelShown } from "./store";
 
 /**
  * The strip at one window edge (the left by default; see `placement.ts`):
- * views at its top (chats, for now), settings at its foot. With the top bar
+ * views at its top (chats, for now); at its foot the plan's usage (when
+ * shown) and settings. With the top bar
  * it frames the inset box.
  */
 export function Dock() {
@@ -36,6 +38,7 @@ export function Dock() {
                 <ChatsCircleIcon weight={chatsShown ? "fill" : "regular"} className="size-5" />
             </DockButton>
             <div className="flex-1" />
+            <DockUsage side={side} />
             <DockButton
                 label="Settings"
                 shortcut="openSettings"

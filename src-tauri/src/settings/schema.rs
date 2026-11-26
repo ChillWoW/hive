@@ -208,6 +208,8 @@ pub struct ClaudeSettings {
     /// The folder Claude keeps its settings and login in (`CLAUDE_CONFIG_DIR`);
     /// empty: its own (`~/.claude`).
     pub config_dir: String,
+    /// The plan's usage as a ring in the dock (`src/layout/DockUsage.tsx`).
+    pub show_usage_in_dock: bool,
 }
 
 /// Chats: their runs, read by `src-tauri/src/chat.rs`, and the defaults the
