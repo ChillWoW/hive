@@ -12,7 +12,7 @@ function withBase<State>(base: string, className: ClassName<State>) {
 // Trigger heights match Input and Button sizes (28-44) so they line up in a row.
 const triggerSizes = {
     xs: "h-7 gap-1.5 pr-1.5 pl-2 text-xs [&_svg:not([class*='size-'])]:size-3.5",
-    sm: "h-8 gap-2 pr-2 pl-2.5 text-xs [&_svg:not([class*='size-'])]:size-3.5",
+    sm: "h-8 gap-2 pr-2 pl-2.5 text-[13px] [&_svg:not([class*='size-'])]:size-3.5",
     md: "h-9 gap-2 pr-2.5 pl-3 text-[13px] [&_svg:not([class*='size-'])]:size-4",
     lg: "h-10 gap-2 pr-3 pl-3.5 text-sm [&_svg:not([class*='size-'])]:size-4.5",
     xl: "h-11 gap-2.5 pr-3.5 pl-4 text-base [&_svg:not([class*='size-'])]:size-5",
@@ -25,7 +25,7 @@ const SizeContext = createContext<SelectSize>("sm");
 
 const itemSizes = {
     xs: "py-1 text-xs",
-    sm: "py-1.5 text-xs",
+    sm: "py-1.5 text-[13px]",
     md: "py-1.5 text-[13px]",
     lg: "py-2 text-sm",
     xl: "py-2 text-base",
