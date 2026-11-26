@@ -165,7 +165,7 @@ function OverflowItem({ tab }: { tab: Tab }) {
     return (
         <Menu.Item onClick={() => useChatsStore.getState().select(tab)}>
             <TabIcon tab={tab} harness={chat?.config.harness} working={working} />
-            <span className={cn("min-w-0 flex-1 truncate", (tab === null || !chat?.title?.trim()) && "text-muted")}>
+            <span className="min-w-0 flex-1 truncate">
                 {title}
             </span>
         </Menu.Item>
@@ -179,7 +179,7 @@ function TabIcon({ tab, harness, working }: { tab: Tab; harness: HarnessId | und
             {working ? (
                 <DotMatrixSpinner label="Working" className="size-2.5 text-text/85" />
             ) : tab === null ? (
-                <NotePencilIcon className="size-3.5 text-muted" />
+                <NotePencilIcon className="size-3.5" />
             ) : (
                 <HarnessMark harness={harness} className="size-3" />
             )}
@@ -242,7 +242,6 @@ function TabItem({
     const working = useWorking(tab);
     const [menuOpen, setMenuOpen] = useState(false);
     const title = tab === null ? UNTITLED : chat?.title?.trim() || UNTITLED;
-    const untitled = tab === null || !chat?.title?.trim();
 
     return (
         <Tooltip disabled={!chat || menuOpen} disableHoverablePopup>
@@ -279,7 +278,7 @@ function TabItem({
                     )}
                 >
                     <TabIcon tab={tab} harness={chat?.config.harness} working={working} />
-                    <span className={cn("min-w-0 flex-1 truncate", untitled && "text-muted")}>{title}</span>
+                    <span className="min-w-0 flex-1 truncate">{title}</span>
                     {closable && (
                         <button
                             type="button"
