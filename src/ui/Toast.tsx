@@ -30,7 +30,7 @@ function ToastList() {
                 toast={t}
                 className={cn(
                     "toast pointer-events-auto rounded-md border border-border bg-surface bg-clip-padding",
-                    "shadow-lg shadow-black/40"
+                    "shadow-lg shadow-shadow/40"
                 )}
             >
                 <BaseToast.Content className="toast-content flex items-start gap-2.5 py-2.5 pr-8 pl-3">

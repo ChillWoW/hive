@@ -59,7 +59,7 @@ export function Switch({ size = "md", className, ...props }: SwitchProps) {
             <SwitchPrimitive.Thumb
                 data-slot="switch-thumb"
                 className={cn(
-                    "pointer-events-none block rounded-full bg-text shadow-sm shadow-black/30 data-checked:bg-accent-fg",
+                    "pointer-events-none block rounded-full bg-text shadow-sm shadow-shadow/30 data-checked:bg-accent-fg",
                     "transition-[translate,width,background-color] duration-150 ease-out motion-reduce:transition-none",
                     sizes[size].thumb,
                 )}

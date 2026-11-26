@@ -105,7 +105,7 @@ export function Slider<Value extends number | readonly number[]>({
                             getAriaLabel={getAriaLabel}
                             getAriaValueText={getAriaValueText}
                             className={cn(
-                                "rounded-full bg-accent shadow-sm shadow-black/40",
+                                "rounded-full bg-accent shadow-sm shadow-shadow/40",
                                 "transition-[box-shadow] duration-150 ease-out motion-reduce:transition-none",
                                 "cursor-grab hover:ring-4 hover:ring-accent/15 data-dragging:cursor-grabbing data-dragging:ring-4 data-dragging:ring-accent/25",
                                 "has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-accent",

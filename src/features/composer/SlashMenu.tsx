@@ -28,7 +28,7 @@ export function SlashMenu({
             role="listbox"
             aria-label="Commands"
             className={cn(
-                "absolute inset-x-0 bottom-full z-20 mb-2 overflow-hidden rounded-xl border border-border bg-surface shadow-lg shadow-black/30",
+                "absolute inset-x-0 bottom-full z-20 mb-2 overflow-hidden rounded-xl border border-border bg-surface shadow-lg shadow-shadow/30",
                 "origin-bottom transition-[opacity,scale] duration-150 ease-out starting:scale-95 starting:opacity-0"
             )}
         >

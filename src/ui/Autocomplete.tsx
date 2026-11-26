@@ -156,7 +156,7 @@ function AutocompleteContent({
                 <AutocompletePrimitive.Popup
                     className={withBase(
                         cn(
-                            "flex max-h-[min(20rem,var(--available-height))] w-(--anchor-width) max-w-(--available-width) flex-col overflow-hidden rounded-md border border-border bg-raised text-text shadow-lg shadow-black/40 outline-none",
+                            "flex max-h-[min(20rem,var(--available-height))] w-(--anchor-width) max-w-(--available-width) flex-col overflow-hidden rounded-md border border-border bg-raised text-text shadow-lg shadow-shadow/40 outline-none",
                             "origin-(--transform-origin) transition-[opacity,scale] duration-150 ease-out",
                             "data-starting-style:scale-95 data-starting-style:opacity-0",
                             "data-ending-style:scale-95 data-ending-style:opacity-0",

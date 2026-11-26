@@ -118,7 +118,7 @@ function ProviderTab({ agent, selected, onSelect }: { agent: Agent; selected: bo
                             "flex h-8 min-w-0 items-center gap-2 rounded-md pr-3 pl-2 text-xs outline-none",
                             "transition-colors duration-150",
                             selected
-                                ? "bg-hover text-text shadow-sm shadow-black/30"
+                                ? "bg-hover text-text shadow-sm shadow-shadow/30"
                                 : "text-muted hover:bg-raised hover:text-text"
                         )}
                     >

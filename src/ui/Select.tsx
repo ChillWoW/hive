@@ -131,7 +131,7 @@ function SelectContent({
                 <SelectPrimitive.Popup
                     className={withBase(
                         cn(
-                            "relative flex max-h-(--available-height) min-w-(--anchor-width) flex-col overflow-hidden rounded-md border border-border bg-raised text-text shadow-lg shadow-black/40 outline-none",
+                            "relative flex max-h-(--available-height) min-w-(--anchor-width) flex-col overflow-hidden rounded-md border border-border bg-raised text-text shadow-lg shadow-shadow/40 outline-none",
                             "origin-(--transform-origin) transition-[opacity,scale] duration-150 ease-out",
                             "data-starting-style:scale-95 data-starting-style:opacity-0",
                             "data-ending-style:scale-95 data-ending-style:opacity-0",

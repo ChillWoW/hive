@@ -542,7 +542,7 @@ function SideCard<T extends string>({
             style={lift ? { bottom: ROW_PITCH } : undefined}
             className={cn(
                 "pointer-events-auto absolute right-full bottom-0 mr-2 w-44",
-                "rounded-xl border border-border bg-surface p-1 shadow-lg shadow-black/40",
+                "rounded-xl border border-border bg-surface p-1 shadow-lg shadow-shadow/40",
                 "transition-opacity duration-150 ease-out starting:opacity-0"
             )}
         >

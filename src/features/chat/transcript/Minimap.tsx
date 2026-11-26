@@ -145,7 +145,7 @@ export function Minimap({
             </button>
             {activeItem && (
                 <div
-                    className="absolute left-10 w-80 rounded-md border border-border bg-raised px-3 py-2.5 shadow-lg shadow-black/40"
+                    className="absolute left-10 w-80 rounded-md border border-border bg-raised px-3 py-2.5 shadow-lg shadow-shadow/40"
                     style={{
                         // The rail is centred, so its percentages map onto the
                         // middle of this box the same way.

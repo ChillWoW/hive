@@ -134,7 +134,7 @@ function TooltipContent({
                 <TooltipPrimitive.Popup
                     className={(state) =>
                         cn(
-                            "relative max-w-xs rounded-md border border-border bg-raised px-2 py-1 text-xs text-text shadow-md shadow-black/30",
+                            "relative max-w-xs rounded-md border border-border bg-raised px-2 py-1 text-xs text-text shadow-md shadow-shadow/30",
                             "origin-(--transform-origin) transition-[opacity,scale] duration-150 ease-out",
                             "data-starting-style:scale-95 data-starting-style:opacity-0",
                             "data-ending-style:scale-95 data-ending-style:opacity-0",

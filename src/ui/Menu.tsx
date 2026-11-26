@@ -84,7 +84,7 @@ function MenuContent({
                 <MenuPrimitive.Popup
                     className={withBase(
                         cn(
-                            "max-h-(--available-height) min-w-40 overflow-y-auto rounded-md border border-border bg-raised p-1 text-text shadow-lg shadow-black/40 outline-none",
+                            "max-h-(--available-height) min-w-40 overflow-y-auto rounded-md border border-border bg-raised p-1 text-text shadow-lg shadow-shadow/40 outline-none",
                             "origin-(--transform-origin) transition-[opacity,scale] duration-150 ease-out",
                             "data-starting-style:scale-95 data-starting-style:opacity-0",
                             "data-ending-style:scale-95 data-ending-style:opacity-0",

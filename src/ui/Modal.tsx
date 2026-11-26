@@ -73,7 +73,7 @@ function ModalContent({
                 <DialogPrimitive.Popup
                     className={withBase(
                         cn(
-                            "relative flex max-h-full w-full flex-col gap-4 rounded-md border border-border bg-surface p-4 text-text shadow-2xl shadow-black/50 outline-none",
+                            "relative flex max-h-full w-full flex-col gap-4 rounded-md border border-border bg-surface p-4 text-text shadow-2xl shadow-shadow/50 outline-none",
                             "transition-[opacity,scale] duration-150 ease-out",
                             "data-starting-style:scale-95 data-starting-style:opacity-0",
                             "data-ending-style:scale-95 data-ending-style:opacity-0",

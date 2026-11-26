@@ -7,9 +7,9 @@
  * variants come from opacity (`bg-accent/90`), never new colours.
  */
 export interface Theme {
-    /** App background, behind everything (darkest). */
+    /** The main working area, inset in the frame (darkest on dark themes, white on light). */
     bg: string;
-    /** Panels and cards sitting on bg. */
+    /** The frame around bg, and panels and cards sitting on bg. */
     surface: string;
     /** Things on a surface: inputs, buttons, chips. */
     raised: string;
@@ -54,7 +54,7 @@ export const COLOR_KEYS = [
 
 export const BUILTIN_THEMES: Record<string, Theme> = {
     "Outcode Slate": { bg: "#131315", surface: "#18181a", raised: "#1e1e21", hover: "#252528", border: "#2e2e32", text: "#ededee", muted: "#8e8e94", accent: "#e6eeee", accentFg: "#131315", success: "#8fd68b", danger: "#ff6b6b", warning: "#f5b85c" },
-    "Outcode Chalk": { bg: "#ebebee", surface: "#ffffff", raised: "#f4f4f6", hover: "#e0e0e5", border: "#d6d6dc", text: "#18181b", muted: "#62626b", accent: "#27272a", accentFg: "#fafafa", success: "#1f8a4c", danger: "#cf3443", warning: "#a96410", light: true },
+    "Outcode Chalk": { bg: "#ffffff", surface: "#f5f5f6", raised: "#efeff1", hover: "#e8e8eb", border: "#e1e1e5", text: "#1b1b1f", muted: "#6b6b73", accent: "#1b1b1f", accentFg: "#ffffff", success: "#1a7f45", danger: "#d4343f", warning: "#b4610b", light: true },
     Fjord: { bg: "#0f1217", surface: "#14181f", raised: "#1a1f28", hover: "#212732", border: "#272e3a", text: "#dfe4ec", muted: "#8691a2", accent: "#86a8e0", accentFg: "#0f1217", success: "#93cf9e", danger: "#ec7b86", warning: "#e5b97c" },
     Moss: { bg: "#111310", surface: "#161914", raised: "#1c2019", hover: "#232820", border: "#2a3026", text: "#e2e6da", muted: "#8e9585", accent: "#b4c97c", accentFg: "#121509", success: "#9ccf72", danger: "#e5786d", warning: "#e3b462" },
     Dusk: { bg: "#140f1a", surface: "#1b1522", raised: "#231c2c", hover: "#2c2337", border: "#342a40", text: "#eee6f4", muted: "#a093b0", accent: "#f0a3c8", accentFg: "#1e0f1a", success: "#a2d49c", danger: "#f07a7a", warning: "#f0b87a" },
@@ -77,6 +77,10 @@ export function parseTheme(raw: unknown): Theme | string {
 const DEFAULT_INFO = "#6fb3f2";
 const DEFAULT_INFO_LIGHT = "#2563eb";
 
+/** `shadow-shadow/40`: black on dark themes, a fainter ink on light ones. */
+const SHADOW = "#000";
+const SHADOW_LIGHT = "rgb(24 24 27 / 0.4)";
+
 const kebab = (s: string) => s.replace(/[A-Z]/g, (c) => "-" + c.toLowerCase());
 
 /** Read by the inline script in `index.html` to paint the last theme first. */
@@ -89,6 +93,7 @@ export function applyTheme(theme: Theme) {
         COLOR_KEYS.map((key) => ["--" + kebab(key), theme[key]])
     );
     vars["--info"] = theme.info ?? (theme.light ? DEFAULT_INFO_LIGHT : DEFAULT_INFO);
+    vars["--shadow"] = theme.light ? SHADOW_LIGHT : SHADOW;
     for (const [name, value] of Object.entries(vars)) root.style.setProperty(name, value);
     root.style.colorScheme = theme.light ? "light" : "dark";
     try {

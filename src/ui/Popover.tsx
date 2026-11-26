@@ -60,7 +60,7 @@ function PopoverContent({
                 <PopoverPrimitive.Popup
                     className={withBase(
                         cn(
-                            "relative flex max-h-(--available-height) w-72 max-w-(--available-width) flex-col gap-2 rounded-md border border-border bg-surface p-2 text-sm text-text shadow-lg shadow-black/40 outline-none",
+                            "relative flex max-h-(--available-height) w-72 max-w-(--available-width) flex-col gap-2 rounded-md border border-border bg-surface p-2 text-sm text-text shadow-lg shadow-shadow/40 outline-none",
                             "origin-(--transform-origin) transition-[opacity,scale] duration-150 ease-out",
                             "data-starting-style:scale-95 data-starting-style:opacity-0",
                             "data-ending-style:scale-95 data-ending-style:opacity-0",

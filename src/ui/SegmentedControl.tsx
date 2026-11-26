@@ -116,7 +116,7 @@ export function SegmentedControl<Value = string>({ size = "sm", className, child
                     aria-hidden
                     data-slot="segmented-control-indicator"
                     className={cn(
-                        "pointer-events-none invisible absolute top-0 left-0 rounded-sm bg-border shadow-sm shadow-black/10",
+                        "pointer-events-none invisible absolute top-0 left-0 rounded-sm bg-border shadow-sm shadow-shadow/10",
                         "transition-[translate,width,height] duration-200 ease-out motion-reduce:transition-none",
                         // Disabled items dim themselves; a disabled group dims the indicator too.
                         "group-data-disabled/segmented-control:opacity-50",

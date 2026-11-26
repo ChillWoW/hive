@@ -29,7 +29,7 @@ export const chipTriggerClassName = cn(
 export const popupClassName = cn(
     // The overlay layer it mounts into is click-through.
     "pointer-events-auto flex max-w-[var(--available-width)] flex-col overflow-hidden outline-none",
-    "rounded-md border border-border bg-surface text-text shadow-lg shadow-black/40",
+    "rounded-md border border-border bg-surface text-text shadow-lg shadow-shadow/40",
     "origin-[var(--transform-origin)] transition-[opacity,scale] duration-150 ease-out",
     "data-[starting-style]:scale-95 data-[starting-style]:opacity-0",
     "data-[ending-style]:scale-95 data-[ending-style]:opacity-0"

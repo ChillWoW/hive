@@ -30,6 +30,7 @@
     --color-danger: var(--danger);
     --color-warning: var(--warning);
     --color-info: var(--info);
+    --color-shadow: var(--shadow);
     --color-black: #000;
     --color-white: #fff;
     --color-transparent: transparent;
@@ -112,6 +113,7 @@
     --danger: #ff6b6b;
     --warning: #f5b85c;
     --info: #6fb3f2;
+    --shadow: #000;
 }
 
 /* Base UI: portalled popups stack above app content. */
