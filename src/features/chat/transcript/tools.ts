@@ -129,6 +129,11 @@ function toolWords(tool: string): string {
     return singleLine(tool.replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/[_-]+/g, " ")).toLowerCase();
 }
 
+/** `text` with its first letter capitalized. */
+function sentenceCase(text: string): string {
+    return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
 /** The input's most telling value: a string under a well-known key, else its first short string. */
 function mainArg(input: JsonValue | undefined): string {
     if (!input || typeof input !== "object" || Array.isArray(input)) return "";
@@ -322,17 +327,18 @@ export function chipContent(
             return chip("Web", call.query);
         case "todo": {
             const done = call.items.filter((i) => i.status === "completed").length;
-            return chip("Todo", `${done}/${call.items.length} done`);
+            return chip("Todo", call.items.length ? `${done}/${call.items.length} done` : "");
         }
         case "mcp":
+            // The tool says what it did, as the other lines' verbs do; its server and argument follow.
             return chip(
-                serverLabel(call.server),
-                [toolWords(call.tool), mainArg(call.input)].filter(Boolean).join(" · ")
+                sentenceCase(toolWords(call.tool)),
+                [serverLabel(call.server), mainArg(call.input)].filter(Boolean).join(" · ")
             );
         case "subagent":
             return chip("Agent", [call.agent, call.description].filter(Boolean).join(" · "));
         case "unknown":
-            return chip("Tool", call.name);
+            return chip(sentenceCase(toolWords(call.name)) || "Tool", mainArg(call.input));
     }
 }
 
@@ -362,77 +368,113 @@ const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one :
 
 type SummarySegment = { text: string; danger?: boolean };
 
+/** A header count: how many, and whether any of them is still going. */
+type Tally = { n: number; live: boolean };
+
 /**
  * The group header: "Thought process · Ran 3 commands · edited 2 files ·
- * 1 failed". Thoughts first, then calls by kind in a fixed order, edits
- * counting distinct files, failures last. Only the leading letter is
- * capitalized.
+ * 1 failed". Thoughts first, then calls by kind in a fixed order, changed
+ * files counted once each (written when only ever written, else edited),
+ * failures last. A kind with a call still running says so: "running 2
+ * commands", "thinking". Only the leading letter is capitalized.
  */
-export function summarize(items: GroupItem[]): SummarySegment[] {
-    let thoughts = 0;
-    let commands = 0;
-    let reads = 0;
-    let searches = 0;
-    let fetches = 0;
-    let todos = 0;
-    let agents = 0;
-    let other = 0;
+export function summarize(items: GroupItem[], streaming: boolean): SummarySegment[] {
+    const tally = () => ({ n: 0, live: false });
+    const thoughts = tally();
+    const commands = tally();
+    const reads = tally();
+    const searches = tally();
+    const fetches = tally();
+    const todos = tally();
+    const agents = tally();
+    const other = tally();
     let failed = 0;
-    const edited = new Set<string>();
+    // Changed files by key: whether an edit touched it, and whether a change to it still runs.
+    const files = new Map<string, { edited: boolean; live: boolean }>();
+    const count = (t: Tally, live: boolean) => {
+        t.n++;
+        t.live ||= live;
+    };
+    const change = (part: ToolPart) => {
+        const path = changedPath(part.call);
+        if (!path) return;
+        const key = pathKey(path);
+        const file = files.get(key) ?? { edited: false, live: false };
+        file.edited ||= part.call.kind === "editFile";
+        file.live ||= isRunning(part, streaming);
+        files.set(key, file);
+    };
+
     for (const item of items) {
         if (item.kind === "thought") {
-            thoughts++;
+            count(thoughts, item.live);
             continue;
         }
         if (item.kind === "edits") {
-            for (const path of editedFiles(item.parts)) edited.add(pathKey(path));
+            item.parts.forEach(change);
             continue;
         }
         const { call, isError } = item.part;
+        const live = isRunning(item.part, streaming);
         if (isError) failed++;
         switch (call.kind) {
             case "exec":
-                commands++;
+                count(commands, live);
                 break;
             case "writeFile":
             case "editFile":
-                edited.add(pathKey(call.path));
+                change(item.part);
                 break;
             case "readFile":
-                reads++;
+                count(reads, live);
                 break;
             case "search":
             case "glob":
             case "webSearch":
-                searches++;
+                count(searches, live);
                 break;
             case "webFetch":
-                fetches++;
+                count(fetches, live);
                 break;
             case "todo":
-                todos++;
+                count(todos, live);
                 break;
             case "subagent":
-                agents++;
+                count(agents, live);
                 break;
             default:
-                other++;
+                count(other, live);
         }
     }
 
+    const edited = { n: 0, live: false };
+    const written = { n: 0, live: false };
+    for (const file of files.values()) count(file.edited ? edited : written, file.live);
+
     const segments: SummarySegment[] = [];
-    const add = (text: string) => segments.push({ text });
-    if (thoughts === 1) add("thought process");
-    else if (thoughts > 1) add(`thought ${thoughts} times`);
-    if (commands) add(`ran ${plural(commands, "command", "commands")}`);
-    if (edited.size) add(`edited ${plural(edited.size, "file", "files")}`);
-    if (reads) add(`read ${plural(reads, "file", "files")}`);
-    if (searches) add(`searched ${plural(searches, "time", "times")}`);
-    if (fetches) add(`fetched ${plural(fetches, "page", "pages")}`);
-    if (todos) add("updated todos");
-    if (agents) add(`ran ${plural(agents, "agent", "agents")}`);
-    if (other) add(`called ${plural(other, "tool", "tools")}`);
-    if (segments.length === 0) add(plural(items.length, "tool", "tools"));
+    // `[running, done]` verbs before the count.
+    const add = (t: Tally, [running, done]: [string, string], noun?: [string, string]) => {
+        if (!t.n) return;
+        const verb = t.live ? running : done;
+        segments.push({ text: noun ? `${verb} ${plural(t.n, ...noun)}` : verb });
+    };
+    if (thoughts.n) {
+        segments.push({
+            text: thoughts.live ? "thinking" : thoughts.n === 1 ? "thought process" : `thought ${thoughts.n} times`
+        });
+    }
+    add(commands, ["running", "ran"], ["command", "commands"]);
+    add(edited, ["editing", "edited"], ["file", "files"]);
+    add(written, ["writing", "wrote"], ["file", "files"]);
+    add(reads, ["reading", "read"], ["file", "files"]);
+    // "Searching" alone while live: "searching 2 times" reads wrong.
+    if (searches.live) segments.push({ text: "searching" });
+    else add(searches, ["searching", "searched"], ["time", "times"]);
+    add(fetches, ["fetching", "fetched"], ["page", "pages"]);
+    add(todos, ["updating todos", "updated todos"]);
+    add(agents, ["running", "ran"], ["agent", "agents"]);
+    add(other, ["calling", "called"], ["tool", "tools"]);
+    if (segments.length === 0) segments.push({ text: plural(items.length, "tool", "tools") });
     if (failed) segments.push({ text: `${failed} failed`, danger: true });
 
     const first = segments[0]!;

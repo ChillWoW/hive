@@ -91,7 +91,7 @@ export function ToolGroup({
         <Collapsible.Root open={userOpen ?? (active || expanded)} onOpenChange={setUserOpen}>
             <FoldHeader>
                 <span className={cn("min-w-0 truncate", active && "shimmer")}>
-                    {summarize(items).map((s, i) => (
+                    {summarize(items, streaming).map((s, i) => (
                         <Fragment key={i}>
                             {i > 0 && " · "}
                             <span className={cn(s.danger && "text-danger")}>{s.text}</span>
@@ -116,27 +116,18 @@ export function ToolGroup({
     );
 }
 
-/** A line's icon: muted, red when it failed. */
-function LineIcon({ icon: Icon, failed }: { icon: ToolIcon; failed: boolean }) {
-    return (
-        <Icon
-            className={cn(
-                "size-3.5 shrink-0 transition-colors",
-                failed ? "text-danger" : "text-muted/70 group-hover/item:text-muted"
-            )}
-        />
-    );
+/**
+ * A line's icon, muted. A failure shows only as the red "failed" at the
+ * line's end, so a failed probe doesn't turn the whole line red.
+ */
+function LineIcon({ icon: Icon }: { icon: ToolIcon }) {
+    return <Icon className="size-3.5 shrink-0 text-muted/70 transition-colors group-hover/item:text-muted" />;
 }
 
 /** A file on a line: its icon and name. */
-function FileName({ path, failed }: { path: string; failed: boolean }) {
+function FileName({ path }: { path: string }) {
     return (
-        <span
-            className={cn(
-                "flex min-w-0 items-center gap-1.5 transition-colors",
-                failed ? "text-danger" : "text-muted group-hover/item:text-text/80"
-            )}
-        >
+        <span className="flex min-w-0 items-center gap-1.5 text-muted transition-colors group-hover/item:text-text/80">
             <FileIcon name={path} className="size-[13px] shrink-0" />
             <span className="min-w-0 truncate">{baseName(path)}</span>
         </span>
@@ -193,12 +184,14 @@ function Item({ item, streaming }: { item: GroupItem; streaming: boolean }) {
         const preview = thoughtPreview(item.part.text, item.live);
         if (preview) target = <span className={targetClassName}>{preview}</span>;
     } else if (item.kind === "edits") {
-        label = running ? "Editing" : "Edited";
+        // A run of only writes says so, as a lone write's line does.
+        const writes = item.parts.every((p) => p.call.kind === "writeFile");
+        label = writes ? (running ? "Writing" : "Wrote") : running ? "Editing" : "Edited";
         target = (
             <span className="flex min-w-0 items-center gap-3 overflow-hidden">
                 {fileCounts(item.parts).map(({ path, added, removed }) => (
                     <span key={path} className="flex min-w-0 items-center gap-1.5">
-                        <FileName path={path} failed={false} />
+                        <FileName path={path} />
                         <Counts added={added} removed={removed} />
                     </span>
                 ))}
@@ -212,7 +205,7 @@ function Item({ item, streaming }: { item: GroupItem; streaming: boolean }) {
             const change = changeOf(item.part);
             target = (
                 <>
-                    <FileName path={path} failed={failed} />
+                    <FileName path={path} />
                     {!failed && <Counts added={change?.additions ?? 0} removed={change?.deletions ?? 0} />}
                 </>
             );
@@ -244,7 +237,7 @@ function Item({ item, streaming }: { item: GroupItem; streaming: boolean }) {
     const icon = call ? iconOf(call) : item.kind === "edits" ? PencilSimpleIcon : ThoughtIcon;
     const line = (
         <>
-            <LineIcon icon={icon} failed={failed} />
+            <LineIcon icon={icon} />
             <span className={cn(verbClassName, live && "shimmer")}>{label}</span>
             {target}
             {failed && <span className="shrink-0 text-xs text-danger">failed</span>}
