@@ -1,14 +1,5 @@
-import {
-    ArrowUpIcon,
-    PauseIcon,
-    PaperclipIcon,
-    RobotIcon,
-    StopIcon,
-    TerminalWindowIcon,
-    WaveformIcon,
-    XIcon
-} from "@phosphor-icons/react";
-import type { BackgroundTask, QueuedPrompt } from "@/proto";
+import { ArrowUpIcon, PauseIcon, PaperclipIcon, XIcon } from "@phosphor-icons/react";
+import type { QueuedPrompt } from "@/proto";
 import { cn } from "@/lib/cn";
 import { Tooltip } from "@/ui";
 
@@ -99,39 +90,6 @@ export function QueuedTray({
                     </RowButton>
                 </li>
             ))}
-        </Tray>
-    );
-}
-
-const TASK_ICONS = {
-    agent: RobotIcon,
-    shell: TerminalWindowIcon,
-    monitor: WaveformIcon,
-    other: TerminalWindowIcon
-} as const;
-
-/** Work the agent left running in the background, each with a stop button. */
-export function TasksTray({ tasks, onStop }: { tasks: BackgroundTask[]; onStop: (id: string) => void }) {
-    if (tasks.length === 0) return null;
-    return (
-        <Tray title={`Running in the background · ${tasks.length}`}>
-            {tasks.map((task) => {
-                const Icon = TASK_ICONS[task.kind];
-                return (
-                    <li key={task.id} className="flex min-h-8 items-center gap-2 rounded-lg px-2 hover:bg-hover/60">
-                        <Icon className="size-3.5 shrink-0 text-muted" />
-                        <span className="shimmer min-w-0 flex-1 truncate text-[13px]">
-                            {task.description || task.agentType || task.id}
-                        </span>
-                        {task.agentType && (
-                            <span className="shrink-0 text-xs text-muted/80">{task.agentType}</span>
-                        )}
-                        <RowButton label="Stop" onClick={() => onStop(task.id)}>
-                            <StopIcon className="size-3.5" weight="fill" />
-                        </RowButton>
-                    </li>
-                );
-            })}
         </Tray>
     );
 }

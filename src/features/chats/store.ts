@@ -31,6 +31,19 @@ export const activity = (chat: Chat) => chat.lastMessageAt ?? chat.createdAt;
 
 const byActivity = (a: Chat, b: Chat) => activity(b) - activity(a);
 
+// When this window first saw each background task: the CLIs don't say when one started.
+const taskSeen = new Map<string, number>();
+
+function stampTasks(sessions: Session[]) {
+    const now = Date.now();
+    for (const session of sessions) {
+        for (const task of session.tasks) if (!taskSeen.has(task.id)) taskSeen.set(task.id, now);
+    }
+}
+
+/** When a background task started, as near as this window knows. */
+export const taskStartedAt = (taskId: string) => taskSeen.get(taskId);
+
 export const useChatsStore = create<ChatsState>()(
     persist(
         (set) => ({
@@ -43,7 +56,9 @@ export const useChatsStore = create<ChatsState>()(
             select: (activeChatId) => set({ activeChatId, subagent: [] }),
             openSubagentPath: (subagent) => set({ subagent }),
             setNewChatCwd: (newChatCwd) => set({ newChatCwd }),
-            apply: (update) =>
+            apply: (update) => {
+                if (update.kind === "snapshot") stampTasks(update.sessions);
+                else if (update.kind === "session") stampTasks([update.session]);
                 set((s): Partial<ChatsState> => {
                     switch (update.kind) {
                         case "snapshot": {
@@ -75,7 +90,8 @@ export const useChatsStore = create<ChatsState>()(
                         case "session":
                             return { sessions: { ...s.sessions, [update.session.chatId]: update.session } };
                     }
-                })
+                });
+            }
         }),
         {
             name: "outcode.chats",

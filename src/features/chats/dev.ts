@@ -179,7 +179,26 @@ function script(prompt: string, config: ChatConfig): AgentEvent[] {
         events.push(call("x1", { kind: "exec", command: "bun run lint" }));
     }
     events.push(
-        result("x1", "Found 0 warnings and 0 errors.\nFinished in 52ms on 64 files."),
+        result("x1", "Found 0 warnings and 0 errors.\nFinished in 52ms on 64 files.")
+    );
+    // Asking for background work leaves a shell and an agent running past the turn.
+    if (lower.includes("background")) {
+        events.push(
+            call("b1", { kind: "exec", command: "bun run dev --port 5173" }),
+            result("b1", "Running in the background."),
+            call("b2", { kind: "subagent", description: "Watch the build", agent: "general-purpose", prompt: "Watch the dev build and report errors." }),
+            { type: "subagent", parentToolId: "b2", event: { type: "textDelta", text: "Watching the build output for errors." } },
+            result("b2", "Async agent launched."),
+            {
+                type: "backgroundTasks",
+                tasks: [
+                    { id: "t1", kind: "shell", description: "Dev server", toolCallId: "b1" },
+                    { id: "t2", kind: "agent", description: "Watch the build", toolCallId: "b2", agentType: "general-purpose" }
+                ]
+            }
+        );
+    }
+    events.push(
         ...words(
             "textDelta",
             `Done. I touched \`src/App.tsx\` and [the styles](src/index.css:1); see [the docs](https://react.dev).\n\n> ${prompt}`
@@ -196,6 +215,10 @@ function feed(chatId: string, replyId: string, event: AgentEvent) {
         setSession(chatId, {
             context: { tokens: event.tokens ?? context.tokens, window: event.window ?? context.window }
         });
+        return;
+    }
+    if (event.type === "backgroundTasks") {
+        setSession(chatId, { tasks: event.tasks });
         return;
     }
     const list = messages.get(chatId) ?? [];

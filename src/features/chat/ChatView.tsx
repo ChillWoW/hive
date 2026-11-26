@@ -16,7 +16,8 @@ import { answer, queue, send, stop, useChatBusy, useChatStore } from "./store";
 import { pendingInput } from "./fold";
 import { InputCard } from "./InputCard";
 import { SecretCard } from "./SecretCard";
-import { QueuedTray, TasksTray } from "./SessionTrays";
+import { BackgroundTasks } from "./BackgroundTasks";
+import { QueuedTray } from "./SessionTrays";
 import { SubagentView } from "./SubagentView";
 import { findSpawnIn, subagentName } from "./transcript/subagents";
 
@@ -65,7 +66,6 @@ export function ChatView() {
     const composer = (
         <>
             {session?.secrets[0] && <SecretCard key={session.secrets[0].id} request={session.secrets[0]} />}
-            {session && <TasksTray tasks={session.tasks} onStop={queue.stopTask} />}
             {session && (
                 <QueuedTray
                     queued={session.queued}
@@ -98,7 +98,10 @@ export function ChatView() {
                     locked={!!chat}
                     onChange={(path) => useChatsStore.getState().setNewChatCwd(path)}
                 />
-                <span className="ml-auto flex items-center">
+                <span className="ml-auto flex items-center gap-1">
+                    {session && (
+                        <BackgroundTasks tasks={session.tasks} messages={messages} onStop={queue.stopTask} />
+                    )}
                     <ContextMeter context={session?.context} />
                 </span>
             </div>
