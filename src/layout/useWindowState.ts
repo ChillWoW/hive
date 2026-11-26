@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { isTauri } from "@/lib/platform";
+import { isMac, isTauri } from "@/lib/platform";
 
 type WindowState = {
     maximized: boolean;
@@ -42,4 +42,10 @@ export function useWindowState(): WindowState {
     }, []);
 
     return state;
+}
+
+/** macOS draws its traffic lights over the top bar's start, except in fullscreen. */
+export function useTrafficLights(): boolean {
+    const { fullscreen } = useWindowState();
+    return isMac && !fullscreen;
 }

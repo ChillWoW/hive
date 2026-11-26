@@ -6,7 +6,7 @@ import { getSettingsPage, SETTINGS_PAGES } from "./pages";
 import { SettingsQueryContext } from "./search";
 import { useSettingsStore, type SettingsPageId } from "./store";
 
-/** Open from anywhere with `settings.open()`, Mod+, or `SettingsButton`. */
+/** Open from anywhere with `settings.open()`, Mod+, or the dock's settings button. */
 export function SettingsModal() {
     const isOpen = useSettingsStore((s) => s.isOpen);
     const setOpen = useSettingsStore((s) => s.setOpen);

@@ -21,6 +21,15 @@ export const PANEL_WIDTHS: Record<Panel, { min: number; max: number; default: nu
     files: { min: 220, max: 440, default: 286 }
 };
 
+/** The dock's width: a fixed strip at the window's left edge, outside the panels' room. */
+export const DOCK_WIDTH = 48;
+
+/** The gap between the inset box and the window's right and bottom edges. */
+export const BOX_INSET = 4;
+
+/** The width the panels and main column share: the window's, less the dock and the box's frame. */
+const roomWidth = () => window.innerWidth - DOCK_WIDTH - BOX_INSET - 2;
+
 /** The main column never gets narrower than this beside shown panels. */
 export const MAIN_MIN_WIDTH = 300;
 /** Panels shrink toward their minimums before the main column gets narrower than this. */
@@ -145,7 +154,7 @@ export const useLayoutStore = create<LayoutState>()(
             resizing: false,
             toggle: (panel) => {
                 const state = get();
-                const shown = state[OPEN_KEY[panel]] && fitPanels(window.innerWidth, state)[panel];
+                const shown = state[OPEN_KEY[panel]] && fitPanels(roomWidth(), state)[panel];
                 set({
                     [OPEN_KEY[panel]]: !shown,
                     ...(!shown && { usedAt: { ...state.usedAt, [panel]: Date.now() } })
@@ -185,14 +194,14 @@ export const useLayoutStore = create<LayoutState>()(
 export const getPanelWidth = (panel: Panel) => useLayoutStore.getState()[WIDTH_KEY[panel]];
 
 /** The layout for the window's width right now, outside React. */
-export const getPanelLayout = () => panelLayout(window.innerWidth, useLayoutStore.getState());
+export const getPanelLayout = () => panelLayout(roomWidth(), useLayoutStore.getState());
 
 const subscribeResize = (onChange: () => void) => {
     window.addEventListener("resize", onChange);
     return () => window.removeEventListener("resize", onChange);
 };
 
-const useViewportWidth = () => useSyncExternalStore(subscribeResize, () => window.innerWidth);
+const useViewportWidth = () => useSyncExternalStore(subscribeResize, roomWidth);
 
 /** The panels shown and their widths, for the window's current width. */
 export function usePanelLayout(): PanelLayout {

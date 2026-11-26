@@ -1,8 +1,7 @@
 import { ChatList, SidebarSearch } from "@/features/sidebar";
-import { SettingsButton } from "@/features/settings";
 import { SidePanel } from "./SidePanel";
 
-/** The left column: New chat and search, the chat list by project, settings at its foot. */
+/** The left column, after the dock: New chat and search, then the chat list by project. */
 export function Sidebar() {
     return (
         <SidePanel panel="left" label="Sidebar">
@@ -13,9 +12,6 @@ export function Sidebar() {
             >
                 <ChatList />
             </nav>
-            <div className="flex shrink-0 flex-col px-2 py-1.5">
-                <SettingsButton />
-            </div>
         </SidePanel>
     );
 }

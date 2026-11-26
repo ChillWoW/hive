@@ -3,6 +3,8 @@ import type { Attachment, Message } from "@/proto";
 import { cn } from "@/lib/cn";
 import { useActiveChat, useChatsStore, useSession } from "@/features/chats/store";
 import { Composer, ContextMeter, FolderPicker } from "@/features/composer";
+import { ClaudeMark } from "@/features/models";
+import { UNTITLED } from "@/features/sidebar/ChatRow";
 import { toast } from "@/ui";
 import { useChatConfig } from "./config";
 import { AssistantMessage } from "./transcript/AssistantMessage";
@@ -126,6 +128,18 @@ export function ChatView() {
             </ChatCwd>
             <Bottom>{composer}</Bottom>
         </div>
+    );
+}
+
+/** The main column's head while a chat is open: its title after its agent's mark. */
+export function ChatHeader() {
+    const chat = useActiveChat();
+    if (!chat) return null;
+    return (
+        <header className="flex h-9 shrink-0 items-center gap-1.5 px-3">
+            <ClaudeMark className="size-3.5 shrink-0" />
+            <h1 className="truncate text-[13px] text-text">{chat.title?.trim() || UNTITLED}</h1>
+        </header>
     );
 }
 

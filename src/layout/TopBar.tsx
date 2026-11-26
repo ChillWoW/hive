@@ -1,38 +1,32 @@
 import { SidebarSimpleIcon } from "@phosphor-icons/react";
-import { useActiveChat } from "@/features/chats";
-import { ClaudeMark } from "@/features/models";
-import { UNTITLED } from "@/features/sidebar/ChatRow";
 import { UpdateButton } from "@/features/updater";
 import { useShortcut } from "@/keybindings";
 import { isMac } from "@/lib/platform";
 import { FolderTreeIcon, IconButton } from "@/ui";
-import { cn } from "@/lib/cn";
-import { useLayoutStore, usePanelLayout } from "./store";
-import { useWindowState } from "./useWindowState";
+import { DOCK_WIDTH, useLayoutStore, usePanelLayout } from "./store";
+import { useTrafficLights } from "./useWindowState";
+import { FakeTrafficLights } from "./FakeTrafficLights";
 import { WindowControls } from "./WindowControls";
 
 /**
  * How far macOS's traffic lights reach into the bar: three 12pt buttons from
- * x=20, so the last ends at 72. The window is frameless, but macOS draws them
- * over the webview anyway.
+ * x=14 (`tauri.macos.conf.json`), so the last ends near 67. The window is
+ * frameless, but macOS draws them over the webview anyway.
  */
-const MAC_TRAFFIC_LIGHTS = "w-[72px]";
+const MAC_TRAFFIC_LIGHTS = "w-[64px]";
 
 /**
- * The frameless window's title strip, laid over the top of every column:
- * draggable, the sidebar toggle at its start (its section as wide as the
- * sidebar), the open chat's title, the update icon, the right sidebar and file panel toggles and,
- * on Windows/Linux, the window controls at its end.
+ * The frameless window's title strip, the frame's top edge (the dock is its
+ * left): draggable, the sidebar toggle at its start, the update icon, the
+ * right sidebar and file panel toggles and, on Windows/Linux, the window
+ * controls at its end. The open chat's title heads its transcript instead.
  */
 export function TopBar() {
-    const { fullscreen } = useWindowState();
-    const chat = useActiveChat();
-    const { visible, widths } = usePanelLayout();
+    const trafficLights = useTrafficLights();
+    const { visible } = usePanelLayout();
     const sidebarOpen = visible.left;
     const rightOpen = visible.right;
     const filesOpen = visible.files;
-    const sidebarWidth = widths.left;
-    const resizing = useLayoutStore((s) => s.resizing);
     const toggle = useLayoutStore((s) => s.toggle);
     const toggleSidebar = () => toggle("left");
     const toggleRightSidebar = () => toggle("right");
@@ -42,21 +36,14 @@ export function TopBar() {
     useShortcut("toggleFilePanel", toggleFilePanel);
 
     return (
-        <header
-            data-tauri-drag-region
-            className="absolute inset-x-0 top-0 z-10 flex h-9 select-none items-center"
-        >
+        <header data-tauri-drag-region className="flex h-9 shrink-0 select-none items-center">
             <div
                 data-tauri-drag-region
-                style={{ width: sidebarWidth }}
-                className={cn(
-                    "flex h-full min-w-fit shrink-0 items-center gap-0.5 px-2",
-                    !resizing && "transition-[width] duration-200 ease-out"
-                )}
+                // Past the traffic lights, or centred over the dock's buttons.
+                style={{ paddingLeft: trafficLights ? 8 : (DOCK_WIDTH - 24) / 2 }}
+                className="flex h-full shrink-0 items-center gap-0.5 pr-2"
             >
-                {isMac && !fullscreen && (
-                    <div data-tauri-drag-region className={MAC_TRAFFIC_LIGHTS} />
-                )}
+                {trafficLights && <div data-tauri-drag-region className={MAC_TRAFFIC_LIGHTS} />}
                 <IconButton
                     label="Toggle sidebar"
                     shortcut="toggleSidebar"
@@ -67,19 +54,8 @@ export function TopBar() {
                 </IconButton>
             </div>
 
-            {/* The open chat's title after its agent's mark, then an empty
-                strip to grab the window by. */}
-            <div data-tauri-drag-region className="flex h-full min-w-0 flex-1 items-center gap-1.5 px-3">
-                {chat && (
-                    <>
-                        <ClaudeMark className="size-3.5 shrink-0" />
-                        <span data-tauri-drag-region className="truncate text-[13px] text-text">
-                            {chat.title?.trim() || UNTITLED}
-                        </span>
-                    </>
-                )}
-                <div data-tauri-drag-region className="h-full min-w-4 flex-1" />
-            </div>
+            {/* An empty strip to grab the window by. */}
+            <div data-tauri-drag-region className="h-full min-w-4 flex-1" />
 
             <div data-tauri-drag-region className="flex h-full shrink-0 items-center gap-0.5 px-2">
                 <UpdateButton />
@@ -104,6 +80,7 @@ export function TopBar() {
                 </IconButton>
             </div>
 
+            <FakeTrafficLights />
             {!isMac && <WindowControls />}
         </header>
     );

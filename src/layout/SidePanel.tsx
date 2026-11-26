@@ -1,6 +1,8 @@
 import { useRef, useState, type ReactNode } from "react";
 import { cn } from "@/lib/cn";
 import {
+    BOX_INSET,
+    DOCK_WIDTH,
     edgeOf,
     getPanelLayout,
     PANEL_WIDTHS,
@@ -14,7 +16,7 @@ import {
  * `panelLayout`). It closes, or hides for room, by sliding its width to 0;
  * the content keeps its last width meanwhile, so it's uncovered rather than
  * reflowed. Dragging its inner edge resizes it; a double-click there resets
- * it. The top bar overlays its first 36px.
+ * it. It shares the inset box's colour, set apart by its border.
  */
 export function SidePanel({
     panel,
@@ -48,7 +50,7 @@ export function SidePanel({
             <div
                 style={{ width: contentWidth }}
                 className={cn(
-                    "flex h-full shrink-0 flex-col border-border bg-surface pt-9",
+                    "flex h-full shrink-0 flex-col border-border pt-2",
                     edge === "left" ? "border-r" : "border-l"
                 )}
             >
@@ -59,8 +61,14 @@ export function SidePanel({
     );
 }
 
-/** The shown width of the panels between `panel` and its window edge. */
-const outerWidth = (panel: Panel) => (panel === "right" ? getPanelLayout().widths.files : 0);
+/**
+ * The shown width of what's between `panel` and its window edge: the dock, or
+ * the box's inset and the file panel; and the box's 1px border either way.
+ */
+const outerWidth = (panel: Panel) =>
+    panel === "left"
+        ? DOCK_WIDTH + 1
+        : BOX_INSET + 1 + (panel === "right" ? getPanelLayout().widths.files : 0);
 
 /** A panel's inner edge: drag to resize, double-click to reset. */
 function ResizeHandle({ panel, label }: { panel: Panel; label: string }) {
@@ -103,7 +111,7 @@ function ResizeHandle({ panel, label }: { panel: Panel; label: string }) {
             onPointerCancel={stop}
             onDoubleClick={() => setWidth(panel, PANEL_WIDTHS[panel].default)}
             className={cn(
-                "absolute top-9 bottom-0 z-20 w-1.5 cursor-col-resize",
+                "absolute inset-y-0 z-20 w-1.5 cursor-col-resize",
                 "after:absolute after:inset-y-0 after:w-px after:transition-colors",
                 edge === "left" ? "right-0 after:right-0" : "left-0 after:left-0",
                 "hover:after:bg-muted/50",
