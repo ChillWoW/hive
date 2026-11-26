@@ -1,4 +1,4 @@
-import { useMemo, useState, type KeyboardEvent } from "react";
+import { useMemo, useState } from "react";
 import type { WorkspaceEntry } from "@/proto";
 import { fileMention, rankEntries, useWorkspaceFiles } from "./files";
 
@@ -41,7 +41,7 @@ export type MentionMenuState = {
     setHighlighted: (index: number) => void;
     pick: (entry: WorkspaceEntry) => void;
     /** The menu's keys, while it's open; true when one was taken. */
-    onKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => boolean;
+    onKeyDown: (event: KeyboardEvent) => boolean;
 };
 
 /**
@@ -98,8 +98,8 @@ export function useMentionMenu({
         complete(before + after, before.length + (gap ? 0 : 1));
     };
 
-    const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-        if (!open || event.nativeEvent.isComposing) return false;
+    const onKeyDown = (event: KeyboardEvent) => {
+        if (!open || event.isComposing) return false;
         if (event.key === "Escape") {
             setDismissedAt(draft);
             event.stopPropagation();

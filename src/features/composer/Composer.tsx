@@ -1,4 +1,5 @@
-import { useEffect, useLayoutEffect, useRef, useState, type ClipboardEvent, type DragEvent, type KeyboardEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import type { EditorView } from "@codemirror/view";
 import { ArrowUpIcon, PaperclipIcon, StopIcon } from "@phosphor-icons/react";
 import type { Attachment, ChatConfig, SlashCommand } from "@/proto";
 import { AttachmentChip, attachFile, isImage, useImageViewer } from "@/features/chats";
@@ -17,6 +18,8 @@ import { useMentionMenu } from "./mentions";
 import { SlashMenu } from "./SlashMenu";
 import { addDraftAttachments, composer, useComposerStore, useDraft, useDraftAttachments } from "./store";
 import { usePromptSuggestion } from "./suggestion";
+import { TagFace } from "./TagChip";
+import { tagPieces, type FoundTag } from "./tags";
 
 /** How long the box takes to reflow between its one-row and two-row shapes. */
 const MORPH_MS = 200;
@@ -161,7 +164,8 @@ export function Composer({
     const [dismissedAt, setDismissedAt] = useState<string>();
     const menuOpen = matches.length > 0 && dismissedAt !== draft;
     const pickCommand = (command: SlashCommand) => {
-        fill(`/${command.name} `);
+        // Skills go as `$name`, which every harness reads (Claude's as its `/name`).
+        fill(`${command.kind === "skill" ? "$" : "/"}${command.name} `);
         setDismissedAt(undefined);
     };
     const focusToken = useComposerStore((s) => s.focusToken);
@@ -195,6 +199,8 @@ export function Composer({
 
     // `@` completes the folder's files and folders.
     const [caret, setCaret] = useState(0);
+    /** The field's tags, so the one-row measure sizes them as drawn. */
+    const [tags, setTags] = useState<FoundTag[]>([]);
     const mention = useMentionMenu({
         draft,
         caret,
@@ -322,12 +328,11 @@ export function Composer({
      * recalled text is left as it is. In a multi-line one the caret first
      * moves line by line, as usual, until it's on the first (↑) or last (↓).
      */
-    const recall = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    const recall = (event: KeyboardEvent, view: EditorView) => {
         if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return false;
         if (event.shiftKey || event.altKey || event.ctrlKey || event.metaKey) return false;
-        if (event.nativeEvent.isComposing) return false;
-        const field = event.currentTarget;
-        const { selectionStart, selectionEnd } = field;
+        if (event.isComposing) return false;
+        const { from: selectionStart, to: selectionEnd } = view.state.selection.main;
         if (selectionStart !== selectionEnd) return false;
         const current = recallRef.current;
         const browsing = current !== null && draft === current.text;
@@ -353,8 +358,8 @@ export function Composer({
     };
 
     /** The command menu's keys, while it's open; true when one was taken. */
-    const menuKey = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-        if (!menuOpen || event.nativeEvent.isComposing) return false;
+    const menuKey = (event: KeyboardEvent) => {
+        if (!menuOpen || event.isComposing) return false;
         switch (event.key) {
             case "ArrowDown":
                 setHighlighted((i) => (i + 1) % matches.length);
@@ -381,9 +386,9 @@ export function Composer({
     };
 
     /** The field's keys, before its own; true when one was taken. */
-    const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    const onKeyDown = (event: KeyboardEvent, view: EditorView) => {
         if (mention.onKeyDown(event) || menuKey(event)) return true;
-        if (suggestion !== null && !event.nativeEvent.isComposing) {
+        if (suggestion !== null && !event.isComposing) {
             const bare = !event.shiftKey && !event.ctrlKey && !event.altKey && !event.metaKey;
             if (event.key === "Tab" && bare) {
                 fill(suggestion);
@@ -400,10 +405,10 @@ export function Composer({
             onConfigChange({ ...config, plan: !config.plan });
             return true;
         }
-        if (recall(event)) return true;
+        if (recall(event, view)) return true;
         if (event.key !== "Enter" || event.shiftKey) return false;
         // Enter mid-composition is the IME accepting a candidate.
-        if (event.nativeEvent.isComposing) return false;
+        if (event.isComposing) return false;
         // Enter never stops a turn; that takes the button or Escape. While a
         // turn runs it queues the prompt.
         if (canSend) submit();
@@ -411,14 +416,16 @@ export function Composer({
     };
 
     /** Pasted files (screenshots, copied files) are attached rather than typed. */
-    const onPaste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
-        const files = Array.from(event.clipboardData.files);
-        if (files.length === 0) return;
+    const onPaste = (event: ClipboardEvent) => {
+        const files = Array.from(event.clipboardData?.files ?? []);
+        if (files.length === 0) return false;
         event.preventDefault();
         void attach(files);
+        return true;
     };
 
-    const hasFiles = (event: DragEvent) => Array.from(event.dataTransfer.types).includes("Files");
+    const hasFiles = (event: { dataTransfer: DataTransfer | null }) =>
+        Array.from(event.dataTransfer?.types ?? []).includes("Files");
 
     const { label, icon: ModeIcon } = MODES[mode];
 
@@ -524,7 +531,13 @@ export function Composer({
                         >
                             {/* An empty field shows the placeholder, which has to
                                 fit on the one row too. */}
-                            {draft === "" ? (suggestion !== null ? suggestion + HINT_ROOM : placeholder) : draft}
+                            {draft === ""
+                                ? suggestion !== null
+                                    ? suggestion + HINT_ROOM
+                                    : placeholder
+                                : tagPieces(draft, tags).map((piece, i) =>
+                                      "tag" in piece ? <TagFace key={i} tag={piece.tag} /> : piece.text
+                                  )}
                         </span>
 
                         {/* Left of the field on one row; the bottom row's first control on two. */}
@@ -550,6 +563,9 @@ export function Composer({
                         <PromptField
                             ref={fieldRef}
                             value={draft}
+                            resetKey={chatId ?? ""}
+                            onTags={setTags}
+                            carriesFiles={hasFiles}
                             placeholder={suggestion !== null ? suggestion + HINT_ROOM : placeholder}
                             onChange={(text) => {
                                 setDraft(text);
@@ -560,7 +576,7 @@ export function Composer({
                             onPaste={onPaste}
                             className={cn(
                                 "col-start-2 row-start-1 block w-full min-w-0 px-2 text-sm leading-6 text-text group-data-tall/deck:col-span-3 group-data-tall/deck:col-start-1 group-data-tall/deck:px-2.5",
-                                suggestion !== null && "placeholder:text-transparent"
+                                suggestion !== null && "[&_.cm-placeholder]:text-transparent!"
                             )}
                         />
 

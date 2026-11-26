@@ -53,7 +53,10 @@ export function SlashMenu({
                             )}
                         >
                             <Icon className="size-3.5 shrink-0 text-muted" />
-                            <span className="shrink-0 text-text">/{command.name}</span>
+                            <span className="shrink-0 text-text">
+                                {command.kind === "skill" ? "$" : "/"}
+                                {command.name}
+                            </span>
                             {command.inputHint && (
                                 <span className="shrink-0 text-xs text-muted/70">{command.inputHint}</span>
                             )}

@@ -2,6 +2,7 @@ import { useRef, useState, type ReactNode } from "react";
 import { CaretDownIcon } from "@phosphor-icons/react";
 import type { Message } from "@/proto";
 import { AttachmentChip, isImage, useImageViewer } from "@/features/chats";
+import { findTags, TagChip, tagPieces } from "@/features/composer";
 import { cn } from "@/lib/cn";
 import { useResizeObserver } from "@/lib/useResizeObserver";
 import { promptText } from "./text";
@@ -73,7 +74,11 @@ export function UserMessage({ message }: { message: Message }) {
             {viewer.viewer}
             {text.trim() && (
                 <div className="rounded-2xl rounded-br-md bg-raised px-3 py-1.5 text-sm leading-6 break-words whitespace-pre-wrap text-text">
-                    <Collapsible>{text}</Collapsible>
+                    <Collapsible>
+                        {tagPieces(text, findTags(text)).map((piece, i) =>
+                            "tag" in piece ? <TagChip key={i} tag={piece.tag} /> : piece.text
+                        )}
+                    </Collapsible>
                 </div>
             )}
         </div>
