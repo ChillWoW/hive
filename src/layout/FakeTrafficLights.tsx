@@ -7,7 +7,7 @@ import { fakeMac } from "@/lib/platform";
  * and grows the titlebar container to the frame's height plus `y`; the buttons
  * keep their offset inside it, which puts their centres about `y + 2` down.
  */
-const POSITION = { x: 14, y: 20 };
+const POSITION = { x: 14, y: 16 };
 const COLORS = ["#ff5f57", "#febc2e", "#28c840"];
 
 export function FakeTrafficLights() {
