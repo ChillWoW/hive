@@ -1,7 +1,7 @@
 import { useRef, useState, type ReactNode } from "react";
 import { CaretDownIcon } from "@phosphor-icons/react";
 import type { Message } from "@/proto";
-import { AttachmentChip } from "@/features/chats";
+import { AttachmentChip, isImage, useImageViewer } from "@/features/chats";
 import { cn } from "@/lib/cn";
 import { useResizeObserver } from "@/lib/useResizeObserver";
 
@@ -59,16 +59,22 @@ function promptText(message: Message): string {
 export function UserMessage({ message }: { message: Message }) {
     const text = promptText(message);
     const attachments = message.attachments ?? [];
+    const viewer = useImageViewer(attachments);
     if (!text.trim() && attachments.length === 0) return null;
     return (
         <div className="flex max-w-[75%] flex-col items-end gap-1.5 self-end">
             {attachments.length > 0 && (
                 <div className="flex flex-wrap justify-end gap-1.5">
                     {attachments.map((attachment) => (
-                        <AttachmentChip key={attachment.path} attachment={attachment} />
+                        <AttachmentChip
+                            key={attachment.path}
+                            attachment={attachment}
+                            onOpen={isImage(attachment) ? () => viewer.open(attachment) : undefined}
+                        />
                     ))}
                 </div>
             )}
+            {viewer.viewer}
             {text.trim() && (
                 <div className="rounded-2xl rounded-br-md bg-raised px-3 py-1.5 text-sm leading-6 break-words whitespace-pre-wrap text-text">
                     <Collapsible>{text}</Collapsible>

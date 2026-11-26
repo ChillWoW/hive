@@ -6,15 +6,18 @@ import { formatBytes, useAttachmentUrl } from "./attachments";
 
 /**
  * A file sent (or about to be sent) with a prompt: an image as a thumbnail,
- * anything else as its icon, name and size. `onRemove` adds a remove button.
+ * anything else as its icon, name and size. `onRemove` adds a remove button;
+ * `onOpen` makes an image clickable (to open it in the viewer).
  */
 export function AttachmentChip({
     attachment,
     onRemove,
+    onOpen,
     className
 }: {
     attachment: Attachment;
     onRemove?: () => void;
+    onOpen?: () => void;
     className?: string;
 }) {
     const url = useAttachmentUrl(attachment);
@@ -32,7 +35,18 @@ export function AttachmentChip({
                     >
                         {image ? (
                             url ? (
-                                <img src={url} alt={attachment.name} className="size-full object-cover" />
+                                onOpen ? (
+                                    <button
+                                        type="button"
+                                        aria-label={`View ${attachment.name}`}
+                                        onClick={onOpen}
+                                        className="size-full cursor-zoom-in transition-opacity hover:opacity-85"
+                                    >
+                                        <img src={url} alt={attachment.name} className="size-full object-cover" />
+                                    </button>
+                                ) : (
+                                    <img src={url} alt={attachment.name} className="size-full object-cover" />
+                                )
                             ) : (
                                 <div className="size-full animate-pulse bg-hover" />
                             )

@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ClipboardEvent, type DragEvent, type KeyboardEvent } from "react";
 import { ArrowUpIcon, PaperclipIcon, StopIcon } from "@phosphor-icons/react";
 import type { Attachment, ChatConfig, SlashCommand } from "@/proto";
-import { AttachmentChip, attachFile } from "@/features/chats";
+import { AttachmentChip, attachFile, isImage, useImageViewer } from "@/features/chats";
 import { ModelPicker } from "@/features/models";
 import { useSettingsStore, type BusySend } from "@/features/settings";
 import { cn } from "@/lib/cn";
@@ -85,6 +85,7 @@ export function Composer({
     const draft = useDraft(chatId);
     const setDraft = (text: string) => composer.setDraft(chatId, text);
     const attachments = useDraftAttachments(chatId);
+    const viewer = useImageViewer(attachments);
     const [uploading, setUploading] = useState(0);
     const [dragging, setDragging] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -367,196 +368,201 @@ export function Composer({
     const { label, icon: ModeIcon } = MODES[mode];
 
     return (
-        <form
-            onSubmit={(event) => {
-                event.preventDefault();
-                submit();
-            }}
-            onKeyDown={(event) => {
-                if (event.key === "Escape" && busy && onStop) {
+        <>
+            <form
+                onSubmit={(event) => {
                     event.preventDefault();
-                    onStop();
-                }
-            }}
-            onDragOver={(event) => {
-                if (!hasFiles(event)) return;
-                event.preventDefault();
-                event.dataTransfer.dropEffect = "copy";
-                setDragging(true);
-            }}
-            onDragLeave={(event) => {
-                if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragging(false);
-            }}
-            onDrop={(event) => {
-                if (!hasFiles(event)) return;
-                event.preventDefault();
-                setDragging(false);
-                void attach(Array.from(event.dataTransfer.files));
-            }}
-            className={cn(
-                "@container/composer relative flex w-full flex-col gap-1.5 rounded-[22px] border border-border bg-surface p-1.5",
-                "transition-colors",
-                dragging
-                    ? "border-accent/60 bg-accent/5"
-                    : "focus-within:border-[color-mix(in_srgb,var(--border)_75%,var(--muted))]",
-                className
-            )}
-        >
-            {menuOpen && (
-                <SlashMenu
-                    commands={matches}
-                    highlighted={highlighted}
-                    onHighlight={setHighlighted}
-                    onPick={pickCommand}
-                />
-            )}
-            {(attachments.length > 0 || uploading > 0) && (
-                <div className="flex flex-wrap items-end gap-1.5 px-1 pt-1">
-                    {attachments.map((attachment) => (
-                        <AttachmentChip
-                            key={attachment.path}
-                            attachment={attachment}
-                            onRemove={() => removeAttachment(attachment.path)}
-                        />
-                    ))}
-                    {uploading > 0 && (
-                        <span className="flex h-9 items-center gap-1.5 px-2 text-xs text-muted">
-                            <Spinner label="Attaching" className="size-3.5" />
-                            Attaching
-                        </span>
-                    )}
-                </div>
-            )}
-            <input
-                ref={fileInputRef}
-                type="file"
-                multiple
-                hidden
-                onChange={(event) => {
-                    void attach(Array.from(event.currentTarget.files ?? []));
-                    event.currentTarget.value = "";
+                    submit();
                 }}
-            />
-            {/* Anchors the deck to its bottom, so while the height animates
-                it is the top row that is revealed or hidden and the controls,
-                on the bottom row in either shape, never move. */}
-            <div
-                ref={frameRef}
-                data-morph={morphing || undefined}
+                onKeyDown={(event) => {
+                    if (event.key === "Escape" && busy && onStop) {
+                        event.preventDefault();
+                        onStop();
+                    }
+                }}
+                onDragOver={(event) => {
+                    if (!hasFiles(event)) return;
+                    event.preventDefault();
+                    event.dataTransfer.dropEffect = "copy";
+                    setDragging(true);
+                }}
+                onDragLeave={(event) => {
+                    if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragging(false);
+                }}
+                onDrop={(event) => {
+                    if (!hasFiles(event)) return;
+                    event.preventDefault();
+                    setDragging(false);
+                    void attach(Array.from(event.dataTransfer.files));
+                }}
                 className={cn(
-                    "-m-1.5 box-content flex flex-col justify-end overflow-hidden p-1.5",
-                    "transition-[height] duration-0 ease-[cubic-bezier(0.22,1,0.36,1)]",
-                    "data-morph:duration-200 motion-reduce:transition-none"
+                    "@container/composer relative flex w-full flex-col gap-1.5 rounded-[22px] border border-border bg-surface p-1.5",
+                    "transition-colors",
+                    dragging
+                        ? "border-accent/60 bg-accent/5"
+                        : "focus-within:border-[color-mix(in_srgb,var(--border)_75%,var(--muted))]",
+                    className
                 )}
             >
-                <div
-                    ref={deckRef}
-                    data-tall={tall || undefined}
-                    // The field's column may not shrink below 8rem and the
-                    // controls' may shrink to nothing, so a narrow box
-                    // truncates the model name rather than the field — and
-                    // once the rest no longer fits, `measure` goes two rows.
-                    className="group/deck relative grid shrink-0 grid-cols-[auto_minmax(8rem,1fr)_minmax(0,auto)] items-end gap-x-1 data-tall:gap-y-1.5"
-                >
-                    <span
-                        ref={measureRef}
-                        aria-hidden="true"
-                        className="invisible absolute text-sm leading-6 whitespace-pre"
-                    >
-                        {/* An empty field shows the placeholder, which has to
-                            fit on the one row too. */}
-                        {draft === "" ? placeholder : draft}
-                    </span>
-
-                    {/* Left of the field on one row; the bottom row's first control on two. */}
-                    <Tooltip>
-                        <Tooltip.Trigger
-                            render={
-                                <button
-                                    type="button"
-                                    aria-label="Attach files"
-                                    onClick={() => fileInputRef.current?.click()}
-                                    className={cn(
-                                        pickerTriggerClassName,
-                                        "col-start-1 row-start-1 size-8 justify-center px-0 group-data-tall/deck:row-start-2"
-                                    )}
-                                >
-                                    <PaperclipIcon className="size-4" />
-                                </button>
-                            }
-                        />
-                        <Tooltip.Content side="top">Attach files (or paste, or drop them here)</Tooltip.Content>
-                    </Tooltip>
-
-                    <PromptField
-                        ref={fieldRef}
-                        value={draft}
-                        placeholder={placeholder}
-                        onChange={(text) => {
-                            setDraft(text);
-                            if (dismissedAt !== undefined && text !== dismissedAt) setDismissedAt(undefined);
-                        }}
-                        onKeyDown={onKeyDown}
-                        onPaste={onPaste}
-                        className="col-start-2 row-start-1 block w-full min-w-0 px-2 text-sm leading-6 text-text group-data-tall/deck:col-span-3 group-data-tall/deck:col-start-1 group-data-tall/deck:px-2.5"
+                {menuOpen && (
+                    <SlashMenu
+                        commands={matches}
+                        highlighted={highlighted}
+                        onHighlight={setHighlighted}
+                        onPick={pickCommand}
                     />
-
-                    <div
-                        ref={controlsRef}
-                        className="col-start-3 row-start-1 flex min-w-0 items-center justify-end gap-0.5 group-data-tall/deck:col-span-2 group-data-tall/deck:col-start-2 group-data-tall/deck:row-start-2"
-                    >
-                        <AccessPicker config={config} onChange={onConfigChange} />
-                        <span className="hidden flex-1 group-data-tall/deck:block" />
-                        <ModelPicker config={config} onChange={onConfigChange} />
-                        {busy && onStop && mode === "send" && (
-                            <Tooltip>
-                                <Tooltip.Trigger
-                                    render={
-                                        <button
-                                            type="button"
-                                            aria-label="Stop"
-                                            onClick={onStop}
-                                            className="ml-1 inline-flex size-8 shrink-0 items-center justify-center rounded-full bg-hover text-text outline-none transition-colors hover:bg-border"
-                                        >
-                                            <StopIcon className="size-3.5" weight="fill" />
-                                        </button>
-                                    }
-                                />
-                                <Tooltip.Content side="top" shortcut="Escape">
-                                    Stop
-                                </Tooltip.Content>
-                            </Tooltip>
+                )}
+                {(attachments.length > 0 || uploading > 0) && (
+                    <div className="flex flex-wrap items-end gap-1.5 px-1 pt-1">
+                        {attachments.map((attachment) => (
+                            <AttachmentChip
+                                key={attachment.path}
+                                attachment={attachment}
+                                onRemove={() => removeAttachment(attachment.path)}
+                                onOpen={isImage(attachment) ? () => viewer.open(attachment) : undefined}
+                            />
+                        ))}
+                        {uploading > 0 && (
+                            <span className="flex h-9 items-center gap-1.5 px-2 text-xs text-muted">
+                                <Spinner label="Attaching" className="size-3.5" />
+                                Attaching
+                            </span>
                         )}
+                    </div>
+                )}
+                <input
+                    ref={fileInputRef}
+                    type="file"
+                    multiple
+                    hidden
+                    onChange={(event) => {
+                        void attach(Array.from(event.currentTarget.files ?? []));
+                        event.currentTarget.value = "";
+                    }}
+                />
+                {/* Anchors the deck to its bottom, so while the height animates
+                    it is the top row that is revealed or hidden and the controls,
+                    on the bottom row in either shape, never move. */}
+                <div
+                    ref={frameRef}
+                    data-morph={morphing || undefined}
+                    className={cn(
+                        "-m-1.5 box-content flex flex-col justify-end overflow-hidden p-1.5",
+                        "transition-[height] duration-0 ease-[cubic-bezier(0.22,1,0.36,1)]",
+                        "data-morph:duration-200 motion-reduce:transition-none"
+                    )}
+                >
+                    <div
+                        ref={deckRef}
+                        data-tall={tall || undefined}
+                        // The field's column may not shrink below 8rem and the
+                        // controls' may shrink to nothing, so a narrow box
+                        // truncates the model name rather than the field — and
+                        // once the rest no longer fits, `measure` goes two rows.
+                        className="group/deck relative grid shrink-0 grid-cols-[auto_minmax(8rem,1fr)_minmax(0,auto)] items-end gap-x-1 data-tall:gap-y-1.5"
+                    >
+                        <span
+                            ref={measureRef}
+                            aria-hidden="true"
+                            className="invisible absolute text-sm leading-6 whitespace-pre"
+                        >
+                            {/* An empty field shows the placeholder, which has to
+                                fit on the one row too. */}
+                            {draft === "" ? placeholder : draft}
+                        </span>
+
+                        {/* Left of the field on one row; the bottom row's first control on two. */}
                         <Tooltip>
                             <Tooltip.Trigger
                                 render={
                                     <button
-                                        key={mode}
-                                        type="submit"
-                                        aria-label={busy && mode === "send" ? busyCopy.action : label}
-                                        disabled={disabled}
+                                        type="button"
+                                        aria-label="Attach files"
+                                        onClick={() => fileInputRef.current?.click()}
                                         className={cn(
-                                            "ml-1 inline-flex size-8 shrink-0 items-center justify-center rounded-full outline-none select-none",
-                                            "transition-[color,background-color,scale,opacity,filter] duration-200 ease-out active:scale-[0.96]",
-                                            "starting:scale-90 starting:opacity-0 starting:blur-[2px]",
-                                            "bg-accent text-accent-fg hover:opacity-90",
-                                            "disabled:bg-hover disabled:text-muted/75 disabled:hover:opacity-100 disabled:active:scale-100"
+                                            pickerTriggerClassName,
+                                            "col-start-1 row-start-1 size-8 justify-center px-0 group-data-tall/deck:row-start-2"
                                         )}
                                     >
-                                        <ModeIcon
-                                            className={mode === "stop" ? "size-3.5" : "size-4"}
-                                            weight={mode === "stop" ? "fill" : "bold"}
-                                        />
+                                        <PaperclipIcon className="size-4" />
                                     </button>
                                 }
                             />
-                            <Tooltip.Content side="top" shortcut={mode === "stop" ? "Escape" : "Enter"}>
-                                {busy && mode === "send" ? busyCopy.tooltip : label}
-                            </Tooltip.Content>
+                            <Tooltip.Content side="top">Attach files (or paste, or drop them here)</Tooltip.Content>
                         </Tooltip>
+
+                        <PromptField
+                            ref={fieldRef}
+                            value={draft}
+                            placeholder={placeholder}
+                            onChange={(text) => {
+                                setDraft(text);
+                                if (dismissedAt !== undefined && text !== dismissedAt) setDismissedAt(undefined);
+                            }}
+                            onKeyDown={onKeyDown}
+                            onPaste={onPaste}
+                            className="col-start-2 row-start-1 block w-full min-w-0 px-2 text-sm leading-6 text-text group-data-tall/deck:col-span-3 group-data-tall/deck:col-start-1 group-data-tall/deck:px-2.5"
+                        />
+
+                        <div
+                            ref={controlsRef}
+                            className="col-start-3 row-start-1 flex min-w-0 items-center justify-end gap-0.5 group-data-tall/deck:col-span-2 group-data-tall/deck:col-start-2 group-data-tall/deck:row-start-2"
+                        >
+                            <AccessPicker config={config} onChange={onConfigChange} />
+                            <span className="hidden flex-1 group-data-tall/deck:block" />
+                            <ModelPicker config={config} onChange={onConfigChange} />
+                            {busy && onStop && mode === "send" && (
+                                <Tooltip>
+                                    <Tooltip.Trigger
+                                        render={
+                                            <button
+                                                type="button"
+                                                aria-label="Stop"
+                                                onClick={onStop}
+                                                className="ml-1 inline-flex size-8 shrink-0 items-center justify-center rounded-full bg-hover text-text outline-none transition-colors hover:bg-border"
+                                            >
+                                                <StopIcon className="size-3.5" weight="fill" />
+                                            </button>
+                                        }
+                                    />
+                                    <Tooltip.Content side="top" shortcut="Escape">
+                                        Stop
+                                    </Tooltip.Content>
+                                </Tooltip>
+                            )}
+                            <Tooltip>
+                                <Tooltip.Trigger
+                                    render={
+                                        <button
+                                            key={mode}
+                                            type="submit"
+                                            aria-label={busy && mode === "send" ? busyCopy.action : label}
+                                            disabled={disabled}
+                                            className={cn(
+                                                "ml-1 inline-flex size-8 shrink-0 items-center justify-center rounded-full outline-none select-none",
+                                                "transition-[color,background-color,scale,opacity,filter] duration-200 ease-out active:scale-[0.96]",
+                                                "starting:scale-90 starting:opacity-0 starting:blur-[2px]",
+                                                "bg-accent text-accent-fg hover:opacity-90",
+                                                "disabled:bg-hover disabled:text-muted/75 disabled:hover:opacity-100 disabled:active:scale-100"
+                                            )}
+                                        >
+                                            <ModeIcon
+                                                className={mode === "stop" ? "size-3.5" : "size-4"}
+                                                weight={mode === "stop" ? "fill" : "bold"}
+                                            />
+                                        </button>
+                                    }
+                                />
+                                <Tooltip.Content side="top" shortcut={mode === "stop" ? "Escape" : "Enter"}>
+                                    {busy && mode === "send" ? busyCopy.tooltip : label}
+                                </Tooltip.Content>
+                            </Tooltip>
+                        </div>
                     </div>
                 </div>
-            </div>
-        </form>
+            </form>
+            {/* Outside the form: its key and drop handlers would catch the viewer's events. */}
+            {viewer.viewer}
+        </>
     );
 }

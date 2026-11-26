@@ -30,6 +30,10 @@ export function useAttachmentUrl(attachment: Attachment): string | undefined {
     return url;
 }
 
+export function isImage(attachment: Attachment): boolean {
+    return attachment.mimeType.startsWith("image/");
+}
+
 /** `bytes` as base64, in chunks small enough for `String.fromCharCode`. */
 function toBase64(bytes: Uint8Array): string {
     let binary = "";
