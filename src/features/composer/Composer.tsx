@@ -29,10 +29,10 @@ const MODES: Record<Mode, { label: string; icon: typeof ArrowUpIcon }> = {
 
 /** What sending while a turn runs is called, by `chat.busySend`. */
 const BUSY_COPY: Record<BusySend, { placeholder: string; action: string; tooltip: string }> = {
-    queue: { placeholder: "Queue a follow-up", action: "Queue", tooltip: "Queue: sends when this turn ends" },
+    queue: { placeholder: "Queue a follow-up", action: "Queue", tooltip: "Sends when this turn ends" },
     "after-tool": {
-        placeholder: "Send after the current tool call",
-        action: "Send after tool call",
+        placeholder: "Steer the agent",
+        action: "Steer",
         tooltip: "Sends once the running tool call finishes"
     },
     interrupt: { placeholder: "Stop and send a new prompt", action: "Stop and send", tooltip: "Stop the turn and send" }

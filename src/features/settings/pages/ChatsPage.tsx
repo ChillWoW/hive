@@ -157,9 +157,9 @@ function TranscriptSection() {
 }
 
 const BUSY_SEND: { value: BusySend; label: string }[] = [
-    { value: "queue", label: "Queue it" },
-    { value: "after-tool", label: "After tool call" },
-    { value: "interrupt", label: "Stop and send" }
+    { value: "queue", label: "Queue" },
+    { value: "after-tool", label: "Steer" },
+    { value: "interrupt", label: "Interrupt" }
 ];
 
 function SendingSection() {
