@@ -99,18 +99,18 @@
 :root {
     --font-ui: "Geist Variable";
     color-scheme: dark;
-    --bg: #141517;
-    --surface: #19191b;
-    --raised: #1e1f20;
-    --hover: #242527;
-    --border: #2d2e30;
-    --text: #e4e4e6;
-    --muted: #8e8f92;
-    --accent: #e4e4e6;
-    --accent-fg: #141517;
-    --success: #a5e075;
-    --danger: #ff616e;
-    --warning: #f0a45d;
+    --bg: #131315;
+    --surface: #18181a;
+    --raised: #1e1e21;
+    --hover: #252528;
+    --border: #2e2e32;
+    --text: #ededee;
+    --muted: #8e8e94;
+    --accent: #e6eeee;
+    --accent-fg: #131315;
+    --success: #8fd68b;
+    --danger: #ff6b6b;
+    --warning: #f5b85c;
     --info: #6fb3f2;
 }
 

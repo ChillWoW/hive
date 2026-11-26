@@ -20,18 +20,18 @@ const TEMPLATE_NAME: &str = "_template.json";
 const TEMPLATE: &str = r##"{
     "name": "My Theme",
     "light": false,
-    "bg": "#141517",
-    "surface": "#19191b",
-    "raised": "#1e1f20",
-    "hover": "#242527",
-    "border": "#2d2e30",
-    "text": "#e4e4e6",
-    "muted": "#8e8f92",
-    "accent": "#e4e4e6",
-    "accentFg": "#141517",
-    "success": "#a5e075",
-    "danger": "#ff616e",
-    "warning": "#f0a45d"
+    "bg": "#131315",
+    "surface": "#18181a",
+    "raised": "#1e1e21",
+    "hover": "#252528",
+    "border": "#2e2e32",
+    "text": "#ededee",
+    "muted": "#8e8e94",
+    "accent": "#e6eeee",
+    "accentFg": "#131315",
+    "success": "#8fd68b",
+    "danger": "#ff6b6b",
+    "warning": "#f5b85c"
 }
 "##;
 

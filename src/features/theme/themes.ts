@@ -53,7 +53,7 @@ export const COLOR_KEYS = [
 ] as const satisfies readonly (keyof Theme)[];
 
 export const BUILTIN_THEMES: Record<string, Theme> = {
-    "Outcode Slate": { bg: "#141517", surface: "#19191b", raised: "#1e1f20", hover: "#242527", border: "#2d2e30", text: "#e4e4e6", muted: "#8e8f92", accent: "#e4e4e6", accentFg: "#141517", success: "#a5e075", danger: "#ff616e", warning: "#f0a45d" },
+    "Outcode Slate": { bg: "#131315", surface: "#18181a", raised: "#1e1e21", hover: "#252528", border: "#2e2e32", text: "#ededee", muted: "#8e8e94", accent: "#e6eeee", accentFg: "#131315", success: "#8fd68b", danger: "#ff6b6b", warning: "#f5b85c" },
     "Outcode Chalk": { bg: "#ebebee", surface: "#ffffff", raised: "#f4f4f6", hover: "#e0e0e5", border: "#d6d6dc", text: "#18181b", muted: "#62626b", accent: "#27272a", accentFg: "#fafafa", success: "#1f8a4c", danger: "#cf3443", warning: "#a96410", light: true },
     Fjord: { bg: "#0f1217", surface: "#14181f", raised: "#1a1f28", hover: "#212732", border: "#272e3a", text: "#dfe4ec", muted: "#8691a2", accent: "#86a8e0", accentFg: "#0f1217", success: "#93cf9e", danger: "#ec7b86", warning: "#e5b97c" },
     Moss: { bg: "#111310", surface: "#161914", raised: "#1c2019", hover: "#232820", border: "#2a3026", text: "#e2e6da", muted: "#8e9585", accent: "#b4c97c", accentFg: "#121509", success: "#9ccf72", danger: "#e5786d", warning: "#e3b462" },
