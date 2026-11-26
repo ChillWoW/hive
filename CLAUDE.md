@@ -12,7 +12,7 @@ A desktop UI for driving coding-agent CLIs (Claude Code, Codex, OpenCode, …) f
 
 ## Status
 
-Branch `rework/app` is a from-scratch rebuild. So far: app shell (top bar, window controls, resizable sidebar), settings, themes, fonts, keybindings, updater, toasts, UI kit. `ROADMAP.md` is the step-by-step plan (Claude Code first, vertical slices); follow it and tick boxes as steps land. `HARNESS_REBUILD.md` has the fuller harness design and ⚠ gotchas.
+Branch `rework/app` is a from-scratch rebuild: app shell, settings, themes, fonts, keybindings, updater, toasts, UI kit, and chats driven by the Claude Code and Codex harnesses.
 
 ## Stack
 
