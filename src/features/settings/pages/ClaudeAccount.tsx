@@ -29,8 +29,10 @@ export function AccountSection() {
     const [code, setCode] = useState("");
     if (!status?.installed) return null;
     const account = status.account;
+    // Personal accounts get an auto-named "<email>'s Organization"; only show a real one.
+    const org = account?.organization && account.organization !== `${account.email}'s Organization` ? account.organization : null;
     const line = account?.loggedIn
-        ? [account.email, account.plan && `${PLAN_LABELS[account.plan] ?? account.plan} plan`, account.organization]
+        ? [account.email, account.plan && `${PLAN_LABELS[account.plan] ?? account.plan} plan`, org]
               .filter(Boolean)
               .join(" · ") || "Signed in"
         : (status.error && !account ? status.error : "Signed out");
@@ -83,7 +85,7 @@ export function AccountSection() {
                             onKeyDown={(e) => {
                                 if (e.key === "Enter" && code.trim()) void claudeProvider.submitCode(code);
                             }}
-                            className="flex-1 font-mono text-xs"
+                            className="flex-1"
                         />
                         <Button size="xs" disabled={!code.trim()} onClick={() => void claudeProvider.submitCode(code)}>
                             Submit

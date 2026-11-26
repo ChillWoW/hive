@@ -116,7 +116,6 @@ function PathInput({ value, onCommit }: { value: string; onCommit: (value: strin
                     if (e.key === "Enter") e.currentTarget.blur();
                     if (e.key === "Escape") setDraft(null);
                 }}
-                className="font-mono text-xs"
             />
             {isTauri && (
                 <Input.Addon>
@@ -144,7 +143,7 @@ function AccessSection() {
         <SettingsSection title="Permissions">
             <SettingRow
                 label="Default access"
-                description="What a new chat's agent may do without asking; each chat can change it"
+                description="What the agent may do without asking"
                 keywords="access permissions approval supervised auto accept edits full access default"
                 setting={access}
                 controlClassName="w-48"
@@ -187,7 +186,7 @@ function AdvancedSection() {
         <SettingsSection title="Advanced">
             <SettingRow
                 label="Launch arguments"
-                description="Added to every chat's claude command line, split like a shell would"
+                description="Extra flags passed to claude"
                 keywords="launch args arguments flags command line cli"
                 setting={launchArgs}
                 controlClassName="w-72"
@@ -203,7 +202,7 @@ function AdvancedSection() {
             />
             <SettingRow
                 label="Config folder"
-                description="Where Claude keeps its settings and login (CLAUDE_CONFIG_DIR); empty: ~/.claude"
+                description="CLAUDE_CONFIG_DIR; empty uses ~/.claude"
                 keywords="config dir folder claude_config_dir profile account"
                 setting={configDir}
                 controlClassName="w-72"
@@ -231,7 +230,6 @@ function CommitInput({ value, placeholder, onCommit }: { value: string; placehol
                 if (e.key === "Enter") e.currentTarget.blur();
                 if (e.key === "Escape") setDraft(null);
             }}
-            className="font-mono text-xs"
         />
     );
 }
@@ -250,7 +248,7 @@ function CommitTextarea({ value, placeholder, onCommit }: { value: string; place
                 if (draft !== null && draft !== value) onCommit(draft);
                 setDraft(null);
             }}
-            className="w-full font-mono text-xs"
+            className="w-full"
         />
     );
 }
