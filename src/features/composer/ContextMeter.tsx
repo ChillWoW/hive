@@ -26,11 +26,12 @@ export function ContextMeter({ context }: { context: ContextWindow | undefined }
                         role="img"
                         aria-label={`Context ${percent}% full`}
                         className={cn(
-                            "inline-flex size-6 shrink-0 items-center justify-center rounded-full",
+                            "inline-flex h-6 shrink-0 items-center gap-1 px-1 text-xs tabular-nums",
                             fraction > 0.9 ? "text-danger" : fraction > 0.7 ? "text-warning" : "text-muted"
                         )}
                     >
                         <Ring fraction={fraction} />
+                        <span aria-hidden>{percent}%</span>
                     </span>
                 }
             />
