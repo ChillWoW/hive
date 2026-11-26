@@ -7,10 +7,12 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use outcode_engine::{Engine, Hooks, SendMode, TextUse, WatchId, WorktreeOptions};
+use outcode_engine::{Engine, Hooks, SendMode, TextModel, TextUse, WatchId, WorktreeOptions};
+use outcode_harness::Harness;
+use outcode_harness::codex::{Codex, Options as CodexOptions};
 use outcode_harness::claude::{Claude, Options as ClaudeOptions};
 use outcode_proto::{
-    Attachment, Catalog, Chat, ChatConfig, ChatsUpdate, InputResponse, MessagesUpdate, NewWorktree, SlashCommand,
+    Attachment, Catalog, Chat, ChatConfig, ChatsUpdate, HarnessId, InputResponse, MessagesUpdate, NewWorktree, SlashCommand,
     WorktreeStep,
 };
 use outcode_store::Store;
@@ -20,9 +22,10 @@ use tauri::{AppHandle, Manager, State, Webview};
 use crate::settings::{BranchNaming, BusySend, SettingsFile};
 
 /// Opens the store under `data_dir`, closes turns a crash left open, and
-/// starts the engine: Claude runs from `claude.binaryPath` (else found), and
-/// closes after `chat.idleTimeoutMinutes` between prompts; chats are titled
-/// by `chat.textGenerationModel` while `chat.autoTitle` is on.
+/// starts the engine: Claude runs from `claude.binaryPath` (else found),
+/// Codex from wherever it's found; runs close after
+/// `chat.idleTimeoutMinutes` between prompts; chats are titled by Claude's
+/// `chat.textGenerationModel` while `chat.autoTitle` is on.
 pub fn engine(app: &AppHandle, data_dir: &Path) -> Result<Engine, Box<dyn std::error::Error>> {
     let store = Store::open(data_dir)?;
     let closed = store.recover()?;
@@ -31,7 +34,7 @@ pub fn engine(app: &AppHandle, data_dir: &Path) -> Result<Engine, Box<dyn std::e
     }
     let (claude, text, idle, worktrees) = (app.clone(), app.clone(), app.clone(), app.clone());
     let data_dir = data_dir.to_path_buf();
-    let harness = Claude::new(move || {
+    let claude = Claude::new(move || {
         let settings = claude.state::<SettingsFile>().get().claude;
         let window = settings.auto_compact_window;
         ClaudeOptions {
@@ -42,10 +45,13 @@ pub fn engine(app: &AppHandle, data_dir: &Path) -> Result<Engine, Box<dyn std::e
     Ok(Engine::new(
         store,
         Hooks {
-            harness: Arc::new(harness),
+            harnesses: vec![Arc::new(claude), Arc::new(Codex::new(CodexOptions::default))],
             text_model: Box::new(move |purpose| {
                 let chat = text.state::<SettingsFile>().get().chat;
-                (purpose != TextUse::Title || chat.auto_title).then_some(chat.text_generation_model)
+                (purpose != TextUse::Title || chat.auto_title).then_some(TextModel {
+                    harness: HarnessId::Claude,
+                    model: chat.text_generation_model,
+                })
             }),
             idle: Box::new(move || {
                 let minutes = idle.state::<SettingsFile>().get().chat.idle_timeout_minutes;
@@ -159,18 +165,28 @@ pub fn chat_set_config(
     engine.set_config(&chat_id, config).map_err(err)
 }
 
-/// Claude's models, and whether its CLI is installed.
+/// `harness`'s models, and whether its CLI is installed.
 #[tauri::command]
-pub async fn claude_catalog(engine: State<'_, Engine>) -> Result<Catalog, String> {
-    Ok(engine.harness().catalog())
+pub async fn harness_catalog(engine: State<'_, Engine>, harness: HarnessId) -> Result<Catalog, String> {
+    Ok(harness_of(&engine, harness)?.catalog())
 }
 
-/// The commands and skills Claude offers in `cwd` (a chat's run lists its
-/// own in its session once it starts).
+/// The commands and skills `harness` offers in `cwd` (a chat's run lists
+/// its own in its session once it starts).
 #[tauri::command]
-pub async fn claude_commands(engine: State<'_, Engine>, cwd: String) -> Result<Vec<SlashCommand>, String> {
-    let harness = engine.harness().clone();
-    harness.commands(&cwd).await.map_err(err)
+pub async fn harness_commands(
+    engine: State<'_, Engine>,
+    harness: HarnessId,
+    cwd: String,
+) -> Result<Vec<SlashCommand>, String> {
+    harness_of(&engine, harness)?.commands(&cwd).await.map_err(err)
+}
+
+fn harness_of(engine: &Engine, id: HarnessId) -> Result<Arc<dyn Harness>, String> {
+    engine
+        .harness(id)
+        .cloned()
+        .ok_or_else(|| format!("no {} harness", id.as_str()))
 }
 
 /// Sends a prompt with the files attached to it ([`attachment_save`]); the

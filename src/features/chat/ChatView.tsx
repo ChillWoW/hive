@@ -4,7 +4,7 @@ import { cn } from "@/lib/cn";
 import { chats, useActiveChat, useChatsStore, useSession, workDir } from "@/features/chats/store";
 import { Composer, ContextMeter, FolderPicker, useComposerStore } from "@/features/composer";
 import { BranchPicker, WorkspaceChip, WorkspacePicker } from "@/features/git";
-import { ClaudeMark } from "@/features/models";
+import { HarnessMark } from "@/features/models";
 import { UNTITLED } from "@/features/sidebar/ChatRow";
 import { toast } from "@/ui";
 import { useChatConfig } from "./config";
@@ -226,7 +226,7 @@ export function ChatHeader() {
     ];
     return (
         <header className="flex h-9 min-w-0 shrink-0 items-center gap-1.5 px-3">
-            <ClaudeMark className="size-3.5 shrink-0" />
+            <HarnessMark harness={chat.config.harness} className="size-3.5 shrink-0" />
             {crumbs.map((name, depth) => {
                 const last = depth === crumbs.length - 1;
                 return (

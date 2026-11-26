@@ -1,13 +1,26 @@
 import { create } from "zustand";
-import type { AccessMode, Catalog, ChatConfig, Model, ReasoningLevel } from "@/proto";
+import type { AccessMode, Catalog, ChatConfig, HarnessId, Model, ReasoningLevel } from "@/proto";
 import type { ChatSettings } from "@/features/settings/types";
 import { backend } from "@/lib/backend";
 
 /**
- * Claude's models (`claude::catalog` in Rust), fetched at launch and again
- * whenever the model picker opens, since `installed` can change while the
- * app runs.
+ * Each harness's models (`Harness::catalog` in Rust), fetched at launch and
+ * again whenever the model picker opens, since `installed` can change while
+ * the app runs.
  */
+
+/** The harnesses the app drives, in the order the picker lists them. */
+export const HARNESSES: HarnessId[] = ["claude", "codex"];
+
+export const HARNESS_LABELS: Record<HarnessId, string> = {
+    claude: "Claude",
+    codex: "Codex"
+};
+
+export type Catalogs = Partial<Record<HarnessId, Catalog>>;
+
+/** The harness a config runs on (configs remembered before there was a choice: Claude). */
+export const harnessOf = (config: ChatConfig): HarnessId => config.harness ?? "claude";
 
 export const REASONING_LABELS: Record<ReasoningLevel, string> = {
     low: "Low",
@@ -30,7 +43,7 @@ const FAST_OPTION = {
 };
 
 /** `bun run dev` has no backend; mirrors `crates/harness/src/claude/models.rs`. */
-const DEV_CATALOG: Catalog = {
+const DEV_CLAUDE: Catalog = {
     installed: true,
     models: (
         [
@@ -53,24 +66,39 @@ const DEV_CATALOG: Catalog = {
     defaultModel: "claude-opus-5-5"
 };
 
-export const useCatalogStore = create<{ catalog: Catalog | null }>()(() => ({ catalog: null }));
+const DEV_CODEX: Catalog = {
+    installed: true,
+    models: [{ id: "gpt-5-codex", label: "GPT-5 Codex", reasoningLevels: ["low", "medium", "high"], options: [] }],
+    defaultModel: "gpt-5-codex"
+};
+
+const DEV_CATALOGS: Record<HarnessId, Catalog> = { claude: DEV_CLAUDE, codex: DEV_CODEX };
+
+export const useCatalogStore = create<{ catalogs: Catalogs }>()(() => ({ catalogs: {} }));
 
 let listing: Promise<void> | null = null;
 
-/** Fetches the catalog; concurrent calls share one request. */
+/** Fetches every harness's catalog; concurrent calls share one round. */
 export function refreshCatalog(): Promise<void> {
-    listing ??= backend<Catalog>("claude_catalog", undefined, () => DEV_CATALOG)
-        .then(
-            (catalog) => useCatalogStore.setState({ catalog }),
-            (error: unknown) => console.warn("[models] listing failed", error)
+    listing ??= Promise.all(
+        HARNESSES.map((harness) =>
+            backend<Catalog>("harness_catalog", { harness }, () => DEV_CATALOGS[harness]).then(
+                (catalog) => useCatalogStore.setState((s) => ({ catalogs: { ...s.catalogs, [harness]: catalog } })),
+                (error: unknown) => console.warn(`[models] listing ${harness} failed`, error)
+            )
         )
+    )
+        .then(() => undefined)
         .finally(() => {
             listing = null;
         });
     return listing;
 }
 
-export const useCatalog = () => useCatalogStore((s) => s.catalog);
+export const useCatalogs = () => useCatalogStore((s) => s.catalogs);
+
+/** `harness`'s catalog; null until it's listed. */
+export const useCatalog = (harness: HarnessId = "claude") => useCatalogStore((s) => s.catalogs[harness] ?? null);
 
 /** The model a config runs on: its own pick, else the default, else the first. */
 export function resolveModel(catalog: Catalog | null, config: ChatConfig): Model | undefined {
@@ -129,14 +157,16 @@ export function withFastMode(config: ChatConfig, on: boolean): ChatConfig {
 }
 
 /**
- * `config` made valid for `catalog`: a model it has, a level that model
- * takes (its default when none fits), only options that model offers. Used
- * when switching model, and on remembered configs that went stale.
+ * `config` made valid for `catalog` (its harness's): a model it has, a level
+ * that model takes (its default when none fits), only options that model
+ * offers. Used when switching model, and on remembered configs that went
+ * stale.
  */
 export function fitConfig(catalog: Catalog, config: ChatConfig): ChatConfig {
     const model = resolveModel(catalog, config);
     return {
         ...config,
+        harness: harnessOf(config),
         model: model?.id,
         reasoning: resolveReasoning(model, config),
         modelOptions: fitOptions(model, config.modelOptions),
@@ -146,9 +176,16 @@ export function fitConfig(catalog: Catalog, config: ChatConfig): ChatConfig {
     };
 }
 
+/** [`fitConfig`] against the catalog of the config's harness, once that's listed. */
+export function fitToCatalogs(catalogs: Catalogs, config: ChatConfig): ChatConfig {
+    const catalog = catalogs[harnessOf(config)];
+    return catalog ? fitConfig(catalog, config) : { ...config, harness: harnessOf(config) };
+}
+
 /** What Settings › Chats says a new chat starts on. */
 export function defaultConfig(settings: ChatSettings, access: AccessMode = "full-access"): ChatConfig {
     return {
+        harness: "claude",
         model: settings.defaultModel,
         reasoning: settings.defaultEffort,
         modelOptions: settings.defaultFastMode ? { [FAST_MODE]: "on" } : {},

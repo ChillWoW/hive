@@ -1,5 +1,6 @@
 mod chat;
 mod claude;
+mod codex;
 mod files;
 mod folders;
 mod fonts;
@@ -51,6 +52,8 @@ pub fn run() {
             app.manage(settings_file);
             app.manage(claude::SignIns::default());
             app.manage(claude::SignInResult::default());
+            app.manage(codex::SignIns::default());
+            app.manage(codex::SignInResult::default());
             app.manage(themes::ThemesDir::open(data_dir.join("themes"))?);
             app.manage(updater::Updates::default());
             let engine = chat::engine(app.handle(), &data_dir)?;
@@ -65,7 +68,7 @@ pub fn run() {
             chat::chat_create,
             chat::worktrees_default_dir,
             chat::chat_set_config,
-            chat::claude_catalog,
+            chat::harness_catalog,
             chat::chat_send,
             chat::chat_interrupt,
             chat::chat_answer,
@@ -73,7 +76,7 @@ pub fn run() {
             chat::chat_queue_cancel,
             chat::chat_queue_send_now,
             chat::chat_queue_reorder,
-            chat::claude_commands,
+            chat::harness_commands,
             chat::attachment_save,
             chat::attachment_add,
             chat::attachment_data_url,
@@ -89,6 +92,15 @@ pub fn run() {
             claude::claude_install,
             claude::claude_latest_version,
             claude::claude_usage,
+            codex::codex_status,
+            codex::codex_sign_in_start,
+            codex::codex_sign_in_wait,
+            codex::codex_sign_in_cancel,
+            codex::codex_sign_out,
+            codex::codex_update,
+            codex::codex_install,
+            codex::codex_latest_version,
+            codex::codex_usage,
             chat::chat_set_pinned,
             chat::chat_set_archived,
             chat::chat_delete,

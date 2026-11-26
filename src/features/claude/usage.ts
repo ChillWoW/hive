@@ -1,63 +1,12 @@
-import { useEffect } from "react";
-import { create } from "zustand";
 import type { UsageWindow } from "@/proto";
-import { onWindowFocus } from "@/lib/windowFocus";
-import { claudeApi } from "./api";
+import { claude } from "./store";
 
-type UsageState = {
-    /** The plan's windows; null without a subscription login; undefined until first read. */
-    windows?: UsageWindow[] | null;
-    /** What went wrong on the last read; earlier windows are kept. */
-    error?: string;
-    loading: boolean;
-    /** When the last read finished (ms). */
-    checkedAt?: number;
-};
+export { USAGE_FRESH_MS } from "@/features/providers/makeProvider";
 
 /** Claude's plan usage, shared by Settings › Providers and the dock. */
-export const useClaudeUsage = create<UsageState>()(() => ({ loading: false }));
-
-const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
-
-/** Reads are cheap but the endpoint answers 429 when asked too often. */
-const POLL_MS = 5 * 60_000;
-/** How old a read may be before a glance (focus, hover) reads it again. */
-export const USAGE_FRESH_MS = 60_000;
-
-let inflight: Promise<void> | undefined;
-
-/** Reads the usage again, unless a read is running or one finished under `maxAge` ms ago. */
-export function refreshUsage({ maxAge = 0 }: { maxAge?: number } = {}): Promise<void> {
-    if (inflight) return inflight;
-    const { checkedAt } = useClaudeUsage.getState();
-    if (maxAge && checkedAt && Date.now() - checkedAt < maxAge) return Promise.resolve();
-    useClaudeUsage.setState({ loading: true });
-    inflight = claudeApi
-        .usage()
-        .then(
-            (windows) => useClaudeUsage.setState({ windows, error: undefined }),
-            (error: unknown) => useClaudeUsage.setState({ error: message(error) })
-        )
-        .finally(() => {
-            useClaudeUsage.setState({ loading: false, checkedAt: Date.now() });
-            inflight = undefined;
-        });
-    return inflight;
-}
-
-/** Keeps the usage fresh while `enabled`: now, every few minutes, and on window focus. */
-export function useUsagePolling(enabled: boolean) {
-    useEffect(() => {
-        if (!enabled) return;
-        void refreshUsage({ maxAge: USAGE_FRESH_MS });
-        const timer = window.setInterval(() => void refreshUsage(), POLL_MS);
-        const off = onWindowFocus(() => void refreshUsage({ maxAge: USAGE_FRESH_MS }));
-        return () => {
-            window.clearInterval(timer);
-            off();
-        };
-    }, [enabled]);
-}
+export const useClaudeUsage = claude.useUsage;
+export const refreshUsage = claude.refreshUsage;
+export const useUsagePolling = claude.useUsagePolling;
 
 /** The most-used window, which is the one closest to blocking. */
 export function tightestWindow(windows: UsageWindow[] | null | undefined): UsageWindow | undefined {
@@ -82,7 +31,17 @@ export function resetsIn(iso: string | undefined, now = Date.now()): string | un
     return `Resets in ${Math.round(hours / 24)}d`;
 }
 
-export const PLAN_LABELS: Record<string, string> = { pro: "Pro", max: "Max", team: "Team", enterprise: "Enterprise" };
+/** Plan names as the CLIs report them (Claude's and ChatGPT's). */
+export const PLAN_LABELS: Record<string, string> = {
+    free: "Free",
+    plus: "Plus",
+    pro: "Pro",
+    max: "Max",
+    team: "Team",
+    business: "Business",
+    edu: "Edu",
+    enterprise: "Enterprise"
+};
 
 export const TONE_BG = { danger: "bg-danger", warning: "bg-warning", accent: "bg-accent" } as const;
 export const TONE_TEXT = { danger: "text-danger", warning: "text-warning", accent: "text-accent" } as const;

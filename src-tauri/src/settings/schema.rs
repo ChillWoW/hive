@@ -25,6 +25,7 @@ pub struct Settings {
     pub updates: UpdatesSettings,
     pub keyboard: KeyboardSettings,
     pub claude: ClaudeSettings,
+    pub codex: CodexSettings,
     pub chat: ChatSettings,
     pub worktrees: WorktreesSettings,
 }
@@ -37,6 +38,7 @@ impl Default for Settings {
             updates: UpdatesSettings::default(),
             keyboard: KeyboardSettings::default(),
             claude: ClaudeSettings::default(),
+            codex: CodexSettings::default(),
             chat: ChatSettings::default(),
             worktrees: WorktreesSettings::default(),
         }
@@ -240,6 +242,14 @@ pub struct ClaudeSettings {
     /// The folder Claude keeps its settings and login in (`CLAUDE_CONFIG_DIR`);
     /// empty: its own (`~/.claude`).
     pub config_dir: String,
+    /// The plan's usage as a ring in the dock (`src/layout/DockUsage.tsx`).
+    pub show_usage_in_dock: bool,
+}
+
+/// Codex, read by the frontend.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct CodexSettings {
     /// The plan's usage as a ring in the dock (`src/layout/DockUsage.tsx`).
     pub show_usage_in_dock: bool,
 }

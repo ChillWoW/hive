@@ -74,18 +74,18 @@ Done when: `outcode-run --mock "hi"` streams a full turn, a question is answerab
 
 ## Phase 4 — Codex
 
-- [ ] `codex app-server` over JSON-RPC lines (`rpc.rs`; no `jsonrpc` field).
-- [ ] ⚠ Serialize + retry server startups: servers starting together race on `$CODEX_HOME`'s SQLite and one dies.
-- [ ] One server + one thread per run: `thread/start` or `thread/resume` (fallback: new thread + note).
-- [ ] `turn/start` per prompt; a prompt mid-turn waits.
-- [ ] Slash routing: `/compact` → `thread/compact/start`, `/review` → `review/start`, `/feedback` → `feedback/upload`, `/goal …` → `thread/goal/*`.
+- [x] `codex app-server` over JSON-RPC lines (`rpc.rs`; no `jsonrpc` field).
+- [x] ⚠ Serialize + retry server startups: servers starting together race on `$CODEX_HOME`'s SQLite and one dies.
+- [x] One server + one thread per run: `thread/start` or `thread/resume` (fallback: new thread + note).
+- [x] `turn/start` per prompt; a prompt mid-turn waits.
+- [x] Slash routing (`/feedback`, `/goal` not yet): `/compact` → `thread/compact/start`, `/review` → `review/start`, `/feedback` → `feedback/upload`, `/goal …` → `thread/goal/*`.
 - [ ] Goals: read at open, follow `thread/goal/updated|cleared` → `GoalChanged`; after a turn wait 5s for Codex's next turn toward an active goal; later ones → `BackgroundTurn`; Stop pauses it.
-- [ ] `normalize.rs`: agent messages/plans → text, reasoning summaries, commands (strip shell wrapper; lone read/search → ReadFile/Search), file changes (one call per file, old/new from hunks), MCP, web search, `turn/plan/updated` → Todo, token usage → ContextUsage, spawned agent threads → Subagent.
-- [ ] Access: full = `approvalPolicy: never`, else `untrusted` + answer approvals by mode or ask; `item/tool/requestUserInput` asked as is.
-- [ ] Plan mode = `plan` collaboration mode every turn; plan ending → ask to implement → "Implement the plan." in default mode.
-- [ ] MCP via `mcp_servers.outcode.*` config overrides, `default_tools_approval_mode = approve`, `tool_timeout_sec`.
-- [ ] Models: `model/list` (cache 10 min), fallback `models_cache.json`.
-- [ ] `$skill` → `skill` input; images → `localImage`.
+- [x] `normalize.rs`: agent messages/plans → text, reasoning summaries, commands (strip shell wrapper; lone read/search → ReadFile/Search), file changes (one call per file, old/new from hunks), MCP, web search, `turn/plan/updated` → Todo, token usage → ContextUsage, spawned agent threads → Subagent.
+- [x] Access: full = `approvalPolicy: never`, else `untrusted` + answer approvals by mode or ask; `item/tool/requestUserInput` asked as is.
+- [x] Plan mode = `plan` collaboration mode every turn; plan ending → ask to implement → "Implement the plan." in default mode.
+- [x] MCP via `mcp_servers.outcode.*` config overrides, `default_tools_approval_mode = approve`, `tool_timeout_sec`.
+- [x] Models: `model/list` (cache 10 min), fallback `models_cache.json`.
+- [x] `$skill` → `skill` input; images → `localImage`.
 
 ---
 

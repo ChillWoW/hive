@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type RefObject } from "react";
 import { CaretDownIcon, NotePencilIcon, PlusIcon, XIcon } from "@phosphor-icons/react";
 import { useChatsStore, useWorking } from "@/features/chats";
-import { ClaudeMark } from "@/features/models";
+import type { HarnessId } from "@/proto";
+import { HarnessMark } from "@/features/models";
 import { ChatCard } from "@/features/sidebar/ChatCard";
 import { CARD_DWELL, UNTITLED } from "@/features/sidebar/ChatRow";
 import { useShortcut } from "@/keybindings";
@@ -163,7 +164,7 @@ function OverflowItem({ tab }: { tab: Tab }) {
     const title = tab === null ? UNTITLED : chat?.title?.trim() || UNTITLED;
     return (
         <Menu.Item onClick={() => useChatsStore.getState().select(tab)}>
-            <TabIcon tab={tab} working={working} />
+            <TabIcon tab={tab} harness={chat?.config.harness} working={working} />
             <span className={cn("min-w-0 flex-1 truncate", (tab === null || !chat?.title?.trim()) && "text-muted")}>
                 {title}
             </span>
@@ -172,7 +173,7 @@ function OverflowItem({ tab }: { tab: Tab }) {
 }
 
 /** A tab's mark: working dots, the new-chat pencil, or the provider's mark. */
-function TabIcon({ tab, working }: { tab: Tab; working: boolean }) {
+function TabIcon({ tab, harness, working }: { tab: Tab; harness: HarnessId | undefined; working: boolean }) {
     return (
         <span className="flex w-3.5 shrink-0 justify-center">
             {working ? (
@@ -180,7 +181,7 @@ function TabIcon({ tab, working }: { tab: Tab; working: boolean }) {
             ) : tab === null ? (
                 <NotePencilIcon className="size-3.5 text-muted" />
             ) : (
-                <ClaudeMark className="size-3" />
+                <HarnessMark harness={harness} className="size-3" />
             )}
         </span>
     );
@@ -277,7 +278,7 @@ function TabItem({
                             : "text-text/70 hover:bg-raised hover:text-text data-[popup-open]:bg-raised"
                     )}
                 >
-                    <TabIcon tab={tab} working={working} />
+                    <TabIcon tab={tab} harness={chat?.config.harness} working={working} />
                     <span className={cn("min-w-0 flex-1 truncate", untitled && "text-muted")}>{title}</span>
                     {closable && (
                         <button

@@ -6,7 +6,7 @@ import {
     MagnifyingGlassIcon,
     StarIcon
 } from "@phosphor-icons/react";
-import type { ChatConfig, Model, ReasoningLevel } from "@/proto";
+import type { Catalog, ChatConfig, HarnessId, Model, ReasoningLevel } from "@/proto";
 import { cn } from "@/lib/cn";
 import { Popover } from "@base-ui/react/popover";
 import { Tooltip } from "@/ui";
@@ -18,16 +18,19 @@ import {
 } from "@/ui/chip";
 import {
     fitConfig,
+    HARNESS_LABELS,
+    harnessOf,
+    HARNESSES,
     hasFastMode,
     isFastMode,
     REASONING_LABELS,
     refreshCatalog,
     resolveModel,
     resolveReasoning,
-    useCatalog,
+    useCatalogs,
     withFastMode
 } from "./catalog";
-import { ClaudeMark } from "./ClaudeMark";
+import { HarnessMark } from "./HarnessMark";
 import { useFavoriteModels } from "./favorites";
 
 /** A row is 32px plus the list's 2px gap; tabs and scrolling count in rows. */
@@ -35,9 +38,11 @@ const ROW_PITCH = 34;
 /** Rows shown before the list scrolls. */
 const VISIBLE_ROWS = 7;
 
-type Row = { model: Model; favorite: boolean };
-/** A run of rows the tab strip can jump to: the starred ones, then Claude's. */
-type Group = { id: "starred" | "claude"; label: string; start: number };
+type Row = { model: Model; harness: HarnessId; favorite: boolean };
+/** A run of rows the tab strip can jump to: the starred ones, then each harness's. */
+type Group = { id: "starred" | HarnessId; label: string; start: number };
+
+const isRow = (row: Row, harness: HarnessId, model: Model) => row.harness === harness && row.model.id === model.id;
 
 function matches(row: Row, query: string) {
     return `${row.model.label} ${row.model.id}`.toLowerCase().includes(query);
@@ -45,9 +50,12 @@ function matches(row: Row, query: string) {
 
 /**
  * Model and reasoning effort in one picker. The chip names the model with
- * Claude's mark and the effort after it (models without levels have none).
+ * its harness's mark and the effort after it (models without levels have
+ * none).
  *
- * The card lists models under tabs (starred models first), with a search
+ * The card lists every installed harness's models under tabs (starred
+ * models first, then Claude's, then Codex's); picking another harness's
+ * model moves the chat there, in a new session. A search sits
  * above and a Reasoning row below, which opens the picked model's levels in
  * a card beside it; models with fast mode (Opus) get a Fast mode row above
  * it that opens On / Off the same way; while it's on, a bolt replaces the
@@ -57,23 +65,32 @@ function matches(row: Row, query: string) {
  *
  * Elsewhere (Settings › Chats), `placement` and `triggerClassName` fit it
  * to a form; `modelOnly` drops effort and fast mode, for runs that take
- * neither (text generation).
+ * neither (text generation); `harnesses` limits what it lists.
  */
 export function ModelPicker({
     config,
     onChange,
     placement = "top",
     triggerClassName,
-    modelOnly = false
+    modelOnly = false,
+    harnesses = HARNESSES
 }: {
     config: ChatConfig;
     onChange: (config: ChatConfig) => void;
     placement?: "top" | "bottom";
     triggerClassName?: string;
     modelOnly?: boolean;
+    harnesses?: HarnessId[];
 }) {
-    const catalog = useCatalog();
+    const catalogs = useCatalogs();
+    const harness = harnessOf(config);
+    const catalog = catalogs[harness] ?? null;
     const model = resolveModel(catalog, config);
+    // Installed ones, and the config's own even when it isn't.
+    const listed = harnesses.flatMap((id) => {
+        const c = catalogs[id];
+        return c && (c.installed || id === harness) ? [{ harness: id, catalog: c }] : [];
+    });
     const reasoning = modelOnly ? undefined : resolveReasoning(model, config);
     const fast = !modelOnly && isFastMode(model, config);
     const showFast = !modelOnly && hasFastMode(model);
@@ -105,7 +122,7 @@ export function ModelPicker({
                 {fast ? (
                     <LightningIcon weight="fill" aria-label="Fast mode" className="size-3.5 shrink-0" />
                 ) : (
-                    <ClaudeMark className="size-3.5 shrink-0" />
+                    <HarnessMark harness={harness} className="size-3.5 shrink-0" />
                 )}
                 <span className="truncate">{model.label}</span>
                 {reasoning && (
@@ -130,14 +147,17 @@ export function ModelPicker({
                         className={cn(popupClassName, "w-72 min-w-0 rounded-xl p-1")}
                     >
                         <ModelCard
-                            models={catalog.models}
-                            config={config}
+                            listed={listed}
+                            harness={harness}
                             model={model}
                             reasoning={reasoning}
                             fast={fast}
                             showFast={showFast}
                             showEffort={showEffort}
-                            onPick={(next) => onChange(fitConfig(catalog, { ...config, model: next.id }))}
+                            onPick={(row) => {
+                                const next = { ...config, harness: row.harness, model: row.model.id };
+                                onChange(fitConfig(catalogs[row.harness] ?? catalog, next));
+                            }}
                             side={side}
                             onToggleSide={(next) => setSide((s) => (s === next ? null : next))}
                         />
@@ -188,8 +208,8 @@ const FAST_CHOICES = [
 ] as const;
 
 function ModelCard({
-    models,
-    config,
+    listed,
+    harness,
     model,
     reasoning,
     fast,
@@ -199,14 +219,14 @@ function ModelCard({
     side,
     onToggleSide
 }: {
-    models: Model[];
-    config: ChatConfig;
+    listed: { harness: HarnessId; catalog: Catalog }[];
+    harness: HarnessId;
     model: Model;
     reasoning: ReasoningLevel | undefined;
     fast: boolean;
     showFast: boolean;
     showEffort: boolean;
-    onPick: (model: Model) => void;
+    onPick: (row: Row) => void;
     side: Side | null;
     onToggleSide: (side: Side) => void;
 }) {
@@ -214,23 +234,29 @@ function ModelCard({
     const [query, setQuery] = useState("");
     const listRef = useRef<HTMLDivElement>(null);
 
-    // Starred models first, then the rest, in catalog order.
+    // Starred models first, then each harness's rest, in catalog order.
     const { rows, groups } = useMemo(() => {
         const starred: Row[] = [];
-        const rest: Row[] = [];
-        for (const m of models) {
-            const row = { model: m, favorite: favorites.includes(m.id) };
-            (row.favorite ? starred : rest).push(row);
-        }
+        const rest: Row[][] = listed.map(() => []);
+        listed.forEach(({ harness, catalog }, i) => {
+            for (const m of catalog.models) {
+                const row = { model: m, harness, favorite: favorites.includes(m.id) };
+                (row.favorite ? starred : rest[i]).push(row);
+            }
+        });
         const groups: Group[] = [];
         if (starred.length) groups.push({ id: "starred", label: "Starred", start: 0 });
-        if (rest.length) groups.push({ id: "claude", label: "Claude", start: starred.length });
-        return { rows: [...starred, ...rest], groups };
-    }, [models, favorites]);
+        let start = starred.length;
+        listed.forEach(({ harness }, i) => {
+            if (rest[i].length) groups.push({ id: harness, label: HARNESS_LABELS[harness], start });
+            start += rest[i].length;
+        });
+        return { rows: [...starred, ...rest.flat()], groups };
+    }, [listed, favorites]);
 
     const q = query.trim().toLowerCase();
     const shown = q ? rows.filter((row) => matches(row, q)) : rows;
-    const selectedIndex = shown.findIndex((row) => row.model.id === model.id);
+    const selectedIndex = shown.findIndex((row) => isRow(row, harness, model));
     const [active, setActive] = useState(Math.max(0, selectedIndex));
     /** Keyboard moves scroll the active row into view; the pointer doesn't. */
     const keyboardRef = useRef(false);
@@ -253,7 +279,7 @@ function ModelCard({
     }, [active]);
 
     const pick = (row: Row) => {
-        if (row.model.id !== config.model) onPick(row.model);
+        if (!isRow(row, harness, model)) onPick(row);
     };
 
     const onKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
@@ -311,10 +337,10 @@ function ModelCard({
                                                 : "opacity-60 hover:bg-raised hover:opacity-100"
                                         )}
                                     >
-                                        {group.id === "claude" ? (
-                                            <ClaudeMark className="size-3.5" />
-                                        ) : (
+                                        {group.id === "starred" ? (
                                             <StarIcon weight="fill" className="size-3.5 text-warning" />
+                                        ) : (
+                                            <HarnessMark harness={group.id} className="size-3.5" />
                                         )}
                                     </button>
                                 }
@@ -357,10 +383,10 @@ function ModelCard({
                 )}
                 {shown.map((row, index) => (
                     <ModelRow
-                        key={row.model.id}
+                        key={`${row.harness}:${row.model.id}`}
                         index={index}
                         row={row}
-                        selected={row.model.id === model.id}
+                        selected={isRow(row, harness, model)}
                         active={index === active}
                         onHover={() => {
                             keyboardRef.current = false;
@@ -459,7 +485,7 @@ function ModelRow({
                 selected ? "bg-hover" : active && "bg-raised"
             )}
         >
-            <ClaudeMark className="size-3.5 shrink-0" />
+            <HarnessMark harness={row.harness} className="size-3.5 shrink-0" />
             <span className="flex min-w-0 flex-1 items-baseline gap-1.5">
                 <span className="max-w-full shrink-0 truncate text-xs font-medium">{row.model.label}</span>
                 {/* The row under the pointer or the arrow keys says what it is. */}

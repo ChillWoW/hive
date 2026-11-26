@@ -43,7 +43,7 @@ use std::sync::{LazyLock, Mutex};
 use std::time::Duration;
 
 use outcode_proto::{
-    AccessMode, AgentEvent, ApprovalDecision, Catalog, ChatConfig, DoneStatus, InputResponse, RunRequest,
+    AccessMode, AgentEvent, ApprovalDecision, Catalog, ChatConfig, DoneStatus, HarnessId, InputResponse, RunRequest,
     SlashCommand, UserInputAnswer, UserInputQuestion,
 };
 use serde_json::Value;
@@ -110,8 +110,8 @@ impl Claude {
 }
 
 impl Harness for Claude {
-    fn id(&self) -> &'static str {
-        NAME
+    fn id(&self) -> HarnessId {
+        HarnessId::Claude
     }
 
     fn catalog(&self) -> Catalog {

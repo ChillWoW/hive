@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type ClipboardEvent, type
 import { ArrowUpIcon, PaperclipIcon, StopIcon } from "@phosphor-icons/react";
 import type { Attachment, ChatConfig, SlashCommand } from "@/proto";
 import { AttachmentChip, attachFile, isImage, useImageViewer } from "@/features/chats";
-import { ModelPicker } from "@/features/models";
+import { harnessOf, ModelPicker } from "@/features/models";
 import { useSettingsStore, type BusySend } from "@/features/settings";
 import { cn } from "@/lib/cn";
 import { useResizeObserver } from "@/lib/useResizeObserver";
@@ -115,7 +115,7 @@ export function Composer({
         );
 
     // `/` at the start lists the commands and skills.
-    const commands = useCommands(chatId, cwd);
+    const commands = useCommands(chatId, harnessOf(config), cwd);
     const query = slashQuery(draft);
     const matches = query === undefined ? [] : matchCommands(commands, query);
     // Which match is highlighted, for the query it was picked at: a new query starts at the top.

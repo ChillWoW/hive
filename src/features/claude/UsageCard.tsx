@@ -1,32 +1,40 @@
 import { ArrowClockwiseIcon, WarningCircleIcon } from "@phosphor-icons/react";
-import type { UsageWindow } from "@/proto";
-import { ClaudeMark } from "@/features/models/ClaudeMark";
+import type { HarnessId, UsageWindow } from "@/proto";
+import { HarnessMark } from "@/features/models/HarnessMark";
+import type { Provider } from "@/features/providers/makeProvider";
 import { cn } from "@/lib/cn";
 import { agoLabel, useMinuteClock } from "@/lib/time";
 import { IconButton } from "@/ui";
-import { useClaudeProvider } from "./store";
-import { PLAN_LABELS, refreshUsage, resetsIn, TONE_BG, useClaudeUsage, usageTone } from "./usage";
+import { PLAN_LABELS, resetsIn, TONE_BG, usageTone } from "./usage";
 
-/** Claude's plan usage at a glance: one bar per window, when each resets, and when it was read. */
-export function UsageCard() {
-    const windows = useClaudeUsage((s) => s.windows);
-    const error = useClaudeUsage((s) => s.error);
-    const loading = useClaudeUsage((s) => s.loading);
-    const checkedAt = useClaudeUsage((s) => s.checkedAt);
-    const plan = useClaudeProvider((s) => s.status?.account?.plan);
+/** A provider's plan usage at a glance: one bar per window, when each resets, and when it was read. */
+export function UsageCard({
+    harness,
+    provider,
+    signedOutHint
+}: {
+    harness: HarnessId;
+    provider: Provider;
+    signedOutHint: string;
+}) {
+    const windows = provider.useUsage((s) => s.windows);
+    const error = provider.useUsage((s) => s.error);
+    const loading = provider.useUsage((s) => s.loading);
+    const checkedAt = provider.useUsage((s) => s.checkedAt);
+    const plan = provider.useProvider((s) => s.status?.account?.plan);
     const now = useMinuteClock();
 
     return (
         <div className="flex flex-col gap-3">
             <div className="flex min-w-0 items-center gap-2">
-                <ClaudeMark className="size-4 shrink-0" />
-                <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-text">Claude Code</span>
+                <HarnessMark harness={harness} className="size-4 shrink-0" />
+                <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-text">{provider.name}</span>
                 {plan && (
                     <span className="shrink-0 rounded-full bg-hover px-2 py-px text-[11px] leading-4 text-muted">
                         {PLAN_LABELS[plan] ?? plan}
                     </span>
                 )}
-                <IconButton label="Refresh" side="top" disabled={loading} onClick={() => void refreshUsage()}>
+                <IconButton label="Refresh" side="top" disabled={loading} onClick={() => void provider.refreshUsage()}>
                     <ArrowClockwiseIcon className={cn("size-3.5", loading && "animate-spin")} />
                 </IconButton>
             </div>
@@ -40,7 +48,7 @@ export function UsageCard() {
             ) : (
                 !error && (
                     <p className="text-xs text-muted">
-                        {windows === null ? "Shown for a Claude subscription login" : "Checking…"}
+                        {windows === null ? signedOutHint : "Checking…"}
                     </p>
                 )
             )}

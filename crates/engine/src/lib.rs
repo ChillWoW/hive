@@ -21,7 +21,7 @@ use std::time::Duration;
 use outcode_git::GitError;
 use outcode_harness::{Harness, HarnessError, Run, RunHandle};
 use outcode_proto::{
-    AgentEvent, Attachment, Chat, ChatConfig, ChatsUpdate, ContextWindow, DoneStatus, InputResponse, MessagesUpdate,
+    AgentEvent, Attachment, Chat, ChatConfig, ChatsUpdate, ContextWindow, DoneStatus, HarnessId, InputResponse, MessagesUpdate,
     McpServer, MessagePart, NewWorktree, SecretRequest, WorktreeStep, has_running_spawn, has_spawn,
     QueuedPrompt, RunRequest, Session,
 };
@@ -50,21 +50,28 @@ pub enum EngineError {
 
 pub type Result<T> = std::result::Result<T, EngineError>;
 
-/// What the engine runs things with: the Claude harness and the settings in
-/// the app, a mock harness in tests.
+/// What the engine runs things with: the harnesses and the settings in the
+/// app, mock harnesses in tests.
 pub struct Hooks {
-    /// Runs chats' agents, and the text runs.
-    pub harness: Arc<dyn Harness>,
-    /// The model a text run for this use (a chat's title, a worktree's
-    /// branch name) answers with, empty for the harness's default; `None`
-    /// while that use is off. Read as each one starts.
-    pub text_model: Box<dyn Fn(TextUse) -> Option<String> + Send + Sync>,
+    /// Run chats' agents (each chat's `config.harness`), and the text runs.
+    pub harnesses: Vec<Arc<dyn Harness>>,
+    /// What a text run for this use (a chat's title, a worktree's branch
+    /// name) runs on; `None` while that use is off. Read as each one starts.
+    pub text_model: Box<dyn Fn(TextUse) -> Option<TextModel> + Send + Sync>,
     /// How long a run may sit between turns before it's closed; read as each
     /// turn ends, so a settings change applies from the next one.
     pub idle: Box<dyn Fn() -> Duration + Send + Sync>,
     /// Where new worktrees go and how they're named; read as each is made
     /// (and as a worktree chat is deleted).
     pub worktrees: Box<dyn Fn() -> WorktreeOptions + Send + Sync>,
+}
+
+/// What a text run runs on.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TextModel {
+    pub harness: HarnessId,
+    /// Empty for the harness's default.
+    pub model: String,
 }
 
 /// What a text run is for.
@@ -237,15 +244,18 @@ impl Engine {
         &self.shared.store
     }
 
-    pub fn harness(&self) -> &Arc<dyn Harness> {
-        &self.shared.hooks.harness
+    pub fn harness(&self, id: HarnessId) -> Option<&Arc<dyn Harness>> {
+        self.shared.hooks.harnesses.iter().find(|h| h.id() == id)
     }
 
     /// Starts a text run for `purpose` answering `prompt`; `None` while
     /// that use is off.
     pub(crate) fn run_text(&self, purpose: TextUse, prompt: String) -> Option<std::result::Result<Run, HarnessError>> {
-        let model = (self.shared.hooks.text_model)(purpose)?;
-        Some(self.harness().run_text(prompt, Some(&model)))
+        let text = (self.shared.hooks.text_model)(purpose)?;
+        Some(match self.harness(text.harness) {
+            Some(harness) => harness.run_text(prompt, Some(&text.model)),
+            None => Err(HarnessError::NotInstalled(text.harness.as_str())),
+        })
     }
 
     // Chats
@@ -352,7 +362,8 @@ impl Engine {
     /// Sets what the chat runs on. Access and plan mode switch a live run in
     /// place. A CLI takes its model and effort only as it starts, so for
     /// those the live run closes (once a running turn ends) and the next
-    /// prompt resumes the session with the new config.
+    /// prompt resumes the session with the new config. Another harness
+    /// can't resume this one's session: the next prompt starts a new one.
     pub fn set_config(&self, chat_id: &str, config: ChatConfig) -> Result<Chat> {
         let mut state = self.state();
         let before = self
@@ -360,7 +371,12 @@ impl Engine {
             .chat(chat_id)?
             .ok_or_else(|| EngineError::NotFound(chat_id.into()))?
             .config;
-        let chat = self.update_locked(&mut state, chat_id, |chat| chat.config = config)?;
+        let chat = self.update_locked(&mut state, chat_id, |chat| {
+            if chat.config.harness != config.harness {
+                chat.session_id = None;
+            }
+            chat.config = config;
+        })?;
         if chat.config == before {
             return Ok(chat);
         }
@@ -521,7 +537,11 @@ impl Engine {
             auto_compact_window: None,
             mcp: self.shared.mcp.lock().unwrap_or_else(PoisonError::into_inner).as_ref().map(|m| m.for_chat(chat_id)),
         };
-        match self.shared.hooks.harness.run(request) {
+        let started = match self.harness(request.config.harness) {
+            Some(harness) => harness.run(request),
+            None => Err(HarnessError::NotInstalled(request.config.harness.as_str())),
+        };
+        match started {
             Ok(run) => {
                 *next_run += 1;
                 let id = *next_run;

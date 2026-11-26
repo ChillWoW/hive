@@ -144,7 +144,7 @@ Done when: typing "hi" streams Claude's reply.
 
 ## Later
 
-- **Codex** — `codex app-server` JSON-RPC lines (no `jsonrpc` field). ⚠ Serialize + retry server startups: servers starting together race on `$CODEX_HOME`'s SQLite and one dies.
+- [x] **Codex** (`crates/harness/src/codex`; chats pick it in the model picker, `ChatConfig.harness`) — `codex app-server` JSON-RPC lines (no `jsonrpc` field). ⚠ Serialize + retry server startups: servers starting together race on `$CODEX_HOME`'s SQLite and one dies.
 - **OpenCode 2.x** — `opencode serve`. ⚠ The bun shim starts the real server → kill the whole tree, never `kill_on_drop`. ⚠ MCP config needs `codemode: false` or tools hide.
 - **Pi** — `pi --mode rpc`. ⚠ Windows shim is cmd → node → node: stop with `kill_tree`.
 - **Remote hosts** — host daemon (engine + store + harnesses) over WebSocket/SSH; client connects to N hosts.

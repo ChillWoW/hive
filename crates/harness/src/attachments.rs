@@ -65,6 +65,30 @@ async fn read_image(path: &str) -> Option<(&'static str, Vec<u8>)> {
     Some((image_type(&bytes)?, bytes))
 }
 
+/// The attachments that are images, by their first bytes, for a CLI that
+/// reads image files itself (Codex's `localImage`).
+pub async fn image_paths(paths: &[String]) -> Vec<String> {
+    use tokio::io::AsyncReadExt as _;
+    let mut images = Vec::new();
+    for path in paths {
+        let Ok(mut file) = tokio::fs::File::open(path).await else {
+            continue;
+        };
+        let mut head = [0u8; 16];
+        let mut read = 0;
+        while read < head.len() {
+            match file.read(&mut head[read..]).await {
+                Ok(0) | Err(_) => break,
+                Ok(n) => read += n,
+            }
+        }
+        if image_type(&head[..read]).is_some() {
+            images.push(path.clone());
+        }
+    }
+    images
+}
+
 /// An image type the API takes, by content.
 pub fn image_type(bytes: &[u8]) -> Option<&'static str> {
     match bytes {
@@ -112,6 +136,7 @@ mod tests {
         let images = load_images(&paths).await;
         assert_eq!(images.len(), 1);
         assert_eq!(images[0].media_type, "image/png");
+        assert_eq!(image_paths(&paths).await, [paths[0].clone()]);
         std::fs::remove_dir_all(&dir).unwrap();
     }
 }

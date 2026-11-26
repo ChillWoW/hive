@@ -2,7 +2,9 @@ import { CaretRightIcon, TerminalWindowIcon } from "@phosphor-icons/react";
 import { cn } from "@/lib/cn";
 import { formatElapsed } from "@/lib/time";
 import { chats } from "@/features/chats/store";
-import { ClaudeMark, useCatalog } from "@/features/models";
+import { HARNESS_LABELS, harnessOf, HarnessMark, useCatalog } from "@/features/models";
+import { ActiveHarnessMark } from "@/features/models/ActiveHarnessMark";
+import { useActiveChat } from "@/features/chats/store";
 import { CARD_DWELL } from "@/features/sidebar/ChatRow";
 import { Tooltip } from "@/ui";
 import {
@@ -20,7 +22,7 @@ import { singleLine, type ToolPart } from "./tools";
 export function SubagentAvatar({ state }: { state: SubagentPhase }) {
     return (
         <span className="relative inline-flex size-6 shrink-0 items-center justify-center rounded-full border border-border bg-surface">
-            <ClaudeMark className="size-3.5" />
+            <ActiveHarnessMark className="size-3.5" />
             <span
                 className={cn(
                     "absolute -right-px -bottom-px size-2 rounded-full ring-2 ring-bg",
@@ -127,7 +129,9 @@ function SubagentCard({
     state: SubagentPhase;
     elapsed: number | null;
 }) {
-    const catalog = useCatalog();
+    const config = useActiveChat()?.config;
+    const harness = config ? harnessOf(config) : "claude";
+    const catalog = useCatalog(harness);
     // A model the spawn named, by its label when the catalog knows it; else the chat's.
     const named = model
         ? (catalog?.models.find((m) => m.id === model || m.label.toLowerCase().includes(model.toLowerCase()))
@@ -140,12 +144,12 @@ function SubagentCard({
             <div className="flex flex-col gap-1.5 border-t border-border pt-2.5 text-xs">
                 <div className="flex min-w-0 items-center gap-2">
                     <span className="flex w-4 shrink-0 justify-center">
-                        <ClaudeMark className="size-3.5" />
+                        <HarnessMark harness={harness} className="size-3.5" />
                     </span>
                     <span className="min-w-0 truncate text-text/85">
                         {named ?? (
                             <>
-                                Claude
+                                {HARNESS_LABELS[harness]}
                                 <span className="text-muted/75"> · chat's model</span>
                             </>
                         )}

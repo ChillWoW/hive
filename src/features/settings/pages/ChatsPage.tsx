@@ -1,4 +1,4 @@
-import type { Catalog, ChatConfig } from "@/proto";
+import type { Catalog, ChatConfig, HarnessId } from "@/proto";
 import { useComposerStore } from "@/features/composer/store";
 import { defaultConfig, ModelPicker, useCatalog } from "@/features/models";
 import { Select } from "@/ui";
@@ -66,6 +66,7 @@ function DefaultsSection() {
                         onChange={onChange}
                         placement="bottom"
                         triggerClassName={PICKER_TRIGGER}
+                        harnesses={CLAUDE_ONLY}
                     />
                 }
             />
@@ -103,10 +104,14 @@ function textModelId(catalog: Catalog | null, stored: string): string | undefine
     );
 }
 
+/** The defaults and text runs are Claude's (`chat.*` settings name its models). */
+const CLAUDE_ONLY: HarnessId[] = ["claude"];
+
 function TextGenerationSection() {
     const model = useSetting("chat", "textGenerationModel");
     const catalog = useCatalog();
     const config: ChatConfig = {
+        harness: "claude",
         model: textModelId(catalog, model.value),
         modelOptions: {},
         access: "full-access",
@@ -127,6 +132,7 @@ function TextGenerationSection() {
                         placement="bottom"
                         triggerClassName={PICKER_TRIGGER}
                         modelOnly
+                        harnesses={CLAUDE_ONLY}
                     />
                 }
             />

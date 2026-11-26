@@ -7,17 +7,18 @@
 //! the handle is closed or dropped, and the event stream ends when the
 //! process exits.
 //!
-//! Each CLI is a [`Harness`]; [`claude::Claude`] is the first, and
+//! Each CLI is a [`Harness`] ([`claude::Claude`], [`codex::Codex`]), and
 //! `mock::Mock` (feature `mock`) scripts turns for tests.
 
 use std::future::Future;
 use std::pin::Pin;
 
-use outcode_proto::{AccessMode, AgentEvent, Catalog, InputResponse, RunRequest, SlashCommand};
+use outcode_proto::{AccessMode, AgentEvent, Catalog, HarnessId, InputResponse, RunRequest, SlashCommand};
 use tokio::sync::mpsc;
 
 pub mod attachments;
 pub mod claude;
+pub mod codex;
 mod cli;
 #[cfg(any(test, feature = "mock"))]
 pub mod mock;
@@ -27,8 +28,8 @@ pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 /// A coding-agent CLI the engine drives. Each call reads the harness's
 /// settings afresh, so a change applies from the next one.
 pub trait Harness: Send + Sync {
-    /// Stable id (`"claude"`).
-    fn id(&self) -> &'static str;
+    /// Which CLI it drives.
+    fn id(&self) -> HarnessId;
 
     /// Its models, and whether its CLI is installed.
     fn catalog(&self) -> Catalog;

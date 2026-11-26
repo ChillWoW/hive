@@ -54,7 +54,7 @@ function seed() {
             id: crypto.randomUUID(),
             cwd,
             title,
-            config: { modelOptions: {}, access: "full-access", plan: false },
+            config: { harness: "claude", modelOptions: {}, access: "full-access", plan: false },
             archived: false,
             createdAt: at,
             lastMessageAt: at,

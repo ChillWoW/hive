@@ -1,19 +1,20 @@
 import { useEffect, useState } from "react";
-import type { SlashCommand } from "@/proto";
+import type { HarnessId, SlashCommand } from "@/proto";
 import { chatsApi, useSession } from "@/features/chats";
 
-/** Probed lists by folder; a folder's is asked once per app run. */
+/** Probed lists by harness and folder; each is asked once per app run. */
 const probed = new Map<string, Promise<SlashCommand[]>>();
 
-function probe(cwd: string): Promise<SlashCommand[]> {
-    let pending = probed.get(cwd);
+function probe(harness: HarnessId, cwd: string): Promise<SlashCommand[]> {
+    const key = `${harness}:${cwd}`;
+    let pending = probed.get(key);
     if (!pending) {
-        pending = chatsApi.commands(cwd).catch((error: unknown) => {
+        pending = chatsApi.commands(harness, cwd).catch((error: unknown) => {
             console.warn("[commands]", error);
-            probed.delete(cwd);
+            probed.delete(key);
             return [];
         });
-        probed.set(cwd, pending);
+        probed.set(key, pending);
     }
     return pending;
 }
@@ -22,22 +23,23 @@ const NONE: SlashCommand[] = [];
 
 /**
  * The commands and skills `/` offers: what the chat's agent listed last,
- * else what Claude offers in the folder (asked once, in the background).
+ * else what its harness offers in the folder (asked once, in the background).
  */
-export function useCommands(chatId: string | null, cwd: string): SlashCommand[] {
+export function useCommands(chatId: string | null, harness: HarnessId, cwd: string): SlashCommand[] {
     const listed = useSession(chatId)?.commands;
-    const [found, setFound] = useState<{ cwd: string; commands: SlashCommand[] }>();
+    const [found, setFound] = useState<{ key: string; commands: SlashCommand[] }>();
     const need = !listed?.length && !!cwd;
+    const key = `${harness}:${cwd}`;
     useEffect(() => {
         if (!need) return;
         let live = true;
-        void probe(cwd).then((commands) => live && setFound({ cwd, commands }));
+        void probe(harness, cwd).then((commands) => live && setFound({ key: `${harness}:${cwd}`, commands }));
         return () => {
             live = false;
         };
-    }, [cwd, need]);
+    }, [harness, cwd, need]);
     if (listed?.length) return listed;
-    return found?.cwd === cwd ? found.commands : NONE;
+    return found?.key === key ? found.commands : NONE;
 }
 
 /** The commands matching what follows the `/`: names starting with it first, then containing it; commands before skills. */

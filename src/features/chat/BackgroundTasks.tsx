@@ -5,7 +5,7 @@ import type { BackgroundTask, BackgroundTaskKind, Message, ToolCall } from "@/pr
 import { cn } from "@/lib/cn";
 import { formatElapsed, useNow } from "@/lib/time";
 import { chats, taskStartedAt } from "@/features/chats/store";
-import { ClaudeMark } from "@/features/models";
+import { ActiveHarnessMark } from "@/features/models/ActiveHarnessMark";
 import { DotMatrixSpinner } from "@/ui";
 import { chipTriggerClassName, popupClassName } from "@/ui/chip";
 import { findSpawnIn, progressLine } from "./transcript/subagents";
@@ -180,7 +180,7 @@ function TaskRow({
             )}
             <span className="pointer-events-none relative inline-flex size-6 shrink-0 items-center justify-center rounded-full border border-border bg-bg">
                 {task.kind === "agent" ? (
-                    <ClaudeMark className="size-3.5" />
+                    <ActiveHarnessMark className="size-3.5" />
                 ) : (
                     <Glyph className="size-3.5 text-muted" />
                 )}

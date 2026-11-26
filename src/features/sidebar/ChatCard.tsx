@@ -2,7 +2,8 @@ import type { ReactNode } from "react";
 import { GitForkIcon } from "@phosphor-icons/react";
 import { activity } from "@/features/chats";
 import {
-    ClaudeMark,
+    harnessOf,
+    HarnessMark,
     isFastMode,
     REASONING_LABELS,
     resolveModel,
@@ -23,7 +24,7 @@ import { StatusMark } from "./StatusMark";
  */
 export function ChatCard({ chat, title, working }: { chat: Chat; title: string; working: boolean }) {
     const now = useMinuteClock();
-    const catalog = useCatalog();
+    const catalog = useCatalog(harnessOf(chat.config));
     const model = resolveModel(catalog, chat.config);
     const reasoning = resolveReasoning(model, chat.config);
     const fast = isFastMode(model, chat.config);
@@ -46,7 +47,7 @@ export function ChatCard({ chat, title, working }: { chat: Chat; title: string; 
                     </Meta>
                 )}
                 {model && (
-                    <Meta icon={<ClaudeMark className="size-3.5" />}>
+                    <Meta icon={<HarnessMark harness={harnessOf(chat.config)} className="size-3.5" />}>
                         <span className="text-text/85">{model.label}</span>
                         {reasoning && <span className="text-muted/75"> · {REASONING_LABELS[reasoning]}</span>}
                         {fast && <span className="text-muted/75"> · Fast</span>}

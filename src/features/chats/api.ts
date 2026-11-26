@@ -4,6 +4,7 @@ import type {
     Chat,
     ChatConfig,
     ChatsUpdate,
+    HarnessId,
     InputResponse,
     MessagesUpdate,
     NewWorktree,
@@ -97,9 +98,9 @@ export const chatsApi = {
     reorderQueued: (chatId: string, ids: string[]) =>
         backend<void>("chat_queue_reorder", { chatId, ids }, () => dev.reorderQueued(chatId, ids)),
 
-    /** Claude's commands and skills in `cwd`, before a chat's run lists its own. */
-    commands: (cwd: string) =>
-        backend<SlashCommand[]>("claude_commands", { cwd }, () => dev.commands()),
+    /** `harness`'s commands and skills in `cwd`, before a chat's run lists its own. */
+    commands: (harness: HarnessId, cwd: string) =>
+        backend<SlashCommand[]>("harness_commands", { harness, cwd }, () => dev.commands()),
 
     /** Keeps a copy of a file to send; `data` is its base64. */
     saveAttachment: (name: string, data: string) =>

@@ -66,6 +66,11 @@ export type ClaudeSettings = {
     showUsageInDock: boolean;
 };
 
+export type CodexSettings = {
+    /** The plan's usage as a ring in the dock; see `src/layout/DockUsage.tsx`. */
+    showUsageInDock: boolean;
+};
+
 export type BusySend = "queue" | "after-tool" | "interrupt";
 
 export type ChatSettings = {
@@ -108,6 +113,7 @@ export type Settings = {
     updates: UpdatesSettings;
     keyboard: KeyboardSettings;
     claude: ClaudeSettings;
+    codex: CodexSettings;
     chat: ChatSettings;
     worktrees: WorktreesSettings;
 };
@@ -151,6 +157,9 @@ export const DEFAULT_SETTINGS: Settings = {
         launchArgs: "",
         env: "",
         configDir: "",
+        showUsageInDock: false
+    },
+    codex: {
         showUsageInDock: false
     },
     chat: {

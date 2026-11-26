@@ -7,7 +7,8 @@ import { ACCESS_MODES } from "@/features/composer/access";
 import { useComposerStore } from "@/features/composer/store";
 import { Button, Input, NumberField, Select, Textarea } from "@/ui";
 import { SettingRow, SettingsSection } from "../SettingsSection";
-import { AccountSection, LocationRow, UsageSection } from "./ClaudeAccount";
+import { claude } from "@/features/claude/store";
+import { AccountSection, LocationRow, UsageSection } from "./ProviderSections";
 import { useSetting } from "../store";
 
 /**
@@ -18,8 +19,8 @@ import { useSetting } from "../store";
 export function ClaudeSettings() {
     return (
         <>
-            <AccountSection />
-            <UsageSection />
+            <AccountSection provider={claude} label="Claude account" />
+            <UsageSection provider={claude} signedOutHint="Shown for a Claude subscription login" dock="claude" />
             <AccessSection />
             <SessionsSection />
             <BinarySection />
@@ -78,7 +79,7 @@ function BinarySection() {
 
     return (
         <SettingsSection title="Installation">
-            <LocationRow />
+            <LocationRow provider={claude} />
             <SettingRow
                 label="Claude binary"
                 description="Leave empty to find claude on PATH"

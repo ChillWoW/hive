@@ -1,45 +1,66 @@
 import { PreviewCard } from "@base-ui/react/preview-card";
-import { refreshClaude, useClaudeProvider } from "@/features/claude/store";
+import type { HarnessId } from "@/proto";
+import { claude } from "@/features/claude/store";
 import { UsageCard } from "@/features/claude/UsageCard";
-import {
-    refreshUsage,
-    tightestWindow,
-    TONE_TEXT,
-    USAGE_FRESH_MS,
-    useClaudeUsage,
-    usageTone,
-    useUsagePolling
-} from "@/features/claude/usage";
-import { ClaudeMark } from "@/features/models/ClaudeMark";
+import { tightestWindow, TONE_TEXT, USAGE_FRESH_MS, usageTone } from "@/features/claude/usage";
+import { codex } from "@/features/codex/store";
+import { HarnessMark } from "@/features/models/HarnessMark";
+import type { Provider } from "@/features/providers/makeProvider";
 import { settings, useSettingsStore } from "@/features/settings";
 import { cn } from "@/lib/cn";
 import { iconButtonClassName, Ring } from "@/ui";
 import { popupClassName } from "@/ui/chip";
 
 /**
- * Claude's plan usage in the dock, when Settings › Providers turns it on: a
- * ring around its mark for the most-used window; resting on it shows every
- * window, a click opens Providers.
+ * The plans' usage in the dock, for each provider Settings › Providers turns
+ * it on for: a ring around its mark for the most-used window; resting on it
+ * shows every window, a click opens Providers.
  */
 export function DockUsage({ side }: { side: "left" | "right" }) {
-    const shown = useSettingsStore((s) => s.settings.claude.showUsageInDock);
-    useUsagePolling(shown);
-    if (!shown) return null;
-    return <UsageButton side={side} />;
+    const showClaude = useSettingsStore((s) => s.settings.claude.showUsageInDock);
+    const showCodex = useSettingsStore((s) => s.settings.codex.showUsageInDock);
+    claude.useUsagePolling(showClaude);
+    codex.useUsagePolling(showCodex);
+    return (
+        <>
+            {showClaude && (
+                <UsageButton
+                    side={side}
+                    harness="claude"
+                    provider={claude}
+                    signedOutHint="Shown for a Claude subscription login"
+                />
+            )}
+            {showCodex && (
+                <UsageButton side={side} harness="codex" provider={codex} signedOutHint="Shown for a ChatGPT login" />
+            )}
+        </>
+    );
 }
 
-function UsageButton({ side }: { side: "left" | "right" }) {
-    const windows = useClaudeUsage((s) => s.windows);
+function UsageButton({
+    side,
+    harness,
+    provider,
+    signedOutHint
+}: {
+    side: "left" | "right";
+    harness: HarnessId;
+    provider: Provider;
+    signedOutHint: string;
+}) {
+    const windows = provider.useUsage((s) => s.windows);
     const top = tightestWindow(windows);
     const used = top?.used ?? 0;
-    const label = top ? `Claude usage: ${top.label} ${Math.round(used * 100)}%` : "Claude usage";
+    const name = `${provider.name} usage`;
+    const label = top ? `${name}: ${top.label} ${Math.round(used * 100)}%` : name;
 
     return (
         <PreviewCard.Root
             onOpenChange={(open) => {
                 if (!open) return;
-                void refreshUsage({ maxAge: USAGE_FRESH_MS });
-                if (!useClaudeProvider.getState().status) void refreshClaude();
+                void provider.refreshUsage({ maxAge: USAGE_FRESH_MS });
+                if (!provider.useProvider.getState().status) void provider.refresh();
             }}
         >
             <PreviewCard.Trigger
@@ -61,13 +82,13 @@ function UsageButton({ side }: { side: "left" | "right" }) {
                         thickness={1.1}
                         className={cn("absolute inset-0 size-full", TONE_TEXT[usageTone(used)])}
                     />
-                    <ClaudeMark className="size-3.5" />
+                    <HarnessMark harness={harness} className="size-3.5" />
                 </span>
             </PreviewCard.Trigger>
             <PreviewCard.Portal>
                 <PreviewCard.Positioner side={side} align="end" sideOffset={10} collisionPadding={12}>
                     <PreviewCard.Popup className={cn(popupClassName, "w-72 p-3")}>
-                        <UsageCard />
+                        <UsageCard harness={harness} provider={provider} signedOutHint={signedOutHint} />
                     </PreviewCard.Popup>
                 </PreviewCard.Positioner>
             </PreviewCard.Portal>

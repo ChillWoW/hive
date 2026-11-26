@@ -9,7 +9,7 @@ import {
     TrashIcon
 } from "@phosphor-icons/react";
 import { activity, chats, useChatsStore, useWorking } from "@/features/chats";
-import { ClaudeMark } from "@/features/models";
+import { HarnessMark } from "@/features/models";
 import { cn } from "@/lib/cn";
 import { timeAgo, useMinuteClock } from "@/lib/time";
 import type { Chat } from "@/proto";
@@ -77,8 +77,8 @@ export function ChatRow({ chat, onDelete }: { chat: Chat; onDelete: (chat: Chat)
                             <span className={cn("min-w-0 flex-1 truncate", !chat.title && "text-muted")}>
                                 {title}
                             </span>
-                            {/* The chat's provider; Claude's is the only one yet. */}
-                            <ClaudeMark className="size-3 shrink-0" />
+                            {/* The chat's harness. */}
+                            <HarnessMark harness={chat.config.harness} className="size-3 shrink-0" />
                             <span
                                 className={cn(
                                     "flex w-7 shrink-0 justify-end text-[11px] text-muted/75 tabular-nums",

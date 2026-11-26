@@ -4,7 +4,7 @@ use std::time::Duration;
 use outcode_harness::mock::{Mock, Seen, Step, echo};
 use outcode_harness::{HarnessError, RunCommand};
 use outcode_proto::{
-    AgentEvent, ChatConfig, ChatsUpdate, DoneStatus, InputResponse, MessagePart, MessageStatus, MessagesUpdate,
+    AgentEvent, ChatConfig, ChatsUpdate, DoneStatus, HarnessId, InputResponse, MessagePart, MessageStatus, MessagesUpdate,
 };
 use outcode_store::Store;
 
@@ -14,12 +14,12 @@ use super::*;
 fn engine_with(
     mock: Mock,
     idle: Duration,
-    text_model: impl Fn(TextUse) -> Option<String> + Send + Sync + 'static,
+    text_model: impl Fn(TextUse) -> Option<TextModel> + Send + Sync + 'static,
 ) -> (tempfile::TempDir, Engine, Arc<Seen>) {
     let dir = tempfile::tempdir().unwrap();
     let seen = mock.seen();
     let hooks = Hooks {
-        harness: Arc::new(mock),
+        harnesses: vec![Arc::new(mock)],
         text_model: Box::new(text_model),
         idle: Box::new(move || idle),
         worktrees: Box::new(WorktreeOptions::default),
@@ -35,7 +35,15 @@ fn engine(idle: Duration) -> (tempfile::TempDir, Engine, Arc<Seen>) {
 
 /// With titles on, the text runs answering `title`.
 fn engine_titled(idle: Duration, title: &str) -> (tempfile::TempDir, Engine, Arc<Seen>) {
-    engine_with(Mock::new().text(title), idle, |_| Some(String::new()))
+    engine_with(Mock::new().text(title), idle, |_| Some(claude_text()))
+}
+
+/// Text runs on Claude's default model.
+fn claude_text() -> TextModel {
+    TextModel {
+        harness: HarnessId::Claude,
+        model: String::new(),
+    }
 }
 
 /// Collects a watcher's updates.
@@ -522,9 +530,9 @@ async fn a_worktree_chat_runs_in_its_worktree_and_takes_it_when_deleted() {
     let mock = Mock::new().text("fix/login-redirect");
     let seen = mock.seen();
     let hooks = Hooks {
-        harness: Arc::new(mock),
+        harnesses: vec![Arc::new(mock)],
         // Only branch names; titles are off.
-        text_model: Box::new(|kind| (kind == TextUse::Branch).then(String::new)),
+        text_model: Box::new(|kind| (kind == TextUse::Branch).then(claude_text)),
         idle: Box::new(|| Duration::from_secs(60)),
         worktrees: Box::new(move || options.clone()),
     };
@@ -569,4 +577,51 @@ async fn a_worktree_chat_runs_in_its_worktree_and_takes_it_when_deleted() {
         tokio::time::sleep(Duration::from_millis(10)).await;
     }
     panic!("the worktree or its branch outlived the chat");
+}
+
+#[tokio::test]
+async fn a_chat_runs_on_its_harness_and_switching_starts_a_new_session() {
+    let claude = Mock::new();
+    let codex = Mock::new().harness(HarnessId::Codex);
+    let (on_claude, on_codex) = (claude.seen(), codex.seen());
+    let dir = tempfile::tempdir().unwrap();
+    let hooks = Hooks {
+        harnesses: vec![Arc::new(claude), Arc::new(codex)],
+        text_model: Box::new(|_| None),
+        idle: Box::new(|| Duration::from_secs(60)),
+        worktrees: Box::new(WorktreeOptions::default),
+    };
+    let engine = Engine::new(Store::open(dir.path()).unwrap(), hooks);
+    let chat = engine.create_chat("/a".into(), ChatConfig::default()).unwrap();
+    engine.send(&chat.id, "one".into(), Vec::new()).unwrap();
+    settle(&engine, &chat.id).await;
+    assert_eq!(engine.store().chat(&chat.id).unwrap().unwrap().session_id.as_deref(), Some("s1"));
+
+    let codex_config = ChatConfig {
+        harness: HarnessId::Codex,
+        ..ChatConfig::default()
+    };
+    let switched = engine.set_config(&chat.id, codex_config).unwrap();
+    assert_eq!(switched.session_id, None, "Codex can't resume Claude's session");
+    assert!(!engine.any_live());
+    engine.send(&chat.id, "two".into(), Vec::new()).unwrap();
+    settle(&engine, &chat.id).await;
+    assert_eq!(on_claude.runs().len(), 1);
+    let runs = on_codex.runs();
+    assert_eq!(runs.len(), 1);
+    assert_eq!(runs[0].resume, None);
+    assert_eq!(reply_text(&engine, &chat.id), "echo: two");
+}
+
+#[tokio::test]
+async fn a_harness_thats_missing_ends_the_turn_with_an_error() {
+    let (_dir, engine, _) = engine(Duration::from_secs(60));
+    let config = ChatConfig {
+        harness: HarnessId::Codex,
+        ..ChatConfig::default()
+    };
+    let chat = engine.create_chat("/a".into(), config).unwrap();
+    engine.send(&chat.id, "hi".into(), Vec::new()).unwrap();
+    let messages = engine.store().messages(&chat.id).unwrap();
+    assert!(matches!(&messages[1].parts[0], MessagePart::Error { message, .. } if message.contains("codex")));
 }

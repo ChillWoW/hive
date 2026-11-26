@@ -17,7 +17,7 @@
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex, PoisonError};
 
-use outcode_proto::{AgentEvent, Catalog, DoneStatus, InputRequest, InputResponse, RunRequest, SlashCommand};
+use outcode_proto::{AgentEvent, Catalog, DoneStatus, HarnessId, InputRequest, InputResponse, RunRequest, SlashCommand};
 use tokio::sync::mpsc;
 
 use crate::{BoxFuture, Gone, Harness, HarnessError, Run, RunCommand, RunHandle};
@@ -66,6 +66,7 @@ pub fn echo(turn: &Turn) -> Vec<Step> {
 }
 
 pub struct Mock {
+    id: HarnessId,
     script: Script,
     text: Option<String>,
     fail: Option<Box<dyn Fn() -> HarnessError + Send + Sync>>,
@@ -79,14 +80,21 @@ impl Default for Mock {
 }
 
 impl Mock {
-    /// Runs [`echo`]; text runs fail.
+    /// Runs [`echo`] as Claude; text runs fail.
     pub fn new() -> Self {
         Self {
+            id: HarnessId::Claude,
             script: Arc::new(echo),
             text: None,
             fail: None,
             seen: Arc::default(),
         }
+    }
+
+    /// Stands in for `id`.
+    pub fn harness(mut self, id: HarnessId) -> Self {
+        self.id = id;
+        self
     }
 
     /// Plays `script`'s steps for each turn.
@@ -143,8 +151,8 @@ fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
 }
 
 impl Harness for Mock {
-    fn id(&self) -> &'static str {
-        "mock"
+    fn id(&self) -> HarnessId {
+        self.id
     }
 
     fn catalog(&self) -> Catalog {
