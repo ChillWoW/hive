@@ -1,6 +1,6 @@
-import type { ChatConfig } from "@/proto";
+import type { Catalog, ChatConfig } from "@/proto";
 import { useComposerStore } from "@/features/composer/store";
-import { defaultConfig, ModelPicker } from "@/features/models";
+import { defaultConfig, ModelPicker, useCatalog } from "@/features/models";
 import { Select } from "@/ui";
 import { SettingRow, SettingsSection, SwitchRow } from "../SettingsSection";
 import { useSetting, useSettingsStore } from "../store";
@@ -17,6 +17,9 @@ export function ChatsPage() {
         </>
     );
 }
+
+/** The composer's model chip as a form control; text sized like `Select`'s trigger. */
+const PICKER_TRIGGER = "h-7 rounded-md border border-border bg-raised text-[13px] text-text";
 
 /**
  * The model, effort and fast mode a new chat starts on, in the composer's own
@@ -62,7 +65,7 @@ function DefaultsSection() {
                         config={defaultConfig(chat)}
                         onChange={onChange}
                         placement="bottom"
-                        triggerClassName="h-7 rounded-md border border-border bg-raised text-text"
+                        triggerClassName={PICKER_TRIGGER}
                     />
                 }
             />
@@ -85,19 +88,30 @@ function TitlesSection() {
     );
 }
 
-/** Claude's aliases; its default as "default" (stored empty). */
-const MODELS: { value: string; label: string }[] = [
-    { value: "haiku", label: "Haiku" },
-    { value: "sonnet", label: "Sonnet" },
-    { value: "opus", label: "Opus" },
-    { value: "default", label: "Claude's default" }
-];
+/**
+ * The catalog id a stored text model shows as: an id as it is, an alias
+ * (`haiku`) as the newest model it names (the catalog lists newest first),
+ * empty as Claude's default.
+ */
+function textModelId(catalog: Catalog | null, stored: string): string | undefined {
+    if (!stored) return undefined;
+    const models = catalog?.models ?? [];
+    return (
+        models.find((m) => m.id === stored)?.id ??
+        models.find((m) => m.id.startsWith(`claude-${stored}-`))?.id ??
+        stored
+    );
+}
 
 function TextGenerationSection() {
     const model = useSetting("chat", "textGenerationModel");
-    const value = model.value || "default";
-    // An id typed into settings.json is offered as it is.
-    const options = MODELS.some((o) => o.value === value) ? MODELS : [...MODELS, { value, label: value }];
+    const catalog = useCatalog();
+    const config: ChatConfig = {
+        model: textModelId(catalog, model.value),
+        modelOptions: {},
+        access: "full-access",
+        plan: false
+    };
 
     return (
         <SettingsSection title="Text generation">
@@ -106,26 +120,14 @@ function TextGenerationSection() {
                 description="Writes chat titles and other short labels; a small one is quick and cheap"
                 keywords="text generation model title haiku sonnet opus label"
                 setting={model}
-                controlClassName="w-44"
                 control={
-                    <Select
-                        items={options}
-                        value={value}
-                        onValueChange={(next) => {
-                            if (next !== null) model.set(next === "default" ? "" : next);
-                        }}
-                    >
-                        <Select.Trigger aria-label="Text generation model">
-                            <Select.Value />
-                        </Select.Trigger>
-                        <Select.Content>
-                            {options.map((option) => (
-                                <Select.Item key={option.value} value={option.value}>
-                                    {option.label}
-                                </Select.Item>
-                            ))}
-                        </Select.Content>
-                    </Select>
+                    <ModelPicker
+                        config={config}
+                        onChange={(next) => next.model && model.set(next.model)}
+                        placement="bottom"
+                        triggerClassName={PICKER_TRIGGER}
+                        modelOnly
+                    />
                 }
             />
         </SettingsSection>

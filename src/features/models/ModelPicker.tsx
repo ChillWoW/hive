@@ -55,25 +55,29 @@ function matches(row: Row, query: string) {
  * first level). Picking a model keeps the card open so its effort can be
  * set next.
  *
- * Elsewhere (Settings › Claude Code › Defaults), `placement` and
- * `triggerClassName` fit it to a form.
+ * Elsewhere (Settings › Chats), `placement` and `triggerClassName` fit it
+ * to a form; `modelOnly` drops effort and fast mode, for runs that take
+ * neither (text generation).
  */
 export function ModelPicker({
     config,
     onChange,
     placement = "top",
-    triggerClassName
+    triggerClassName,
+    modelOnly = false
 }: {
     config: ChatConfig;
     onChange: (config: ChatConfig) => void;
     placement?: "top" | "bottom";
     triggerClassName?: string;
+    modelOnly?: boolean;
 }) {
     const catalog = useCatalog();
     const model = resolveModel(catalog, config);
-    const reasoning = resolveReasoning(model, config);
-    const fast = isFastMode(model, config);
-    const showFast = hasFastMode(model);
+    const reasoning = modelOnly ? undefined : resolveReasoning(model, config);
+    const fast = !modelOnly && isFastMode(model, config);
+    const showFast = !modelOnly && hasFastMode(model);
+    const showEffort = !modelOnly && !!model?.reasoningLevels.length;
     const [open, setOpen] = useState(false);
     const [side, setSide] = useState<Side | null>(null);
 
@@ -132,6 +136,7 @@ export function ModelPicker({
                             reasoning={reasoning}
                             fast={fast}
                             showFast={showFast}
+                            showEffort={showEffort}
                             onPick={(next) => onChange(fitConfig(catalog, { ...config, model: next.id }))}
                             side={side}
                             onToggleSide={(next) => setSide((s) => (s === next ? null : next))}
@@ -145,14 +150,14 @@ export function ModelPicker({
                             options={FAST_CHOICES}
                             value={fast ? "on" : "off"}
                             // Level with the Fast mode row, one above Reasoning.
-                            lift={model.reasoningLevels.length > 0}
+                            lift={showEffort}
                             onSelect={(choice) => {
                                 onChange(withFastMode(config, choice === "on"));
                                 setSide(null);
                             }}
                         />
                     )}
-                    {side === "effort" && model.reasoningLevels.length > 0 && (
+                    {side === "effort" && showEffort && (
                         <SideCard
                             label="Reasoning effort"
                             // Highest first, so the list reads the way the effort grows.
@@ -189,6 +194,7 @@ function ModelCard({
     reasoning,
     fast,
     showFast,
+    showEffort,
     onPick,
     side,
     onToggleSide
@@ -199,6 +205,7 @@ function ModelCard({
     reasoning: ReasoningLevel | undefined;
     fast: boolean;
     showFast: boolean;
+    showEffort: boolean;
     onPick: (model: Model) => void;
     side: Side | null;
     onToggleSide: (side: Side) => void;
@@ -367,7 +374,7 @@ function ModelCard({
 
             {/* Fast mode and effort belong to the picked model, not the
                 highlighted one: each model has its own. */}
-            {(showFast || model.reasoningLevels.length > 0) && (
+            {(showFast || showEffort) && (
                 <div className="mt-1 flex flex-col gap-0.5 border-t border-border pt-1">
                     {showFast && (
                         <FooterRow
@@ -377,7 +384,7 @@ function ModelCard({
                             onClick={() => onToggleSide("fast")}
                         />
                     )}
-                    {model.reasoningLevels.length > 0 && (
+                    {showEffort && (
                         <FooterRow
                             label="Reasoning"
                             value={reasoning && REASONING_LABELS[reasoning]}
