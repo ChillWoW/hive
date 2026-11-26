@@ -26,8 +26,8 @@ export const UNTITLED = "New chat";
 export const CARD_DWELL = 300;
 
 /**
- * One chat in the sidebar: status mark, title, its provider's mark and time
- * since its last activity. The "⋯" button (on hover) and a right-click open the same menu:
+ * One chat in the sidebar: status mark, title, time since its last activity
+ * and its provider's mark. The "⋯" button (on hover, over the mark) and a right-click open the same menu:
  * Rename (in place), Pin, Archive, Delete. Resting on it shows its card
  * (`ChatCard`) beside the sidebar; a click or a menu hides it. `showProject`
  * puts its project's icon in place of the provider's mark.
@@ -89,19 +89,21 @@ export function ChatRow({
                             <span className={cn("min-w-0 flex-1 truncate", !chat.title && "text-muted")}>
                                 {title}
                             </span>
-                            {showProject ? (
-                                <ProjectIcon path={chat.cwd} className="size-3.5 shrink-0" />
-                            ) : (
-                                // The chat's harness.
-                                <HarnessMark harness={chat.config.harness} className="size-3 shrink-0" />
-                            )}
+                            <span className="flex w-7 shrink-0 justify-end text-[11px] text-muted/75 tabular-nums">
+                                {timeAgo(activity(chat), now)}
+                            </span>
                             <span
                                 className={cn(
-                                    "flex w-7 shrink-0 justify-end text-[11px] text-muted/75 tabular-nums",
+                                    "flex w-4 shrink-0 justify-center",
                                     "group-hover/chat:invisible group-has-[[data-popup-open]]/chat:invisible"
                                 )}
                             >
-                                {timeAgo(activity(chat), now)}
+                                {showProject ? (
+                                    <ProjectIcon path={chat.cwd} className="size-3.5 shrink-0" />
+                                ) : (
+                                    // The chat's harness.
+                                    <HarnessMark harness={chat.config.harness} className="size-3 shrink-0" />
+                                )}
                             </span>
                         </button>
                     )}
