@@ -69,5 +69,37 @@ export const ACTIONS: readonly Action[] = [
         description: "Shows the chat you went back from",
         keywords: "forward next history navigate chat",
         scope: "global"
+    },
+    {
+        id: "newTab",
+        category: "general",
+        label: "New chat tab",
+        description: "Opens the new-chat view in a tab",
+        keywords: "new tab chat open create",
+        scope: "global"
+    },
+    {
+        id: "closeTab",
+        category: "general",
+        label: "Close tab",
+        description: "Closes the shown chat's tab",
+        keywords: "close tab chat",
+        scope: "global"
+    },
+    {
+        id: "nextTab",
+        category: "general",
+        label: "Next tab",
+        description: "Shows the tab to the right",
+        keywords: "next tab switch cycle chat",
+        scope: "global"
+    },
+    {
+        id: "previousTab",
+        category: "general",
+        label: "Previous tab",
+        description: "Shows the tab to the left",
+        keywords: "previous tab switch cycle chat",
+        scope: "global"
     }
 ];

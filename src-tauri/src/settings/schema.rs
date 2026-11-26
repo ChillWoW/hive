@@ -179,6 +179,10 @@ pub struct KeyboardSettings {
     pub toggle_file_panel: String,
     pub go_back: String,
     pub go_forward: String,
+    pub new_tab: String,
+    pub close_tab: String,
+    pub next_tab: String,
+    pub previous_tab: String,
 }
 
 impl Default for KeyboardSettings {
@@ -190,6 +194,10 @@ impl Default for KeyboardSettings {
             toggle_file_panel: "Mod+Shift+E".into(),
             go_back: "Mod+[".into(),
             go_forward: "Mod+]".into(),
+            new_tab: "Mod+T".into(),
+            close_tab: "Mod+W".into(),
+            next_tab: "Ctrl+Tab".into(),
+            previous_tab: "Ctrl+Shift+Tab".into(),
         }
     }
 }

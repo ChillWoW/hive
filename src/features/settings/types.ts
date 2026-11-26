@@ -34,6 +34,10 @@ export type KeyboardSettings = {
     toggleFilePanel: string;
     goBack: string;
     goForward: string;
+    newTab: string;
+    closeTab: string;
+    nextTab: string;
+    previousTab: string;
 };
 
 export type ClaudeSettings = {
@@ -116,7 +120,11 @@ export const DEFAULT_SETTINGS: Settings = {
         toggleRightSidebar: "Mod+Alt+B",
         toggleFilePanel: "Mod+Shift+E",
         goBack: "Mod+[",
-        goForward: "Mod+]"
+        goForward: "Mod+]",
+        newTab: "Mod+T",
+        closeTab: "Mod+W",
+        nextTab: "Ctrl+Tab",
+        previousTab: "Ctrl+Shift+Tab"
     },
     claude: {
         binaryPath: "",

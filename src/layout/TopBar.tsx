@@ -1,6 +1,7 @@
 import { ArrowLeftIcon, ArrowRightIcon, SidebarSimpleIcon } from "@phosphor-icons/react";
 import { useEffect } from "react";
 import { history, useCanGo } from "@/features/chats";
+import { TabStrip } from "@/features/tabs";
 import { UpdateButton } from "@/features/updater";
 import { useShortcut, type ActionId } from "@/keybindings";
 import { isMac } from "@/lib/platform";
@@ -30,8 +31,8 @@ const TOGGLES: Record<Panel, { label: string; shortcut: ActionId }> = {
 /**
  * The frameless window's title strip, the frame's top edge (the dock is its
  * side): draggable, each panel's toggle at the end of the side the panel is
- * on, the update icon and, on Windows/Linux, the window controls at its end.
- * The open chat's title heads its transcript instead.
+ * on, the open chats' tabs between, the update icon and, on Windows/Linux,
+ * the window controls at its end.
  */
 export function TopBar() {
     const trafficLights = useTrafficLights();
@@ -57,8 +58,8 @@ export function TopBar() {
                 <HistoryButtons />
             </div>
 
-            {/* An empty strip to grab the window by. */}
-            <div data-tauri-drag-region className="h-full min-w-4 flex-1" />
+            {/* The open chats; past them, an empty strip to grab the window by. */}
+            <TabStrip />
 
             <div
                 data-tauri-drag-region
