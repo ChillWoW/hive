@@ -3,6 +3,7 @@ import type { Attachment, BackgroundTask, Message } from "@/proto";
 import { cn } from "@/lib/cn";
 import { chats, useActiveChat, useChatsStore, useSession } from "@/features/chats/store";
 import { Composer, ContextMeter, FolderPicker } from "@/features/composer";
+import { BranchPicker } from "@/features/git";
 import { ClaudeMark } from "@/features/models";
 import { UNTITLED } from "@/features/sidebar/ChatRow";
 import { toast } from "@/ui";
@@ -100,6 +101,7 @@ export function ChatView() {
                     locked={!!chat}
                     onChange={(path) => useChatsStore.getState().setNewChatCwd(path)}
                 />
+                <BranchPicker cwd={cwd || null} />
                 <span className="ml-auto flex items-center gap-1">
                     {session && (
                         <BackgroundTasks tasks={session.tasks} messages={messages} onStop={queue.stopTask} />

@@ -72,6 +72,7 @@ dependencies = [
  "fontdb",
  "log",
  "outcode-engine",
+ "outcode-git",
  "outcode-harness",
  "outcode-mcp",
  "outcode-proto",
@@ -2684,6 +2685,16 @@ dependencies = [
  "outcode-proto",
  "outcode-store",
  "serde_json",
+ "tempfile",
+ "thiserror 2.0.21",
+ "tokio",
+]
+
+[[package]]
+name = "outcode-git"
+version = "0.0.1"
+dependencies = [
+ "outcode-proto",
  "tempfile",
  "thiserror 2.0.21",
  "tokio",

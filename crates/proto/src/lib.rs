@@ -6,6 +6,7 @@
 pub mod agent;
 pub mod chat;
 pub mod fold;
+pub mod git;
 pub mod message;
 pub mod model;
 pub mod provider;
@@ -13,6 +14,7 @@ pub mod provider;
 pub use agent::*;
 pub use chat::*;
 pub use fold::{fold_event, has_running_spawn, has_spawn, stamp_event};
+pub use git::*;
 pub use message::*;
 pub use model::*;
 pub use provider::*;
@@ -46,6 +48,7 @@ mod export {
         ProviderStatus::export_all(&cfg).unwrap();
         UsageWindow::export_all(&cfg).unwrap();
         SignInStarted::export_all(&cfg).unwrap();
+        GitRepo::export_all(&cfg).unwrap();
 
         let mut modules = Vec::new();
         collect_modules(&dir, "", &mut modules);

@@ -35,6 +35,7 @@ outcode-harness.workspace = true
 outcode-store.workspace = true
 outcode-engine.workspace = true
 outcode-mcp.workspace = true
+outcode-git.workspace = true
 base64 = "0.22"
 tokio = { workspace = true }
 

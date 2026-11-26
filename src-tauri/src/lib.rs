@@ -3,6 +3,7 @@ mod claude;
 mod files;
 mod folders;
 mod fonts;
+mod git;
 mod http;
 mod mcp;
 mod settings;
@@ -93,6 +94,10 @@ pub fn run() {
             chat::chat_watch_messages,
             chat::chat_unwatch,
             folders::folder_icon,
+            git::git_repo,
+            git::git_switch_branch,
+            git::git_create_branch,
+            git::git_delete_branch,
             files::file_open,
             settings::settings_get,
             settings::settings_update,
