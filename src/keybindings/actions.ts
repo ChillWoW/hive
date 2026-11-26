@@ -3,7 +3,10 @@ import type { KeyboardSettings } from "@/features/settings/types";
 export type ActionId = keyof KeyboardSettings;
 
 /** Settings page sections, in order. */
-export const CATEGORIES = [{ id: "general", title: "General" }] as const;
+export const CATEGORIES = [
+    { id: "general", title: "General" },
+    { id: "tabs", title: "Tabs" }
+] as const;
 
 export type CategoryId = (typeof CATEGORIES)[number]["id"];
 
@@ -72,7 +75,7 @@ export const ACTIONS: readonly Action[] = [
     },
     {
         id: "newTab",
-        category: "general",
+        category: "tabs",
         label: "New chat tab",
         description: "Opens the new-chat view in a tab",
         keywords: "new tab chat open create",
@@ -80,7 +83,7 @@ export const ACTIONS: readonly Action[] = [
     },
     {
         id: "closeTab",
-        category: "general",
+        category: "tabs",
         label: "Close tab",
         description: "Closes the shown chat's tab",
         keywords: "close tab chat",
@@ -88,7 +91,7 @@ export const ACTIONS: readonly Action[] = [
     },
     {
         id: "nextTab",
-        category: "general",
+        category: "tabs",
         label: "Next tab",
         description: "Shows the tab to the right",
         keywords: "next tab switch cycle chat",
@@ -96,10 +99,82 @@ export const ACTIONS: readonly Action[] = [
     },
     {
         id: "previousTab",
-        category: "general",
+        category: "tabs",
         label: "Previous tab",
         description: "Shows the tab to the left",
         keywords: "previous tab switch cycle chat",
+        scope: "global"
+    },
+    {
+        id: "goToTab1",
+        category: "tabs",
+        label: "Go to tab 1",
+        description: "Shows the first tab",
+        keywords: "tab 1 switch jump go number",
+        scope: "global"
+    },
+    {
+        id: "goToTab2",
+        category: "tabs",
+        label: "Go to tab 2",
+        description: "Shows the second tab",
+        keywords: "tab 2 switch jump go number",
+        scope: "global"
+    },
+    {
+        id: "goToTab3",
+        category: "tabs",
+        label: "Go to tab 3",
+        description: "Shows the third tab",
+        keywords: "tab 3 switch jump go number",
+        scope: "global"
+    },
+    {
+        id: "goToTab4",
+        category: "tabs",
+        label: "Go to tab 4",
+        description: "Shows the fourth tab",
+        keywords: "tab 4 switch jump go number",
+        scope: "global"
+    },
+    {
+        id: "goToTab5",
+        category: "tabs",
+        label: "Go to tab 5",
+        description: "Shows the fifth tab",
+        keywords: "tab 5 switch jump go number",
+        scope: "global"
+    },
+    {
+        id: "goToTab6",
+        category: "tabs",
+        label: "Go to tab 6",
+        description: "Shows the sixth tab",
+        keywords: "tab 6 switch jump go number",
+        scope: "global"
+    },
+    {
+        id: "goToTab7",
+        category: "tabs",
+        label: "Go to tab 7",
+        description: "Shows the seventh tab",
+        keywords: "tab 7 switch jump go number",
+        scope: "global"
+    },
+    {
+        id: "goToTab8",
+        category: "tabs",
+        label: "Go to tab 8",
+        description: "Shows the eighth tab",
+        keywords: "tab 8 switch jump go number",
+        scope: "global"
+    },
+    {
+        id: "goToLastTab",
+        category: "tabs",
+        label: "Go to last tab",
+        description: "Shows the rightmost tab",
+        keywords: "tab last 9 switch jump go end",
         scope: "global"
     }
 ];

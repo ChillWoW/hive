@@ -94,6 +94,13 @@ export const tabs = {
         next.splice(to, 0, tab);
         setTabs(next);
     },
+    /** Shows the tab at `index` (-1: the last). False when there's none. */
+    show: (index: number) => {
+        const current = list();
+        const tab = index < 0 ? current.at(index) : current[index];
+        if (tab === undefined) return false;
+        chats.select(tab);
+    },
     /** Shows the next (1) or previous (-1) tab, wrapping around. False with one tab. */
     cycle: (step: 1 | -1) => {
         const current = list();

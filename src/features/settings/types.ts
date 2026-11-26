@@ -38,6 +38,15 @@ export type KeyboardSettings = {
     closeTab: string;
     nextTab: string;
     previousTab: string;
+    goToTab1: string;
+    goToTab2: string;
+    goToTab3: string;
+    goToTab4: string;
+    goToTab5: string;
+    goToTab6: string;
+    goToTab7: string;
+    goToTab8: string;
+    goToLastTab: string;
 };
 
 export type ClaudeSettings = {
@@ -124,7 +133,16 @@ export const DEFAULT_SETTINGS: Settings = {
         newTab: "Mod+T",
         closeTab: "Mod+W",
         nextTab: "Ctrl+Tab",
-        previousTab: "Ctrl+Shift+Tab"
+        previousTab: "Ctrl+Shift+Tab",
+        goToTab1: "Mod+1",
+        goToTab2: "Mod+2",
+        goToTab3: "Mod+3",
+        goToTab4: "Mod+4",
+        goToTab5: "Mod+5",
+        goToTab6: "Mod+6",
+        goToTab7: "Mod+7",
+        goToTab8: "Mod+8",
+        goToLastTab: "Mod+9"
     },
     claude: {
         binaryPath: "",

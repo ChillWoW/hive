@@ -35,6 +35,15 @@ export function TabStrip() {
     });
     useShortcut("nextTab", () => tabs.cycle(1));
     useShortcut("previousTab", () => tabs.cycle(-1));
+    useShortcut("goToTab1", () => tabs.show(0));
+    useShortcut("goToTab2", () => tabs.show(1));
+    useShortcut("goToTab3", () => tabs.show(2));
+    useShortcut("goToTab4", () => tabs.show(3));
+    useShortcut("goToTab5", () => tabs.show(4));
+    useShortcut("goToTab6", () => tabs.show(5));
+    useShortcut("goToTab7", () => tabs.show(6));
+    useShortcut("goToTab8", () => tabs.show(7));
+    useShortcut("goToLastTab", () => tabs.show(-1));
 
     // The shown tab scrolls into view, and stays there as the strip narrows.
     useEffect(() => {

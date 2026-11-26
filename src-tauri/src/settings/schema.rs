@@ -183,6 +183,15 @@ pub struct KeyboardSettings {
     pub close_tab: String,
     pub next_tab: String,
     pub previous_tab: String,
+    pub go_to_tab1: String,
+    pub go_to_tab2: String,
+    pub go_to_tab3: String,
+    pub go_to_tab4: String,
+    pub go_to_tab5: String,
+    pub go_to_tab6: String,
+    pub go_to_tab7: String,
+    pub go_to_tab8: String,
+    pub go_to_last_tab: String,
 }
 
 impl Default for KeyboardSettings {
@@ -198,6 +207,15 @@ impl Default for KeyboardSettings {
             close_tab: "Mod+W".into(),
             next_tab: "Ctrl+Tab".into(),
             previous_tab: "Ctrl+Shift+Tab".into(),
+            go_to_tab1: "Mod+1".into(),
+            go_to_tab2: "Mod+2".into(),
+            go_to_tab3: "Mod+3".into(),
+            go_to_tab4: "Mod+4".into(),
+            go_to_tab5: "Mod+5".into(),
+            go_to_tab6: "Mod+6".into(),
+            go_to_tab7: "Mod+7".into(),
+            go_to_tab8: "Mod+8".into(),
+            go_to_last_tab: "Mod+9".into(),
         }
     }
 }
