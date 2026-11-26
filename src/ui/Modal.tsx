@@ -2,7 +2,11 @@ import type { ComponentProps } from "react";
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
 import { XIcon } from "@phosphor-icons/react";
 import { cn } from "@/lib/cn";
+import { isMac } from "@/lib/platform";
 import { Button } from "./Button";
+
+/** Width of the top bar's window controls (`layout/WindowControls`), left clear of a modal's drag strip. */
+const WINDOW_CONTROLS_WIDTH = isMac ? 0 : 88;
 
 type ClassName<State> = string | ((state: State) => string | undefined) | undefined;
 
@@ -57,7 +61,15 @@ function ModalContent({
                     "data-starting-style:opacity-0 data-ending-style:opacity-0",
                 )}
             />
-            <DialogPrimitive.Viewport className="fixed inset-0 flex items-center justify-center p-4">
+            {/* The top bar stays usable under the dim: this strip keeps the window draggable
+                (presses off the backdrop never dismiss), the window controls sit above it, and
+                the popup centres below the bar. */}
+            <div
+                data-tauri-drag-region
+                style={{ right: WINDOW_CONTROLS_WIDTH }}
+                className="fixed top-0 left-0 h-9"
+            />
+            <DialogPrimitive.Viewport className="fixed inset-x-0 top-9 bottom-0 flex items-center justify-center p-4">
                 <DialogPrimitive.Popup
                     className={withBase(
                         cn(

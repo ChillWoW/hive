@@ -31,7 +31,7 @@ function ControlButton({ label, className, ...props }: ComponentProps<"button"> 
     );
 }
 
-/** Three 24px buttons, their gaps and padding: what a modal's top-bar dim leaves clickable. */
+/** Three 24px buttons, their gaps and padding: what a modal's drag strip leaves clear (mirrored in `ui/Modal`). */
 export const WINDOW_CONTROLS_WIDTH = 88;
 
 /**
@@ -47,7 +47,8 @@ export function WindowControls() {
     return (
         <div
             style={{ width: WINDOW_CONTROLS_WIDTH }}
-            className="flex h-full shrink-0 items-center justify-end gap-0.5 pr-2 pl-1"
+            // Above a modal's backdrop, so the window can still be minimised or closed.
+            className="relative z-50 flex h-full shrink-0 items-center justify-end gap-0.5 pr-2 pl-1"
         >
             <ControlButton label="Minimize" onClick={() => runOnWindow((w) => w.minimize())}>
                 <MinusIcon className="size-4" />
