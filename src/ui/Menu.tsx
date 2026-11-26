@@ -39,7 +39,7 @@ export interface MenuContentProps
     extends MenuPrimitive.Popup.Props,
         Pick<
             MenuPrimitive.Positioner.Props,
-            "side" | "align" | "sideOffset" | "alignOffset" | "collisionPadding"
+            "side" | "align" | "sideOffset" | "alignOffset" | "collisionPadding" | "anchor"
         > {
     /** Where to portal the popup. Defaults to `document.body`. */
     container?: MenuPrimitive.Portal.Props["container"];
@@ -56,6 +56,7 @@ function MenuContent({
     sideOffset,
     alignOffset,
     collisionPadding = 8,
+    anchor,
     container,
     className,
     ...props
@@ -78,6 +79,7 @@ function MenuContent({
                 sideOffset={sideOffset ?? defaults.sideOffset}
                 alignOffset={alignOffset ?? defaults.alignOffset}
                 collisionPadding={collisionPadding}
+                anchor={anchor}
             >
                 <MenuPrimitive.Popup
                     className={withBase(

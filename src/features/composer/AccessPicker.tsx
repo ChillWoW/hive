@@ -1,3 +1,4 @@
+import { useRef, useState } from "react";
 import { CheckIcon, ClipboardTextIcon } from "@phosphor-icons/react";
 import type { ChatConfig } from "@/proto";
 import { cn } from "@/lib/cn";
@@ -18,9 +19,26 @@ const rowClassName = cn(
  */
 export function AccessPicker({ config, onChange }: { config: ChatConfig; onChange: (config: ChatConfig) => void }) {
     const mode = ACCESS_MODES.find((m) => m.id === config.access) ?? ACCESS_MODES[2]!;
+    const triggerRef = useRef<HTMLButtonElement>(null);
+    // The chip's horizontal span when the menu opened: toggling plan mode
+    // widens the chip, and the open menu shouldn't slide with it.
+    const span = useRef<{ left: number; width: number } | null>(null);
+    const [anchor] = useState(() => ({
+        getBoundingClientRect: () => {
+            const rect = triggerRef.current?.getBoundingClientRect() ?? new DOMRect();
+            const s = span.current;
+            return s ? new DOMRect(s.left, rect.top, s.width, rect.height) : rect;
+        },
+    }));
     return (
-        <Menu>
+        <Menu
+            onOpenChange={(open) => {
+                const rect = triggerRef.current?.getBoundingClientRect();
+                if (open && rect) span.current = { left: rect.left, width: rect.width };
+            }}
+        >
             <Menu.Trigger
+                ref={triggerRef}
                 aria-label={`Access: ${mode.label}${config.plan ? ", plan mode" : ""}`}
                 className={cn(pickerTriggerClassName, "gap-1.5")}
             >
@@ -33,7 +51,7 @@ export function AccessPicker({ config, onChange }: { config: ChatConfig; onChang
                 )}
                 <span className="truncate">{mode.label}</span>
             </Menu.Trigger>
-            <Menu.Content side="top" align="start" sideOffset={10} className="w-64 p-1">
+            <Menu.Content side="top" align="center" sideOffset={10} anchor={anchor} className="w-64 p-1">
                 {ACCESS_MODES.map((m) => (
                     <Menu.Item
                         key={m.id}
