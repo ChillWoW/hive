@@ -117,7 +117,7 @@ function TextGenerationSection() {
         <SettingsSection title="Text generation">
             <SettingRow
                 label="Model"
-                description="Writes chat titles and other short labels; a small one is quick and cheap"
+                description="Writes chat titles and short labels; small is quick and cheap"
                 keywords="text generation model title haiku sonnet opus label"
                 setting={model}
                 control={
@@ -168,7 +168,7 @@ function SendingSection() {
         <SettingsSection title="Sending">
             <SettingRow
                 label="While the agent works"
-                description="Queue a prompt sent mid-turn until the turn ends, or stop the turn and send it at once"
+                description="Queue a mid-turn prompt, or stop the turn and send it now"
                 keywords="busy send queue steer interrupt follow up while working"
                 setting={busySend}
                 controlClassName="w-44"

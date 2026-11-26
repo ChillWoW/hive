@@ -54,7 +54,7 @@ function SessionsSection() {
             />
             <SettingRow
                 label="Compact the conversation at"
-                description="The context size, in tokens, Claude summarizes the conversation at; 0 keeps its default. Applies to new sessions"
+                description="Context size in tokens to summarize at; 0 keeps the default"
                 keywords="auto compact window context tokens compaction summarize"
                 setting={compactWindow}
                 controlClassName="w-40"
