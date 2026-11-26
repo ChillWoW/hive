@@ -47,6 +47,7 @@ export type { UsageWindow } from "./UsageWindow";
 export type { UserInputAnswer } from "./UserInputAnswer";
 export type { UserInputOption } from "./UserInputOption";
 export type { UserInputQuestion } from "./UserInputQuestion";
+export type { WorkspaceEntry } from "./WorkspaceEntry";
 export type { Worktree } from "./Worktree";
 export type { WorktreeStep } from "./WorktreeStep";
 export type { JsonValue } from "./serde_json/JsonValue";

@@ -25,6 +25,7 @@ export function PromptField({
     placeholder,
     onChange,
     onFocusChange,
+    onCaretChange,
     onKeyDown,
     onPaste,
     className
@@ -34,6 +35,8 @@ export function PromptField({
     placeholder?: string;
     onChange: (text: string) => void;
     onFocusChange?: (focused: boolean) => void;
+    /** The caret moved (typing, clicks, arrows, `setText`). */
+    onCaretChange?: (caret: number) => void;
     onKeyDown?: (event: KeyboardEvent<HTMLTextAreaElement>) => boolean;
     onPaste?: (event: ClipboardEvent<HTMLTextAreaElement>) => void;
     className?: string;
@@ -54,7 +57,10 @@ export function PromptField({
             const field = fieldRef.current;
             onChange(text);
             // After React writes the value.
-            requestAnimationFrame(() => field?.setSelectionRange(caret, caret));
+            requestAnimationFrame(() => {
+                field?.setSelectionRange(caret, caret);
+                onCaretChange?.(caret);
+            });
         }
     }));
 
@@ -84,7 +90,11 @@ export function PromptField({
             value={value}
             placeholder={placeholder}
             spellCheck={false}
-            onChange={(event) => onChange(event.target.value)}
+            onChange={(event) => {
+                onChange(event.target.value);
+                onCaretChange?.(event.target.selectionStart);
+            }}
+            onSelect={(event) => onCaretChange?.(event.currentTarget.selectionStart)}
             onFocus={() => onFocusChange?.(true)}
             onBlur={() => onFocusChange?.(false)}
             onPaste={onPaste}

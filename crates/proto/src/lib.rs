@@ -5,6 +5,7 @@
 
 pub mod agent;
 pub mod chat;
+pub mod files;
 pub mod fold;
 pub mod git;
 pub mod message;
@@ -13,6 +14,7 @@ pub mod provider;
 
 pub use agent::*;
 pub use chat::*;
+pub use files::*;
 pub use fold::{fold_event, has_running_spawn, has_spawn, stamp_event};
 pub use git::*;
 pub use message::*;
@@ -51,6 +53,7 @@ mod export {
         GitRepo::export_all(&cfg).unwrap();
         NewWorktree::export_all(&cfg).unwrap();
         WorktreeStep::export_all(&cfg).unwrap();
+        WorkspaceEntry::export_all(&cfg).unwrap();
 
         let mut modules = Vec::new();
         collect_modules(&dir, "", &mut modules);

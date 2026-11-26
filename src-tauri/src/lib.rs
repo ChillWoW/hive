@@ -113,6 +113,7 @@ pub fn run() {
             git::git_create_branch,
             git::git_delete_branch,
             files::file_open,
+            files::list_files,
             settings::settings_get,
             settings::settings_update,
             settings::settings_reset,

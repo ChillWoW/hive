@@ -12,6 +12,8 @@ import { AccessPicker } from "./AccessPicker";
 import { matchCommands, slashQuery, useCommands } from "./commands";
 import { usePromptHistory } from "./history";
 import { PromptField, type PromptFieldHandle } from "./PromptField";
+import { MentionMenu } from "./MentionMenu";
+import { useMentionMenu } from "./mentions";
 import { SlashMenu } from "./SlashMenu";
 import { addDraftAttachments, composer, useComposerStore, useDraft, useDraftAttachments } from "./store";
 import { usePromptSuggestion } from "./suggestion";
@@ -94,7 +96,7 @@ export function Composer({
 }: {
     /** Whose draft the field holds; null is the new-chat view. */
     chatId: string | null;
-    /** The folder the chat works in: where `/` looks for commands. */
+    /** The folder the chat works in: where `/` looks for commands and `@` for files. */
     cwd?: string;
     config: ChatConfig;
     onConfigChange: (config: ChatConfig) => void;
@@ -190,6 +192,15 @@ export function Composer({
     useEffect(() => {
         recallRef.current = null;
     }, [chatId]);
+
+    // `@` completes the folder's files and folders.
+    const [caret, setCaret] = useState(0);
+    const mention = useMentionMenu({
+        draft,
+        caret,
+        cwd,
+        complete: (text, at) => fieldRef.current?.setText(text, at)
+    });
 
     /** Puts `text` in the field, the caret at its end. */
     const fill = (text: string) => fieldRef.current?.setText(text);
@@ -371,7 +382,7 @@ export function Composer({
 
     /** The field's keys, before its own; true when one was taken. */
     const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-        if (menuKey(event)) return true;
+        if (mention.onKeyDown(event) || menuKey(event)) return true;
         if (suggestion !== null && !event.nativeEvent.isComposing) {
             const bare = !event.shiftKey && !event.ctrlKey && !event.altKey && !event.metaKey;
             if (event.key === "Tab" && bare) {
@@ -448,6 +459,7 @@ export function Composer({
                     className
                 )}
             >
+                {mention.open && <MentionMenu menu={mention} />}
                 {menuOpen && (
                     <SlashMenu
                         commands={matches}
@@ -543,6 +555,7 @@ export function Composer({
                                 setDraft(text);
                                 if (dismissedAt !== undefined && text !== dismissedAt) setDismissedAt(undefined);
                             }}
+                            onCaretChange={setCaret}
                             onKeyDown={onKeyDown}
                             onPaste={onPaste}
                             className={cn(
