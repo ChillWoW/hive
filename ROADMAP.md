@@ -130,9 +130,9 @@ Done when: typing "hi" streams Claude's reply.
 
 ## 17. Outcode MCP server
 
-- [ ] Loopback TCP host + token file; bridge = app exe as `outcode mcp` (stdio), tagged with `OUTCODE_CHAT_ID`.
-- [ ] Inject via `--mcp-config`; tool timeout ~65 min.
-- [ ] Tools one at a time: whoami, show_image, show_svg, preview_html, render_html, request_secret.
+- [x] Loopback TCP host + token file; bridge = app exe as `outcode mcp` (stdio), tagged with `OUTCODE_CHAT_ID`.
+- [x] Inject via `--mcp-config`; tool timeout ~65 min.
+- [x] Tools one at a time: whoami, show_image, show_svg, preview_html, render_html, request_secret.
 
 ## 18. Git
 
@@ -163,6 +163,6 @@ Before adding a harness, extract a `Harness` trait from the Claude code and add 
 - [x] Compaction
 - [x] Subagent events nest correctly
 - [x] Background task survives turn end, can be stopped
-- [ ] Outcode MCP tool call (and a long wait > CLI's default timeout)
+- [x] Outcode MCP tool call (and a long wait > CLI's default timeout)
 - [x] Attachments (file + image)
 - [x] Title run
