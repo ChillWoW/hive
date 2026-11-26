@@ -19,8 +19,12 @@ import type { ComponentType } from "react";
 import type { MessagePart, ToolCall } from "@/proto";
 import type { JsonValue } from "@/proto/serde_json/JsonValue";
 import type { ToolPart } from "../fold";
+import { OutcodeIcon } from "./OutcodeIcon";
 
 export type { ToolPart };
+
+/** Outcode's own MCP server (`McpServer::OUTCODE`): its tools get the app's mark. */
+const OUTCODE_SERVER = "outcode";
 type ReasoningPart = Extract<MessagePart, { kind: "reasoning" }>;
 
 /**
@@ -241,7 +245,7 @@ export function iconOf(call: ToolCall): ToolIcon {
         case "todo":
             return ListChecksIcon;
         case "mcp":
-            return PlugsConnectedIcon;
+            return call.server === OUTCODE_SERVER ? OutcodeIcon : PlugsConnectedIcon;
         case "subagent":
             return RobotIcon;
         default:
