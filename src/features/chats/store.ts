@@ -14,7 +14,14 @@ type ChatsState = {
     activeChatId: string | null;
     /** Where the new-chat view's next chat will run. Survives a reload. */
     newChatCwd: string | null;
+    /**
+     * The subagent thread shown in the active chat: spawn ids from the
+     * outermost in; empty for the chat itself. Cleared when the chat changes.
+     */
+    subagent: string[];
     select: (chatId: string | null) => void;
+    /** Shows a subagent thread in the active chat: `path` of spawn ids, outermost first. */
+    openSubagentPath: (path: string[]) => void;
     setNewChatCwd: (cwd: string | null) => void;
     apply: (update: ChatsUpdate) => void;
 };
@@ -32,7 +39,9 @@ export const useChatsStore = create<ChatsState>()(
             sessions: {},
             activeChatId: null,
             newChatCwd: null,
-            select: (activeChatId) => set({ activeChatId }),
+            subagent: [],
+            select: (activeChatId) => set({ activeChatId, subagent: [] }),
+            openSubagentPath: (subagent) => set({ subagent }),
             setNewChatCwd: (newChatCwd) => set({ newChatCwd }),
             apply: (update) =>
                 set((s): Partial<ChatsState> => {
@@ -45,7 +54,8 @@ export const useChatsStore = create<ChatsState>()(
                                 chats,
                                 sessions: Object.fromEntries(update.sessions.map((x) => [x.chatId, x])),
                                 // A chat deleted while the app was closed.
-                                activeChatId: known ? s.activeChatId : null
+                                activeChatId: known ? s.activeChatId : null,
+                                subagent: known ? s.subagent : []
                             };
                         }
                         case "upsert": {
@@ -54,10 +64,12 @@ export const useChatsStore = create<ChatsState>()(
                         }
                         case "removed": {
                             const { [update.id]: _, ...sessions } = s.sessions;
+                            const active = s.activeChatId === update.id;
                             return {
                                 chats: s.chats.filter((c) => c.id !== update.id),
                                 sessions,
-                                activeChatId: s.activeChatId === update.id ? null : s.activeChatId
+                                activeChatId: active ? null : s.activeChatId,
+                                subagent: active ? [] : s.subagent
                             };
                         }
                         case "session":
@@ -89,6 +101,16 @@ export const useWorking = (chatId: string | null | undefined) =>
 /** Chat actions, outside React too. Changes come back through the watcher. */
 export const chats = {
     select: (chatId: string | null) => useChatsStore.getState().select(chatId),
+    /** Opens a subagent's thread, one level in from the one shown. */
+    openSubagent: (id: string) => {
+        const state = useChatsStore.getState();
+        state.openSubagentPath([...state.subagent, id]);
+    },
+    /** Shows the thread `depth` levels in (0: the chat itself; -1: the shown one's parent). */
+    openSubagentDepth: (depth: number) => {
+        const state = useChatsStore.getState();
+        state.openSubagentPath(state.subagent.slice(0, depth));
+    },
     /** Opens the new-chat view, in `cwd` when given. */
     startNew: (cwd?: string) => {
         const state = useChatsStore.getState();

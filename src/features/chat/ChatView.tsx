@@ -1,14 +1,14 @@
 import { useLayoutEffect, useMemo, useRef, type ReactNode } from "react";
-import type { Attachment, Message } from "@/proto";
+import type { Attachment, BackgroundTask, Message } from "@/proto";
 import { cn } from "@/lib/cn";
-import { useActiveChat, useChatsStore, useSession } from "@/features/chats/store";
+import { chats, useActiveChat, useChatsStore, useSession } from "@/features/chats/store";
 import { Composer, ContextMeter, FolderPicker } from "@/features/composer";
 import { ClaudeMark } from "@/features/models";
 import { UNTITLED } from "@/features/sidebar/ChatRow";
 import { toast } from "@/ui";
 import { useChatConfig } from "./config";
 import { AssistantMessage } from "./transcript/AssistantMessage";
-import { ChatCwd, KnownFiles } from "./transcript/context";
+import { ChatCwd, KnownFiles, LiveTasks } from "./transcript/context";
 import { foldPath, fullPath, parseFileRef, resolveFileRef } from "./transcript/filePaths";
 import { pathOf } from "./transcript/tools";
 import { UserMessage } from "./transcript/UserMessage";
@@ -17,6 +17,8 @@ import { pendingInput } from "./fold";
 import { InputCard } from "./InputCard";
 import { SecretCard } from "./SecretCard";
 import { QueuedTray, TasksTray } from "./SessionTrays";
+import { SubagentView } from "./SubagentView";
+import { findSpawnIn, subagentName } from "./transcript/subagents";
 
 /**
  * The column the transcript and the composer share: centred, at most
@@ -24,6 +26,8 @@ import { QueuedTray, TasksTray } from "./SessionTrays";
  * the main column, which the layout keeps at least `MAIN_MIN_WIDTH` wide.
  */
 export const laneClassName = "mx-auto w-full max-w-3xl";
+
+const NO_TASKS: readonly BackgroundTask[] = [];
 
 /** How close to the end counts as following it, in px. */
 const FOLLOW_SLACK = 48;
@@ -46,6 +50,8 @@ export function ChatView() {
     const [config, setConfig] = useChatConfig();
     const lastReply = messages.findLast((m) => m.role === "assistant");
     const waiting = lastReply?.status === "streaming" ? pendingInput(lastReply.parts) : undefined;
+    // The subagent thread shown in place of the chat's, if any.
+    const openSpawn = useChatsStore((s) => s.subagent.at(-1));
 
     const onSend = (prompt: string, attachments: Attachment[]) => {
         // The draft stays until there's somewhere to send it.
@@ -119,26 +125,66 @@ export function ChatView() {
         <div className="flex h-full w-full flex-col">
             <ChatCwd value={cwd || undefined}>
                 <KnownFiles value={known}>
-                    <TranscriptScroller key={chat?.id} follow={messages}>
-                        {messages.map((message) => (
-                            <MessageView key={message.id} message={message} />
-                        ))}
-                    </TranscriptScroller>
+                    <LiveTasks value={session?.tasks ?? NO_TASKS}>
+                        {openSpawn ? (
+                            <SubagentView id={openSpawn} messages={messages} />
+                        ) : (
+                            <TranscriptScroller key={chat?.id} follow={messages}>
+                                {messages.map((message) => (
+                                    <MessageView key={message.id} message={message} />
+                                ))}
+                            </TranscriptScroller>
+                        )}
+                    </LiveTasks>
                 </KnownFiles>
             </ChatCwd>
-            <Bottom>{composer}</Bottom>
+            {!openSpawn && <Bottom>{composer}</Bottom>}
         </div>
     );
 }
 
-/** The main column's head while a chat is open: its title after its agent's mark. */
+/**
+ * The main column's head while a chat is open: its title after its agent's
+ * mark, then the subagent threads open in it, `title / a / b`. Each crumb
+ * but the last steps back out to it.
+ */
 export function ChatHeader() {
     const chat = useActiveChat();
+    const messages = useChatStore((s) => s.messages);
+    const path = useChatsStore((s) => s.subagent);
     if (!chat) return null;
+    const crumbs = [
+        chat.title?.trim() || UNTITLED,
+        ...path.map((id) => {
+            const found = findSpawnIn(messages, id);
+            return found ? subagentName(found.spawn) : "Subagent";
+        })
+    ];
     return (
-        <header className="flex h-9 shrink-0 items-center gap-1.5 px-3">
+        <header className="flex h-9 min-w-0 shrink-0 items-center gap-1.5 px-3">
             <ClaudeMark className="size-3.5 shrink-0" />
-            <h1 className="truncate text-[13px] text-text">{chat.title?.trim() || UNTITLED}</h1>
+            {crumbs.map((name, depth) => {
+                const last = depth === crumbs.length - 1;
+                return (
+                    <span
+                        key={depth}
+                        className={cn("flex min-w-0 items-center gap-1.5 text-[13px]", !last && "max-w-[40%] shrink")}
+                    >
+                        {depth > 0 && <span className="shrink-0 text-muted/60">/</span>}
+                        {last ? (
+                            <h1 className="truncate text-text">{name}</h1>
+                        ) : (
+                            <button
+                                type="button"
+                                onClick={() => chats.openSubagentDepth(depth)}
+                                className="cursor-pointer truncate text-muted transition-colors hover:text-text"
+                            >
+                                {name}
+                            </button>
+                        )}
+                    </span>
+                );
+            })}
         </header>
     );
 }

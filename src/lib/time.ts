@@ -52,13 +52,14 @@ export function useMinuteClock(): number {
     return useSyncExternalStore(subscribe, () => now);
 }
 
-/** Now, re-read every `ms`: a clock for something running. */
-export function useNow(ms = 1000): number {
+/** Now, re-read every `ms` while `enabled`: a clock for something running. */
+export function useNow(ms = 1000, enabled = true): number {
     const [now, setNow] = useState(Date.now);
     useEffect(() => {
+        if (!enabled) return;
         const id = setInterval(() => setNow(Date.now()), ms);
         return () => clearInterval(id);
-    }, [ms]);
+    }, [ms, enabled]);
     return now;
 }
 

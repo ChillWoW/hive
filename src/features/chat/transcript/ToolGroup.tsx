@@ -10,14 +10,12 @@ import {
 import type { JsonValue } from "@/proto/serde_json/JsonValue";
 import { cn } from "@/lib/cn";
 import { baseName } from "@/lib/paths";
-import { formatElapsed, useNow } from "@/lib/time";
 import { useSettingsStore } from "@/features/settings";
 import { FileIcon } from "@/ui";
 import { ChatCwd } from "./context";
 import { diffLines, toFileDiff, toFileView, type FileDiff } from "./diff";
 import { DiffView } from "./DiffView";
 import { Markdown } from "./Markdown";
-import { TurnParts } from "./Parts";
 import { ThoughtIcon } from "./ThoughtIcon";
 import {
     blockClassName,
@@ -249,7 +247,6 @@ function Item({ item, streaming }: { item: GroupItem; streaming: boolean }) {
             <span className={cn(verbClassName, live && "shimmer")}>{label}</span>
             {target}
             {failed && <span className="shrink-0 text-xs text-danger">failed</span>}
-            {item.kind === "call" && item.part.call.kind === "subagent" && <SpawnTime part={item.part} />}
         </>
     );
 
@@ -371,7 +368,6 @@ function invocationOf(part: ToolPart, cwd: string | undefined): string {
 function CallBody({ part }: { part: ToolPart }): ReactNode {
     const cwd = use(ChatCwd);
     const call = part.call;
-    if (call.kind === "subagent") return <SubagentThread part={part} />;
     if (call.kind === "todo") {
         return (
             <ul className={cn(blockClassName, "flex flex-col gap-1 text-xs")}>
@@ -416,51 +412,3 @@ function CallBody({ part }: { part: ToolPart }): ReactNode {
     );
 }
 
-/**
- * A subagent's own work under its spawn row: the task it was given, then
- * its transcript (thoughts, calls and text, nested spawns too), and what it
- * reported back once done.
- */
-function SubagentThread({ part }: { part: ToolPart }) {
-    const call = part.call;
-    if (call.kind !== "subagent") return null;
-    const thread = part.thread ?? [];
-    const running = part.subagent === "running";
-    const report = part.output?.trim();
-    return (
-        <div className="mt-0.5 mb-2 flex flex-col gap-2 border-l border-border pl-3">
-            {call.prompt && (
-                <div className={cn(blockClassName, "my-0 text-xs text-muted")}>
-                    <Lines text={call.prompt} className="whitespace-pre-wrap" />
-                </div>
-            )}
-            {thread.length > 0 && (
-                <div className="flex flex-col gap-2 text-[13px]">
-                    <TurnParts parts={thread} streaming={running} />
-                </div>
-            )}
-            {running && thread.length === 0 && <span className="shimmer text-xs text-muted">Starting</span>}
-            {!running && report && thread.every((p) => p.kind !== "text") && (
-                <Markdown className="markdown-muted markdown-small">{report}</Markdown>
-            )}
-            {part.subagent === "failed" && <span className="text-xs text-danger">The agent failed.</span>}
-        </div>
-    );
-}
-
-/** How long a subagent took, or has been running (ticking). */
-function SpawnTime({ part }: { part: ToolPart }) {
-    if (part.startedAt === undefined) return null;
-    if (part.endedAt !== undefined) return <Elapsed ms={part.endedAt - part.startedAt} />;
-    if (part.subagent !== "running") return null;
-    return <LiveElapsed since={part.startedAt} />;
-}
-
-function LiveElapsed({ since }: { since: number }) {
-    const now = useNow();
-    return <Elapsed ms={now - since} />;
-}
-
-function Elapsed({ ms }: { ms: number }) {
-    return <span className="shrink-0 text-xs text-muted/70 tabular-nums">{formatElapsed(ms, { round: true })}</span>;
-}

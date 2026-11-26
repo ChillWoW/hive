@@ -6,24 +6,31 @@ import { Markdown } from "./Markdown";
 import { CompactionDivider, WakeDivider } from "./Dividers";
 import { Shown } from "./Shown";
 import { isShowing } from "./showing";
+import { SubagentStack } from "./Subagent";
 import { ToolGroup } from "./ToolGroup";
-import { pushCall, type GroupItem } from "./tools";
+import { pushCall, type GroupItem, type ToolPart } from "./tools";
 
 /** Tools whose call is the question or plan an `input` part already shows. */
 const ASKING_TOOLS = new Set(["AskUserQuestion", "ExitPlanMode"]);
 
-/** What a turn renders as, in order: a group of calls and thoughts, or a single part. */
+/**
+ * What a turn renders as, in order: a group of calls and thoughts, a stack of
+ * subagent rows, or a single part.
+ */
 type Block =
     | { kind: "group"; items: GroupItem[]; first: number; last: number }
+    | { kind: "agents"; parts: ToolPart[]; first: number }
     | { kind: "part"; part: MessagePart; index: number };
 
 /**
  * Consecutive tool calls and thoughts fold into one group; anything else
- * ends it. Empty text and empty thoughts draw nothing and so split nothing.
+ * ends it. Subagent spawns gather into their own run, so a running subagent
+ * never hides behind a fold. Empty text and empty thoughts draw nothing and
+ * so split nothing.
  */
 function toBlocks(parts: MessagePart[], streaming: boolean): Block[] {
     const blocks: Block[] = [];
-    let open: Extract<Block, { kind: "group" }> | undefined;
+    let open: Extract<Block, { kind: "group" | "agents" }> | undefined;
     const last = parts.length - 1;
 
     parts.forEach((part, index) => {
@@ -36,8 +43,13 @@ function toBlocks(parts: MessagePart[], streaming: boolean): Block[] {
             blocks.push({ kind: "part", part, index });
             return;
         }
+        if (part.kind === "tool" && part.call.kind === "subagent") {
+            if (open?.kind !== "agents") blocks.push((open = { kind: "agents", parts: [], first: index }));
+            open.parts.push(part);
+            return;
+        }
         if (part.kind === "tool" || part.kind === "reasoning") {
-            if (!open) blocks.push((open = { kind: "group", items: [], first: index, last: index }));
+            if (open?.kind !== "group") blocks.push((open = { kind: "group", items: [], first: index, last: index }));
             if (part.kind === "tool") pushCall(open.items, part);
             // Live only while it's the tail of the turn: once anything
             // follows, the thought is finished.
@@ -63,7 +75,7 @@ export function ErrorChip({ message }: { message: string }) {
 /**
  * A turn's parts, in order: markdown, thoughts and tool calls grouped
  * (consecutive file edits on one line), what the agent asked, compactions,
- * and errors. Also a subagent's thread, inside its spawn row.
+ * subagents, and errors. Also a subagent's thread, under its row.
  */
 export function TurnParts({ parts, streaming }: { parts: MessagePart[]; streaming: boolean }) {
     const last = parts.length - 1;
@@ -81,6 +93,9 @@ export function TurnParts({ parts, streaming }: { parts: MessagePart[]; streamin
                     streaming={streaming}
                 />
             );
+        }
+        if (block.kind === "agents") {
+            return <SubagentStack key={`a${block.first}`} parts={block.parts} streaming={streaming} />;
         }
         const { part, index } = block;
         switch (part.kind) {
