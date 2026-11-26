@@ -7,9 +7,10 @@
 //! the handle is closed or dropped, and the event stream ends when the
 //! process exits.
 
-use outcode_proto::AgentEvent;
+use outcode_proto::{AccessMode, AgentEvent, InputResponse};
 use tokio::sync::mpsc;
 
+pub mod attachments;
 pub mod claude;
 mod cli;
 
@@ -21,6 +22,8 @@ pub enum HarnessError {
     BinaryMissing(String),
     #[error("failed to start {0}: {1}")]
     Spawn(&'static str, std::io::Error),
+    #[error("{0}")]
+    Probe(String),
 }
 
 pub struct Run {
@@ -41,7 +44,20 @@ pub struct RunHandle {
 /// What a [`RunHandle`] asks of its session.
 #[derive(Debug, PartialEq)]
 pub enum RunCommand {
-    Send { prompt: String },
+    Send {
+        prompt: String,
+        /// Absolute paths of files sent with it.
+        attachments: Vec<String>,
+    },
+    /// Answers the [`AgentEvent::InputRequested`] `request_id`.
+    Answer {
+        request_id: String,
+        response: InputResponse,
+    },
+    /// Switches what the agent may do without asking, and plan mode, in place.
+    SetModes { access: AccessMode, plan: bool },
+    /// Stops one background task.
+    StopTask { task_id: String },
     Interrupt,
     Close,
 }
@@ -56,12 +72,34 @@ impl RunHandle {
 
     /// Starts another turn with `prompt`. Sent mid-turn, the CLI takes it up
     /// once the current turn ends. False once the session has ended.
-    pub fn send(&self, prompt: impl Into<String>) -> bool {
+    pub fn send(&self, prompt: impl Into<String>, attachments: Vec<String>) -> bool {
         self.commands
             .send(RunCommand::Send {
                 prompt: prompt.into(),
+                attachments,
             })
             .is_ok()
+    }
+
+    /// Answers a question or approval the turn waits on. False once the
+    /// session has ended.
+    pub fn answer(&self, request_id: impl Into<String>, response: InputResponse) -> bool {
+        self.commands
+            .send(RunCommand::Answer {
+                request_id: request_id.into(),
+                response,
+            })
+            .is_ok()
+    }
+
+    pub fn set_modes(&self, access: AccessMode, plan: bool) {
+        let _ = self.commands.send(RunCommand::SetModes { access, plan });
+    }
+
+    pub fn stop_task(&self, task_id: impl Into<String>) {
+        let _ = self.commands.send(RunCommand::StopTask {
+            task_id: task_id.into(),
+        });
     }
 
     /// Stops the in-flight turn, which ends with `Done { status: interrupted }`.

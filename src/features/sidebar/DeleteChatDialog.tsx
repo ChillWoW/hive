@@ -1,4 +1,4 @@
-import { chats, useChatsStore } from "@/features/chats";
+import { chats, useWorking } from "@/features/chats";
 import type { Chat } from "@/proto";
 import { ConfirmDialog, useLastNonNull } from "@/ui";
 import { UNTITLED } from "./ChatRow";
@@ -6,7 +6,7 @@ import { UNTITLED } from "./ChatRow";
 /** Asks before deleting `chat`, since it can't be undone. Closed while null. */
 export function DeleteChatDialog({ chat, onClose }: { chat: Chat | null; onClose: () => void }) {
     const shown = useLastNonNull(chat);
-    const working = useChatsStore((s) => !!shown && !!s.working[shown.id]);
+    const working = useWorking(shown?.id);
 
     return (
         <ConfirmDialog

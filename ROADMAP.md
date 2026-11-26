@@ -39,7 +39,7 @@ Done when: typing "hi" streams Claude's reply.
 - [x] `Message` / `MessagePart` + pure `fold_event` (unit tests on scripted events).
 - [x] UI: markdown, code blocks (no highlighting yet), reasoning block, tool cards (diff for edits, output for exec), todo list. Tool rows grouped (consecutive edits on one line), thoughts with a preview line, long prompts collapse, file + web links clickable.
 - [x] Turn with no streamed text → show `result` text.
-- [ ] Settings: `chat.reasoningExpanded`, `chat.toolOutputExpanded`.
+- [x] Settings: `chat.reasoningExpanded`, `chat.toolOutputExpanded`.
 
 ## 4. Chats + projects + persistence
 
@@ -61,54 +61,55 @@ Done when: typing "hi" streams Claude's reply.
 
 ## 6. Access modes + approvals
 
-- [ ] `AccessMode`: supervised / auto-accept edits / full access.
-- [ ] `can_use_tool` → allow / deny / ask (`InputRequested` yes/no) by mode.
-- [ ] UI: approval card (allow / deny / allow for session), access picker.
-- [ ] Settings: `claude.defaultAccess`.
+- [x] `AccessMode`: supervised / auto-accept edits / full access.
+- [x] `can_use_tool` → allow / deny / ask (`InputRequested` yes/no) by mode.
+- [x] UI: approval card (allow / deny / allow for session), access picker.
+- [x] Settings: `claude.defaultAccess`.
 
 ## 7. Questions
 
-- [ ] `UserInputQuestion` / `UserInputAnswer` (same shape as approvals).
-- [ ] `AskUserQuestion` always → `InputRequested`; answer → `InputResolved`.
-- [ ] UI: question card (options, multi-select, free text).
+- [x] `UserInputQuestion` / `UserInputAnswer` (same shape as approvals).
+- [x] `AskUserQuestion` always → `InputRequested`; answer → `InputResolved`.
+- [x] UI: question card (options, multi-select, free text).
 
 ## 8. Follow-ups while busy
 
-- [ ] Command ledger: send mid-turn queues; cancel / reorder / send-now.
-- [ ] Held after a user stop until the next turn ends.
-- [ ] UI: queued prompts above composer.
-- [ ] Settings: `chat.busySend` (queue / steer).
+- [x] Command ledger: send mid-turn queues; cancel / reorder / send-now.
+- [x] Held after a user stop until the next turn ends.
+- [x] UI: queued prompts above composer.
+- [x] Settings: `chat.busySend` (queue / stop and send; Claude takes a mid-turn prompt only after the turn).
 
 ## 9. Plan mode
 
-- [ ] `--permission-mode plan`, re-enter each turn; approving `ExitPlanMode` drops to the access mode.
-- [ ] UI: plan toggle, plan card with approve / keep planning.
+- [x] `--permission-mode plan`, re-enter each turn; approving `ExitPlanMode` drops to the access mode.
+- [x] UI: plan toggle, plan card with approve / keep planning.
 
 ## 10. Slash commands + skills
 
-- [ ] Commands/skills from `system:init` → `AvailableCommands`; `$skill` → `/name`.
-- [ ] UI: `/` autocomplete in composer.
+- [x] Commands/skills from `system:init` → `AvailableCommands`; `$skill` → `/name`.
+- [x] UI: `/` autocomplete in composer.
 
 ## 11. Attachments
 
-- [ ] Files: list paths under the prompt. Images: inline as image blocks.
-- [ ] UI: paste/drop, chips, image previews.
+- [x] Files: list paths under the prompt. Images: inline as image blocks.
+- [x] UI: paste/drop, chips, image previews.
 
 ## 12. Context + compaction
 
-- [ ] `get_context_usage` → `ContextUsage`; `Usage` per turn.
-- [ ] ⚠ Skip the window from `get_context_usage` when `autocompactSource == settings` (that's the compaction window, not the model's).
-- [ ] Compaction: `status: compacting` → running, `compact_boundary` → completed, failed `compact_result` → failed; "Not enough messages to compact." = failed.
-- [ ] UI: context meter, compaction divider in transcript.
-- [ ] Settings: `claude.autoCompactWindow`.
+- [x] `get_context_usage` → `ContextUsage`; `Usage` per turn.
+- [x] ⚠ Skip the window from `get_context_usage` when `autocompactSource == settings` (that's the compaction window, not the model's).
+- [x] Compaction: `status: compacting` → running, `compact_boundary` → completed, failed `compact_result` → failed; "Not enough messages to compact." = failed.
+- [x] UI: context meter, compaction divider in transcript.
+- [x] Settings: `claude.autoCompactWindow`.
 
 ## 13. Subagents + background tasks
 
-- [ ] Subagent traffic by parent tool id → nested `Subagent` events; spawn start/end times (`stamp_event`).
-- [ ] `initialize` with `perTaskStopAffordance`; `background_tasks_changed` → `BackgroundTasks`; `stop_task`, `get_task_output`.
-- [ ] CLI-started turn (`system:init` with no prompt in flight) → `BackgroundTurn`.
-- [ ] Never idle-close a run with live background tasks.
-- [ ] UI: nested subagent threads, background tasks panel.
+- [x] Subagent traffic by parent tool id → nested `Subagent` events.
+- [x] Spawn start/end times (`stamp_event`).
+- [x] `initialize` with `perTaskStopAffordance`; `background_tasks_changed` → `BackgroundTasks`; `stop_task`, `get_task_output`.
+- [x] CLI-started turn (`system:init` with no prompt in flight) → `BackgroundTurn`.
+- [x] Never idle-close a run with live background tasks.
+- [x] UI: nested subagent threads, background tasks panel.
 
 ## 14. Titles (done early, after 4)
 
@@ -117,15 +118,15 @@ Done when: typing "hi" streams Claude's reply.
 
 ## 15. Claude provider management
 
-- [ ] Status: version, login state, install location.
-- [ ] Sign in / sign out, install / update, latest-release check (npm dist-tag).
-- [ ] Plan usage: `GET /api/oauth/usage` with the CLI's token (read, never refresh). ⚠ User-Agent must be `claude-code/<installed version>` or 429.
-- [ ] UI: Providers settings page, usage meter.
+- [x] Status: version, login state, install location.
+- [x] Sign in / sign out, install / update, latest-release check (npm dist-tag).
+- [x] Plan usage: `GET /api/oauth/usage` with the CLI's token (read, never refresh). ⚠ User-Agent must be `claude-code/<installed version>` or 429.
+- [x] UI: Providers settings page, usage meter (Settings › Claude Code).
 
 ## 16. Advanced Claude settings
 
-- [ ] Launch args (shell-split), extra env, config dir (`CLAUDE_CONFIG_DIR`) — applied to every spawn.
-- [ ] Settings: `claude.launchArgs`, `claude.env`, `claude.configDir`.
+- [x] Launch args (shell-split), extra env, config dir (`CLAUDE_CONFIG_DIR`) — applied to every spawn.
+- [x] Settings: `claude.launchArgs`, `claude.env`, `claude.configDir`.
 
 ## 17. Outcode MCP server
 
@@ -152,16 +153,16 @@ Before adding a harness, extract a `Harness` trait from the Claude code and add 
 
 ## Test checklist per harness
 
-- [ ] Plain prompt → text + Done
-- [ ] Tool call → normalized ToolCall + result
-- [ ] Approval asked in supervised, skipped in full access
-- [ ] Question answered
-- [ ] Interrupt mid-turn
-- [ ] Follow-up while busy
-- [ ] Resume a previous session
-- [ ] Compaction
-- [ ] Subagent events nest correctly
-- [ ] Background task survives turn end, can be stopped
+- [x] Plain prompt → text + Done
+- [x] Tool call → normalized ToolCall + result
+- [x] Approval asked in supervised, skipped in full access
+- [x] Question answered
+- [x] Interrupt mid-turn
+- [x] Follow-up while busy
+- [x] Resume a previous session
+- [x] Compaction
+- [x] Subagent events nest correctly
+- [x] Background task survives turn end, can be stopped
 - [ ] Outcode MCP tool call (and a long wait > CLI's default timeout)
-- [ ] Attachments (file + image)
-- [ ] Title run
+- [x] Attachments (file + image)
+- [x] Title run

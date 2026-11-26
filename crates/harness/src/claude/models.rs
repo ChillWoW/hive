@@ -83,9 +83,10 @@ pub fn catalog(binary: Option<&Path>) -> Catalog {
     }
 }
 
-/// `--model`, `--effort`, and fast mode as inline `--settings` layered over
-/// the user's own (left out while off, so theirs stands).
-pub(super) fn config_args(config: &ChatConfig) -> Vec<String> {
+/// `--model`, `--effort`, and fast mode and the compaction window as inline
+/// `--settings` layered over the user's own (each left out while unset, so
+/// theirs stands).
+pub(super) fn config_args(config: &ChatConfig, auto_compact_window: Option<u32>) -> Vec<String> {
     let mut args = Vec::new();
     if let Some(model) = config.model.as_deref().filter(|m| !m.is_empty()) {
         args.extend(["--model".into(), model.into()]);
@@ -93,9 +94,14 @@ pub(super) fn config_args(config: &ChatConfig) -> Vec<String> {
     if let Some(level) = config.reasoning {
         args.extend(["--effort".into(), effort(level).into()]);
     }
+    let mut settings = Map::new();
     if config.fast_mode() {
-        let mut settings = Map::new();
         settings.insert("fastMode".into(), true.into());
+    }
+    if let Some(window) = auto_compact_window {
+        settings.insert("autoCompactWindow".into(), window.into());
+    }
+    if !settings.is_empty() {
         args.extend(["--settings".into(), Value::Object(settings).to_string()]);
     }
     args
@@ -107,7 +113,11 @@ mod tests {
 
     #[test]
     fn the_config_becomes_flags() {
-        assert!(config_args(&ChatConfig::default()).is_empty());
+        assert!(config_args(&ChatConfig::default(), None).is_empty());
+        assert_eq!(
+            config_args(&ChatConfig::default(), Some(300_000)),
+            ["--settings", r#"{"autoCompactWindow":300000}"#]
+        );
         let mut config = ChatConfig {
             model: Some("claude-opus-5-5".into()),
             reasoning: Some(ReasoningLevel::XHigh),
@@ -117,7 +127,7 @@ mod tests {
             .model_options
             .insert(ChatConfig::FAST_MODE.into(), "on".into());
         assert_eq!(
-            config_args(&config),
+            config_args(&config, None),
             [
                 "--model",
                 "claude-opus-5-5",

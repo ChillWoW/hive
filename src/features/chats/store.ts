@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
-import type { Chat, ChatsUpdate } from "@/proto";
+import type { Chat, ChatsUpdate, Session } from "@/proto";
 import { chatsApi } from "./api";
 
 type ChatsState = {
@@ -8,8 +8,8 @@ type ChatsState = {
     loaded: boolean;
     /** Every chat, most recently active first. */
     chats: Chat[];
-    /** Chats whose turn is running. */
-    working: Record<string, true>;
+    /** Chats' live state (running, queued prompts, background tasks, context), by chat id. */
+    sessions: Record<string, Session>;
     /** The chat the main pane shows; null for the new-chat view. Survives a reload. */
     activeChatId: string | null;
     /** Where the new-chat view's next chat will run. Survives a reload. */
@@ -29,13 +29,13 @@ export const useChatsStore = create<ChatsState>()(
         (set) => ({
             loaded: false,
             chats: [],
-            working: {},
+            sessions: {},
             activeChatId: null,
             newChatCwd: null,
             select: (activeChatId) => set({ activeChatId }),
             setNewChatCwd: (newChatCwd) => set({ newChatCwd }),
             apply: (update) =>
-                set((s) => {
+                set((s): Partial<ChatsState> => {
                     switch (update.kind) {
                         case "snapshot": {
                             const chats = [...update.chats].sort(byActivity);
@@ -43,7 +43,7 @@ export const useChatsStore = create<ChatsState>()(
                             return {
                                 loaded: true,
                                 chats,
-                                working: Object.fromEntries(update.working.map((id) => [id, true])),
+                                sessions: Object.fromEntries(update.sessions.map((x) => [x.chatId, x])),
                                 // A chat deleted while the app was closed.
                                 activeChatId: known ? s.activeChatId : null
                             };
@@ -53,17 +53,15 @@ export const useChatsStore = create<ChatsState>()(
                             return { chats: [...rest, update.chat].sort(byActivity) };
                         }
                         case "removed": {
-                            const { [update.id]: _, ...working } = s.working;
+                            const { [update.id]: _, ...sessions } = s.sessions;
                             return {
                                 chats: s.chats.filter((c) => c.id !== update.id),
-                                working,
+                                sessions,
                                 activeChatId: s.activeChatId === update.id ? null : s.activeChatId
                             };
                         }
-                        case "working": {
-                            const { [update.chatId]: _, ...working } = s.working;
-                            return { working: update.working ? { ...working, [update.chatId]: true } : working };
-                        }
+                        case "session":
+                            return { sessions: { ...s.sessions, [update.session.chatId]: update.session } };
                     }
                 })
         }),
@@ -79,6 +77,14 @@ export const useChatsStore = create<ChatsState>()(
 export function useActiveChat(): Chat | undefined {
     return useChatsStore((s) => s.chats.find((c) => c.id === s.activeChatId));
 }
+
+/** A chat's live state; undefined while it has none. */
+export const useSession = (chatId: string | null | undefined) =>
+    useChatsStore((s) => (chatId ? s.sessions[chatId] : undefined));
+
+/** Whether the chat's turn is running. */
+export const useWorking = (chatId: string | null | undefined) =>
+    useChatsStore((s) => !!chatId && !!s.sessions[chatId]?.working);
 
 /** Chat actions, outside React too. Changes come back through the watcher. */
 export const chats = {

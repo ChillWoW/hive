@@ -15,6 +15,7 @@ const CHANGED: &str = "settings://changed";
 
 fn broadcast(app: &AppHandle, (settings, changed): (Settings, bool)) -> Settings {
     if changed {
+        crate::claude::configure(&settings);
         let _ = app.emit(CHANGED, &settings);
     }
     settings

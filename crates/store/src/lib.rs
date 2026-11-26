@@ -12,12 +12,12 @@
 
 pub mod journal;
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::{Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
 
 use outcode_proto::{
-    AgentEvent, Chat, ChatConfig, DoneStatus, Message, MessagePart, MessageRole, MessageStatus, fold_event,
+    AgentEvent, Attachment, Chat, ChatConfig, DoneStatus, Message, MessagePart, MessageRole, MessageStatus, fold_event, stamp_event,
 };
 use rusqlite::{Connection, OptionalExtension, params};
 
@@ -63,13 +63,15 @@ const MIGRATIONS: &[&str] = &[r#"
 pub struct Store {
     db: Mutex<Connection>,
     journal: Journal,
+    dir: PathBuf,
 }
 
 /// One turn being recorded: the prompt and the assistant message its events
 /// fold into.
 pub struct Turn {
     pub chat_id: String,
-    pub user: Message,
+    /// None for a turn the agent started on its own.
+    pub user: Option<Message>,
     pub assistant: Message,
     last_saved: Instant,
     /// Folded changes not yet saved.
@@ -87,6 +89,7 @@ impl Store {
         Ok(Self {
             db: Mutex::new(db),
             journal: Journal::open(dir.join("journals"))?,
+            dir: dir.to_owned(),
         })
     }
 
@@ -184,25 +187,34 @@ impl Store {
 
     // Turns
 
-    /// Saves the prompt as a user message and an empty streaming assistant
-    /// message for the reply; the chat is marked active (and unarchived).
-    pub fn start_turn(&self, chat_id: &str, prompt: &str) -> Result<(Turn, Chat)> {
+    /// Saves the prompt (and the files sent with it) as a user message and an
+    /// empty streaming assistant message for the reply; the chat is marked
+    /// active (and unarchived). Without a prompt only the reply is started:
+    /// a turn the agent began on its own.
+    pub fn start_turn(
+        &self,
+        chat_id: &str,
+        prompt: Option<&str>,
+        attachments: Vec<Attachment>,
+    ) -> Result<(Turn, Chat)> {
         let now = now_ms();
-        let user = Message {
+        let user = prompt.map(|prompt| Message {
             id: new_id(),
             role: MessageRole::User,
             parts: vec![MessagePart::Text {
                 id: "t0".into(),
                 text: prompt.to_owned(),
             }],
+            attachments,
             created_at: now,
             status: None,
             duration_ms: None,
-        };
+        });
         let assistant = Message {
             id: new_id(),
             role: MessageRole::Assistant,
             parts: Vec::new(),
+            attachments: Vec::new(),
             created_at: now,
             status: Some(MessageStatus::Streaming),
             duration_ms: None,
@@ -212,7 +224,9 @@ impl Store {
             // New work brings an archived chat back.
             chat.archived = false;
         })?;
-        self.save_message(chat_id, &user)?;
+        if let Some(user) = &user {
+            self.save_message(chat_id, user)?;
+        }
         self.save_message(chat_id, &assistant)?;
         let turn = Turn {
             chat_id: chat_id.to_owned(),
@@ -224,6 +238,33 @@ impl Store {
         Ok((turn, chat))
     }
 
+    // Attachments
+
+    /// Keeps a copy of a file sent with a prompt, named `name`, under the
+    /// data folder's `attachments/`.
+    pub fn save_attachment(&self, name: &str, bytes: &[u8]) -> Result<Attachment> {
+        let name = safe_file_name(name);
+        let dir = self.dir.join("attachments").join(new_id());
+        std::fs::create_dir_all(&dir)?;
+        let path = dir.join(&name);
+        std::fs::write(&path, bytes)?;
+        Ok(Attachment {
+            path: path.to_string_lossy().into_owned(),
+            mime_type: mime_type(&name, bytes).into(),
+            name,
+            size: bytes.len() as u64,
+        })
+    }
+
+    /// Whether `path` is one of the copies [`Store::save_attachment`] keeps.
+    pub fn is_attachment(&self, path: &Path) -> bool {
+        let root = self.dir.join("attachments");
+        match (path.canonicalize(), root.canonicalize()) {
+            (Ok(path), Ok(root)) => path.starts_with(root),
+            _ => false,
+        }
+    }
+
     /// Journals `event` and folds it into the turn's assistant message.
     /// Returns the chat when the event changed it (a new session id, the
     /// turn's end).
@@ -232,6 +273,7 @@ impl Store {
         self.journal
             .append(&turn.chat_id, &turn.assistant.id, now, event)?;
         fold_event(&mut turn.assistant.parts, event);
+        stamp_event(&mut turn.assistant.parts, event, now);
         turn.dirty = true;
 
         let chat = match event {
@@ -376,6 +418,42 @@ pub(crate) fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
     mutex.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
+/// `name` as a file name that is safe to create: no folders, no characters
+/// Windows refuses, never empty.
+fn safe_file_name(name: &str) -> String {
+    let base = name.rsplit(['/', '\\']).next().unwrap_or_default();
+    let cleaned: String = base
+        .chars()
+        .map(|c| if c.is_control() || r#"<>:"|?*"#.contains(c) { '_' } else { c })
+        .collect();
+    let cleaned = cleaned.trim().trim_matches('.');
+    if cleaned.is_empty() { "file".into() } else { cleaned.chars().take(120).collect() }
+}
+
+/// A file's media type: by content for images, else by extension.
+fn mime_type(name: &str, bytes: &[u8]) -> &'static str {
+    match bytes {
+        [0x89, b'P', b'N', b'G', ..] => return "image/png",
+        [0xFF, 0xD8, 0xFF, ..] => return "image/jpeg",
+        [b'G', b'I', b'F', b'8', ..] => return "image/gif",
+        [b'R', b'I', b'F', b'F', _, _, _, _, b'W', b'E', b'B', b'P', ..] => return "image/webp",
+        _ => {}
+    }
+    let ext = name.rsplit_once('.').map(|(_, e)| e.to_ascii_lowercase()).unwrap_or_default();
+    match ext.as_str() {
+        "svg" => "image/svg+xml",
+        "pdf" => "application/pdf",
+        "json" => "application/json",
+        "md" | "markdown" => "text/markdown",
+        "html" | "htm" => "text/html",
+        "csv" => "text/csv",
+        "txt" | "log" | "rs" | "ts" | "tsx" | "js" | "jsx" | "py" | "toml" | "yaml" | "yml" | "css" | "go"
+        | "java" | "c" | "h" | "cpp" | "sh" | "ps1" | "sql" | "xml" => "text/plain",
+        _ if std::str::from_utf8(&bytes[..bytes.len().min(4096)]).is_ok() => "text/plain",
+        _ => "application/octet-stream",
+    }
+}
+
 pub fn new_id() -> String {
     uuid::Uuid::new_v4().to_string()
 }
@@ -409,7 +487,7 @@ mod tests {
         b.created_at = a.created_at - 10;
         b.title = Some("B".into());
         store.save_chat(&b).unwrap();
-        store.start_turn(&b.id, "hi").unwrap();
+        store.start_turn(&b.id, Some("hi"), Vec::new()).unwrap();
 
         let chats = store.chats().unwrap();
         assert_eq!(chats[0].id, b.id);
@@ -426,7 +504,7 @@ mod tests {
         let (_dir, store) = store();
         let chat = store.create_chat("/a", ChatConfig::default()).unwrap();
         store.update_chat(&chat.id, |c| c.archived = true).unwrap();
-        let (_, chat) = store.start_turn(&chat.id, "hi").unwrap();
+        let (_, chat) = store.start_turn(&chat.id, Some("hi"), Vec::new()).unwrap();
         assert!(!chat.archived);
     }
 
@@ -434,7 +512,7 @@ mod tests {
     fn a_recorded_turn_folds_journals_and_finishes() {
         let (_dir, store) = store();
         let chat = store.create_chat("/a", ChatConfig::default()).unwrap();
-        let (mut turn, _) = store.start_turn(&chat.id, "hello").unwrap();
+        let (mut turn, _) = store.start_turn(&chat.id, Some("hello"), Vec::new()).unwrap();
         let session = AgentEvent::SessionStarted {
             session_id: "s1".into(),
         };
@@ -459,7 +537,7 @@ mod tests {
 
         let messages = store.messages(&chat.id).unwrap();
         assert_eq!(messages.len(), 2);
-        assert_eq!(messages[0], turn.user);
+        assert_eq!(Some(&messages[0]), turn.user.as_ref());
         assert_eq!(messages[1], turn.assistant);
         assert_eq!(messages[1].status, Some(MessageStatus::Complete));
         assert!(
@@ -476,7 +554,7 @@ mod tests {
         let message_id = {
             let store = Store::open(dir.path()).unwrap();
             let chat = store.create_chat("/a", ChatConfig::default()).unwrap();
-            let (mut turn, _) = store.start_turn(&chat.id, "hello").unwrap();
+            let (mut turn, _) = store.start_turn(&chat.id, Some("hello"), Vec::new()).unwrap();
             store.record(&mut turn, &text("partial ")).unwrap();
             // Within the save interval: journaled, not yet saved.
             store.record(&mut turn, &text("reply")).unwrap();

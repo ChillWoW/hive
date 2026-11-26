@@ -1,4 +1,4 @@
-import { useImperativeHandle, useLayoutEffect, useRef, type KeyboardEvent, type Ref } from "react";
+import { useImperativeHandle, useLayoutEffect, useRef, type ClipboardEvent, type KeyboardEvent, type Ref } from "react";
 import { cn } from "@/lib/cn";
 import { useResizeObserver } from "@/lib/useResizeObserver";
 
@@ -26,6 +26,7 @@ export function PromptField({
     onChange,
     onFocusChange,
     onKeyDown,
+    onPaste,
     className
 }: {
     ref?: Ref<PromptFieldHandle>;
@@ -34,6 +35,7 @@ export function PromptField({
     onChange: (text: string) => void;
     onFocusChange?: (focused: boolean) => void;
     onKeyDown?: (event: KeyboardEvent<HTMLTextAreaElement>) => boolean;
+    onPaste?: (event: ClipboardEvent<HTMLTextAreaElement>) => void;
     className?: string;
 }) {
     const fieldRef = useRef<HTMLTextAreaElement>(null);
@@ -85,6 +87,7 @@ export function PromptField({
             onChange={(event) => onChange(event.target.value)}
             onFocus={() => onFocusChange?.(true)}
             onBlur={() => onFocusChange?.(false)}
+            onPaste={onPaste}
             onKeyDown={(event) => {
                 if (onKeyDown?.(event)) event.preventDefault();
             }}

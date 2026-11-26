@@ -1,6 +1,7 @@
 import { useRef, useState, type ReactNode } from "react";
 import { CaretDownIcon } from "@phosphor-icons/react";
 import type { Message } from "@/proto";
+import { AttachmentChip } from "@/features/chats";
 import { cn } from "@/lib/cn";
 import { useResizeObserver } from "@/lib/useResizeObserver";
 
@@ -51,15 +52,28 @@ function promptText(message: Message): string {
     return message.parts.flatMap((p) => (p.kind === "text" ? [p.text] : [])).join("\n\n");
 }
 
-/** What the user sent, as a bubble on the right; a long prompt is collapsed to five lines until expanded. */
+/**
+ * What the user sent, as a bubble on the right, with the files sent along
+ * above it; a long prompt is collapsed to five lines until expanded.
+ */
 export function UserMessage({ message }: { message: Message }) {
     const text = promptText(message);
-    if (!text.trim()) return null;
+    const attachments = message.attachments ?? [];
+    if (!text.trim() && attachments.length === 0) return null;
     return (
-        <div className="flex max-w-[75%] flex-col items-end self-end">
-            <div className="rounded-2xl rounded-br-md bg-raised px-3 py-1.5 text-sm leading-6 break-words whitespace-pre-wrap text-text">
-                <Collapsible>{text}</Collapsible>
-            </div>
+        <div className="flex max-w-[75%] flex-col items-end gap-1.5 self-end">
+            {attachments.length > 0 && (
+                <div className="flex flex-wrap justify-end gap-1.5">
+                    {attachments.map((attachment) => (
+                        <AttachmentChip key={attachment.path} attachment={attachment} />
+                    ))}
+                </div>
+            )}
+            {text.trim() && (
+                <div className="rounded-2xl rounded-br-md bg-raised px-3 py-1.5 text-sm leading-6 break-words whitespace-pre-wrap text-text">
+                    <Collapsible>{text}</Collapsible>
+                </div>
+            )}
         </div>
     );
 }

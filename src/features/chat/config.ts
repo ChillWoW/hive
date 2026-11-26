@@ -5,11 +5,12 @@ import { useComposerStore } from "@/features/composer/store";
 import { defaultConfig, fitConfig, useCatalog } from "@/features/models";
 import { useCatalogStore } from "@/features/models/catalog";
 import { useSettingsStore } from "@/features/settings";
-import type { ChatSettings } from "@/features/settings/types";
+import type { Settings } from "@/features/settings/types";
 
 /** The new chat's config: the one picked last on this device, else Settings' defaults. */
-function newConfig(picked: ChatConfig | null, settings: ChatSettings, catalog: Catalog | null) {
-    const config = picked ?? defaultConfig(settings);
+function newConfig(picked: ChatConfig | null, settings: Settings, catalog: Catalog | null) {
+    const fallback = defaultConfig(settings.chat, settings.claude.defaultAccess);
+    const config = picked ? { ...fallback, ...picked } : fallback;
     return catalog ? fitConfig(catalog, config) : config;
 }
 
@@ -17,21 +18,21 @@ function newConfig(picked: ChatConfig | null, settings: ChatSettings, catalog: C
 export function newChatConfig(): ChatConfig {
     return newConfig(
         useComposerStore.getState().newChatConfig,
-        useSettingsStore.getState().settings.chat,
+        useSettingsStore.getState().settings,
         useCatalogStore.getState().catalog
     );
 }
 
 /**
- * What the composer's model picker shows and edits: the open chat's config
- * (saved on the chat; its run picks it up from the next prompt), or in the
- * new-chat view the next chat's.
+ * What the composer's pickers show and edit: the open chat's config (saved
+ * on the chat; model and effort apply from its next prompt, access and plan
+ * mode at once), or in the new-chat view the next chat's.
  */
 export function useChatConfig(): [ChatConfig, (config: ChatConfig) => void] {
     const chat = useActiveChat();
     const catalog = useCatalog();
     const picked = useComposerStore((s) => s.newChatConfig);
-    const settings = useSettingsStore((s) => s.settings.chat);
+    const settings = useSettingsStore((s) => s.settings);
     if (!chat) {
         const set = (config: ChatConfig) => useComposerStore.getState().setNewChatConfig(config);
         return [newConfig(picked, settings, catalog), set];

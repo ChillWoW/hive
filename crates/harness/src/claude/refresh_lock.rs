@@ -30,7 +30,7 @@ const SETTLE_MAX: Duration = Duration::from_secs(40);
 /// `CLAUDE_SECURESTORAGE_CONFIG_DIR`, else `CLAUDE_CONFIG_DIR`, else
 /// `~/.claude`.
 fn config_dir() -> Option<PathBuf> {
-    let var = |name| std::env::var_os(name).filter(|v| !v.is_empty());
+    let var = super::overrides::env_var;
     var("CLAUDE_SECURESTORAGE_CONFIG_DIR")
         .or_else(|| var("CLAUDE_CONFIG_DIR"))
         .map(PathBuf::from)

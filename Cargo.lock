@@ -73,6 +73,7 @@ dependencies = [
  "log",
  "outcode-engine",
  "outcode-harness",
+ "outcode-mcp",
  "outcode-proto",
  "outcode-store",
  "reqwest",
@@ -2692,12 +2693,26 @@ dependencies = [
 name = "outcode-harness"
 version = "0.0.1"
 dependencies = [
+ "base64 0.22.1",
  "filetime",
  "outcode-proto",
  "serde",
  "serde_json",
  "thiserror 2.0.21",
  "tokio",
+]
+
+[[package]]
+name = "outcode-mcp"
+version = "0.0.1"
+dependencies = [
+ "outcode-harness",
+ "outcode-proto",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "uuid",
 ]
 
 [[package]]

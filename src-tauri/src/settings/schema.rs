@@ -9,7 +9,7 @@
 //! the document still deserializes, so a bad field falls back to its previous
 //! value instead of failing the whole file.
 
-use outcode_proto::ReasoningLevel;
+use outcode_proto::{AccessMode, ReasoningLevel};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -118,13 +118,26 @@ impl Default for KeyboardSettings {
     }
 }
 
-/// Claude Code, read by `src-tauri/src/chat.rs`.
+/// Claude Code, read by `src-tauri/src/chat.rs` and the frontend's new-chat
+/// config (`src/features/chat/config.ts`).
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct ClaudeSettings {
     /// The `claude` executable to run. Empty: found on PATH or where its
     /// installers put it.
     pub binary_path: String,
+    /// What a new chat's agent may do without asking.
+    pub default_access: AccessMode,
+    /// The context size, in tokens, Claude compacts the conversation at; 0
+    /// keeps its own default. Applies to runs started after a change.
+    pub auto_compact_window: u32,
+    /// Extra arguments for every chat's `claude`, split like a shell would.
+    pub launch_args: String,
+    /// Extra environment variables for every `claude`, as `KEY=value` lines.
+    pub env: String,
+    /// The folder Claude keeps its settings and login in (`CLAUDE_CONFIG_DIR`);
+    /// empty: its own (`~/.claude`).
+    pub config_dir: String,
 }
 
 /// Chats: their runs, read by `src-tauri/src/chat.rs`, and the defaults the
@@ -147,6 +160,23 @@ pub struct ChatSettings {
     /// The model for text runs (chat titles and other short labels): a
     /// Claude alias or id; empty: Claude's default.
     pub text_generation_model: String,
+    /// Thinking blocks start expanded in the transcript.
+    pub reasoning_expanded: bool,
+    /// Tool rows start expanded, showing their output.
+    pub tool_output_expanded: bool,
+    /// What sending does while a turn runs: wait for it, or stop it.
+    pub busy_send: BusySend,
+}
+
+/// What sending a prompt does while the chat's turn runs.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum BusySend {
+    /// Queue it; it goes once the turn ends.
+    #[default]
+    Queue,
+    /// Stop the turn and send it now.
+    Interrupt,
 }
 
 impl Default for ChatSettings {
@@ -158,6 +188,9 @@ impl Default for ChatSettings {
             idle_timeout_minutes: 15,
             auto_title: true,
             text_generation_model: "haiku".into(),
+            reasoning_expanded: false,
+            tool_output_expanded: false,
+            busy_send: BusySend::Queue,
         }
     }
 }
@@ -171,6 +204,12 @@ impl Settings {
         appearance.theme = non_empty(&appearance.theme, DEFAULT_THEME);
         appearance.font_family = non_empty(&appearance.font_family, DEFAULT_FONT_FAMILY);
         settings.claude.binary_path = settings.claude.binary_path.trim().into();
+        settings.claude.config_dir = settings.claude.config_dir.trim().into();
+        settings.claude.launch_args = settings.claude.launch_args.trim().into();
+        let window = &mut settings.claude.auto_compact_window;
+        if *window != 0 {
+            *window = (*window).clamp(10_000, 2_000_000);
+        }
         let model = &mut settings.chat.default_model;
         *model = non_empty(model, &ChatSettings::default().default_model);
         let idle = &mut settings.chat.idle_timeout_minutes;

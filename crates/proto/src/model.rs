@@ -5,6 +5,8 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
+use crate::agent::AccessMode;
+
 /// How hard a model thinks before answering (Claude's `--effort`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, TS)]
 #[serde(rename_all = "lowercase")]
@@ -76,6 +78,24 @@ pub struct ChatConfig {
     /// Selections for [`Model::options`]: option id → choice id.
     #[serde(default)]
     pub model_options: BTreeMap<String, String>,
+    /// What the agent may do without asking. Changes apply to a live run at
+    /// once.
+    #[serde(default)]
+    pub access: AccessMode,
+    /// Plan mode: each turn explores and proposes a plan instead of changing
+    /// anything; approving the plan lets that turn implement it.
+    #[serde(default)]
+    pub plan: bool,
+}
+
+impl ChatConfig {
+    /// The same config but for access and plan mode, which a live run
+    /// takes without restarting.
+    pub fn same_launch(&self, other: &ChatConfig) -> bool {
+        self.model == other.model
+            && self.reasoning == other.reasoning
+            && self.model_options == other.model_options
+    }
 }
 
 impl ChatConfig {

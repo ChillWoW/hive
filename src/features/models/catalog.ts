@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { Catalog, ChatConfig, Model, ReasoningLevel } from "@/proto";
+import type { AccessMode, Catalog, ChatConfig, Model, ReasoningLevel } from "@/proto";
 import type { ChatSettings } from "@/features/settings/types";
 import { backend } from "@/lib/backend";
 
@@ -136,17 +136,23 @@ export function withFastMode(config: ChatConfig, on: boolean): ChatConfig {
 export function fitConfig(catalog: Catalog, config: ChatConfig): ChatConfig {
     const model = resolveModel(catalog, config);
     return {
+        ...config,
         model: model?.id,
         reasoning: resolveReasoning(model, config),
-        modelOptions: fitOptions(model, config.modelOptions)
+        modelOptions: fitOptions(model, config.modelOptions),
+        // Remembered before access and plan mode existed.
+        access: config.access ?? "full-access",
+        plan: config.plan ?? false
     };
 }
 
 /** What Settings › Chats says a new chat starts on. */
-export function defaultConfig(settings: ChatSettings): ChatConfig {
+export function defaultConfig(settings: ChatSettings, access: AccessMode = "full-access"): ChatConfig {
     return {
         model: settings.defaultModel,
         reasoning: settings.defaultEffort,
-        modelOptions: settings.defaultFastMode ? { [FAST_MODE]: "on" } : {}
+        modelOptions: settings.defaultFastMode ? { [FAST_MODE]: "on" } : {},
+        access,
+        plan: false
     };
 }

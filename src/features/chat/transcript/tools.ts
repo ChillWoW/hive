@@ -9,6 +9,7 @@ import {
     PencilSimpleIcon,
     PlugsConnectedIcon,
     PuzzlePieceIcon,
+    RobotIcon,
     StopIcon,
     TerminalIcon,
     TerminalWindowIcon,
@@ -71,9 +72,12 @@ export function pushCall(items: GroupItem[], part: ToolPart) {
     items.push({ kind: "call", part });
 }
 
-/** A call still waiting for its result while the turn runs. */
+/**
+ * A call still waiting for its result while the turn runs, or a subagent
+ * still working (in the background, it outlives its turn).
+ */
 export function isRunning(part: ToolPart, streaming: boolean) {
-    return streaming && !part.resolved;
+    return (streaming && !part.resolved) || part.subagent === "running";
 }
 
 /** `path` relative to `cwd` when it's inside it. */
@@ -238,6 +242,8 @@ export function iconOf(call: ToolCall): ToolIcon {
             return ListChecksIcon;
         case "mcp":
             return PlugsConnectedIcon;
+        case "subagent":
+            return RobotIcon;
         default:
             return PuzzlePieceIcon;
     }
@@ -319,6 +325,8 @@ export function chipContent(
                 serverLabel(call.server),
                 [toolWords(call.tool), mainArg(call.input)].filter(Boolean).join(" · ")
             );
+        case "subagent":
+            return chip("Agent", [call.agent, call.description].filter(Boolean).join(" · "));
         case "unknown":
             return chip("Tool", call.name);
     }
@@ -336,7 +344,8 @@ const TENSES: Record<string, [running: string, done: string]> = {
     Web: ["Searching web", "Searched web"],
     Todo: ["Updating todos", "Todos"],
     "Load tools": ["Loading tools", "Loaded tools"],
-    "Find tools": ["Finding tools", "Found tools"]
+    "Find tools": ["Finding tools", "Found tools"],
+    Agent: ["Running agent", "Agent"]
 };
 
 /** A call's label in the tense of its line: "Running" while it runs, "Ran" after. */
@@ -362,6 +371,7 @@ export function summarize(items: GroupItem[]): SummarySegment[] {
     let searches = 0;
     let fetches = 0;
     let todos = 0;
+    let agents = 0;
     let other = 0;
     let failed = 0;
     const edited = new Set<string>();
@@ -398,6 +408,9 @@ export function summarize(items: GroupItem[]): SummarySegment[] {
             case "todo":
                 todos++;
                 break;
+            case "subagent":
+                agents++;
+                break;
             default:
                 other++;
         }
@@ -413,6 +426,7 @@ export function summarize(items: GroupItem[]): SummarySegment[] {
     if (searches) add(`searched ${plural(searches, "time", "times")}`);
     if (fetches) add(`fetched ${plural(fetches, "page", "pages")}`);
     if (todos) add("updated todos");
+    if (agents) add(`ran ${plural(agents, "agent", "agents")}`);
     if (other) add(`called ${plural(other, "tool", "tools")}`);
     if (segments.length === 0) add(plural(items.length, "tool", "tools"));
     if (failed) segments.push({ text: `${failed} failed`, danger: true });

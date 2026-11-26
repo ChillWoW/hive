@@ -1,8 +1,10 @@
 mod chat;
+mod claude;
 mod files;
 mod folders;
 mod fonts;
 mod http;
+mod mcp;
 mod settings;
 mod themes;
 mod updater;
@@ -43,10 +45,16 @@ pub fn run() {
         })
         .setup(|app| {
             let data_dir = data_dir(app)?;
-            app.manage(settings::SettingsFile::open(&data_dir)?);
+            let settings_file = settings::SettingsFile::open(&data_dir)?;
+            claude::configure(&settings_file.get());
+            app.manage(settings_file);
+            app.manage(claude::SignIns::default());
+            app.manage(claude::SignInResult::default());
             app.manage(themes::ThemesDir::open(data_dir.join("themes"))?);
             app.manage(updater::Updates::default());
             let engine = chat::engine(app.handle(), &data_dir)?;
+            app.manage(mcp::SecretRequests::default());
+            mcp::start(app.handle(), &data_dir, &engine);
             app.manage(engine);
             app.manage(chat::Watches::default());
             Ok(())
@@ -57,7 +65,27 @@ pub fn run() {
             chat::claude_catalog,
             chat::chat_send,
             chat::chat_interrupt,
+            chat::chat_answer,
+            chat::chat_stop_task,
+            chat::chat_queue_cancel,
+            chat::chat_queue_send_now,
+            chat::chat_queue_reorder,
+            chat::claude_commands,
+            chat::attachment_save,
+            chat::attachment_add,
+            chat::attachment_data_url,
             chat::chat_rename,
+            mcp::secret_answer,
+            claude::claude_status,
+            claude::claude_sign_in_start,
+            claude::claude_sign_in_wait,
+            claude::claude_sign_in_code,
+            claude::claude_sign_in_cancel,
+            claude::claude_sign_out,
+            claude::claude_update,
+            claude::claude_install,
+            claude::claude_latest_version,
+            claude::claude_usage,
             chat::chat_set_pinned,
             chat::chat_set_archived,
             chat::chat_delete,

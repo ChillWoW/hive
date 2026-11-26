@@ -10,11 +10,15 @@ export type RunRequest = {
  */
 cwd: string, prompt: string, 
 /**
+ * Absolute paths of files sent with the prompt.
+ */
+attachments?: Array<string>, 
+/**
  * A session to pick up (the CLI's own id, from [`AgentEvent::SessionStarted`]),
  * so the agent remembers the chat so far.
  */
 resume?: string, 
 /**
- * Model, effort and options; unset ones are the CLI's own.
+ * Model, effort, options, access and plan mode; unset ones are the CLI's own.
  */
 config: ChatConfig, };

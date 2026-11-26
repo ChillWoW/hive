@@ -1,4 +1,7 @@
 import { SidebarSimpleIcon } from "@phosphor-icons/react";
+import { useActiveChat } from "@/features/chats";
+import { ClaudeMark } from "@/features/models";
+import { UNTITLED } from "@/features/sidebar/ChatRow";
 import { UpdateButton } from "@/features/updater";
 import { useShortcut } from "@/keybindings";
 import { isMac } from "@/lib/platform";
@@ -18,11 +21,12 @@ const MAC_TRAFFIC_LIGHTS = "w-[72px]";
 /**
  * The frameless window's title strip, laid over the top of every column:
  * draggable, the sidebar toggle at its start (its section as wide as the
- * sidebar), the update icon, the right sidebar and file panel toggles and,
+ * sidebar), the open chat's title, the update icon, the right sidebar and file panel toggles and,
  * on Windows/Linux, the window controls at its end.
  */
 export function TopBar() {
     const { fullscreen } = useWindowState();
+    const chat = useActiveChat();
     const { visible, widths } = usePanelLayout();
     const sidebarOpen = visible.left;
     const rightOpen = visible.right;
@@ -63,8 +67,19 @@ export function TopBar() {
                 </IconButton>
             </div>
 
-            {/* An empty strip to grab the window by. */}
-            <div data-tauri-drag-region className="h-full min-w-0 flex-1" />
+            {/* The open chat's title after its agent's mark, then an empty
+                strip to grab the window by. */}
+            <div data-tauri-drag-region className="flex h-full min-w-0 flex-1 items-center gap-1.5 px-3">
+                {chat && (
+                    <>
+                        <ClaudeMark className="size-3.5 shrink-0" />
+                        <span data-tauri-drag-region className="truncate text-[13px] text-text">
+                            {chat.title?.trim() || UNTITLED}
+                        </span>
+                    </>
+                )}
+                <div data-tauri-drag-region className="h-full min-w-4 flex-1" />
+            </div>
 
             <div data-tauri-drag-region className="flex h-full shrink-0 items-center gap-0.5 px-2">
                 <UpdateButton />

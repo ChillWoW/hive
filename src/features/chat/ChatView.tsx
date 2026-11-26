@@ -1,8 +1,8 @@
 import { useLayoutEffect, useMemo, useRef, type ReactNode } from "react";
-import type { Message } from "@/proto";
+import type { Attachment, Message } from "@/proto";
 import { cn } from "@/lib/cn";
-import { useActiveChat, useChatsStore } from "@/features/chats/store";
-import { Composer, FolderPicker } from "@/features/composer";
+import { useActiveChat, useChatsStore, useSession } from "@/features/chats/store";
+import { Composer, ContextMeter, FolderPicker } from "@/features/composer";
 import { toast } from "@/ui";
 import { useChatConfig } from "./config";
 import { AssistantMessage } from "./transcript/AssistantMessage";
@@ -10,7 +10,11 @@ import { ChatCwd, KnownFiles } from "./transcript/context";
 import { foldPath, fullPath, parseFileRef, resolveFileRef } from "./transcript/filePaths";
 import { pathOf } from "./transcript/tools";
 import { UserMessage } from "./transcript/UserMessage";
-import { send, stop, useChatBusy, useChatStore } from "./store";
+import { answer, queue, send, stop, useChatBusy, useChatStore } from "./store";
+import { pendingInput } from "./fold";
+import { InputCard } from "./InputCard";
+import { SecretCard } from "./SecretCard";
+import { QueuedTray, TasksTray } from "./SessionTrays";
 
 /**
  * The column the transcript and the composer share: centred, at most
@@ -33,24 +37,47 @@ export function ChatView() {
     const messages = useChatStore((s) => s.messages);
     const loaded = useChatStore((s) => s.loaded);
     const busy = useChatBusy();
+    const session = useSession(chat?.id);
     const newChatCwd = useChatsStore((s) => s.newChatCwd);
     const cwd = chat?.cwd ?? newChatCwd ?? "";
     const known = useMemo(() => knownFiles(messages, cwd), [messages, cwd]);
     const [config, setConfig] = useChatConfig();
+    const lastReply = messages.findLast((m) => m.role === "assistant");
+    const waiting = lastReply?.status === "streaming" ? pendingInput(lastReply.parts) : undefined;
 
-    const onSend = (prompt: string) => {
+    const onSend = (prompt: string, attachments: Attachment[]) => {
         // The draft stays until there's somewhere to send it.
         if (!chat && !newChatCwd) {
             toast.error({ title: "Choose a folder first", description: "Pick where the agent should work." });
             return false;
         }
-        void send(prompt);
+        void send(prompt, attachments);
     };
 
     const composer = (
         <>
+            {session?.secrets[0] && <SecretCard key={session.secrets[0].id} request={session.secrets[0]} />}
+            {session && <TasksTray tasks={session.tasks} onStop={queue.stopTask} />}
+            {session && (
+                <QueuedTray
+                    queued={session.queued}
+                    held={session.held}
+                    onSendNow={queue.sendNow}
+                    onCancel={queue.cancel}
+                />
+            )}
+            {waiting && (
+                <ChatCwd value={cwd || undefined}>
+                    <InputCard
+                        key={waiting.requestId}
+                        part={waiting}
+                        onAnswer={(response) => answer(waiting.requestId, response)}
+                    />
+                </ChatCwd>
+            )}
             <Composer
                 chatId={chat?.id ?? null}
+                cwd={cwd}
                 config={config}
                 onConfigChange={setConfig}
                 onSend={onSend}
@@ -63,6 +90,9 @@ export function ChatView() {
                     locked={!!chat}
                     onChange={(path) => useChatsStore.getState().setNewChatCwd(path)}
                 />
+                <span className="ml-auto flex items-center">
+                    <ContextMeter context={session?.context} />
+                </span>
             </div>
         </>
     );

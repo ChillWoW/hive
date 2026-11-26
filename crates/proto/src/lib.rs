@@ -8,12 +8,14 @@ pub mod chat;
 pub mod fold;
 pub mod message;
 pub mod model;
+pub mod provider;
 
 pub use agent::*;
 pub use chat::*;
-pub use fold::fold_event;
+pub use fold::{fold_event, has_running_spawn, has_spawn, stamp_event};
 pub use message::*;
 pub use model::*;
+pub use provider::*;
 
 #[cfg(test)]
 mod export {
@@ -41,6 +43,9 @@ mod export {
         ChatsUpdate::export_all(&cfg).unwrap();
         MessagesUpdate::export_all(&cfg).unwrap();
         Catalog::export_all(&cfg).unwrap();
+        ProviderStatus::export_all(&cfg).unwrap();
+        UsageWindow::export_all(&cfg).unwrap();
+        SignInStarted::export_all(&cfg).unwrap();
 
         let mut modules = Vec::new();
         collect_modules(&dir, "", &mut modules);

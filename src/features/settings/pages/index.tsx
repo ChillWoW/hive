@@ -4,14 +4,14 @@ import {
     InfoIcon,
     KeyboardIcon,
     PaletteIcon,
-    TerminalWindowIcon,
+    PlugsConnectedIcon,
     type Icon
 } from "@phosphor-icons/react";
 import type { SettingsPageId } from "../store";
 import { AboutPage } from "./AboutPage";
 import { AppearancePage } from "./AppearancePage";
 import { ChatsPage } from "./ChatsPage";
-import { ClaudePage } from "./ClaudePage";
+import { ProvidersPage } from "./ProvidersPage";
 import { KeyboardPage } from "./KeyboardPage";
 
 export type SettingsPage = {
@@ -26,7 +26,7 @@ export const SETTINGS_PAGES: readonly SettingsPage[] = [
     { id: "appearance", label: "Appearance", icon: PaletteIcon, Component: AppearancePage },
     { id: "keyboard", label: "Keyboard", icon: KeyboardIcon, Component: KeyboardPage },
     { id: "chats", label: "Chats", icon: ChatsCircleIcon, Component: ChatsPage },
-    { id: "claude", label: "Claude Code", icon: TerminalWindowIcon, Component: ClaudePage },
+    { id: "providers", label: "Providers", icon: PlugsConnectedIcon, Component: ProvidersPage },
     { id: "about", label: "About", icon: InfoIcon, Component: AboutPage }
 ];
 

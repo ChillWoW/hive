@@ -8,12 +8,12 @@ use std::sync::Mutex;
 use std::time::Duration;
 
 use outcode_engine::{Engine, Hooks, WatchId};
-use outcode_proto::{Catalog, Chat, ChatConfig, ChatsUpdate, MessagesUpdate};
+use outcode_proto::{Attachment, Catalog, Chat, ChatConfig, ChatsUpdate, InputResponse, MessagesUpdate, SlashCommand};
 use outcode_store::Store;
 use tauri::ipc::Channel;
 use tauri::{AppHandle, Manager, State, Webview};
 
-use crate::settings::SettingsFile;
+use crate::settings::{BusySend, SettingsFile};
 
 /// Opens the store under `data_dir`, closes turns a crash left open, and
 /// starts the engine: Claude runs from `claude.binaryPath` (else found), and
@@ -29,8 +29,10 @@ pub fn engine(app: &AppHandle, data_dir: &Path) -> Result<Engine, Box<dyn std::e
     Ok(Engine::new(
         store,
         Hooks {
-            spawn: Box::new(move |request| {
+            spawn: Box::new(move |mut request| {
                 let binary = binary(&spawn);
+                let window = spawn.state::<SettingsFile>().get().claude.auto_compact_window;
+                request.auto_compact_window = (window != 0).then_some(window);
                 outcode_harness::claude::run(request, binary.as_deref())
             }),
             text: Box::new(move |prompt| {
@@ -115,20 +117,122 @@ pub async fn claude_catalog(app: AppHandle) -> Catalog {
     outcode_harness::claude::catalog(binary.as_deref())
 }
 
-/// Sends a prompt; the reply streams to the chat's message watchers.
+/// The commands and skills Claude offers in `cwd` (a chat's run lists its
+/// own in its session once it starts).
+#[tauri::command]
+pub async fn claude_commands(app: AppHandle, cwd: String) -> Result<Vec<SlashCommand>, String> {
+    let binary = binary(&app);
+    outcode_harness::claude::commands(&cwd, binary.as_deref())
+        .await
+        .map_err(err)
+}
+
+/// Sends a prompt with the files attached to it ([`attachment_save`]); the
+/// reply streams to the chat's message watchers. While a turn runs it
+/// waits in the chat's queue, or stops it (`chat.busySend`).
 #[tauri::command]
 pub async fn chat_send(
+    app: AppHandle,
     engine: State<'_, Engine>,
     chat_id: String,
     prompt: String,
+    attachments: Option<Vec<Attachment>>,
 ) -> Result<(), String> {
-    engine.send(&chat_id, prompt).map_err(err)
+    let attachments = attachments.unwrap_or_default();
+    if let Some(stray) = attachments
+        .iter()
+        .find(|a| !engine.store().is_attachment(Path::new(&a.path)))
+    {
+        return Err(format!("{} isn't an attachment", stray.path));
+    }
+    // `chat.busySend`: a prompt sent mid-turn waits, or stops the turn.
+    let now = app.state::<SettingsFile>().get().chat.busy_send == BusySend::Interrupt;
+    engine.send_with(&chat_id, prompt, attachments, now).map_err(err)
 }
 
 /// Stops the chat's running turn; its run stays up for the next prompt.
 #[tauri::command]
 pub fn chat_interrupt(engine: State<'_, Engine>, chat_id: String) {
     engine.interrupt(&chat_id);
+}
+
+/// Answers a question or approval the chat's turn waits on.
+#[tauri::command]
+pub fn chat_answer(
+    engine: State<'_, Engine>,
+    chat_id: String,
+    request_id: String,
+    response: InputResponse,
+) -> Result<(), String> {
+    engine.answer(&chat_id, &request_id, response).map_err(err)
+}
+
+/// Stops one of the chat's background tasks.
+#[tauri::command]
+pub fn chat_stop_task(engine: State<'_, Engine>, chat_id: String, task_id: String) -> Result<(), String> {
+    engine.stop_task(&chat_id, &task_id).map_err(err)
+}
+
+#[tauri::command]
+pub fn chat_queue_cancel(engine: State<'_, Engine>, chat_id: String, id: String) {
+    engine.cancel_queued(&chat_id, &id);
+}
+
+/// Stops the running turn and sends the queued prompt `id` next.
+#[tauri::command]
+pub fn chat_queue_send_now(engine: State<'_, Engine>, chat_id: String, id: String) -> Result<(), String> {
+    engine.send_queued_now(&chat_id, &id).map_err(err)
+}
+
+#[tauri::command]
+pub fn chat_queue_reorder(engine: State<'_, Engine>, chat_id: String, ids: Vec<String>) {
+    engine.reorder_queued(&chat_id, &ids);
+}
+
+/// Largest file that can be attached.
+const MAX_ATTACHMENT_BYTES: usize = 32 * 1024 * 1024;
+
+/// Keeps a copy of a file to send with a prompt; `data` is its base64.
+#[tauri::command]
+pub async fn attachment_save(engine: State<'_, Engine>, name: String, data: String) -> Result<Attachment, String> {
+    use base64::Engine as _;
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(data.as_bytes())
+        .map_err(err)?;
+    if bytes.len() > MAX_ATTACHMENT_BYTES {
+        return Err(format!("{name} is too big to attach (32 MB at most)."));
+    }
+    engine.store().save_attachment(&name, &bytes).map_err(err)
+}
+
+/// Copies a file on disk to send with a prompt.
+#[tauri::command]
+pub async fn attachment_add(engine: State<'_, Engine>, path: String) -> Result<Attachment, String> {
+    let path = PathBuf::from(path);
+    let meta = std::fs::metadata(&path).map_err(err)?;
+    if !meta.is_file() {
+        return Err(format!("{} isn't a file", path.display()));
+    }
+    if meta.len() as usize > MAX_ATTACHMENT_BYTES {
+        return Err(format!("{} is too big to attach (32 MB at most).", path.display()));
+    }
+    let bytes = std::fs::read(&path).map_err(err)?;
+    let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    engine.store().save_attachment(&name, &bytes).map_err(err)
+}
+
+/// An attachment's bytes as a `data:` URL, for previews.
+#[tauri::command]
+pub async fn attachment_data_url(engine: State<'_, Engine>, path: String, mime_type: String) -> Result<String, String> {
+    use base64::Engine as _;
+    if !engine.store().is_attachment(Path::new(&path)) {
+        return Err(format!("{path} isn't an attachment"));
+    }
+    let bytes = std::fs::read(&path).map_err(err)?;
+    Ok(format!(
+        "data:{mime_type};base64,{}",
+        base64::engine::general_purpose::STANDARD.encode(bytes)
+    ))
 }
 
 /// A blank title clears it.

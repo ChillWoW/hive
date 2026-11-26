@@ -2,7 +2,7 @@
  * Mirror of `src-tauri/src/settings/schema.rs`; change both together.
  */
 
-import type { ReasoningLevel } from "@/proto";
+import type { AccessMode, ReasoningLevel } from "@/proto";
 
 export type AppearanceSettings = {
     /** A theme's name; see `src/features/theme/themes.ts`. */
@@ -32,7 +32,19 @@ export type KeyboardSettings = {
 export type ClaudeSettings = {
     /** The `claude` executable; empty finds it on PATH or in its install folders. */
     binaryPath: string;
+    /** What a new chat's agent may do without asking. */
+    defaultAccess: AccessMode;
+    /** The context size (tokens) Claude compacts at; 0 keeps its default. Applies to new runs. */
+    autoCompactWindow: number;
+    /** Extra arguments for every chat's `claude`, split like a shell would. */
+    launchArgs: string;
+    /** Extra environment variables for every `claude`, as `KEY=value` lines. */
+    env: string;
+    /** Claude's settings and login folder (`CLAUDE_CONFIG_DIR`); empty: `~/.claude`. */
+    configDir: string;
 };
+
+export type BusySend = "queue" | "interrupt";
 
 export type ChatSettings = {
     /** The model a new chat starts on (a catalog id). */
@@ -47,6 +59,12 @@ export type ChatSettings = {
     autoTitle: boolean;
     /** The model for text runs (chat titles, other short labels): a Claude alias or id; empty: Claude's default. */
     textGenerationModel: string;
+    /** Thinking blocks start expanded in the transcript. */
+    reasoningExpanded: boolean;
+    /** Tool rows start expanded, showing their output. */
+    toolOutputExpanded: boolean;
+    /** What sending does while a turn runs: queue it, or stop the turn and send now. */
+    busySend: BusySend;
 };
 
 export type Settings = {
@@ -75,7 +93,12 @@ export const DEFAULT_SETTINGS: Settings = {
         toggleFilePanel: "Mod+Shift+E"
     },
     claude: {
-        binaryPath: ""
+        binaryPath: "",
+        defaultAccess: "full-access",
+        autoCompactWindow: 0,
+        launchArgs: "",
+        env: "",
+        configDir: ""
     },
     chat: {
         defaultModel: "claude-opus-5-5",
@@ -83,6 +106,9 @@ export const DEFAULT_SETTINGS: Settings = {
         defaultFastMode: false,
         idleTimeoutMinutes: 15,
         autoTitle: true,
-        textGenerationModel: "haiku"
+        textGenerationModel: "haiku",
+        reasoningExpanded: false,
+        toolOutputExpanded: false,
+        busySend: "queue"
     }
 };

@@ -4,12 +4,14 @@ import { defaultConfig, ModelPicker } from "@/features/models";
 import { Select } from "@/ui";
 import { SettingRow, SettingsSection, SwitchRow } from "../SettingsSection";
 import { useSetting, useSettingsStore } from "../store";
-import { DEFAULT_SETTINGS } from "../types";
+import { DEFAULT_SETTINGS, type BusySend } from "../types";
 
 export function ChatsPage() {
     return (
         <>
             <DefaultsSection />
+            <SendingSection />
+            <TranscriptSection />
             <TitlesSection />
             <TextGenerationSection />
         </>
@@ -118,6 +120,67 @@ function TextGenerationSection() {
                         </Select.Trigger>
                         <Select.Content>
                             {options.map((option) => (
+                                <Select.Item key={option.value} value={option.value}>
+                                    {option.label}
+                                </Select.Item>
+                            ))}
+                        </Select.Content>
+                    </Select>
+                }
+            />
+        </SettingsSection>
+    );
+}
+
+function TranscriptSection() {
+    const reasoning = useSetting("chat", "reasoningExpanded");
+    const toolOutput = useSetting("chat", "toolOutputExpanded");
+
+    return (
+        <SettingsSection title="Transcript">
+            <SwitchRow
+                label="Expand thinking"
+                description="Show the agent's thoughts in full rather than a one-line preview"
+                keywords="reasoning thinking thoughts expand collapse transcript"
+                setting={reasoning}
+            />
+            <SwitchRow
+                label="Expand tool output"
+                description="Show each tool call's output, diff or command open"
+                keywords="tool output expand collapse transcript diff command"
+                setting={toolOutput}
+            />
+        </SettingsSection>
+    );
+}
+
+const BUSY_SEND: { value: BusySend; label: string }[] = [
+    { value: "queue", label: "Queue it" },
+    { value: "interrupt", label: "Stop and send" }
+];
+
+function SendingSection() {
+    const busySend = useSetting("chat", "busySend");
+
+    return (
+        <SettingsSection title="Sending">
+            <SettingRow
+                label="While the agent works"
+                description="Queue a prompt sent mid-turn until the turn ends, or stop the turn and send it at once"
+                keywords="busy send queue steer interrupt follow up while working"
+                setting={busySend}
+                controlClassName="w-44"
+                control={
+                    <Select
+                        items={BUSY_SEND}
+                        value={busySend.value}
+                        onValueChange={(next: BusySend | null) => next && busySend.set(next)}
+                    >
+                        <Select.Trigger aria-label="While the agent works">
+                            <Select.Value />
+                        </Select.Trigger>
+                        <Select.Content>
+                            {BUSY_SEND.map((option) => (
                                 <Select.Item key={option.value} value={option.value}>
                                     {option.label}
                                 </Select.Item>

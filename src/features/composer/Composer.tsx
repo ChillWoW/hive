@@ -1,13 +1,19 @@
-import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
-import { ArrowUpIcon, StopIcon } from "@phosphor-icons/react";
-import type { ChatConfig } from "@/proto";
+import { useEffect, useLayoutEffect, useRef, useState, type ClipboardEvent, type DragEvent, type KeyboardEvent } from "react";
+import { ArrowUpIcon, PaperclipIcon, StopIcon } from "@phosphor-icons/react";
+import type { Attachment, ChatConfig, SlashCommand } from "@/proto";
+import { AttachmentChip, attachFile } from "@/features/chats";
 import { ModelPicker } from "@/features/models";
+import { useSettingsStore } from "@/features/settings";
 import { cn } from "@/lib/cn";
 import { useResizeObserver } from "@/lib/useResizeObserver";
-import { Tooltip } from "@/ui";
+import { Spinner, toast, Tooltip } from "@/ui";
+import { pickerTriggerClassName } from "@/ui/chip";
+import { AccessPicker } from "./AccessPicker";
+import { matchCommands, slashQuery, useCommands } from "./commands";
 import { usePromptHistory } from "./history";
 import { PromptField, type PromptFieldHandle } from "./PromptField";
-import { composer, useComposerStore, useDraft } from "./store";
+import { SlashMenu } from "./SlashMenu";
+import { addDraftAttachments, composer, useComposerStore, useDraft, useDraftAttachments } from "./store";
 
 /** How long the box takes to reflow between its one-row and two-row shapes. */
 const MORPH_MS = 200;
@@ -39,28 +45,78 @@ const MODES: Record<Mode, { label: string; icon: typeof ArrowUpIcon }> = {
  */
 export function Composer({
     chatId,
+    cwd = "",
     config,
     onConfigChange,
     busy = false,
     onSend,
     onStop,
-    placeholder = "Ask anything",
+    placeholder,
     className
 }: {
     /** Whose draft the field holds; null is the new-chat view. */
     chatId: string | null;
+    /** The folder the chat works in: where `/` looks for commands. */
+    cwd?: string;
     config: ChatConfig;
     onConfigChange: (config: ChatConfig) => void;
-    /** The agent is working on a turn. */
+    /** The agent is working on a turn: a prompt sent now is queued. */
     busy?: boolean;
     /** False keeps the draft: the prompt couldn't be sent. */
-    onSend: (prompt: string) => boolean | void;
+    onSend: (prompt: string, attachments: Attachment[]) => boolean | void;
     onStop?: () => void;
     placeholder?: string;
     className?: string;
 }) {
+    const interrupts = useSettingsStore((s) => s.settings.chat.busySend === "interrupt");
+    placeholder ??= busy ? (interrupts ? "Stop and send a new prompt" : "Queue a follow-up") : "Ask anything";
     const draft = useDraft(chatId);
     const setDraft = (text: string) => composer.setDraft(chatId, text);
+    const attachments = useDraftAttachments(chatId);
+    const [uploading, setUploading] = useState(0);
+    const [dragging, setDragging] = useState(false);
+    const fileInputRef = useRef<HTMLInputElement>(null);
+
+    /** Copies `files` and attaches them to the draft. */
+    const attach = async (files: File[]) => {
+        if (files.length === 0) return;
+        setUploading((n) => n + files.length);
+        const added: Attachment[] = [];
+        for (const file of files) {
+            try {
+                added.push(await attachFile(file));
+            } catch (error) {
+                toast.error({
+                    title: `Couldn't attach ${file.name || "the file"}`,
+                    description: error instanceof Error ? error.message : String(error)
+                });
+            }
+        }
+        setUploading((n) => n - files.length);
+        if (added.length) addDraftAttachments(chatId, added);
+    };
+    const removeAttachment = (path: string) =>
+        useComposerStore.getState().setAttachments(
+            chatId,
+            attachments.filter((a) => a.path !== path)
+        );
+
+    // `/` at the start lists the commands and skills.
+    const commands = useCommands(chatId, cwd);
+    const query = slashQuery(draft);
+    const matches = query === undefined ? [] : matchCommands(commands, query);
+    // Which match is highlighted, for the query it was picked at: a new query starts at the top.
+    const [highlight, setHighlight] = useState({ query, index: 0 });
+    const highlighted = highlight.query === query ? Math.min(highlight.index, Math.max(matches.length - 1, 0)) : 0;
+    const setHighlighted = (next: number | ((index: number) => number)) =>
+        setHighlight({ query, index: typeof next === "function" ? next(highlighted) : next });
+    /** The draft the menu was closed at (Escape); it opens again once that changes. */
+    const [dismissedAt, setDismissedAt] = useState<string>();
+    const menuOpen = matches.length > 0 && dismissedAt !== draft;
+    const pickCommand = (command: SlashCommand) => {
+        fill(`/${command.name} `);
+        setDismissedAt(undefined);
+    };
     const focusToken = useComposerStore((s) => s.focusToken);
     const fieldRef = useRef<PromptFieldHandle>(null);
     const frameRef = useRef<HTMLDivElement>(null);
@@ -184,18 +240,22 @@ export function Composer({
     });
 
     const prompt = draft.trim();
-    const mode: Mode = busy && onStop ? "stop" : "send";
-    const disabled = mode === "send" && (!prompt || busy);
+    const canSend = (!!prompt || attachments.length > 0) && uploading === 0;
+    // While a turn runs, Stop until something is typed; then Send queues it
+    // and Stop moves beside it.
+    const mode: Mode = busy && onStop && !canSend ? "stop" : "send";
+    const disabled = mode === "send" && !canSend;
 
     const submit = () => {
         if (mode === "stop") {
             onStop?.();
             return;
         }
-        if (!prompt || busy) return;
-        if (onSend(prompt) !== false) {
+        if (!canSend) return;
+        if (onSend(prompt, attachments) !== false) {
             fill("");
-            rememberPrompt(prompt);
+            useComposerStore.getState().setAttachments(chatId, []);
+            if (prompt) rememberPrompt(prompt);
             recallRef.current = null;
         }
     };
@@ -236,16 +296,61 @@ export function Composer({
         return true;
     };
 
+    /** The command menu's keys, while it's open; true when one was taken. */
+    const menuKey = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+        if (!menuOpen || event.nativeEvent.isComposing) return false;
+        switch (event.key) {
+            case "ArrowDown":
+                setHighlighted((i) => (i + 1) % matches.length);
+                return true;
+            case "ArrowUp":
+                setHighlighted((i) => (i - 1 + matches.length) % matches.length);
+                return true;
+            case "Tab":
+            case "Enter": {
+                if (event.shiftKey) return false;
+                const command = matches[highlighted];
+                // A full name typed already: Enter sends it as is.
+                if (event.key === "Enter" && command?.name === query) return false;
+                if (command) pickCommand(command);
+                return true;
+            }
+            case "Escape":
+                setDismissedAt(draft);
+                event.stopPropagation();
+                return true;
+            default:
+                return false;
+        }
+    };
+
     /** The field's keys, before its own; true when one was taken. */
     const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+        if (menuKey(event)) return true;
+        // Shift+Tab toggles plan mode, as in Claude Code.
+        if (event.key === "Tab" && event.shiftKey && !event.ctrlKey && !event.altKey && !event.metaKey) {
+            onConfigChange({ ...config, plan: !config.plan });
+            return true;
+        }
         if (recall(event)) return true;
         if (event.key !== "Enter" || event.shiftKey) return false;
         // Enter mid-composition is the IME accepting a candidate.
         if (event.nativeEvent.isComposing) return false;
-        // Enter never stops a turn; that takes the button or Escape.
-        if (prompt && !busy) submit();
+        // Enter never stops a turn; that takes the button or Escape. While a
+        // turn runs it queues the prompt.
+        if (canSend) submit();
         return true;
     };
+
+    /** Pasted files (screenshots, copied files) are attached rather than typed. */
+    const onPaste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
+        const files = Array.from(event.clipboardData.files);
+        if (files.length === 0) return;
+        event.preventDefault();
+        void attach(files);
+    };
+
+    const hasFiles = (event: DragEvent) => Array.from(event.dataTransfer.types).includes("Files");
 
     const { label, icon: ModeIcon } = MODES[mode];
 
@@ -256,19 +361,70 @@ export function Composer({
                 submit();
             }}
             onKeyDown={(event) => {
-                if (event.key === "Escape" && mode === "stop") {
+                if (event.key === "Escape" && busy && onStop) {
                     event.preventDefault();
-                    onStop?.();
+                    onStop();
                 }
             }}
+            onDragOver={(event) => {
+                if (!hasFiles(event)) return;
+                event.preventDefault();
+                event.dataTransfer.dropEffect = "copy";
+                setDragging(true);
+            }}
+            onDragLeave={(event) => {
+                if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragging(false);
+            }}
+            onDrop={(event) => {
+                if (!hasFiles(event)) return;
+                event.preventDefault();
+                setDragging(false);
+                void attach(Array.from(event.dataTransfer.files));
+            }}
             className={cn(
-                "relative flex w-full flex-col gap-1.5 rounded-[22px] border border-border bg-surface p-1.5",
+                "@container/composer relative flex w-full flex-col gap-1.5 rounded-[22px] border border-border bg-surface p-1.5",
                 "transition-colors focus-within:border-muted/40",
+                dragging && "border-accent/60 bg-accent/5",
                 className
             )}
         >
+            {menuOpen && (
+                <SlashMenu
+                    commands={matches}
+                    highlighted={highlighted}
+                    onHighlight={setHighlighted}
+                    onPick={pickCommand}
+                />
+            )}
+            {(attachments.length > 0 || uploading > 0) && (
+                <div className="flex flex-wrap items-end gap-1.5 px-1 pt-1">
+                    {attachments.map((attachment) => (
+                        <AttachmentChip
+                            key={attachment.path}
+                            attachment={attachment}
+                            onRemove={() => removeAttachment(attachment.path)}
+                        />
+                    ))}
+                    {uploading > 0 && (
+                        <span className="flex h-9 items-center gap-1.5 px-2 text-xs text-muted">
+                            <Spinner label="Attaching" className="size-3.5" />
+                            Attaching
+                        </span>
+                    )}
+                </div>
+            )}
+            <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                hidden
+                onChange={(event) => {
+                    void attach(Array.from(event.currentTarget.files ?? []));
+                    event.currentTarget.value = "";
+                }}
+            />
             {/* Anchors the deck to its bottom, so while the height animates
-                it's the top row that is revealed or hidden and the controls,
+                it is the top row that is revealed or hidden and the controls,
                 on the bottom row in either shape, never move. */}
             <div
                 ref={frameRef}
@@ -286,7 +442,7 @@ export function Composer({
                     // controls' may shrink to nothing, so a narrow box
                     // truncates the model name rather than the field — and
                     // once the rest no longer fits, `measure` goes two rows.
-                    className="group/deck relative grid shrink-0 grid-cols-[minmax(8rem,1fr)_minmax(0,auto)] items-end gap-x-1 data-tall:gap-y-1.5"
+                    className="group/deck relative grid shrink-0 grid-cols-[auto_minmax(8rem,1fr)_minmax(0,auto)] items-end gap-x-1 data-tall:gap-y-1.5"
                 >
                     <span
                         ref={measureRef}
@@ -298,27 +454,72 @@ export function Composer({
                         {draft === "" ? placeholder : draft}
                     </span>
 
+                    {/* Left of the field on one row; the bottom row's first control on two. */}
+                    <Tooltip>
+                        <Tooltip.Trigger
+                            render={
+                                <button
+                                    type="button"
+                                    aria-label="Attach files"
+                                    onClick={() => fileInputRef.current?.click()}
+                                    className={cn(
+                                        pickerTriggerClassName,
+                                        "col-start-1 row-start-1 size-8 justify-center px-0 group-data-tall/deck:row-start-2"
+                                    )}
+                                >
+                                    <PaperclipIcon className="size-4" />
+                                </button>
+                            }
+                        />
+                        <Tooltip.Content side="top">Attach files (or paste, or drop them here)</Tooltip.Content>
+                    </Tooltip>
+
                     <PromptField
                         ref={fieldRef}
                         value={draft}
                         placeholder={placeholder}
-                        onChange={setDraft}
+                        onChange={(text) => {
+                            setDraft(text);
+                            if (dismissedAt !== undefined && text !== dismissedAt) setDismissedAt(undefined);
+                        }}
                         onKeyDown={onKeyDown}
-                        className="col-start-1 row-start-1 block w-full min-w-0 px-2.5 text-sm leading-6 text-text group-data-tall/deck:col-span-2"
+                        onPaste={onPaste}
+                        className="col-start-2 row-start-1 block w-full min-w-0 px-2 text-sm leading-6 text-text group-data-tall/deck:col-span-3 group-data-tall/deck:col-start-1 group-data-tall/deck:px-2.5"
                     />
 
                     <div
                         ref={controlsRef}
-                        className="col-start-2 row-start-1 flex min-w-0 items-center justify-end gap-0.5 group-data-tall/deck:col-span-2 group-data-tall/deck:col-start-1 group-data-tall/deck:row-start-2"
+                        className="col-start-3 row-start-1 flex min-w-0 items-center justify-end gap-0.5 group-data-tall/deck:col-span-2 group-data-tall/deck:col-start-2 group-data-tall/deck:row-start-2"
                     >
+                        <AccessPicker config={config} onChange={onConfigChange} />
+                        <span className="hidden flex-1 group-data-tall/deck:block" />
                         <ModelPicker config={config} onChange={onConfigChange} />
+                        {busy && onStop && mode === "send" && (
+                            <Tooltip>
+                                <Tooltip.Trigger
+                                    render={
+                                        <button
+                                            type="button"
+                                            aria-label="Stop"
+                                            onClick={onStop}
+                                            className="ml-1 inline-flex size-8 shrink-0 items-center justify-center rounded-full bg-hover text-text outline-none transition-colors hover:bg-border"
+                                        >
+                                            <StopIcon className="size-3.5" weight="fill" />
+                                        </button>
+                                    }
+                                />
+                                <Tooltip.Content side="top" shortcut="Escape">
+                                    Stop
+                                </Tooltip.Content>
+                            </Tooltip>
+                        )}
                         <Tooltip>
                             <Tooltip.Trigger
                                 render={
                                     <button
                                         key={mode}
                                         type="submit"
-                                        aria-label={label}
+                                        aria-label={busy && mode === "send" ? (interrupts ? "Stop and send" : "Queue") : label}
                                         disabled={disabled}
                                         className={cn(
                                             "ml-1 inline-flex size-8 shrink-0 items-center justify-center rounded-full outline-none select-none",
@@ -336,7 +537,11 @@ export function Composer({
                                 }
                             />
                             <Tooltip.Content side="top" shortcut={mode === "stop" ? "Escape" : "Enter"}>
-                                {label}
+                                {busy && mode === "send"
+                                    ? interrupts
+                                        ? "Stop the turn and send"
+                                        : "Queue: sends when this turn ends"
+                                    : label}
                             </Tooltip.Content>
                         </Tooltip>
                     </div>

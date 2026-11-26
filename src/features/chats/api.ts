@@ -1,5 +1,13 @@
 import { Channel } from "@tauri-apps/api/core";
-import type { Chat, ChatConfig, ChatsUpdate, MessagesUpdate } from "@/proto";
+import type {
+    Attachment,
+    Chat,
+    ChatConfig,
+    ChatsUpdate,
+    InputResponse,
+    MessagesUpdate,
+    SlashCommand
+} from "@/proto";
 import { backend } from "@/lib/backend";
 import { isTauri } from "@/lib/platform";
 import { dev } from "./dev";
@@ -43,13 +51,57 @@ export const chatsApi = {
     setConfig: (chatId: string, config: ChatConfig) =>
         backend<Chat>("chat_set_config", { chatId, config }, () => dev.update(chatId, { config })),
 
-    /** The reply streams to the chat's message watchers. */
-    send: (chatId: string, prompt: string) =>
-        backend<void>("chat_send", { chatId, prompt }, () => dev.send(chatId, prompt)),
+    /** The reply streams to the chat's message watchers; while a turn runs it's queued. */
+    send: (chatId: string, prompt: string, attachments: Attachment[] = []) =>
+        backend<void>("chat_send", { chatId, prompt, attachments }, () =>
+            dev.send(chatId, prompt, attachments)
+        ),
 
-    /** Stops the running turn; its reply ends as stopped. */
+    /** Stops the running turn; its reply ends as stopped, and the queue waits. */
     interrupt: (chatId: string) =>
         backend<void>("chat_interrupt", { chatId }, () => dev.interrupt(chatId)),
+
+    /** Answers the question or approval the turn waits on. */
+    answer: (chatId: string, requestId: string, response: InputResponse) =>
+        backend<void>("chat_answer", { chatId, requestId, response }, () =>
+            dev.answer(chatId, requestId, response)
+        ),
+
+    /** The user's answer to a secret card; null declines. Goes to a private file, never the chat. */
+    answerSecret: (id: string, value: string | null) =>
+        backend<void>("secret_answer", { id, value }, () => undefined),
+
+    stopTask: (chatId: string, taskId: string) =>
+        backend<void>("chat_stop_task", { chatId, taskId }, () => dev.stopTask(chatId, taskId)),
+
+    cancelQueued: (chatId: string, id: string) =>
+        backend<void>("chat_queue_cancel", { chatId, id }, () => dev.cancelQueued(chatId, id)),
+
+    /** Stops the running turn and sends the queued prompt next. */
+    sendQueuedNow: (chatId: string, id: string) =>
+        backend<void>("chat_queue_send_now", { chatId, id }, () => dev.sendQueuedNow(chatId, id)),
+
+    reorderQueued: (chatId: string, ids: string[]) =>
+        backend<void>("chat_queue_reorder", { chatId, ids }, () => dev.reorderQueued(chatId, ids)),
+
+    /** Claude's commands and skills in `cwd`, before a chat's run lists its own. */
+    commands: (cwd: string) =>
+        backend<SlashCommand[]>("claude_commands", { cwd }, () => dev.commands()),
+
+    /** Keeps a copy of a file to send; `data` is its base64. */
+    saveAttachment: (name: string, data: string) =>
+        backend<Attachment>("attachment_save", { name, data }, () => dev.saveAttachment(name, data)),
+
+    /** Keeps a copy of a file on disk to send. */
+    addAttachment: (path: string) => backend<Attachment>("attachment_add", { path }),
+
+    /** An attachment as a `data:` URL, for previews. */
+    attachmentUrl: (path: string, mimeType: string) =>
+        backend<string>(
+            "attachment_data_url",
+            { path, mimeType },
+            () => dev.attachmentUrl(path)
+        ),
 
     /** A blank title clears it. */
     rename: (chatId: string, title: string | null) =>

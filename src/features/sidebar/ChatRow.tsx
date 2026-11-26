@@ -8,7 +8,7 @@ import {
     PushPinSlashIcon,
     TrashIcon
 } from "@phosphor-icons/react";
-import { activity, chats, useChatsStore } from "@/features/chats";
+import { activity, chats, useChatsStore, useWorking } from "@/features/chats";
 import { cn } from "@/lib/cn";
 import { timeAgo, useMinuteClock } from "@/lib/time";
 import type { Chat } from "@/proto";
@@ -31,7 +31,7 @@ export const CARD_DWELL = 300;
  */
 export function ChatRow({ chat, onDelete }: { chat: Chat; onDelete: (chat: Chat) => void }) {
     const active = useChatsStore((s) => s.activeChatId === chat.id);
-    const working = useChatsStore((s) => !!s.working[chat.id]);
+    const working = useWorking(chat.id);
     const renaming = useSidebarStore((s) => s.renaming === chat.id);
     const setRenaming = useSidebarStore((s) => s.setRenaming);
     const now = useMinuteClock();

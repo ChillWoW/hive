@@ -1,10 +1,10 @@
 import { create } from "zustand";
-import type { Message, MessagesUpdate } from "@/proto";
+import type { Attachment, InputResponse, Message, MessagesUpdate } from "@/proto";
 import { chatsApi, type Unwatch } from "@/features/chats/api";
 import { chats, useChatsStore } from "@/features/chats/store";
 import { toast } from "@/ui";
 import { newChatConfig } from "./config";
-import { foldEvent } from "./fold";
+import { foldEvent, stampEvent } from "./fold";
 
 type ChatState = {
     /** The chat whose messages these are. */
@@ -35,7 +35,9 @@ export const useChatStore = create<ChatState>()((set, get) => ({
             case "event":
                 return set((s) => ({
                     messages: s.messages.map((m) =>
-                        m.id === update.messageId ? { ...m, parts: foldEvent(m.parts, update.event) } : m
+                        m.id === update.messageId
+                            ? { ...m, parts: stampEvent(foldEvent(m.parts, update.event), update.event, Date.now()) }
+                            : m
                     )
                 }));
         }
@@ -76,12 +78,13 @@ const warn = (title: string) => (error: unknown) =>
     toast.error({ title, description: error instanceof Error ? error.message : String(error) });
 
 /**
- * Sends a prompt to the open chat; from the new-chat view, first makes a
- * chat in the folder picked for it and opens that.
+ * Sends a prompt (and files) to the open chat; from the new-chat view, first
+ * makes a chat in the folder picked for it and opens that. While the chat's
+ * turn runs the prompt waits in its queue.
  */
-export async function send(prompt: string) {
+export async function send(prompt: string, attachments: Attachment[] = []) {
     const text = prompt.trim();
-    if (!text) return;
+    if (!text && attachments.length === 0) return;
     let chatId = useChatsStore.getState().activeChatId;
     if (!chatId) {
         const cwd = useChatsStore.getState().newChatCwd;
@@ -97,15 +100,44 @@ export async function send(prompt: string) {
         chats.select(chatId);
     }
     await attach(chatId);
-    await chatsApi.send(chatId, text).catch(warn("Couldn't send"));
+    await chatsApi.send(chatId, text, attachments).catch(warn("Couldn't send"));
 }
+
+/** The open chat's id, for actions on it. */
+const openChat = () => useChatsStore.getState().activeChatId;
 
 /** Stops the open chat's running turn. */
 export function stop() {
-    const chatId = useChatsStore.getState().activeChatId;
+    const chatId = openChat();
     if (chatId) void chatsApi.interrupt(chatId);
 }
 
-/** The open chat's turn is running: its last reply is still streaming. */
+/** Answers what the open chat's turn waits on. */
+export function answer(requestId: string, response: InputResponse) {
+    const chatId = openChat();
+    if (chatId) void chatsApi.answer(chatId, requestId, response).catch(warn("Couldn't answer"));
+}
+
+/** The open chat's queue and background tasks. */
+export const queue = {
+    cancel: (id: string) => {
+        const chatId = openChat();
+        if (chatId) void chatsApi.cancelQueued(chatId, id).catch(warn("Couldn't remove it"));
+    },
+    sendNow: (id: string) => {
+        const chatId = openChat();
+        if (chatId) void chatsApi.sendQueuedNow(chatId, id).catch(warn("Couldn't send"));
+    },
+    reorder: (ids: string[]) => {
+        const chatId = openChat();
+        if (chatId) void chatsApi.reorderQueued(chatId, ids).catch(warn("Couldn't reorder"));
+    },
+    stopTask: (taskId: string) => {
+        const chatId = openChat();
+        if (chatId) void chatsApi.stopTask(chatId, taskId).catch(warn("Couldn't stop it"));
+    }
+};
+
+/** The open chat's turn is running. */
 export const useChatBusy = () =>
-    useChatStore((s) => s.messages.at(-1)?.status === "streaming");
+    useChatsStore((s) => !!s.activeChatId && !!s.sessions[s.activeChatId]?.working);
