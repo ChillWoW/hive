@@ -168,7 +168,6 @@ function Project({ project, row, forceOpen }: { project: ProjectGroup; row: Row;
             foldKey={projectKey(path)}
             icon={<ProjectIcon path={path} selected={picked} />}
             name={name}
-            title={path}
             list={project.chats}
             row={row}
             forceOpen={forceOpen}
@@ -195,7 +194,6 @@ function Group({
     foldKey,
     icon,
     name,
-    title,
     list,
     row,
     counted,
@@ -205,8 +203,6 @@ function Group({
     foldKey: string;
     icon: ReactNode;
     name: string;
-    /** The header's native tooltip (a project's full path). */
-    title?: string;
     list: Chat[];
     row: Row;
     /** Shows how many chats it has after the name, muted. */
@@ -229,7 +225,6 @@ function Group({
                     type="button"
                     onClick={toggle}
                     aria-expanded={!collapsed}
-                    title={title}
                     className={cn(
                         "flex h-7 w-full items-center gap-2 rounded-md pr-8 pl-2 text-left text-xs font-medium outline-none",
                         "text-muted transition-colors hover:bg-raised hover:text-text",
