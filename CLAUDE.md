@@ -37,7 +37,7 @@ Branch `rework/app` is a from-scratch rebuild. So far: app shell (top bar, windo
 - `src-tauri/src/` — Tauri commands, registered in `lib.rs`: `chat.rs` (engine commands, watchers), `folders.rs`, `git.rs`, `files.rs`, `settings/`, `themes.rs`, `fonts.rs`, `updater.rs`, `http.rs`.
 - `crates/proto` — wire types; `cargo test -p outcode-proto` regenerates `src/proto/` (never edit by hand).
 - `crates/harness` — spawns agent CLIs, normalizes output to `AgentEvent`s. Live tests: `cargo test -p outcode-harness -- --ignored`.
-- `crates/git` — a folder's branches over the user's `git` CLI (list, switch, create, delete).
+- `crates/git` — a folder's branches over the user's `git` CLI (list, switch, create, delete), and chats' worktrees (add, restore, remove).
 - `crates/store` — SQLite (`outcode.db`: chats, messages) + per-chat JSONL event journals; `recover()` closes turns a crash left open.
 - `crates/engine` — chats and their live runs over the store: one run per chat, resumed by session id, closed when idle; `watch_chats` / `watch_messages` stream a snapshot then changes.
 

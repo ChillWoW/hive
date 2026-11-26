@@ -29,6 +29,9 @@ type ChatsState = {
 /** When a chat was last active: its latest message, else its creation. */
 export const activity = (chat: Chat) => chat.lastMessageAt ?? chat.createdAt;
 
+/** Where the chat's agent works: its worktree, else its folder (`Chat::work_dir`). */
+export const workDir = (chat: Chat) => chat.worktree?.path ?? chat.cwd;
+
 const byActivity = (a: Chat, b: Chat) => activity(b) - activity(a);
 
 // When this window first saw each background task: the CLIs don't say when one started.

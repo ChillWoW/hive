@@ -26,6 +26,7 @@ pub struct Settings {
     pub keyboard: KeyboardSettings,
     pub claude: ClaudeSettings,
     pub chat: ChatSettings,
+    pub worktrees: WorktreesSettings,
 }
 
 impl Default for Settings {
@@ -37,6 +38,7 @@ impl Default for Settings {
             keyboard: KeyboardSettings::default(),
             claude: ClaudeSettings::default(),
             chat: ChatSettings::default(),
+            worktrees: WorktreesSettings::default(),
         }
     }
 }
@@ -270,6 +272,47 @@ impl Default for ChatSettings {
     }
 }
 
+/// How a new worktree's branch is named.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum BranchNaming {
+    /// `<branch_prefix>/<slug of the first prompt>`.
+    #[default]
+    Static,
+    /// `<type>/<slug>`, the type (feat, fix, refactor, …) and slug written by
+    /// the text generation model from the first prompt; guessed from its
+    /// words when that fails.
+    Semantic,
+}
+
+/// Chats started in a worktree of their own, read by `src-tauri/src/chat.rs`
+/// as each is made; chats already in a worktree keep theirs.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct WorktreesSettings {
+    /// The folder new worktrees go in, a subfolder each. Empty (or not an
+    /// absolute path; a leading `~` is the home folder) uses
+    /// `<data dir>/worktrees`.
+    pub location: String,
+    pub branch_naming: BranchNaming,
+    /// With static naming, new branches are `<prefix>/<slug of the first
+    /// prompt>`; empty, just the slug.
+    pub branch_prefix: String,
+    /// Deleting a worktree chat deletes its branch too, merged or not.
+    pub delete_branch: bool,
+}
+
+impl Default for WorktreesSettings {
+    fn default() -> Self {
+        Self {
+            location: String::new(),
+            branch_naming: BranchNaming::Static,
+            branch_prefix: "outcode".into(),
+            delete_branch: false,
+        }
+    }
+}
+
 impl Settings {
     /// Arbitrary JSON in, a valid document out; never fails.
     pub fn sanitize(base: &Settings, input: &Value) -> Settings {
@@ -292,6 +335,9 @@ impl Settings {
         *idle = (*idle).clamp(1, 24 * 60);
         let model = &mut settings.chat.text_generation_model;
         *model = model.trim().into();
+        let worktrees = &mut settings.worktrees;
+        worktrees.location = worktrees.location.trim().into();
+        worktrees.branch_prefix = worktrees.branch_prefix.trim().trim_matches('/').into();
         settings
     }
 }

@@ -67,8 +67,9 @@ fn engine_titled(idle: Duration, title: Option<&'static str>) -> (tempfile::Temp
     let requests = Requests::default();
     let hooks = Hooks {
         spawn: Box::new(scripted(requests.clone())),
-        text: Box::new(move |_| title.map(|answer| Ok(answering(answer)))),
+        text: Box::new(move |_, _| title.map(|answer| Ok(answering(answer)))),
         idle: Box::new(move || idle),
+        worktrees: Box::new(WorktreeOptions::default),
     };
     let engine = Engine::new(Store::open(dir.path()).unwrap(), hooks);
     (dir, engine, requests)
@@ -229,8 +230,9 @@ fn held_engine() -> (tempfile::TempDir, Engine, Arc<Mutex<Vec<String>>>) {
     let seen = Arc::new(Mutex::new(Vec::new()));
     let hooks = Hooks {
         spawn: Box::new(held_run(seen.clone())),
-        text: Box::new(|_| None),
+        text: Box::new(|_, _| None),
         idle: Box::new(|| Duration::from_secs(60)),
+        worktrees: Box::new(WorktreeOptions::default),
     };
     let engine = Engine::new(Store::open(dir.path()).unwrap(), hooks);
     (dir, engine, seen)
@@ -324,8 +326,9 @@ async fn after_tool_stops_the_turn_once_its_tool_calls_finish() {
     let dir = tempfile::tempdir().unwrap();
     let hooks = Hooks {
         spawn: Box::new(tool_run),
-        text: Box::new(|_| None),
+        text: Box::new(|_, _| None),
         idle: Box::new(|| Duration::from_secs(60)),
+        worktrees: Box::new(WorktreeOptions::default),
     };
     let engine = Engine::new(Store::open(dir.path()).unwrap(), hooks);
     let chat = engine.create_chat("/a".into(), ChatConfig::default()).unwrap();
@@ -424,8 +427,9 @@ async fn a_run_that_cant_start_ends_the_turn_with_its_error() {
     let dir = tempfile::tempdir().unwrap();
     let hooks = Hooks {
         spawn: Box::new(|_| Err(HarnessError::NotInstalled("claude"))),
-        text: Box::new(|_| None),
+        text: Box::new(|_, _| None),
         idle: Box::new(|| Duration::from_secs(60)),
+        worktrees: Box::new(WorktreeOptions::default),
     };
     let engine = Engine::new(Store::open(dir.path()).unwrap(), hooks);
     let chat = engine.create_chat("/a".into(), ChatConfig::default()).unwrap();
@@ -598,8 +602,9 @@ async fn a_background_subagent_reports_into_the_reply_that_spawned_it() {
             });
             Ok(Run { events, handle })
         }),
-        text: Box::new(|_| None),
+        text: Box::new(|_, _| None),
         idle: Box::new(|| Duration::from_secs(60)),
+        worktrees: Box::new(WorktreeOptions::default),
     };
     let engine = Engine::new(Store::open(dir.path()).unwrap(), hooks);
     let chat = engine.create_chat("/a".into(), ChatConfig::default()).unwrap();
@@ -614,4 +619,88 @@ async fn a_background_subagent_reports_into_the_reply_that_spawned_it() {
         MessagePart::Tool { subagent: Some(outcode_proto::SubagentStatus::Done), thread, .. } if thread.len() == 1
     ), "{:?}", messages[1].parts);
     assert!(matches!(&messages[3].parts[..], [MessagePart::Text { text, .. }] if text == "second"));
+}
+
+/// Runs git in `cwd`; false when it failed (or isn't installed).
+fn git(cwd: &std::path::Path, args: &[&str]) -> bool {
+    std::process::Command::new("git")
+        .args(args)
+        .current_dir(cwd)
+        .output()
+        .is_ok_and(|o| o.status.success())
+}
+
+#[tokio::test]
+async fn a_worktree_chat_runs_in_its_worktree_and_takes_it_when_deleted() {
+    let project = tempfile::tempdir().unwrap();
+    let path = project.path();
+    let ready = [
+        &["init", "-q", "-b", "main"][..],
+        &["config", "user.email", "test@example.com"],
+        &["config", "user.name", "Test"],
+        &["config", "commit.gpgsign", "false"],
+        &["commit", "-q", "--allow-empty", "-m", "first"],
+    ]
+    .iter()
+    .all(|args| git(path, args));
+    if !ready {
+        return;
+    }
+    let worktrees = tempfile::tempdir().unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let requests = Requests::default();
+    let options = WorktreeOptions {
+        dir: worktrees.path().to_path_buf(),
+        semantic: true,
+        prefix: String::new(),
+        delete_branch: true,
+    };
+    let hooks = Hooks {
+        spawn: Box::new(scripted(requests.clone())),
+        // Only the branch run answers; titles are off.
+        text: Box::new(|kind, _| (kind == TextUse::Branch).then(|| Ok(answering("fix/login-redirect")))),
+        idle: Box::new(|| Duration::from_secs(60)),
+        worktrees: Box::new(move || options.clone()),
+    };
+    let engine = Engine::new(Store::open(dir.path()).unwrap(), hooks);
+
+    let steps = Mutex::new(Vec::new());
+    let new = NewWorktree {
+        base: None,
+        hint: Some("Fix the login redirect".into()),
+    };
+    let cwd = path.to_string_lossy().into_owned();
+    let chat = engine
+        .create_chat_in_worktree(cwd, ChatConfig::default(), new, |s| steps.lock().unwrap().push(s))
+        .await
+        .unwrap();
+    assert_eq!(
+        *steps.lock().unwrap(),
+        [
+            WorktreeStep::Naming,
+            WorktreeStep::CheckingOut {
+                branch: "fix/login-redirect".into()
+            }
+        ]
+    );
+    let worktree = chat.worktree.clone().unwrap();
+    assert_eq!(worktree.branch, "fix/login-redirect");
+    assert_eq!(worktree.base, "main");
+
+    // The agent runs there, and gets it back when it's gone.
+    std::fs::remove_dir_all(&worktree.root).unwrap();
+    engine.send(&chat.id, "go".into(), Vec::new()).unwrap();
+    settle(&engine, &chat.id).await;
+    assert_eq!(requests.lock().unwrap()[0].cwd, worktree.path);
+    assert!(std::path::Path::new(&worktree.root).join(".git").exists());
+
+    engine.delete_chat(&chat.id).unwrap();
+    let refname = format!("refs/heads/{}", worktree.branch);
+    for _ in 0..400 {
+        if !std::path::Path::new(&worktree.root).exists() && !git(path, &["show-ref", "--verify", "--quiet", &refname]) {
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    panic!("the worktree or its branch outlived the chat");
 }

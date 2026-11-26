@@ -137,7 +137,7 @@ Done when: typing "hi" streams Claude's reply.
 ## 18. Git
 
 - [ ] Turn snapshots (git tree per prompted turn) → `turn_diff`, `revert_turn`.
-- [ ] Worktrees per chat (branch names via `run_text`).
+- [x] Worktrees per chat (branch names via `run_text`).
 - [ ] UI: diff panel, revert turn.
 
 ---

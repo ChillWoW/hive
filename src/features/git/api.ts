@@ -29,7 +29,7 @@ function fakeRepo(cwd: string): GitRepo {
             worktree: b.name.startsWith("outcode/") ? "~/.outcode/worktrees/x" : undefined
         }))
         .sort((a, b) => (b.committedAt ?? 0) - (a.committedAt ?? 0));
-    return { root: cwd, branch: fake.current, commit: "5c93f90", branches };
+    return { root: cwd, branch: fake.current, commit: "5c93f90", changes: 0, branches };
 }
 
 async function fakeChange(change: () => void): Promise<void> {

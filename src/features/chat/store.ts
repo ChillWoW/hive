@@ -2,9 +2,13 @@ import { create } from "zustand";
 import type { Attachment, InputResponse, Message, MessagesUpdate } from "@/proto";
 import { chatsApi, type Unwatch } from "@/features/chats/api";
 import { chats, useChatsStore } from "@/features/chats/store";
+import { useComposerStore } from "@/features/composer/store";
+import { git } from "@/features/git/store";
+import { settings } from "@/features/settings";
 import { toast } from "@/ui";
 import { newChatConfig } from "./config";
 import { foldEvent, stampEvent } from "./fold";
+import { setups, useSetups } from "./setup";
 
 type ChatState = {
     /** The chat whose messages these are. */
@@ -77,10 +81,42 @@ export function attach(chatId: string | null): Promise<void> {
 const warn = (title: string) => (error: unknown) =>
     toast.error({ title, description: error instanceof Error ? error.message : String(error) });
 
+/** Whether a new chat in `cwd` gets a worktree: picked, and `cwd` is a checkout with a commit. */
+function wantsWorktree(cwd: string) {
+    if (useComposerStore.getState().newChatWorkspace !== "worktree") return false;
+    return !!git.known(cwd)?.commit;
+}
+
+/**
+ * Makes the new-chat view's chat in `cwd`, in a worktree when one is
+ * picked; its setup card follows along (`./setup.ts`).
+ */
+async function createChat(cwd: string, prompt: string, attachments: Attachment[]) {
+    setups.dismiss();
+    if (!wantsWorktree(cwd)) return chatsApi.create(cwd, newChatConfig());
+    const base = useComposerStore.getState().newChatBase ?? undefined;
+    setups.begin(prompt, attachments, settings.get().worktrees.branchNaming === "semantic");
+    // A files-only prompt names the branch after its files.
+    const hint = prompt || attachments.map((a) => a.name).join(" ");
+    try {
+        const chat = await chatsApi.create(cwd, newChatConfig(), { base, hint }, setups.step);
+        setups.created(chat);
+        useComposerStore.getState().setNewChatBase(null);
+        return chat;
+    } catch (error) {
+        setups.failed(error instanceof Error ? error.message : String(error));
+        throw error;
+    } finally {
+        // The branch it took is in use now.
+        void git.refresh(cwd, true);
+    }
+}
+
 /**
  * Sends a prompt (and files) to the open chat; from the new-chat view, first
- * makes a chat in the folder picked for it and opens that. While the chat's
- * turn runs the prompt waits in its queue.
+ * makes a chat in the folder picked for it (in a worktree of its own, when
+ * picked) and opens that. While the chat's turn runs the prompt waits in
+ * its queue.
  */
 export async function send(prompt: string, attachments: Attachment[] = []) {
     const text = prompt.trim();
@@ -92,9 +128,20 @@ export async function send(prompt: string, attachments: Attachment[] = []) {
             toast.error({ title: "Choose a folder first", description: "Pick where the agent should work." });
             return;
         }
+        // One chat at a time.
+        const draft = useSetups.getState().draft;
+        if (draft && !draft.error) return;
         try {
-            chatId = (await chatsApi.create(cwd, newChatConfig())).id;
+            chatId = (await createChat(cwd, text, attachments)).id;
         } catch (error) {
+            // The prompt goes back in the box, unless something new is there.
+            const draft = useComposerStore.getState();
+            if (!draft.drafts.new && !draft.attachments.new?.length) {
+                draft.setDraft(null, prompt);
+                draft.setAttachments(null, attachments);
+            }
+            // A worktree's setup card says why.
+            if (useSetups.getState().draft?.error) return;
             return warn("Couldn't start a chat")(error);
         }
         chats.select(chatId);
@@ -141,3 +188,8 @@ export const queue = {
 /** The open chat's turn is running. */
 export const useChatBusy = () =>
     useChatsStore((s) => !!s.activeChatId && !!s.sessions[s.activeChatId]?.working);
+
+// A worktree chat's setup ends once its agent answers.
+useChatStore.subscribe((s) => {
+    if (s.chatId) setups.observe(s.chatId, s.messages);
+});

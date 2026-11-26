@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { create } from "zustand";
-import { useChatsStore } from "@/features/chats/store";
+import { useChatsStore, workDir } from "@/features/chats/store";
 import { errorMessage } from "@/lib/errors";
 import { onWindowFocus } from "@/lib/windowFocus";
 import type { GitRepo } from "@/proto";
@@ -74,7 +74,7 @@ export function useGitRepo(cwd: string | null | undefined): GitRepo | null | und
 
 /** An agent is mid-turn in `cwd`, so the branch there shouldn't move under it. */
 export function useFolderBusy(cwd: string | null | undefined) {
-    return useChatsStore((s) => !!cwd && s.chats.some((c) => c.cwd === cwd && !!s.sessions[c.id]?.working));
+    return useChatsStore((s) => !!cwd && s.chats.some((c) => workDir(c) === cwd && !!s.sessions[c.id]?.working));
 }
 
 /**
@@ -111,6 +111,8 @@ async function then(cwd: string, action: Promise<void>): Promise<void> {
 
 export const git = {
     refresh,
+    /** `cwd`'s checkout as last read: undefined until read, null outside one. */
+    known: (cwd: string): GitRepo | null | undefined => useGitStore.getState().repos[cwd]?.repo,
     switchBranch: (cwd: string, name: string) => then(cwd, gitApi.switchBranch(cwd, name)),
     createBranch: (cwd: string, name: string, from: string) => then(cwd, gitApi.createBranch(cwd, name, from)),
     deleteBranch: (cwd: string, name: string) => then(cwd, gitApi.deleteBranch(cwd, name))

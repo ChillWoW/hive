@@ -6,7 +6,9 @@ import type {
     ChatsUpdate,
     InputResponse,
     MessagesUpdate,
-    SlashCommand
+    NewWorktree,
+    SlashCommand,
+    WorktreeStep
 } from "@/proto";
 import { backend } from "@/lib/backend";
 import { isTauri } from "@/lib/platform";
@@ -44,8 +46,19 @@ async function watch<T>(
  * turns scripted.
  */
 export const chatsApi = {
-    create: (cwd: string, config: ChatConfig) =>
-        backend<Chat>("chat_create", { cwd, config }, () => dev.create(cwd, config)),
+    /**
+     * With `worktree`, the chat works in a worktree of its own (a new branch
+     * in a folder of its own); `onProgress` hears each step of making it.
+     * The dev stand-in makes one up.
+     */
+    create: (cwd: string, config: ChatConfig, worktree?: NewWorktree, onProgress?: (step: WorktreeStep) => void) => {
+        if (!isTauri) {
+            if (worktree) return dev.createInWorktree(cwd, config, worktree, onProgress);
+            return Promise.resolve(dev.create(cwd, config));
+        }
+        const channel = new Channel<WorktreeStep>((step) => onProgress?.(step));
+        return backend<Chat>("chat_create", { cwd, config, worktree: worktree ?? null, onProgress: channel });
+    },
 
     /** What the chat runs on; its live run picks it up from the next prompt. */
     setConfig: (chatId: string, config: ChatConfig) =>

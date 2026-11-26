@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { Attachment, BackgroundTask, Message } from "@/proto";
 import { cn } from "@/lib/cn";
-import { chats, useActiveChat, useChatsStore, useSession } from "@/features/chats/store";
-import { Composer, ContextMeter, FolderPicker } from "@/features/composer";
-import { BranchPicker } from "@/features/git";
+import { chats, useActiveChat, useChatsStore, useSession, workDir } from "@/features/chats/store";
+import { Composer, ContextMeter, FolderPicker, useComposerStore } from "@/features/composer";
+import { BranchPicker, WorkspaceChip, WorkspacePicker } from "@/features/git";
 import { ClaudeMark } from "@/features/models";
 import { UNTITLED } from "@/features/sidebar/ChatRow";
 import { toast } from "@/ui";
@@ -16,6 +16,8 @@ import { minimapItems, type MinimapItem } from "./transcript/minimapItems";
 import { pathOf } from "./transcript/tools";
 import { UserMessage } from "./transcript/UserMessage";
 import { answer, queue, send, stop, useChatBusy, useChatStore } from "./store";
+import { setups, useChatSetup, useDraftSetup, type WorktreeSetup } from "./setup";
+import { WorktreeDivider } from "./transcript/WorktreeDivider";
 import { pendingInput } from "./fold";
 import { InputCard } from "./InputCard";
 import { SecretCard } from "./SecretCard";
@@ -49,7 +51,15 @@ export function ChatView() {
     const busy = useChatBusy();
     const session = useSession(chat?.id);
     const newChatCwd = useChatsStore((s) => s.newChatCwd);
-    const cwd = chat?.cwd ?? newChatCwd ?? "";
+    // Where the agent works: a chat's worktree, else its folder.
+    const cwd = (chat ? workDir(chat) : newChatCwd) ?? "";
+    const workspace = useComposerStore((s) => s.newChatWorkspace);
+    const base = useComposerStore((s) => s.newChatBase);
+    const draftSetup = useDraftSetup();
+    const chatSetup = useChatSetup(chat?.id);
+    // The new-chat view's worktree being made, or why it couldn't be.
+    const making = !chat && !!draftSetup && !draftSetup.error;
+    const failedSetup = !chat ? draftSetup?.error && draftSetup : undefined;
     const known = useMemo(() => knownFiles(messages, cwd), [messages, cwd]);
     const [config, setConfig] = useChatConfig();
     const lastReply = messages.findLast((m) => m.role === "assistant");
@@ -77,6 +87,11 @@ export function ChatView() {
                     onCancel={queue.cancel}
                 />
             )}
+            {failedSetup && (
+                <div className="mb-3 px-1">
+                    <WorktreeDivider setup={failedSetup} />
+                </div>
+            )}
             {waiting && (
                 <ChatCwd value={cwd || undefined}>
                     <InputCard
@@ -97,11 +112,32 @@ export function ChatView() {
             />
             <div className="mt-1.5 flex items-center gap-1">
                 <FolderPicker
-                    cwd={cwd || null}
-                    locked={!!chat}
-                    onChange={(path) => useChatsStore.getState().setNewChatCwd(path)}
+                    cwd={(chat?.cwd ?? newChatCwd) || null}
+                    locked={!!chat || making}
+                    onChange={(path) => {
+                        useChatsStore.getState().setNewChatCwd(path);
+                        useComposerStore.getState().setNewChatBase(null);
+                        setups.dismiss();
+                    }}
                 />
-                <BranchPicker cwd={cwd || null} />
+                {chat ? (
+                    <>
+                        <BranchPicker cwd={cwd || null} />
+                        <WorkspaceChip chat={chat} />
+                    </>
+                ) : (
+                    <>
+                        {/* A worktree's base is picked in the workspace chip. */}
+                        {workspace !== "worktree" && <BranchPicker cwd={cwd || null} />}
+                        <WorkspacePicker
+                            cwd={cwd || null}
+                            value={workspace}
+                            onChange={(next) => useComposerStore.getState().setNewChatWorkspace(next)}
+                            base={base}
+                            onBaseChange={(next) => useComposerStore.getState().setNewChatBase(next)}
+                        />
+                    </>
+                )}
                 <span className="ml-auto flex items-center gap-1">
                     {session && (
                         <BackgroundTasks tasks={session.tasks} messages={messages} onStop={queue.stopTask} />
@@ -111,6 +147,21 @@ export function ChatView() {
             </div>
         </>
     );
+
+    // A worktree being made, then its chat until the prompt lands: the
+    // prompt with the setup under it.
+    const pendingSetup = making ? draftSetup : chat && messages.length === 0 ? chatSetup : undefined;
+    if (pendingSetup) {
+        return (
+            <div className="flex h-full w-full flex-col">
+                <TranscriptScroller follow={pendingSetup}>
+                    <PendingPrompt setup={pendingSetup} />
+                    <WorktreeDivider setup={pendingSetup} worktree={chat?.worktree} />
+                </TranscriptScroller>
+                <Bottom>{composer}</Bottom>
+            </div>
+        );
+    }
 
     // A chat opening: its messages are on their way.
     if (chat && !loaded) return <div className="h-full w-full" />;
@@ -137,8 +188,14 @@ export function ChatView() {
                             <SubagentView id={openSpawn} messages={messages} />
                         ) : (
                             <TranscriptScroller key={chat?.id} follow={messages} minimap={messages}>
-                                {messages.map((message) => (
-                                    <MessageView key={message.id} message={message} />
+                                {messages.map((message, at) => (
+                                    <Fragment key={message.id}>
+                                        <MessageView message={message} />
+                                        {/* The chat's worktree, under its first prompt. */}
+                                        {at === 0 && chat?.worktree && (
+                                            <WorktreeDivider setup={chatSetup} worktree={chat.worktree} />
+                                        )}
+                                    </Fragment>
                                 ))}
                             </TranscriptScroller>
                         )}
@@ -194,6 +251,21 @@ export function ChatHeader() {
             })}
         </header>
     );
+}
+
+/** The first prompt while its chat's worktree is made: there's no chat to show it in yet. */
+function PendingPrompt({ setup }: { setup: WorktreeSetup }) {
+    const message = useMemo<Message>(
+        () => ({
+            id: "pending",
+            role: "user",
+            parts: [{ kind: "text", id: "pending", text: setup.prompt }],
+            attachments: setup.attachments,
+            createdAt: setup.startedAt
+        }),
+        [setup.prompt, setup.attachments, setup.startedAt]
+    );
+    return <MessageView message={message} />;
 }
 
 /** Under the transcript (or the heading): the composer. */

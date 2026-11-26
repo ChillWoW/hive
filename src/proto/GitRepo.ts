@@ -18,6 +18,10 @@ branch?: string,
  */
 commit?: string, 
 /**
+ * Files with uncommitted changes, untracked ones included.
+ */
+changes: number, 
+/**
  * Local branches, most recently committed first.
  */
 branches: Array<GitBranch>, };

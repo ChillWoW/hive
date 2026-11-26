@@ -16,7 +16,8 @@ pub struct Chat {
     /// The user's name for it; untitled until renamed.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
-    /// The folder the agent works in.
+    /// The project folder: where the agent works, unless the chat has a
+    /// worktree ([`Chat::work_dir`]).
     pub cwd: String,
     /// The model and effort its turns run on.
     #[serde(default)]
@@ -36,6 +37,60 @@ pub struct Chat {
     /// Epoch millis of the latest prompt or reply.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_message_at: Option<i64>,
+    /// The git worktree the chat works in, made for it when it was created;
+    /// missing for a chat in `cwd`'s own checkout.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub worktree: Option<Worktree>,
+}
+
+impl Chat {
+    /// Where the agent runs: the worktree's folder, else `cwd`.
+    pub fn work_dir(&self) -> &str {
+        self.worktree.as_ref().map_or(&self.cwd, |w| &w.path)
+    }
+}
+
+/// A git worktree Outcode made for one chat: a checkout of its own branch in
+/// a folder of its own, so the agent's work doesn't touch the project's
+/// checkout. Removed with the chat; the branch is kept unless
+/// `worktrees.deleteBranch` is on.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct Worktree {
+    /// The worktree's top folder.
+    pub root: String,
+    /// Where the agent runs: `root`, or the same subfolder of it that the
+    /// chat's `cwd` is of its repository.
+    pub path: String,
+    /// The branch checked out in it, made for it.
+    pub branch: String,
+    /// What the branch was made from: a branch name or a commit.
+    pub base: String,
+}
+
+/// Asks `chat_create` for a worktree.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(optional_fields)]
+pub struct NewWorktree {
+    /// The branch or commit to start from; the checked-out one when missing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub base: Option<String>,
+    /// Text to name the branch after (the first prompt).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hint: Option<String>,
+}
+
+/// How far `chat_create` got making a chat's worktree, streamed while it
+/// works; the chat it returns has the result.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(tag = "step", rename_all = "camelCase")]
+pub enum WorktreeStep {
+    /// A text run is naming the branch (semantic naming).
+    Naming,
+    /// `git worktree add` is checking the branch out; `branch` is the name
+    /// asked for (numbered if it turns out taken).
+    CheckingOut { branch: String },
 }
 
 /// A prompt sent while the chat's turn was running, waiting its turn.

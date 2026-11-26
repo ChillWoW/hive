@@ -96,7 +96,8 @@ function filterGroups(query: string, groups: Groups): Groups | null {
         const lower = text.toLowerCase();
         return words.every((word) => lower.includes(word));
     };
-    const chatMatches = (chat: Chat) => matches(`${chat.title ?? ""} ${baseName(chat.cwd)}`);
+    const chatMatches = (chat: Chat) =>
+        matches(`${chat.title ?? ""} ${baseName(chat.cwd)} ${chat.worktree?.branch ?? ""}`);
     return {
         pinned: groups.pinned.filter(chatMatches),
         projects: groups.projects.flatMap((project) => {

@@ -14,18 +14,21 @@
 //! queue is held until a turn they start ends, or one is sent now.
 
 use std::collections::{HashMap, HashSet};
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
+use outcode_git::GitError;
 use outcode_harness::{HarnessError, Run, RunHandle};
 use outcode_proto::{
     AgentEvent, Attachment, Chat, ChatConfig, ChatsUpdate, ContextWindow, DoneStatus, InputResponse, MessagesUpdate,
-    McpServer, MessagePart, SecretRequest, has_running_spawn, has_spawn,
+    McpServer, MessagePart, NewWorktree, SecretRequest, WorktreeStep, has_running_spawn, has_spawn,
     QueuedPrompt, RunRequest, Session,
 };
 use outcode_store::{Store, StoreError, Turn, new_id, now_ms};
 use tokio::sync::mpsc;
 
+mod branches;
 mod titles;
 
 pub type WatchId = u64;
@@ -41,6 +44,8 @@ pub enum EngineError {
     NotFound(String),
     #[error("the chat's agent isn't running")]
     NotRunning,
+    #[error(transparent)]
+    Git(#[from] GitError),
 }
 
 pub type Result<T> = std::result::Result<T, EngineError>;
@@ -52,12 +57,49 @@ type Started = std::result::Result<Run, HarnessError>;
 pub struct Hooks {
     /// Starts a chat's run.
     pub spawn: Box<dyn Fn(RunRequest) -> Started + Send + Sync>,
-    /// Starts a one-turn text run answering a prompt (a chat's title);
-    /// `None` while automatic titles are off.
-    pub text: Box<dyn Fn(String) -> Option<Started> + Send + Sync>,
+    /// Starts a one-turn text run answering a prompt (a chat's title, a
+    /// worktree's branch name); `None` while that use is off.
+    pub text: Box<dyn Fn(TextUse, String) -> Option<Started> + Send + Sync>,
     /// How long a run may sit between turns before it's closed; read as each
     /// turn ends, so a settings change applies from the next one.
     pub idle: Box<dyn Fn() -> Duration + Send + Sync>,
+    /// Where new worktrees go and how they're named; read as each is made
+    /// (and as a worktree chat is deleted).
+    pub worktrees: Box<dyn Fn() -> WorktreeOptions + Send + Sync>,
+}
+
+/// What a text run is for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TextUse {
+    /// A chat's title, from its first prompt.
+    Title,
+    /// A worktree's semantic branch name, from the chat's first prompt.
+    Branch,
+}
+
+/// How chats' worktrees are made and cleaned up.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WorktreeOptions {
+    /// New worktrees go in a subfolder each of this.
+    pub dir: PathBuf,
+    /// Branches are `<type>/<slug>`, both written by a text run, rather than
+    /// `<prefix>/<slug>`.
+    pub semantic: bool,
+    /// With static naming, the prefix; empty for just the slug.
+    pub prefix: String,
+    /// Deleting a worktree chat deletes its branch too, merged or not.
+    pub delete_branch: bool,
+}
+
+impl Default for WorktreeOptions {
+    fn default() -> Self {
+        Self {
+            dir: std::env::temp_dir().join("outcode-worktrees"),
+            semantic: false,
+            prefix: "outcode".into(),
+            delete_branch: false,
+        }
+    }
 }
 
 /// What sending does while the chat's turn runs.
@@ -211,6 +253,50 @@ impl Engine {
         Ok(chat)
     }
 
+    /// A chat in a worktree of its own: a new branch off `worktree.base`,
+    /// checked out under [`WorktreeOptions::dir`]. The chat keeps `cwd` as
+    /// its project; its agent runs in the worktree. `progress` hears each
+    /// step as it starts.
+    pub async fn create_chat_in_worktree(
+        &self,
+        cwd: String,
+        config: ChatConfig,
+        worktree: NewWorktree,
+        progress: impl Fn(WorktreeStep) + Send + Sync,
+    ) -> Result<Chat> {
+        // Short, since the path shows in every tool call.
+        let key: String = new_id().chars().filter(char::is_ascii_alphanumeric).take(8).collect();
+        let options = (self.shared.hooks.worktrees)();
+        let dir = options.dir.join(key);
+        let hint = worktree.hint.as_deref().unwrap_or_default();
+        let (prefix, hint) = if options.semantic {
+            progress(WorktreeStep::Naming);
+            self.semantic_branch(hint).await
+        } else {
+            (options.prefix, hint.to_owned())
+        };
+        progress(WorktreeStep::CheckingOut {
+            branch: outcode_git::prefixed(&prefix, &outcode_git::branch_slug(&hint)),
+        });
+        let made = outcode_git::add_worktree(Path::new(&cwd), &dir, worktree.base.as_deref(), &prefix, &hint).await?;
+        let saved = self.store().create_chat(cwd.clone(), config).and_then(|mut chat| {
+            chat.worktree = Some(made.clone());
+            self.store().save_chat(&chat)?;
+            Ok(chat)
+        });
+        let chat = match saved {
+            Ok(chat) => chat,
+            Err(e) => {
+                let _ = outcode_git::remove_worktree(Path::new(&cwd), &made).await;
+                return Err(e.into());
+            }
+        };
+        self.state()
+            .watchers
+            .chats(ChatsUpdate::Upsert { chat: chat.clone() });
+        Ok(chat)
+    }
+
     /// Changes a chat and tells the watchers, if anything changed.
     fn update(&self, chat_id: &str, update: impl FnOnce(&mut Chat)) -> Result<Chat> {
         let mut state = self.state();
@@ -287,9 +373,13 @@ impl Engine {
         Ok(chat)
     }
 
-    /// Deletes the chat and its transcript, stopping its run.
+    /// Deletes the chat and its transcript, stopping its run. Its worktree
+    /// is removed in the background, once the run has let go of it; the
+    /// branch is kept unless [`WorktreeOptions::delete_branch`]. Must be
+    /// called inside a tokio runtime.
     pub fn delete_chat(&self, chat_id: &str) -> Result<()> {
         let mut state = self.state();
+        let chat = self.store().chat(chat_id)?;
         if let Some(live) = state.runs.remove(chat_id) {
             live.handle.interrupt();
             live.handle.close();
@@ -297,6 +387,20 @@ impl Engine {
         state.sessions.remove(chat_id);
         self.store().delete_chat(chat_id)?;
         state.watchers.chats(ChatsUpdate::Removed { id: chat_id.into() });
+        if let Some((cwd, worktree)) = chat.and_then(|c| Some((c.cwd, c.worktree?))) {
+            let delete_branch = (self.shared.hooks.worktrees)().delete_branch;
+            tokio::spawn(async move {
+                let cwd = Path::new(&cwd);
+                if let Err(e) = outcode_git::remove_worktree(cwd, &worktree).await {
+                    eprintln!("[engine] removing worktree {}: {e}", worktree.root);
+                } else if delete_branch
+                    && cwd.is_dir()
+                    && let Err(e) = outcode_git::delete(cwd, &worktree.branch).await
+                {
+                    eprintln!("[engine] deleting branch {}: {e}", worktree.branch);
+                }
+            });
+        }
         Ok(())
     }
 
@@ -382,8 +486,24 @@ impl Engine {
             return Ok(());
         }
 
+        // Its folder may have been deleted since; bring it back first.
+        if let Some(worktree) = &chat.worktree
+            && let Err(error) = outcode_git::restore_worktree(Path::new(&chat.cwd), worktree)
+        {
+            for event in [
+                AgentEvent::Error {
+                    message: format!("The chat's worktree is missing and couldn't be restored: {error}"),
+                },
+                AgentEvent::Done {
+                    status: DoneStatus::Errored,
+                },
+            ] {
+                self.record(watchers, &mut turn, event);
+            }
+            return Ok(());
+        }
         let request = RunRequest {
-            cwd: chat.cwd,
+            cwd: chat.work_dir().to_owned(),
             prompt,
             attachments: paths,
             resume: chat.session_id,

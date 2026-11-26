@@ -7,13 +7,16 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::Duration;
 
-use outcode_engine::{Engine, Hooks, SendMode, WatchId};
-use outcode_proto::{Attachment, Catalog, Chat, ChatConfig, ChatsUpdate, InputResponse, MessagesUpdate, SlashCommand};
+use outcode_engine::{Engine, Hooks, SendMode, TextUse, WatchId, WorktreeOptions};
+use outcode_proto::{
+    Attachment, Catalog, Chat, ChatConfig, ChatsUpdate, InputResponse, MessagesUpdate, NewWorktree, SlashCommand,
+    WorktreeStep,
+};
 use outcode_store::Store;
 use tauri::ipc::Channel;
 use tauri::{AppHandle, Manager, State, Webview};
 
-use crate::settings::{BusySend, SettingsFile};
+use crate::settings::{BranchNaming, BusySend, SettingsFile};
 
 /// Opens the store under `data_dir`, closes turns a crash left open, and
 /// starts the engine: Claude runs from `claude.binaryPath` (else found), and
@@ -25,7 +28,8 @@ pub fn engine(app: &AppHandle, data_dir: &Path) -> Result<Engine, Box<dyn std::e
     if !closed.is_empty() {
         log::info!("closed {} turns left running", closed.len());
     }
-    let (spawn, text, idle) = (app.clone(), app.clone(), app.clone());
+    let (spawn, text, idle, worktrees) = (app.clone(), app.clone(), app.clone(), app.clone());
+    let data_dir = data_dir.to_path_buf();
     Ok(Engine::new(
         store,
         Hooks {
@@ -35,9 +39,9 @@ pub fn engine(app: &AppHandle, data_dir: &Path) -> Result<Engine, Box<dyn std::e
                 request.auto_compact_window = (window != 0).then_some(window);
                 outcode_harness::claude::run(request, binary.as_deref())
             }),
-            text: Box::new(move |prompt| {
+            text: Box::new(move |purpose, prompt| {
                 let chat = text.state::<SettingsFile>().get().chat;
-                if !chat.auto_title {
+                if purpose == TextUse::Title && !chat.auto_title {
                     return None;
                 }
                 let binary = binary(&text);
@@ -48,9 +52,48 @@ pub fn engine(app: &AppHandle, data_dir: &Path) -> Result<Engine, Box<dyn std::e
                 let minutes = idle.state::<SettingsFile>().get().chat.idle_timeout_minutes;
                 Duration::from_secs(u64::from(minutes) * 60)
             }),
+            worktrees: Box::new(move || {
+                let settings = worktrees.state::<SettingsFile>().get().worktrees;
+                WorktreeOptions {
+                    dir: worktrees_dir(&worktrees, &data_dir, &settings.location),
+                    semantic: settings.branch_naming == BranchNaming::Semantic,
+                    prefix: settings.branch_prefix,
+                    delete_branch: settings.delete_branch,
+                }
+            }),
         },
     ))
 }
+
+/// `worktrees.location` with a leading `~` as the home folder, when that's
+/// an absolute path; else `<data dir>/worktrees`.
+fn worktrees_dir(app: &AppHandle, data_dir: &Path, location: &str) -> PathBuf {
+    let home = app.path().home_dir().ok();
+    let expanded = match (location.strip_prefix('~'), home) {
+        (Some(rest), Some(home)) if rest.is_empty() || rest.starts_with(['/', '\\']) => {
+            home.join(rest.trim_start_matches(['/', '\\']))
+        }
+        _ => PathBuf::from(location),
+    };
+    if !location.is_empty() && expanded.is_absolute() {
+        expanded
+    } else {
+        default_worktrees_dir(data_dir)
+    }
+}
+
+fn default_worktrees_dir(data_dir: &Path) -> PathBuf {
+    data_dir.join("worktrees")
+}
+
+/// Where worktrees go while `worktrees.location` is empty.
+#[tauri::command]
+pub fn worktrees_default_dir(dir: State<'_, DataDir>) -> String {
+    default_worktrees_dir(&dir.0).to_string_lossy().into_owned()
+}
+
+/// The app's data folder (`~/.outcode`, or `~/.outcode.dev`).
+pub struct DataDir(pub PathBuf);
 
 /// `claude.binaryPath`, when set.
 fn binary(app: &AppHandle) -> Option<PathBuf> {
@@ -91,13 +134,26 @@ fn err(error: impl std::fmt::Display) -> String {
     error.to_string()
 }
 
+/// With `worktree`, the chat works in a worktree of its own (`worktrees.*`
+/// settings); `on_progress` hears each step of making it.
 #[tauri::command]
-pub fn chat_create(
+pub async fn chat_create(
     engine: State<'_, Engine>,
     cwd: String,
     config: ChatConfig,
+    worktree: Option<NewWorktree>,
+    on_progress: Channel<WorktreeStep>,
 ) -> Result<Chat, String> {
-    engine.create_chat(cwd, config).map_err(err)
+    let Some(worktree) = worktree else {
+        return engine.create_chat(cwd, config).map_err(err);
+    };
+    let progress = move |step| {
+        let _ = on_progress.send(step);
+    };
+    engine
+        .create_chat_in_worktree(cwd, config, worktree, progress)
+        .await
+        .map_err(err)
 }
 
 /// Sets what the chat runs on; a live run picks it up from the next prompt.
@@ -268,9 +324,10 @@ pub fn chat_set_archived(
     engine.set_archived(&chat_id, archived).map_err(err)
 }
 
-/// Deletes the chat and its transcript, stopping its agent.
+/// Deletes the chat and its transcript, stopping its agent; its worktree
+/// goes in the background.
 #[tauri::command]
-pub fn chat_delete(engine: State<'_, Engine>, chat_id: String) -> Result<(), String> {
+pub async fn chat_delete(engine: State<'_, Engine>, chat_id: String) -> Result<(), String> {
     engine.delete_chat(&chat_id).map_err(err)
 }
 

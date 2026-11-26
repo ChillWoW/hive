@@ -114,6 +114,7 @@ impl Store {
             pinned_at: None,
             created_at: now_ms(),
             last_message_at: None,
+            worktree: None,
         };
         self.save_chat(&chat)?;
         Ok(chat)

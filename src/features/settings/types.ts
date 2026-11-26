@@ -74,6 +74,19 @@ export type ChatSettings = {
     busySend: BusySend;
 };
 
+/** How a new worktree's branch is named: `<prefix>/<slug>`, or `<type>/<slug>` by the text generation model. */
+export type BranchNaming = "static" | "semantic";
+
+export type WorktreesSettings = {
+    /** The folder new worktrees go in; empty (or not absolute; `~` is home) uses `<data dir>/worktrees`. */
+    location: string;
+    branchNaming: BranchNaming;
+    /** With static naming, new branches are `<prefix>/<slug>`; empty, just the slug. */
+    branchPrefix: string;
+    /** Deleting a worktree chat deletes its branch too, merged or not. */
+    deleteBranch: boolean;
+};
+
 export type Settings = {
     version: number;
     appearance: AppearanceSettings;
@@ -81,6 +94,7 @@ export type Settings = {
     keyboard: KeyboardSettings;
     claude: ClaudeSettings;
     chat: ChatSettings;
+    worktrees: WorktreesSettings;
 };
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -119,5 +133,11 @@ export const DEFAULT_SETTINGS: Settings = {
         reasoningExpanded: false,
         toolOutputExpanded: false,
         busySend: "queue"
+    },
+    worktrees: {
+        location: "",
+        branchNaming: "static",
+        branchPrefix: "outcode",
+        deleteBranch: false
     }
 };

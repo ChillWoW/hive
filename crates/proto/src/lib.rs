@@ -49,6 +49,8 @@ mod export {
         UsageWindow::export_all(&cfg).unwrap();
         SignInStarted::export_all(&cfg).unwrap();
         GitRepo::export_all(&cfg).unwrap();
+        NewWorktree::export_all(&cfg).unwrap();
+        WorktreeStep::export_all(&cfg).unwrap();
 
         let mut modules = Vec::new();
         collect_modules(&dir, "", &mut modules);

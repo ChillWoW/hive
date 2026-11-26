@@ -2681,6 +2681,7 @@ dependencies = [
 name = "outcode-engine"
 version = "0.0.1"
 dependencies = [
+ "outcode-git",
  "outcode-harness",
  "outcode-proto",
  "outcode-store",

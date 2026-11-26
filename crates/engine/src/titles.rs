@@ -8,7 +8,7 @@ use std::time::Duration;
 use outcode_harness::Run;
 use outcode_proto::{AgentEvent, ChatsUpdate, DoneStatus};
 
-use crate::Engine;
+use crate::{Engine, TextUse};
 
 /// The task a title run is given, before the prompt it names.
 const TITLE_TASK: &str = "Write a title for this session. Return only a concise 3-5 word title \
@@ -62,8 +62,8 @@ impl Engine {
             serde_json::to_string(prompt).unwrap_or_default()
         );
         for attempt in 0..=RETRY_DELAYS.len() {
-            match (self.shared.hooks.text)(body.clone())? {
-                Ok(run) => match collect_text(run).await {
+            match (self.shared.hooks.text)(TextUse::Title, body.clone())? {
+                Ok(run) => match collect_text(run, ATTEMPT_TIMEOUT).await {
                     Ok(text) => {
                         let title = clean_title(&text);
                         if !title.is_empty() {
@@ -89,9 +89,9 @@ impl Engine {
 
 /// The run's text up to its `Done`. A tool call fails it: a text run must
 /// never act.
-async fn collect_text(run: Run) -> Result<String, String> {
+pub(crate) async fn collect_text(run: Run, timeout: Duration) -> Result<String, String> {
     let Run { mut events, handle } = run;
-    let result = tokio::time::timeout(ATTEMPT_TIMEOUT, async {
+    let result = tokio::time::timeout(timeout, async {
         let mut text = String::new();
         while let Some(event) = events.recv().await {
             match event {

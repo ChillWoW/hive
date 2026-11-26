@@ -159,7 +159,7 @@ async fn show_image(app: AppHandle, ctx: Ctx, raw: Value) -> Result<Value, Strin
     let chat = calling_chat(&app, &ctx)?;
     let mut file = PathBuf::from(path.trim());
     if file.is_relative() {
-        file = Path::new(&chat.cwd).join(file);
+        file = Path::new(chat.work_dir()).join(file);
     }
     let meta = tokio::fs::metadata(&file).await.map_err(|e| format!("{}: {e}", file.display()))?;
     if !meta.is_file() || meta.len() > MAX_IMAGE {

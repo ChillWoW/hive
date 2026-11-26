@@ -14,7 +14,7 @@ function formatTokens(n: number): string {
 }
 
 /** A line across the transcript with a label in the middle. */
-function Divider({ icon, children, className }: { icon: ReactNode; children: ReactNode; className?: string }) {
+export function Divider({ icon, children, className }: { icon: ReactNode; children: ReactNode; className?: string }) {
     return (
         <div className={cn("flex items-center gap-3 py-1 text-xs text-muted/85", className)}>
             <span className="h-px flex-1 bg-border" />

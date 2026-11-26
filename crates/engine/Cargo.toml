@@ -9,6 +9,7 @@ publish = false
 outcode-proto.workspace = true
 outcode-harness.workspace = true
 outcode-store.workspace = true
+outcode-git.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 tokio.workspace = true

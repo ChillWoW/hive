@@ -58,10 +58,12 @@ pub fn run() {
             mcp::start(app.handle(), &data_dir, &engine);
             app.manage(engine);
             app.manage(chat::Watches::default());
+            app.manage(chat::DataDir(data_dir.clone()));
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             chat::chat_create,
+            chat::worktrees_default_dir,
             chat::chat_set_config,
             chat::claude_catalog,
             chat::chat_send,

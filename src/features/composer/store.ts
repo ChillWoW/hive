@@ -6,6 +6,12 @@ import type { Attachment, ChatConfig } from "@/proto";
 const NEW = "new";
 const keyOf = (chatId: string | null) => chatId ?? NEW;
 
+/**
+ * Where a new chat works: the folder's own checkout, or a worktree made for
+ * it as its first prompt is sent (a new branch in a folder of its own).
+ */
+export type Workspace = "local" | "worktree";
+
 type ComposerState = {
     /**
      * Unsent text by chat id (the new-chat view's under `new`), so a
@@ -17,11 +23,17 @@ type ComposerState = {
     attachments: Record<string, Attachment[]>;
     /** What the next new chat runs on, once picked; else Settings' defaults. */
     newChatConfig: ChatConfig | null;
+    /** Where the next new chat works. Remembered. */
+    newChatWorkspace: Workspace;
+    /** The branch a new chat's worktree starts from; null for the checked-out one. Not remembered. */
+    newChatBase: string | null;
     /** Bumped to ask the composer for the caret back. */
     focusToken: number;
     setDraft: (chatId: string | null, text: string) => void;
     setAttachments: (chatId: string | null, attachments: Attachment[]) => void;
     setNewChatConfig: (config: ChatConfig | null) => void;
+    setNewChatWorkspace: (workspace: Workspace) => void;
+    setNewChatBase: (base: string | null) => void;
     focus: () => void;
     /** Drops the drafts of chats that are gone. */
     pruneDrafts: (chatIds: Set<string>) => void;
@@ -37,6 +49,8 @@ export const useComposerStore = create<ComposerState>()(
             drafts: {},
             attachments: {},
             newChatConfig: null,
+            newChatWorkspace: "local",
+            newChatBase: null,
             focusToken: 0,
             setDraft: (chatId, text) =>
                 set((s) => {
@@ -51,6 +65,8 @@ export const useComposerStore = create<ComposerState>()(
                     return { attachments: attachments.length ? { ...rest, [key]: attachments } : rest };
                 }),
             setNewChatConfig: (newChatConfig) => set({ newChatConfig }),
+            setNewChatWorkspace: (newChatWorkspace) => set({ newChatWorkspace }),
+            setNewChatBase: (newChatBase) => set({ newChatBase }),
             focus: () => set((s) => ({ focusToken: s.focusToken + 1 })),
             pruneDrafts: (chatIds) =>
                 set((s) => {
@@ -70,7 +86,13 @@ export const useComposerStore = create<ComposerState>()(
         {
             name: "outcode.composer",
             storage: createJSONStorage(() => localStorage),
-            partialize: (s) => ({ drafts: s.drafts, attachments: s.attachments, newChatConfig: s.newChatConfig })
+            // The worktree's base is for the chat at hand.
+            partialize: (s) => ({
+                drafts: s.drafts,
+                attachments: s.attachments,
+                newChatConfig: s.newChatConfig,
+                newChatWorkspace: s.newChatWorkspace
+            })
         }
     )
 );

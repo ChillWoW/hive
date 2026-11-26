@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { GitForkIcon } from "@phosphor-icons/react";
 import { activity } from "@/features/chats";
 import {
     ClaudeMark,
@@ -17,7 +18,8 @@ import { StatusMark } from "./StatusMark";
 
 /**
  * What a sidebar row has no room for, shown in its hover card: the whole
- * title and its age, then the folder it works in, its model and whether it's working.
+ * title and its age, then the folder it works in (and its worktree's
+ * branch), its model and whether it's working.
  */
 export function ChatCard({ chat, title, working }: { chat: Chat; title: string; working: boolean }) {
     const now = useMinuteClock();
@@ -37,6 +39,12 @@ export function ChatCard({ chat, title, working }: { chat: Chat; title: string; 
                     <span className="text-text/85">{baseName(chat.cwd)}</span>
                     <span className="text-muted/75"> · {chat.cwd}</span>
                 </Meta>
+                {chat.worktree && (
+                    <Meta icon={<GitForkIcon className="size-3.5 text-muted" />}>
+                        <span className="text-text/85">{chat.worktree.branch}</span>
+                        <span className="text-muted/75"> · worktree</span>
+                    </Meta>
+                )}
                 {model && (
                     <Meta icon={<ClaudeMark className="size-3.5" />}>
                         <span className="text-text/85">{model.label}</span>

@@ -1,6 +1,7 @@
 import type { ComponentType } from "react";
 import {
     ChatsCircleIcon,
+    GitForkIcon,
     InfoIcon,
     KeyboardIcon,
     PaletteIcon,
@@ -13,6 +14,7 @@ import { AppearancePage } from "./AppearancePage";
 import { ChatsPage } from "./ChatsPage";
 import { ProvidersPage } from "./ProvidersPage";
 import { KeyboardPage } from "./KeyboardPage";
+import { WorktreesPage } from "./WorktreesPage";
 
 export type SettingsPage = {
     id: SettingsPageId;
@@ -26,6 +28,7 @@ export const SETTINGS_PAGES: readonly SettingsPage[] = [
     { id: "appearance", label: "Appearance", icon: PaletteIcon, Component: AppearancePage },
     { id: "keyboard", label: "Keyboard", icon: KeyboardIcon, Component: KeyboardPage },
     { id: "chats", label: "Chats", icon: ChatsCircleIcon, Component: ChatsPage },
+    { id: "worktrees", label: "Worktrees", icon: GitForkIcon, Component: WorktreesPage },
     { id: "providers", label: "Providers", icon: PlugsConnectedIcon, Component: ProvidersPage },
     { id: "about", label: "About", icon: InfoIcon, Component: AboutPage }
 ];

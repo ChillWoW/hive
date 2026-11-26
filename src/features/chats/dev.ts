@@ -8,10 +8,13 @@ import type {
     InputResponse,
     Message,
     MessagesUpdate,
+    NewWorktree,
     Session,
-    SlashCommand
+    SlashCommand,
+    WorktreeStep
 } from "@/proto";
 import { foldEvent, stampEvent } from "@/features/chat/fold";
+import { baseName } from "@/lib/paths";
 
 /**
  * `bun run dev`'s stand-in for the engine: chats and messages in memory
@@ -306,6 +309,25 @@ export const dev = {
         chats.unshift(chat);
         emitChats({ kind: "upsert", chat });
         return chat;
+    },
+
+    /** A made-up worktree, its steps played out over a couple of seconds. */
+    async createInWorktree(
+        cwd: string,
+        config: ChatConfig,
+        worktree: NewWorktree,
+        onProgress?: (step: WorktreeStep) => void
+    ): Promise<Chat> {
+        const wait = (ms: number) => new Promise((done) => setTimeout(done, ms));
+        const words = (worktree.hint ?? "").toLowerCase().match(/[a-z0-9]+/g) ?? [];
+        const branch = `outcode/${words.slice(0, 5).join("-") || "chat"}`;
+        onProgress?.({ step: "naming" });
+        await wait(900);
+        onProgress?.({ step: "checkingOut", branch });
+        await wait(1200);
+        const root = `~/.outcode/worktrees/a1b2c3d4/${baseName(cwd) || "repo"}`;
+        const chat = this.create(cwd, config);
+        return save({ ...chat, worktree: { root, path: root, branch, base: worktree.base ?? "main" } });
     },
 
     update(chatId: string, patch: Partial<Chat>): Chat {

@@ -1,10 +1,12 @@
-//! outcode-git — a project folder's branches, over the `git` the user has
-//! installed: list them, switch, branch off one, delete one.
+//! outcode-git — a project folder's branches and Outcode's worktrees, over
+//! the `git` the user has installed: list branches, switch, branch off one,
+//! delete one; add, restore and remove a chat's worktree.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Stdio;
+use std::time::Duration;
 
-use outcode_proto::{GitBranch, GitRepo};
+use outcode_proto::{GitBranch, GitRepo, Worktree};
 use tokio::process::Command;
 
 #[derive(Debug, thiserror::Error)]
@@ -65,8 +67,18 @@ impl Output {
     }
 }
 
-async fn git(cwd: &Path, args: &[&str]) -> Result<Output, GitError> {
-    let mut cmd = Command::new("git");
+impl From<std::process::Output> for Output {
+    fn from(out: std::process::Output) -> Self {
+        Self {
+            code: out.status.code(),
+            stdout: String::from_utf8_lossy(&out.stdout).into_owned(),
+            stderr: String::from_utf8_lossy(&out.stderr).into_owned(),
+        }
+    }
+}
+
+fn command(cwd: &Path, args: &[&str]) -> std::process::Command {
+    let mut cmd = std::process::Command::new("git");
     cmd.args(args)
         .current_dir(cwd)
         // Messages in English (they're matched on), and never a prompt.
@@ -76,19 +88,32 @@ async fn git(cwd: &Path, args: &[&str]) -> Result<Output, GitError> {
         .env("GIT_OPTIONAL_LOCKS", "0")
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .kill_on_drop(true);
+        .stderr(Stdio::piped());
     #[cfg(windows)]
-    cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
-    let out = cmd.output().await.map_err(|e| match e.kind() {
+    {
+        use std::os::windows::process::CommandExt as _;
+        cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+    }
+    cmd
+}
+
+/// Git failing to start.
+fn spawn_error(e: std::io::Error) -> GitError {
+    match e.kind() {
         std::io::ErrorKind::NotFound => GitError::NotInstalled,
         _ => GitError::Failed(e.to_string()),
-    })?;
-    Ok(Output {
-        code: out.status.code(),
-        stdout: String::from_utf8_lossy(&out.stdout).into_owned(),
-        stderr: String::from_utf8_lossy(&out.stderr).into_owned(),
-    })
+    }
+}
+
+async fn git(cwd: &Path, args: &[&str]) -> Result<Output, GitError> {
+    let mut cmd = Command::from(command(cwd, args));
+    cmd.kill_on_drop(true);
+    cmd.output().await.map(Output::from).map_err(spawn_error)
+}
+
+/// For callers that can't await; only for rare, quick work.
+fn git_blocking(cwd: &Path, args: &[&str]) -> Result<Output, GitError> {
+    command(cwd, args).output().map(Output::from).map_err(spawn_error)
 }
 
 /// The top folder of the checkout `cwd` is in, as git prints it; `None` when
@@ -150,6 +175,10 @@ pub async fn repo(cwd: &Path) -> Result<Option<GitRepo>, GitError> {
         String::new()
     };
     let merged: Vec<&str> = merged.lines().collect();
+    let changes = git(cwd, &["status", "--porcelain"])
+        .await?
+        .checked()
+        .map_or(0, |out| out.lines().count() as u32);
 
     let branches = list
         .lines()
@@ -179,6 +208,7 @@ pub async fn repo(cwd: &Path) -> Result<Option<GitRepo>, GitError> {
         root,
         branch,
         commit,
+        changes,
         branches,
     }))
 }
@@ -235,6 +265,220 @@ pub async fn delete(cwd: &Path, name: &str) -> Result<(), GitError> {
     }
     git(cwd, &["branch", "-D", "--", name]).await?.checked()?;
     Ok(())
+}
+
+// Worktrees
+
+/// A branch name from free text: its first few words, lowercased, as
+/// `fix-the-login-bug`; `"chat"` when nothing usable is left.
+pub fn branch_slug(hint: &str) -> String {
+    let mut slug = String::new();
+    let words = hint
+        .split(|c: char| !c.is_ascii_alphanumeric())
+        .filter(|w| !w.is_empty())
+        .take(5);
+    for word in words {
+        let word = word.to_ascii_lowercase();
+        let word = &word[..word.len().min(24)];
+        if !slug.is_empty() && slug.len() + 1 + word.len() > 40 {
+            break;
+        }
+        if !slug.is_empty() {
+            slug.push('-');
+        }
+        slug.push_str(word);
+    }
+    if slug.is_empty() { "chat".into() } else { slug }
+}
+
+/// `<prefix>/<slug>`, or just the slug for an empty prefix.
+pub fn prefixed(prefix: &str, slug: &str) -> String {
+    match prefix.trim().trim_matches('/') {
+        "" => slug.to_owned(),
+        prefix => format!("{prefix}/{slug}"),
+    }
+}
+
+async fn branch_exists(cwd: &Path, name: &str) -> Result<bool, GitError> {
+    let refname = format!("refs/heads/{name}");
+    Ok(git(cwd, &["show-ref", "--verify", "--quiet", &refname]).await?.ok())
+}
+
+/// Git's `a/b/` prefix, under `root`.
+fn join_prefix(root: &Path, prefix: &str) -> PathBuf {
+    prefix
+        .split('/')
+        .filter(|part| !part.is_empty())
+        .fold(root.to_path_buf(), |path, part| path.join(part))
+}
+
+fn io_error(e: std::io::Error) -> GitError {
+    GitError::Failed(e.to_string())
+}
+
+/// Makes a worktree for a chat in `cwd`'s repository: a new branch
+/// `<branch_prefix>/<slug of hint>` (just the slug for an empty prefix;
+/// numbered when taken) off `base` (when missing, the checked-out branch,
+/// else HEAD's commit), checked out at `dir/<repository name>` so the folder
+/// keeps the project's name. The agent runs in the same subfolder of it that
+/// `cwd` is of its repository.
+pub async fn add_worktree(
+    cwd: &Path,
+    dir: &Path,
+    base: Option<&str>,
+    branch_prefix: &str,
+    hint: &str,
+) -> Result<Worktree, GitError> {
+    let out = git(cwd, &["rev-parse", "--show-toplevel", "--show-prefix"])
+        .await?
+        .checked()?;
+    let mut lines = out.lines();
+    let top = PathBuf::from(lines.next().unwrap_or_default().trim());
+    let prefix = lines.next().unwrap_or_default().trim().to_owned();
+
+    let base = match base.map(str::trim).filter(|b| !b.is_empty()) {
+        Some(base) => existing(base)?.to_owned(),
+        None => match current_branch(&top).await? {
+            Some(branch) => branch,
+            None => git(&top, &["rev-parse", "--short", "HEAD"])
+                .await?
+                .checked()?
+                .trim()
+                .to_owned(),
+        },
+    };
+    let commit = format!("{base}^{{commit}}");
+    if !git(&top, &["rev-parse", "--verify", "--quiet", &commit]).await?.ok() {
+        return Err(GitError::Failed(format!(
+            "“{base}” has no commit to start a worktree from."
+        )));
+    }
+
+    let slug = prefixed(branch_prefix, &branch_slug(hint));
+    let mut branch = slug.clone();
+    let mut n = 1;
+    while branch_exists(&top, &branch).await? {
+        n += 1;
+        branch = format!("{slug}-{n}");
+    }
+    check_name(&top, &branch).await?;
+
+    let name = top
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .filter(|n| !n.is_empty())
+        .unwrap_or_else(|| "repo".into());
+    let root = dir.join(name);
+    if root.exists() {
+        return Err(GitError::Failed(format!("{} already exists.", root.display())));
+    }
+    std::fs::create_dir_all(dir).map_err(io_error)?;
+    let root_arg = root.to_string_lossy().into_owned();
+    let added = git(
+        &top,
+        &["worktree", "add", "--no-track", "-b", &branch, &root_arg, &base],
+    )
+    .await?;
+    if !added.ok() {
+        // Only removed while empty, which is how it was made.
+        let _ = std::fs::remove_dir(dir);
+        return Err(added.error());
+    }
+    let path = join_prefix(&root, &prefix);
+    // A subfolder that's only in the project's checkout (untracked) still
+    // has to exist to run in.
+    std::fs::create_dir_all(&path).map_err(io_error)?;
+    Ok(Worktree {
+        root: root_arg,
+        path: path.to_string_lossy().into_owned(),
+        branch,
+        base,
+    })
+}
+
+/// Puts a chat's worktree back when its folder has gone missing (deleted by
+/// hand, or by a cleaner): re-adds it from its branch, or remakes the branch
+/// off `base` when that's gone too. True when it had to. Blocking, for the
+/// engine's turn start; the folder being there costs no git call.
+pub fn restore_worktree(cwd: &Path, worktree: &Worktree) -> Result<bool, GitError> {
+    let root = Path::new(&worktree.root);
+    let path = Path::new(&worktree.path);
+    if root.join(".git").exists() {
+        if path.is_dir() {
+            return Ok(false);
+        }
+        std::fs::create_dir_all(path).map_err(io_error)?;
+        return Ok(true);
+    }
+    if !cwd.is_dir() {
+        return Err(GitError::Failed(format!("{} no longer exists.", cwd.display())));
+    }
+    if root.read_dir().is_ok_and(|mut d| d.next().is_some()) {
+        return Err(GitError::Failed(format!(
+            "{} isn't a worktree any more; move it away and try again.",
+            root.display()
+        )));
+    }
+    // Forgets the missing worktree, which still holds its branch.
+    git_blocking(cwd, &["worktree", "prune"])?.checked()?;
+    let branch = existing(&worktree.branch)?;
+    let refname = format!("refs/heads/{branch}");
+    let has_branch = git_blocking(cwd, &["show-ref", "--verify", "--quiet", &refname])?.ok();
+    let root_arg = worktree.root.as_str();
+    let added = if has_branch {
+        git_blocking(cwd, &["worktree", "add", root_arg, branch])?
+    } else {
+        let base = existing(&worktree.base)?;
+        git_blocking(
+            cwd,
+            &["worktree", "add", "--no-track", "-b", branch, root_arg, base],
+        )?
+    };
+    added.checked()?;
+    std::fs::create_dir_all(path).map_err(io_error)?;
+    Ok(true)
+}
+
+/// Removes a chat's worktree folder, uncommitted changes and all, and git's
+/// record of it; the branch stays. Retries for a few seconds, since files
+/// the agent's process just let go of can stay locked a moment (Windows).
+/// Its parent folder goes too once empty.
+pub async fn remove_worktree(cwd: &Path, worktree: &Worktree) -> Result<(), GitError> {
+    let root = Path::new(&worktree.root);
+    let mut failure = None;
+    for attempt in 0..6u64 {
+        failure = None;
+        if !root.exists() {
+            break;
+        }
+        if attempt > 0 {
+            tokio::time::sleep(Duration::from_millis(500 * attempt)).await;
+        }
+        let by_git = cwd.is_dir()
+            && git(cwd, &["worktree", "remove", "--force", &worktree.root])
+                .await
+                .is_ok_and(|out| out.ok());
+        if by_git {
+            break;
+        }
+        // Git couldn't (the project is gone, or it doesn't know this
+        // worktree): delete the folder itself.
+        match std::fs::remove_dir_all(root) {
+            Ok(()) => break,
+            Err(e) => failure = Some(e),
+        }
+    }
+    if cwd.is_dir() {
+        let _ = git(cwd, &["worktree", "prune"]).await;
+    }
+    if let Some(parent) = root.parent() {
+        // Only while empty.
+        let _ = std::fs::remove_dir(parent);
+    }
+    match failure {
+        Some(e) => Err(GitError::Failed(format!("Couldn't remove {}: {e}", root.display()))),
+        None => Ok(()),
+    }
 }
 
 #[cfg(test)]
@@ -302,5 +546,72 @@ mod tests {
             ));
         }
         assert!(matches!(switch(path, "--orphan").await, Err(GitError::InvalidName(_))));
+    }
+
+    #[tokio::test]
+    async fn worktrees_are_added_restored_and_removed() {
+        let Some(repo_dir) = fixture().await else { return };
+        let path = repo_dir.path();
+        std::fs::create_dir_all(path.join("pkg/app")).unwrap();
+        let store = tempfile::tempdir().unwrap();
+        let dir = store.path().join("abc");
+
+        // From a subfolder: the agent runs in the same one of the worktree.
+        let wt = add_worktree(&path.join("pkg/app"), &dir, None, "outcode", "Fix the login bug, please!")
+            .await
+            .unwrap();
+        assert_eq!(wt.branch, "outcode/fix-the-login-bug-please");
+        assert_eq!(wt.base, "main");
+        assert!(Path::new(&wt.root).join(".git").exists());
+        assert!(wt.path.replace('\\', "/").ends_with("/pkg/app"));
+        assert!(Path::new(&wt.path).is_dir());
+
+        // The branch is in use there, as the project's listing says.
+        let r = repo(path).await.unwrap().unwrap();
+        let branch = r.branches.iter().find(|b| b.name == wt.branch).unwrap();
+        assert!(branch.worktree.is_some() && !branch.current);
+        let inside = repo(Path::new(&wt.root)).await.unwrap().unwrap();
+        assert_eq!(inside.branch.as_deref(), Some(wt.branch.as_str()));
+
+        // The same hint again gets a numbered branch.
+        let dir2 = store.path().join("def");
+        let wt2 = add_worktree(path, &dir2, Some("main"), "outcode", "Fix the login bug, please!")
+            .await
+            .unwrap();
+        assert_eq!(wt2.branch, "outcode/fix-the-login-bug-please-2");
+
+        // Another prefix, or none.
+        let wt3 = add_worktree(path, &store.path().join("ghi"), None, "me/", "Fix it").await.unwrap();
+        assert_eq!(wt3.branch, "me/fix-it");
+        let wt4 = add_worktree(path, &store.path().join("jkl"), None, "", "Fix it").await.unwrap();
+        assert_eq!(wt4.branch, "fix-it");
+
+        // The folder disappears, and comes back.
+        assert!(!restore_worktree(path, &wt).unwrap());
+        std::fs::remove_dir_all(&wt.root).unwrap();
+        assert!(restore_worktree(path, &wt).unwrap());
+        assert!(Path::new(&wt.path).is_dir());
+
+        remove_worktree(path, &wt).await.unwrap();
+        assert!(!dir.exists());
+        // The branch is kept.
+        assert!(branch_exists(path, &wt.branch).await.unwrap());
+        // With its branch gone too, a restore remakes it off the base.
+        delete(path, &wt.branch).await.unwrap();
+        assert!(restore_worktree(path, &wt).unwrap());
+        for w in [&wt, &wt2, &wt3, &wt4] {
+            remove_worktree(path, w).await.unwrap();
+        }
+        assert!(!dir2.exists());
+    }
+
+    #[test]
+    fn slugs() {
+        assert_eq!(branch_slug("Add dark mode to settings page now"), "add-dark-mode-to-settings");
+        assert_eq!(branch_slug("  ¿¡ "), "chat");
+        assert_eq!(branch_slug("über café"), "ber-caf");
+        assert!(branch_slug(&"x".repeat(100)).len() <= 40);
+        assert_eq!(prefixed("/a/", "b"), "a/b");
+        assert_eq!(prefixed(" ", "b"), "b");
     }
 }

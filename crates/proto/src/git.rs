@@ -16,6 +16,8 @@ pub struct GitRepo {
     /// HEAD's short hash; missing before the first commit.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub commit: Option<String>,
+    /// Files with uncommitted changes, untracked ones included.
+    pub changes: u32,
     /// Local branches, most recently committed first.
     pub branches: Vec<GitBranch>,
 }

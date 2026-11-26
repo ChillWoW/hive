@@ -1,4 +1,4 @@
 export { Composer } from "./Composer";
 export { FolderPicker } from "./FolderPicker";
-export { composer, useComposerStore } from "./store";
+export { composer, useComposerStore, type Workspace } from "./store";
 export { ContextMeter } from "./ContextMeter";
