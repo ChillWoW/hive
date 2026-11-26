@@ -10,27 +10,30 @@ import { CARD_DWELL, ChatRow } from "./ChatRow";
 import { DeleteChatDialog } from "./DeleteChatDialog";
 import { useSidebarGroups, type ProjectGroup } from "./groups";
 import { ROW_ACTION } from "./rows";
-import { ARCHIVED, isCollapsed, PINNED, projectKey, useSidebarStore } from "./store";
+import { ACTIVE, ARCHIVED, isCollapsed, PINNED, projectKey, useSidebarStore } from "./store";
 
 /** Chats a group lists before "Show more". */
 const GROUP_LIMIT = 6;
 
 type Row = (chat: Chat) => ReactNode;
 
-/** Pinned chats, then each project's, then Archived; a search filters them. */
+/** Running chats, pinned ones, then each project's, then Archived; a search filters them. */
 export function ChatList() {
     const groups = useSidebarGroups();
     const loaded = useChatsStore((s) => s.loaded);
     const [deleting, setDeleting] = useState<Chat | null>(null);
 
     const row: Row = (chat) => <ChatRow key={chat.id} chat={chat} onDelete={setDeleting} />;
+    // Active mixes projects, so its rows say whose they are.
+    const activeRow: Row = (chat) => <ChatRow key={chat.id} chat={chat} onDelete={setDeleting} showProject />;
 
     const query = useSidebarStore((s) => s.query);
     const found = useMemo(() => filterGroups(query, groups), [query, groups]);
     // Search results show unfolded, every chat listed.
     const searching = found !== null;
     const shown = found ?? groups;
-    const empty = !shown.pinned.length && !shown.projects.length && !shown.archived.length;
+    const empty =
+        !shown.active.length && !shown.pinned.length && !shown.projects.length && !shown.archived.length;
 
     if (!searching && loaded && empty) {
         return (
@@ -50,6 +53,17 @@ export function ChatList() {
                 </p>
             ) : (
                 <div className="flex flex-col gap-3">
+                    {shown.active.length > 0 && (
+                        <Section
+                            sectionKey={ACTIVE}
+                            label="Active"
+                            count={shown.active.length}
+                            forceOpen={searching}
+                        >
+                            {shown.active.map(activeRow)}
+                        </Section>
+                    )}
+
                     {shown.pinned.length > 0 && (
                         <Section sectionKey={PINNED} label="Pinned" forceOpen={searching}>
                             {shown.pinned.map(row)}
@@ -82,7 +96,7 @@ export function ChatList() {
     );
 }
 
-type Groups = { pinned: Chat[]; projects: ProjectGroup[]; archived: Chat[] };
+type Groups = { active: Chat[]; pinned: Chat[]; projects: ProjectGroup[]; archived: Chat[] };
 
 /**
  * What a search shows (null while the query is blank): chats whose title or
@@ -99,6 +113,7 @@ function filterGroups(query: string, groups: Groups): Groups | null {
     const chatMatches = (chat: Chat) =>
         matches(`${chat.title ?? ""} ${baseName(chat.cwd)} ${chat.worktree?.branch ?? ""}`);
     return {
+        active: groups.active.filter(chatMatches),
         pinned: groups.pinned.filter(chatMatches),
         projects: groups.projects.flatMap((project) => {
             if (matches(baseName(project.path))) return [project];
@@ -120,11 +135,14 @@ function useFold(key: string, forceOpen = false) {
 function Section({
     sectionKey,
     label,
+    count,
     forceOpen,
     children
 }: {
     sectionKey: string;
     label: string;
+    /** Shown after the label, muted. */
+    count?: number;
     forceOpen?: boolean;
     children: ReactNode;
 }) {
@@ -141,6 +159,7 @@ function Section({
                 )}
             >
                 <span>{label}</span>
+                {count !== undefined && <span className="tabular-nums">{count}</span>}
                 <Caret open={!collapsed} className="ml-auto opacity-0 group-hover/head:opacity-100" />
             </button>
             {!collapsed && <div className="flex flex-col gap-px">{children}</div>}
@@ -170,6 +189,7 @@ function Project({ project, row, forceOpen }: { project: ProjectGroup; row: Row;
             icon={<ProjectIcon path={path} selected={picked} />}
             name={name}
             list={project.chats}
+            emptyLabel={project.active ? "All chats active" : "No chats"}
             row={row}
             forceOpen={forceOpen}
             action={
@@ -196,6 +216,7 @@ function Group({
     icon,
     name,
     list,
+    emptyLabel = "No chats",
     row,
     counted,
     action,
@@ -205,6 +226,7 @@ function Group({
     icon: ReactNode;
     name: string;
     list: Chat[];
+    emptyLabel?: string;
     row: Row;
     /** Shows how many chats it has after the name, muted. */
     counted?: boolean;
@@ -242,7 +264,7 @@ function Group({
 
             {!collapsed && (
                 <div className="flex flex-col gap-px">
-                    {list.length === 0 && <p className="py-1 pl-8 text-[11px] text-muted/75">No chats</p>}
+                    {list.length === 0 && <p className="py-1 pl-8 text-[11px] text-muted/75">{emptyLabel}</p>}
                     {list.slice(0, shown).map(row)}
                     {(hidden > 0 || expanded) && list.length > GROUP_LIMIT && (
                         <button

@@ -10,6 +10,7 @@ import {
 } from "@phosphor-icons/react";
 import { activity, chats, useChatsStore, useWorking } from "@/features/chats";
 import { HarnessMark } from "@/features/models";
+import { ProjectIcon } from "@/features/projects";
 import { cn } from "@/lib/cn";
 import { timeAgo, useMinuteClock } from "@/lib/time";
 import type { Chat } from "@/proto";
@@ -17,7 +18,7 @@ import { ContextMenu, Menu, Tooltip, useInlineRename } from "@/ui";
 import { ChatCard } from "./ChatCard";
 import { ROW_ACTION, rowClassName, warn } from "./rows";
 import { StatusMark } from "./StatusMark";
-import { useSidebarStore } from "./store";
+import { isUnread, useSidebarStore } from "./store";
 
 export const UNTITLED = "New chat";
 
@@ -28,9 +29,18 @@ export const CARD_DWELL = 300;
  * One chat in the sidebar: status mark, title, its provider's mark and time
  * since its last activity. The "⋯" button (on hover) and a right-click open the same menu:
  * Rename (in place), Pin, Archive, Delete. Resting on it shows its card
- * (`ChatCard`) beside the sidebar; a click or a menu hides it.
+ * (`ChatCard`) beside the sidebar; a click or a menu hides it. `showProject`
+ * puts its project's icon in place of the provider's mark.
  */
-export function ChatRow({ chat, onDelete }: { chat: Chat; onDelete: (chat: Chat) => void }) {
+export function ChatRow({
+    chat,
+    onDelete,
+    showProject = false
+}: {
+    chat: Chat;
+    onDelete: (chat: Chat) => void;
+    showProject?: boolean;
+}) {
     const active = useChatsStore((s) => s.activeChatId === chat.id);
     const working = useWorking(chat.id);
     const renaming = useSidebarStore((s) => s.renaming === chat.id);
@@ -41,7 +51,9 @@ export function ChatRow({ chat, onDelete }: { chat: Chat; onDelete: (chat: Chat)
     const [menuOpen, setMenuOpen] = useState(false);
     const [contextOpen, setContextOpen] = useState(false);
 
-    const status = working ? "working" : "idle";
+    // The open chat is being read, so it shows no unread dot.
+    const unread = useSidebarStore((s) => !active && isUnread(chat, s.seen));
+    const status = working ? "working" : unread ? "unread" : "idle";
     const title = chat.title?.trim() || UNTITLED;
 
     const startRename = () => {
@@ -77,8 +89,12 @@ export function ChatRow({ chat, onDelete }: { chat: Chat; onDelete: (chat: Chat)
                             <span className={cn("min-w-0 flex-1 truncate", !chat.title && "text-muted")}>
                                 {title}
                             </span>
-                            {/* The chat's harness. */}
-                            <HarnessMark harness={chat.config.harness} className="size-3 shrink-0" />
+                            {showProject ? (
+                                <ProjectIcon path={chat.cwd} className="size-3.5 shrink-0" />
+                            ) : (
+                                // The chat's harness.
+                                <HarnessMark harness={chat.config.harness} className="size-3 shrink-0" />
+                            )}
                             <span
                                 className={cn(
                                     "flex w-7 shrink-0 justify-end text-[11px] text-muted/75 tabular-nums",

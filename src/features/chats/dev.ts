@@ -262,6 +262,8 @@ function finish(chatId: string, status: "completed" | "interrupted") {
     if (!turn) return;
     scripts.delete(chatId);
     feed(chatId, turn.reply, { type: "done", status });
+    // As the store does: a turn's end is its chat's latest activity.
+    save({ ...chatOf(chatId), lastMessageAt: Date.now() });
     const session = sessionOf(chatId);
     const held = session.held && status === "interrupted";
     setSession(chatId, { working: false, held });

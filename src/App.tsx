@@ -2,6 +2,7 @@ import type { ComponentType } from "react";
 import { ChatHeader, ChatView, useChatRuntime } from "@/features/chat";
 import { useChatsRuntime } from "@/features/chats";
 import { SettingsModal, useSettingsRuntime } from "@/features/settings";
+import { useSidebarRuntime } from "@/features/sidebar";
 import { useFontRuntime } from "@/features/fonts/useFontRuntime";
 import { useThemeRuntime } from "@/features/theme/useThemeRuntime";
 import { useUpdaterRuntime } from "@/features/updater";
@@ -32,6 +33,7 @@ export function App() {
     useUpdaterRuntime();
     useChatsRuntime();
     useChatRuntime();
+    useSidebarRuntime();
     const placement = usePlacement();
     const dockLeft = placement.dock === "left";
 
