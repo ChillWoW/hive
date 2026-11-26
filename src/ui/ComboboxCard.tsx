@@ -18,10 +18,12 @@ export function ComboboxCard({
                 side="top"
                 align="start"
                 sideOffset={8}
-                collisionPadding={12}
+                // The extra room on top keeps it off the top bar, the
+                // window's drag handle.
+                collisionPadding={{ top: 48, right: 12, bottom: 12, left: 12 }}
                 className="z-50 outline-none"
             >
-                <Combobox.Popup className={cn(popupClassName, className)} {...props} />
+                <Combobox.Popup className={cn(popupClassName, "rounded-xl p-1", className)} {...props} />
             </Combobox.Positioner>
         </Combobox.Portal>
     );

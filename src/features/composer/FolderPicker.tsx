@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Combobox } from "@base-ui/react/combobox";
 import {
+    CaretUpDownIcon,
     CheckIcon,
     CopyIcon,
     FolderIcon,
@@ -21,6 +22,7 @@ import {
     cardFooterClassName,
     cardListClassName,
     cardRowClassName,
+    cardRowDetailClassName,
     chipClassName,
     chipTriggerClassName,
     rowMetaClassName,
@@ -136,6 +138,7 @@ function FolderCombobox({
                             <span className="truncate">
                                 {cwd ? baseName(cwd) : "Choose a folder"}
                             </span>
+                            <CaretUpDownIcon className="size-3 shrink-0 opacity-60" weight="bold" />
                         </Combobox.Trigger>
                     }
                 />
@@ -144,7 +147,7 @@ function FolderCombobox({
                 </Tooltip.Content>
             </Tooltip>
 
-            <ComboboxCard aria-label="Choose a folder" className="w-72">
+            <ComboboxCard aria-label="Choose a folder" className="w-80">
                 <ComboboxCardSearch placeholder="Search or paste a path" />
 
                 <Combobox.Empty className="px-2.5 py-3 text-center text-xs text-muted/75 empty:hidden">
@@ -160,13 +163,15 @@ function FolderCombobox({
                                 value={path}
                                 className={cardRowClassName}
                             >
-                                <ProjectIcon
-                                    path={path}
-                                    selected={path === cwd}
-                                    className="size-3.5"
-                                />
-                                <span className="min-w-0 flex-1 truncate">
-                                    {baseName(path)}
+                                <ProjectIcon path={path} selected={path === cwd} />
+                                <span className="flex min-w-0 flex-1 items-baseline gap-1.5">
+                                    <span className="max-w-full shrink-0 truncate font-medium">
+                                        {baseName(path)}
+                                    </span>
+                                    {/* Where it lives, for the row under the pointer or the arrow keys. */}
+                                    <span className={cardRowDetailClassName}>
+                                        {parentOf(path)}
+                                    </span>
                                 </span>
                                 <span className={cn(rowMetaClassName, menuOpen && "hidden")}>
                                     {path === cwd && (
@@ -212,6 +217,11 @@ function FolderCombobox({
             </ComboboxCard>
         </Combobox.Root>
     );
+}
+
+/** The folder `path` sits in; its own name is already on the row. */
+function parentOf(path: string): string {
+    return path.replace(/[/\\]+$/, "").replace(/[/\\][^/\\]*$/, "");
 }
 
 /** A project row's "⋯" menu, on the right of the row. */

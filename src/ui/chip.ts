@@ -47,14 +47,14 @@ export const footerButtonClassName = cn(
 
 /** The search on top of a card, edge to edge. */
 export const cardSearchClassName =
-    "flex shrink-0 items-center gap-2 border-b border-border px-2.5";
+    "-mx-1 -mt-1 mb-1 flex shrink-0 items-center gap-2 border-b border-border px-3.5";
 
 export const cardListClassName =
-    "hide-scrollbar flex max-h-72 flex-col overflow-y-auto overscroll-contain p-1 empty:hidden";
+    "hide-scrollbar flex max-h-[17rem] flex-col gap-0.5 overflow-y-auto overscroll-contain empty:hidden";
 
 export const cardRowClassName = cn(
-    "group/row flex min-h-7 shrink-0 cursor-pointer items-center gap-2 rounded-sm py-1 pr-1 pl-2 outline-none select-none",
-    "text-xs text-text/85 data-[highlighted]:bg-hover",
+    "group/row flex h-8 shrink-0 cursor-pointer items-center gap-2 rounded-[7px] pr-1 pl-2 outline-none select-none",
+    "text-xs text-text transition-colors duration-100 data-[highlighted]:bg-hover",
     "data-[disabled]:cursor-default data-[disabled]:opacity-50"
 );
 
@@ -64,11 +64,12 @@ export const cardRowDetailClassName =
 
 /** The footer under a card's list. */
 export const cardFooterClassName =
-    "flex flex-col border-t border-border p-1 empty:hidden";
+    "mt-1 flex flex-col gap-0.5 border-t border-border pt-1 empty:hidden";
 
 export const cardFooterButtonClassName = cn(
     footerButtonClassName,
-    "text-left data-[highlighted]:bg-hover data-[popup-open]:bg-hover",
+    "h-8 rounded-[7px] px-2 text-left text-sm text-text hover:bg-raised",
+    "data-[highlighted]:bg-hover data-[popup-open]:bg-hover",
     "data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
 );
 
@@ -82,7 +83,7 @@ export const sideMenuItemClassName = "whitespace-nowrap [&_svg]:shrink-0";
  * row is highlighted or hovered, or its menu is open.
  */
 export const rowMenuTriggerClassName = cn(
-    "pointer-events-auto hidden size-5 shrink-0 items-center justify-center rounded-sm text-muted/75 outline-none",
+    "pointer-events-auto hidden size-6 shrink-0 items-center justify-center rounded-md text-muted/75 outline-none",
     "transition-colors duration-100 hover:bg-border hover:text-text",
     "group-hover/row:inline-flex group-data-[highlighted]/row:inline-flex",
     "data-[popup-open]:inline-flex data-[popup-open]:bg-border data-[popup-open]:text-text"
@@ -90,7 +91,7 @@ export const rowMenuTriggerClassName = cn(
 
 /** The row's meta, which the "⋯" button takes the place of. */
 export const rowMetaClassName =
-    "flex h-5 min-w-5 shrink-0 items-center justify-center group-hover/row:hidden group-data-[highlighted]/row:hidden";
+    "flex h-6 min-w-6 shrink-0 items-center justify-center group-hover/row:hidden group-data-[highlighted]/row:hidden";
 
 export const searchInputClassName =
     "h-8 w-full bg-transparent text-xs text-text outline-none placeholder:text-muted/75";
