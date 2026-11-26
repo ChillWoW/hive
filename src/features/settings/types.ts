@@ -9,7 +9,12 @@ export type AppearanceSettings = {
     theme: string;
     /** A font family: the bundled default or an installed one; see `src/features/fonts/`. */
     fontFamily: string;
+    /** The window's columns, left to right; each once, the dock at an end. See `src/layout/placement.ts`. */
+    layout: LayoutColumn[];
 };
+
+/** A column of the window: the dock, a side panel (chats, tabs, files), or the main chat column. */
+export type LayoutColumn = "dock" | "chats" | "main" | "tabs" | "files";
 
 export type UpdateChannel = "stable" | "prerelease";
 
@@ -80,7 +85,8 @@ export const DEFAULT_SETTINGS: Settings = {
     version: 1,
     appearance: {
         theme: "Outcode Slate",
-        fontFamily: "Geist"
+        fontFamily: "Geist",
+        layout: ["dock", "chats", "main", "tabs", "files"]
     },
     updates: {
         autoCheck: true,

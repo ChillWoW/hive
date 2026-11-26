@@ -2,29 +2,21 @@ import { useMemo, useSyncExternalStore } from "react";
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import { useShallow } from "zustand/react/shallow";
+import { PANELS, type Panel } from "./placement";
 
-/**
- * A column beside the main one: the sidebar on the left; the right sidebar,
- * then the file panel at the window's edge, on the right.
- */
-export type Panel = "left" | "right" | "files";
-
-export const PANELS: readonly Panel[] = ["left", "right", "files"];
-
-/** Which window edge a panel hangs off. */
-export const edgeOf = (panel: Panel): "left" | "right" => (panel === "left" ? "left" : "right");
+export { PANELS, type Panel };
 
 /** Each panel's widths in px. */
 export const PANEL_WIDTHS: Record<Panel, { min: number; max: number; default: number }> = {
-    left: { min: 220, max: 480, default: 280 },
-    right: { min: 360, max: 960, default: 520 },
+    chats: { min: 220, max: 480, default: 280 },
+    tabs: { min: 360, max: 960, default: 520 },
     files: { min: 220, max: 440, default: 286 }
 };
 
-/** The dock's width: a fixed strip at the window's left edge, outside the panels' room. */
+/** The dock's width: a fixed strip at one window edge, outside the panels' room. */
 export const DOCK_WIDTH = 48;
 
-/** The gap between the inset box and the window's right and bottom edges. */
+/** The gap between the inset box and the window's edges the dock isn't at. */
 export const BOX_INSET = 4;
 
 /** The width the panels and main column share: the window's, less the dock and the box's frame. */
@@ -39,24 +31,16 @@ const clamp = (value: number, min: number, max: number) => Math.min(Math.max(val
 
 const clampWidth = (panel: Panel, width: number) => {
     const { min, max } = PANEL_WIDTHS[panel];
-    return Math.round(clamp(width, min, max));
+    return Math.round(clamp(Number.isFinite(width) ? width : PANEL_WIDTHS[panel].default, min, max));
 };
 
-const OPEN_KEY = { left: "sidebarOpen", right: "rightSidebarOpen", files: "filesOpen" } as const;
-const WIDTH_KEY = {
-    left: "sidebarWidth",
-    right: "rightSidebarWidth",
-    files: "filesWidth"
-} as const;
+const perPanel = <T,>(value: (panel: Panel) => T) =>
+    Object.fromEntries(PANELS.map((p) => [p, value(p)])) as Record<Panel, T>;
 
 type LayoutState = {
-    sidebarOpen: boolean;
-    rightSidebarOpen: boolean;
-    filesOpen: boolean;
+    open: Record<Panel, boolean>;
     /** Preferred widths; what's shown can be less while the window is narrow. */
-    sidebarWidth: number;
-    rightSidebarWidth: number;
-    filesWidth: number;
+    widths: Record<Panel, number>;
     /**
      * When each panel was last opened or resized. Short of room, the least
      * recently used gives up width first, then hides.
@@ -73,7 +57,7 @@ type LayoutState = {
     setResizing: (resizing: boolean) => void;
 };
 
-type FitInput = Pick<LayoutState, (typeof OPEN_KEY)[Panel] | (typeof WIDTH_KEY)[Panel] | "usedAt">;
+type FitInput = Pick<LayoutState, "open" | "widths" | "usedAt">;
 
 /** Open panels, least recently used first. */
 const byUse = (panels: Panel[], state: FitInput) =>
@@ -85,16 +69,12 @@ const byUse = (panels: Panel[], state: FitInput) =>
  * stays open and comes back once there's room.
  */
 export function fitPanels(viewport: number, state: FitInput): Record<Panel, boolean> {
-    const visible = {
-        left: state.sidebarOpen,
-        right: state.rightSidebarOpen,
-        files: state.filesOpen
-    };
+    const visible = { ...state.open };
     for (;;) {
         const open = PANELS.filter((p) => visible[p]);
         const minimum = open.reduce((sum, p) => sum + PANEL_WIDTHS[p].min, MAIN_MIN_WIDTH);
         if (minimum <= viewport || open.length === 0) return visible;
-        visible[byUse(open, state)[0]] = false;
+        visible[byUse(open, state)[0]!] = false;
     }
 }
 
@@ -117,8 +97,8 @@ export function panelLayout(viewport: number, state: FitInput): PanelLayout {
     const minimums = shown.reduce((sum, p) => sum + PANEL_WIDTHS[p].min, 0);
     const main = clamp(viewport - minimums, MAIN_MIN_WIDTH, MAIN_COMFORT_WIDTH);
 
-    const widths: Record<Panel, number> = { left: 0, right: 0, files: 0 };
-    for (const p of shown) widths[p] = clampWidth(p, state[WIDTH_KEY[p]]);
+    const widths = perPanel(() => 0);
+    for (const p of shown) widths[p] = clampWidth(p, state.widths[p]);
     let excess = shown.reduce((sum, p) => sum + widths[p], 0) - (viewport - main);
     for (const p of byUse(shown, state)) {
         if (excess <= 0) break;
@@ -127,7 +107,7 @@ export function panelLayout(viewport: number, state: FitInput): PanelLayout {
         excess -= cut;
     }
 
-    const dragMax: Record<Panel, number> = { left: 0, right: 0, files: 0 };
+    const dragMax = perPanel(() => 0);
     for (const p of shown) {
         const others = shown
             .filter((o) => o !== p)
@@ -140,58 +120,77 @@ export function panelLayout(viewport: number, state: FitInput): PanelLayout {
     return { visible, widths, dragMax };
 }
 
-/** Which panels are open and how wide; persisted per device. */
+/** Version 0 named panels by their old fixed sides. */
+type SavedV0 = {
+    sidebarOpen?: boolean;
+    rightSidebarOpen?: boolean;
+    filesOpen?: boolean;
+    sidebarWidth?: number;
+    rightSidebarWidth?: number;
+    filesWidth?: number;
+    usedAt?: { left?: number; right?: number; files?: number };
+};
+
+const migrateV0 = (saved: SavedV0): Partial<FitInput> => ({
+    open: {
+        chats: saved.sidebarOpen ?? true,
+        tabs: saved.rightSidebarOpen ?? false,
+        files: saved.filesOpen ?? false
+    },
+    widths: {
+        chats: saved.sidebarWidth ?? PANEL_WIDTHS.chats.default,
+        tabs: saved.rightSidebarWidth ?? PANEL_WIDTHS.tabs.default,
+        files: saved.filesWidth ?? PANEL_WIDTHS.files.default
+    },
+    usedAt: {
+        chats: saved.usedAt?.left ?? 0,
+        tabs: saved.usedAt?.right ?? 0,
+        files: saved.usedAt?.files ?? 0
+    }
+});
+
+/** Which panels are open and how wide; persisted per device. Where they sit is a setting (`placement.ts`). */
 export const useLayoutStore = create<LayoutState>()(
     persist(
         (set, get) => ({
-            sidebarOpen: true,
-            rightSidebarOpen: false,
-            filesOpen: false,
-            sidebarWidth: PANEL_WIDTHS.left.default,
-            rightSidebarWidth: PANEL_WIDTHS.right.default,
-            filesWidth: PANEL_WIDTHS.files.default,
-            usedAt: { left: 0, right: 0, files: 0 },
+            open: { chats: true, tabs: false, files: false },
+            widths: perPanel((p) => PANEL_WIDTHS[p].default),
+            usedAt: perPanel(() => 0),
             resizing: false,
             toggle: (panel) => {
                 const state = get();
-                const shown = state[OPEN_KEY[panel]] && fitPanels(roomWidth(), state)[panel];
+                const shown = state.open[panel] && fitPanels(roomWidth(), state)[panel];
                 set({
-                    [OPEN_KEY[panel]]: !shown,
+                    open: { ...state.open, [panel]: !shown },
                     ...(!shown && { usedAt: { ...state.usedAt, [panel]: Date.now() } })
                 });
             },
-            setWidth: (panel, width) => set({ [WIDTH_KEY[panel]]: clampWidth(panel, width) }),
+            setWidth: (panel, width) =>
+                set((s) => ({ widths: { ...s.widths, [panel]: clampWidth(panel, width) } })),
             touch: (panel) => set((s) => ({ usedAt: { ...s.usedAt, [panel]: Date.now() } })),
             setResizing: (resizing) => set({ resizing })
         }),
         {
             name: "outcode.layout",
+            version: 1,
             storage: createJSONStorage(() => localStorage),
-            partialize: (s) => ({
-                sidebarOpen: s.sidebarOpen,
-                rightSidebarOpen: s.rightSidebarOpen,
-                filesOpen: s.filesOpen,
-                sidebarWidth: s.sidebarWidth,
-                rightSidebarWidth: s.rightSidebarWidth,
-                filesWidth: s.filesWidth,
-                usedAt: s.usedAt
-            }),
-            // A saved width from before the limits changed snaps into them.
+            partialize: (s): FitInput => ({ open: s.open, widths: s.widths, usedAt: s.usedAt }),
+            migrate: (saved, version) =>
+                (version === 0 ? migrateV0(saved as SavedV0) : saved) as LayoutState,
+            // Fills panels the save doesn't know; a width from before the limits changed snaps into them.
             merge: (saved, current) => {
-                const merged = { ...current, ...(saved as Partial<LayoutState>) };
+                const s = (saved ?? {}) as Partial<FitInput>;
+                const widths = { ...current.widths, ...s.widths };
                 return {
-                    ...merged,
-                    sidebarWidth: clampWidth("left", merged.sidebarWidth),
-                    rightSidebarWidth: clampWidth("right", merged.rightSidebarWidth),
-                    filesWidth: clampWidth("files", merged.filesWidth),
-                    usedAt: { ...current.usedAt, ...merged.usedAt }
+                    ...current,
+                    open: { ...current.open, ...s.open },
+                    widths: perPanel((p) => clampWidth(p, widths[p])),
+                    usedAt: { ...current.usedAt, ...s.usedAt }
                 };
             }
         }
     )
 );
-
-export const getPanelWidth = (panel: Panel) => useLayoutStore.getState()[WIDTH_KEY[panel]];
 
 /** The layout for the window's width right now, outside React. */
 export const getPanelLayout = () => panelLayout(roomWidth(), useLayoutStore.getState());
@@ -207,15 +206,7 @@ const useViewportWidth = () => useSyncExternalStore(subscribeResize, roomWidth);
 export function usePanelLayout(): PanelLayout {
     const viewport = useViewportWidth();
     const state = useLayoutStore(
-        useShallow((s) => ({
-            sidebarOpen: s.sidebarOpen,
-            rightSidebarOpen: s.rightSidebarOpen,
-            filesOpen: s.filesOpen,
-            sidebarWidth: s.sidebarWidth,
-            rightSidebarWidth: s.rightSidebarWidth,
-            filesWidth: s.filesWidth,
-            usedAt: s.usedAt
-        }))
+        useShallow((s) => ({ open: s.open, widths: s.widths, usedAt: s.usedAt }))
     );
     return useMemo(() => panelLayout(viewport, state), [viewport, state]);
 }

@@ -1,5 +1,6 @@
 import { FolderOpenIcon } from "@phosphor-icons/react";
 import { FontPicker } from "@/features/fonts/FontPicker";
+import { LayoutSection } from "./LayoutSection";
 import { ThemePicker } from "@/features/theme/ThemePicker";
 import { themesApi } from "@/features/theme/store";
 import { isTauri } from "@/lib/platform";
@@ -12,6 +13,7 @@ export function AppearancePage() {
         <>
             <ThemeSection />
             <FontSection />
+            <LayoutSection />
         </>
     );
 }

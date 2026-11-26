@@ -1,10 +1,10 @@
 import { ChatList, SidebarSearch } from "@/features/sidebar";
 import { SidePanel } from "./SidePanel";
 
-/** The left column, after the dock: New chat and search, then the chat list by project. */
+/** The chats panel: New chat and search, then the chat list by project. */
 export function Sidebar() {
     return (
-        <SidePanel panel="left" label="Sidebar">
+        <SidePanel panel="chats" label="Chats">
             <SidebarSearch />
             <nav
                 aria-label="Chats"

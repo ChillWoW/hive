@@ -41,7 +41,7 @@ export const ACTIONS: readonly Action[] = [
     {
         id: "toggleRightSidebar",
         category: "general",
-        label: "Toggle right sidebar",
+        label: "Toggle tabs panel",
         description: "Shows or hides the tabs panel",
         keywords: "right sidebar tabs panel show hide collapse",
         scope: "global"

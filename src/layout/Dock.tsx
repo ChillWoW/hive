@@ -4,17 +4,21 @@ import { useSettingsStore } from "@/features/settings";
 import type { ShortcutRef } from "@/keybindings/runtime";
 import { cn } from "@/lib/cn";
 import { IconButton } from "@/ui";
+import { usePlacement } from "./placement";
 import { DOCK_WIDTH, useLayoutStore, usePanelShown } from "./store";
 
 /**
- * The strip at the window's left edge, before the sidebar: views at its top
- * (chats, for now), settings at its foot. With the top bar it frames the inset box.
+ * The strip at one window edge (the left by default; see `placement.ts`):
+ * views at its top (chats, for now), settings at its foot. With the top bar
+ * it frames the inset box.
  */
 export function Dock() {
-    const sidebarShown = usePanelShown("left");
+    const chatsShown = usePanelShown("chats");
     const toggle = useLayoutStore((s) => s.toggle);
     const settingsOpen = useSettingsStore((s) => s.isOpen);
     const toggleSettings = useSettingsStore((s) => s.toggle);
+    // Tooltips open toward the window's middle.
+    const side = usePlacement().dock === "left" ? "right" : "left";
 
     return (
         <nav
@@ -25,15 +29,17 @@ export function Dock() {
             <DockButton
                 label="Chats"
                 shortcut="toggleSidebar"
-                active={sidebarShown}
-                onClick={() => toggle("left")}
+                side={side}
+                active={chatsShown}
+                onClick={() => toggle("chats")}
             >
-                <ChatsCircleIcon weight={sidebarShown ? "fill" : "regular"} className="size-5" />
+                <ChatsCircleIcon weight={chatsShown ? "fill" : "regular"} className="size-5" />
             </DockButton>
             <div className="flex-1" />
             <DockButton
                 label="Settings"
                 shortcut="openSettings"
+                side={side}
                 active={settingsOpen}
                 onClick={toggleSettings}
             >
@@ -43,7 +49,7 @@ export function Dock() {
     );
 }
 
-/** A dock entry: a larger icon button, its tooltip to the right. */
+/** A dock entry: a larger icon button. */
 function DockButton({
     active,
     children,
@@ -51,17 +57,13 @@ function DockButton({
 }: {
     label: string;
     shortcut?: ShortcutRef;
+    side: "left" | "right";
     active?: boolean;
     onClick?: () => void;
     children: ReactNode;
 }) {
     return (
-        <IconButton
-            side="right"
-            aria-pressed={active}
-            className={cn("size-8", active && "text-text")}
-            {...props}
-        >
+        <IconButton aria-pressed={active} className={cn("size-8", active && "text-text")} {...props}>
             {children}
         </IconButton>
     );

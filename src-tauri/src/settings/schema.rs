@@ -55,6 +55,9 @@ pub struct AppearanceSettings {
     /// The interface font's family name: the bundled default or an installed
     /// one. One that isn't installed falls back to the system UI font.
     pub font_family: String,
+    /// The window's columns, left to right (read by `src/layout/placement.ts`).
+    /// Each appears once; the dock is always at one end.
+    pub layout: Vec<LayoutColumn>,
 }
 
 impl Default for AppearanceSettings {
@@ -62,7 +65,74 @@ impl Default for AppearanceSettings {
         Self {
             theme: DEFAULT_THEME.into(),
             font_family: DEFAULT_FONT_FAMILY.into(),
+            layout: LayoutColumn::DEFAULT.to_vec(),
         }
+    }
+}
+
+/// A column of the window: the dock, a side panel, or the main chat column.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum LayoutColumn {
+    Dock,
+    /// The chats sidebar.
+    Chats,
+    Main,
+    /// The tabs panel (the right sidebar by default).
+    Tabs,
+    Files,
+}
+
+impl LayoutColumn {
+    pub const DEFAULT: [LayoutColumn; 5] = [
+        LayoutColumn::Dock,
+        LayoutColumn::Chats,
+        LayoutColumn::Main,
+        LayoutColumn::Tabs,
+        LayoutColumn::Files,
+    ];
+
+    /// Each column once, the dock at an end; mirrored by `normalizeLayout`
+    /// in `src/layout/placement.ts`. Duplicates keep their first place; a
+    /// missing column goes beside the main one on its default side (the dock
+    /// to its default end); no main column resets the whole layout.
+    pub fn normalize(columns: &[LayoutColumn]) -> Vec<LayoutColumn> {
+        use LayoutColumn::{Dock, Main};
+        let mut out: Vec<LayoutColumn> = Vec::new();
+        for &column in columns {
+            if !out.contains(&column) {
+                out.push(column);
+            }
+        }
+        if !out.contains(&Main) {
+            return Self::DEFAULT.to_vec();
+        }
+        let position = |out: &[LayoutColumn], column| out.iter().position(|&c| c == column).unwrap();
+        let default_main = position(&Self::DEFAULT, Main);
+        for (at, &column) in Self::DEFAULT.iter().enumerate() {
+            if out.contains(&column) {
+                continue;
+            }
+            let main = position(&out, Main);
+            let index = match (column, at < default_main) {
+                (Dock, true) => 0,
+                (Dock, false) => out.len(),
+                (_, true) => main,
+                (_, false) => main + 1,
+            };
+            out.insert(index, column);
+        }
+        let dock = position(&out, Dock);
+        if dock != 0 && dock != out.len() - 1 {
+            let left_of_main = dock < position(&out, Main);
+            out.remove(dock);
+            if left_of_main {
+                out.insert(0, Dock);
+            } else {
+                out.push(Dock);
+            }
+        }
+        out
     }
 }
 
@@ -206,6 +276,7 @@ impl Settings {
         let appearance = &mut settings.appearance;
         appearance.theme = non_empty(&appearance.theme, DEFAULT_THEME);
         appearance.font_family = non_empty(&appearance.font_family, DEFAULT_FONT_FAMILY);
+        appearance.layout = LayoutColumn::normalize(&appearance.layout);
         settings.claude.binary_path = settings.claude.binary_path.trim().into();
         settings.claude.config_dir = settings.claude.config_dir.trim().into();
         settings.claude.launch_args = settings.claude.launch_args.trim().into();
@@ -332,6 +403,43 @@ mod tests {
         assert_eq!(s.appearance.font_family, "Inter");
         let s = Settings::sanitize(&s, &json!({ "appearance": { "fontFamily": "" } }));
         assert_eq!(s.appearance.font_family, DEFAULT_FONT_FAMILY);
+    }
+
+    #[test]
+    fn layout_is_normalized() {
+        use LayoutColumn::*;
+        let layout = |value: Value| {
+            Settings::sanitize(
+                &Settings::default(),
+                &json!({ "appearance": { "layout": value } }),
+            )
+            .appearance
+            .layout
+        };
+        assert_eq!(
+            layout(json!(["files", "tabs", "main", "chats", "dock"])),
+            vec![Files, Tabs, Main, Chats, Dock]
+        );
+        // Duplicates keep their first place; missing columns go beside main.
+        assert_eq!(
+            layout(json!(["dock", "files", "files", "main"])),
+            vec![Dock, Files, Chats, Main, Tabs]
+        );
+        // The dock moves to the end of its side.
+        assert_eq!(
+            layout(json!(["chats", "dock", "main", "tabs", "files"])),
+            vec![Dock, Chats, Main, Tabs, Files]
+        );
+        assert_eq!(
+            layout(json!(["chats", "main", "dock", "tabs", "files"])),
+            vec![Chats, Main, Tabs, Files, Dock]
+        );
+        assert_eq!(layout(json!(["dock", "chats"])), LayoutColumn::DEFAULT.to_vec());
+        // An unknown column keeps the previous layout.
+        assert_eq!(
+            layout(json!(["dock", "terminal", "main"])),
+            LayoutColumn::DEFAULT.to_vec()
+        );
     }
 
     #[test]
