@@ -1,4 +1,4 @@
-import { useLayoutEffect, useMemo, useRef, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { Attachment, BackgroundTask, Message } from "@/proto";
 import { cn } from "@/lib/cn";
 import { chats, useActiveChat, useChatsStore, useSession } from "@/features/chats/store";
@@ -10,6 +10,8 @@ import { useChatConfig } from "./config";
 import { AssistantMessage } from "./transcript/AssistantMessage";
 import { ChatCwd, KnownFiles, LiveTasks } from "./transcript/context";
 import { foldPath, fullPath, parseFileRef, resolveFileRef } from "./transcript/filePaths";
+import { Minimap } from "./transcript/Minimap";
+import { minimapItems, type MinimapItem } from "./transcript/minimapItems";
 import { pathOf } from "./transcript/tools";
 import { UserMessage } from "./transcript/UserMessage";
 import { answer, queue, send, stop, useChatBusy, useChatStore } from "./store";
@@ -132,7 +134,7 @@ export function ChatView() {
                         {openSpawn ? (
                             <SubagentView id={openSpawn} messages={messages} />
                         ) : (
-                            <TranscriptScroller key={chat?.id} follow={messages}>
+                            <TranscriptScroller key={chat?.id} follow={messages} minimap={messages}>
                                 {messages.map((message) => (
                                     <MessageView key={message.id} message={message} />
                                 ))}
@@ -204,21 +206,74 @@ function Bottom({ className, children }: { className?: string; children?: ReactN
 /**
  * The transcript's scroller: messages down the lane, its scrollbar kept
  * clear of it. While scrolled to the end it stays there as `follow` changes.
+ * Given `minimap`, its prompts run as ticks down the left edge.
  */
 export function TranscriptScroller({
     follow,
+    minimap,
     children
 }: {
     follow?: unknown;
+    minimap?: Message[];
     children?: ReactNode;
 }) {
     const scrollerRef = useRef<HTMLDivElement>(null);
+    const contentRef = useRef<HTMLDivElement>(null);
     const pinnedRef = useRef(true);
 
     useLayoutEffect(() => {
         const scroller = scrollerRef.current;
         if (scroller && pinnedRef.current) scroller.scrollTop = scroller.scrollHeight;
     }, [follow]);
+
+    const items = useMemo(() => (minimap ? minimapItems(minimap) : []), [minimap]);
+    const [ticks] = useState(() => new Map<string, HTMLSpanElement>());
+
+    // Lights the ticks whose turns are on screen: a turn runs from its
+    // prompt to the next one. Written straight onto the ticks, not rendered.
+    const markInView = useCallback(() => {
+        const el = scrollerRef.current;
+        if (!el || ticks.size === 0) return;
+        const view = el.getBoundingClientRect();
+        const turns = [...el.querySelectorAll<HTMLElement>("[data-turn]")];
+        const contentBottom = contentRef.current?.getBoundingClientRect().bottom ?? view.bottom;
+        turns.forEach((turn, i) => {
+            const top = turn.getBoundingClientRect().top;
+            const bottom = turns[i + 1]?.getBoundingClientRect().top ?? contentBottom;
+            const tick = ticks.get(turn.dataset.turn!);
+            if (tick) tick.dataset.inView = String(bottom > view.top && top < view.bottom);
+        });
+    }, [ticks]);
+
+    const frame = useRef(0);
+    const scheduleMark = useCallback(() => {
+        cancelAnimationFrame(frame.current);
+        frame.current = requestAnimationFrame(markInView);
+    }, [markInView]);
+
+    useEffect(() => {
+        const el = scrollerRef.current;
+        const content = contentRef.current;
+        if (!el || !content) return;
+        const observer = new ResizeObserver(scheduleMark);
+        observer.observe(el);
+        observer.observe(content);
+        return () => {
+            observer.disconnect();
+            cancelAnimationFrame(frame.current);
+        };
+    }, [scheduleMark]);
+    useEffect(scheduleMark, [items, scheduleMark]);
+
+    const jumpTo = (item: MinimapItem) => {
+        const el = scrollerRef.current;
+        const turn = el?.querySelector<HTMLElement>(`[data-turn="${CSS.escape(item.id)}"]`);
+        if (!el || !turn) return;
+        const top = turn.getBoundingClientRect().top - el.getBoundingClientRect().top + el.scrollTop - 24;
+        // Unpinned so streaming doesn't pull it away; reaching the bottom pins again.
+        pinnedRef.current = false;
+        el.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
+    };
 
     return (
         <div className="relative flex min-h-0 flex-1 flex-col">
@@ -228,11 +283,22 @@ export function TranscriptScroller({
                     const el = e.currentTarget;
                     pinnedRef.current =
                         el.scrollHeight - el.scrollTop - el.clientHeight <= FOLLOW_SLACK;
+                    scheduleMark();
                 }}
                 className="min-h-0 flex-1 overflow-y-auto px-6 [scrollbar-gutter:stable_both-edges]"
             >
-                <div className={cn(laneClassName, "flex flex-col gap-5 py-6")}>{children}</div>
+                <div ref={contentRef} className={cn(laneClassName, "flex flex-col gap-5 py-6")}>
+                    {children}
+                </div>
             </div>
+            {minimap && (
+                <Minimap
+                    items={items}
+                    ticks={ticks}
+                    onSelect={jumpTo}
+                    onWheel={(deltaY) => scrollerRef.current?.scrollBy({ top: deltaY })}
+                />
+            )}
         </div>
     );
 }
@@ -254,7 +320,10 @@ function knownFiles(messages: Message[], cwd: string): Set<string> {
 
 function MessageView({ message }: { message: Message }) {
     return message.role === "user" ? (
-        <UserMessage message={message} />
+        // A turn starts here, for the minimap.
+        <div data-turn={message.id} className="flex flex-col">
+            <UserMessage message={message} />
+        </div>
     ) : (
         <AssistantMessage message={message} />
     );

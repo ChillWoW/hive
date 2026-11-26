@@ -4,6 +4,7 @@ import type { Message } from "@/proto";
 import { AttachmentChip, isImage, useImageViewer } from "@/features/chats";
 import { cn } from "@/lib/cn";
 import { useResizeObserver } from "@/lib/useResizeObserver";
+import { promptText } from "./text";
 
 /** Height (px) past which a prompt is collapsed: five lines at `leading-6`. */
 const COLLAPSED_HEIGHT = 120;
@@ -45,11 +46,6 @@ function Collapsible({ children }: { children: ReactNode }) {
             )}
         </>
     );
-}
-
-/** What a prompt says: its text parts, a blank line apart. */
-function promptText(message: Message): string {
-    return message.parts.flatMap((p) => (p.kind === "text" ? [p.text] : [])).join("\n\n");
 }
 
 /**
