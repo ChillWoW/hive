@@ -11,9 +11,9 @@ function withBase<State>(base: string, className: ClassName<State>) {
 }
 
 const itemBase = cn(
-    "relative flex cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm text-text outline-none select-none",
+    "relative flex cursor-pointer items-center gap-2 rounded-sm px-2.5 py-1.5 text-xs text-text outline-none select-none",
     "data-highlighted:bg-hover data-disabled:pointer-events-none data-disabled:opacity-50",
-    "[&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 [&_svg:not([class*='text-'])]:text-muted",
+    "[&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-3.5 [&_svg:not([class*='text-'])]:text-muted",
 );
 
 const itemVariants = {
@@ -105,7 +105,7 @@ export interface MenuItemProps extends MenuPrimitive.Item.Props {
 function MenuItem({ variant = "default", inset, className, ...props }: MenuItemProps) {
     return (
         <MenuPrimitive.Item
-            className={withBase(cn(itemBase, itemVariants[variant], inset && "pl-8"), className)}
+            className={withBase(cn(itemBase, itemVariants[variant], inset && "pl-7"), className)}
             {...props}
         />
     );
@@ -120,7 +120,7 @@ export interface MenuLinkItemProps extends MenuPrimitive.LinkItem.Props {
 function MenuLinkItem({ variant = "default", inset, className, ...props }: MenuLinkItemProps) {
     return (
         <MenuPrimitive.LinkItem
-            className={withBase(cn(itemBase, itemVariants[variant], inset && "pl-8"), className)}
+            className={withBase(cn(itemBase, itemVariants[variant], inset && "pl-7"), className)}
             {...props}
         />
     );
@@ -128,7 +128,7 @@ function MenuLinkItem({ variant = "default", inset, className, ...props }: MenuL
 
 function ItemIndicator({ children }: { children: ReactNode }) {
     return (
-        <span className="pointer-events-none absolute left-2 flex size-4 items-center justify-center">
+        <span className="pointer-events-none absolute left-1.5 flex size-4 items-center justify-center">
             {children}
         </span>
     );
@@ -137,7 +137,7 @@ function ItemIndicator({ children }: { children: ReactNode }) {
 /** Toggle item with a check mark. Stays open on click (`closeOnClick` to change). */
 function MenuCheckboxItem({ className, children, ...props }: MenuPrimitive.CheckboxItem.Props) {
     return (
-        <MenuPrimitive.CheckboxItem className={withBase(cn(itemBase, "pl-8"), className)} {...props}>
+        <MenuPrimitive.CheckboxItem className={withBase(cn(itemBase, "pl-7"), className)} {...props}>
             <ItemIndicator>
                 <MenuPrimitive.CheckboxItemIndicator>
                     <CheckIcon weight="bold" className="size-3.5 text-text" />
@@ -151,7 +151,7 @@ function MenuCheckboxItem({ className, children, ...props }: MenuPrimitive.Check
 /** Use inside `Menu.RadioGroup`. Stays open on click (`closeOnClick` to change). */
 function MenuRadioItem({ className, children, ...props }: MenuPrimitive.RadioItem.Props) {
     return (
-        <MenuPrimitive.RadioItem className={withBase(cn(itemBase, "pl-8"), className)} {...props}>
+        <MenuPrimitive.RadioItem className={withBase(cn(itemBase, "pl-7"), className)} {...props}>
             <ItemIndicator>
                 <MenuPrimitive.RadioItemIndicator className="size-1.5 rounded-full bg-text" />
             </ItemIndicator>
@@ -168,7 +168,7 @@ export interface MenuLabelProps extends MenuPrimitive.GroupLabel.Props {
 function MenuLabel({ inset, className, ...props }: MenuLabelProps) {
     return (
         <MenuPrimitive.GroupLabel
-            className={withBase(cn("px-2 py-1.5 text-xs font-medium text-muted select-none", inset && "pl-8"), className)}
+            className={withBase(cn("px-2.5 py-1 text-[11px] font-medium text-muted select-none", inset && "pl-7"), className)}
             {...props}
         />
     );
@@ -182,7 +182,7 @@ function MenuSeparator({ className, ...props }: MenuPrimitive.Separator.Props) {
 
 /** Right-aligned hint inside an item, e.g. `<Menu.Shortcut>Ctrl C</Menu.Shortcut>`. */
 function MenuShortcut({ className, ...props }: ComponentProps<"span">) {
-    return <span className={cn("ml-auto pl-4 text-xs tracking-wide text-muted", className)} {...props} />;
+    return <span className={cn("ml-auto pl-4 text-[11px] tracking-wide text-muted", className)} {...props} />;
 }
 
 /** Nested menu: `Menu.SubTrigger` + `Menu.Content`. Opens on hover by default. */
@@ -201,7 +201,7 @@ export interface MenuSubTriggerProps extends MenuPrimitive.SubmenuTrigger.Props 
 function MenuSubTrigger({ inset, className, children, ...props }: MenuSubTriggerProps) {
     return (
         <MenuPrimitive.SubmenuTrigger
-            className={withBase(cn(itemBase, "data-popup-open:bg-hover", inset && "pl-8"), className)}
+            className={withBase(cn(itemBase, "data-popup-open:bg-hover", inset && "pl-7"), className)}
             {...props}
         >
             {children}

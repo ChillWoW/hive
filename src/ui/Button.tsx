@@ -6,7 +6,7 @@ const variants = {
     default: "bg-accent text-accent-fg hover:bg-accent/85",
     destructive: "bg-danger text-white hover:bg-danger/85 focus-visible:outline-danger",
     "destructive-outline":
-        "border border-danger/50 bg-transparent text-danger hover:bg-danger/10 focus-visible:outline-danger",
+        "border border-transparent bg-transparent text-danger hover:border-danger/50 focus-visible:outline-danger",
     secondary: "bg-raised text-text hover:bg-hover",
     outline: "border border-border bg-transparent text-text hover:bg-raised",
     ghost: "bg-transparent text-text hover:bg-raised",
@@ -16,8 +16,8 @@ const variants = {
 // Heights step by 4px (28-44). Icons and the loading spinner share one size per step.
 const sizes = {
     xs: "h-7 gap-1 px-2.5 text-xs [&_svg:not([class*='size-'])]:size-3.5",
-    sm: "h-8 gap-1.5 px-3 text-sm [&_svg:not([class*='size-'])]:size-4",
-    md: "h-9 gap-2 px-4 text-sm [&_svg:not([class*='size-'])]:size-4",
+    sm: "h-8 gap-1.5 px-3 text-xs [&_svg:not([class*='size-'])]:size-4",
+    md: "h-9 gap-2 px-4 text-[13px] [&_svg:not([class*='size-'])]:size-4",
     lg: "h-10 gap-2 px-5 text-sm [&_svg:not([class*='size-'])]:size-4.5",
     xl: "h-11 gap-2 px-6 text-base [&_svg:not([class*='size-'])]:size-5",
     "icon-xs": "size-7 [&_svg:not([class*='size-'])]:size-3.5",

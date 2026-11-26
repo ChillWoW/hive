@@ -6,8 +6,8 @@ import { cn } from "@/lib/cn";
 // Root heights match Button (28-44); items fill the root minus its 1px border and 2px padding.
 const sizes = {
     xs: { root: "h-7", item: "gap-1 px-2 text-xs [&_svg:not([class*='size-'])]:size-3.5" },
-    sm: { root: "h-8", item: "gap-1.5 px-2.5 text-sm [&_svg:not([class*='size-'])]:size-4" },
-    md: { root: "h-9", item: "gap-2 px-3 text-sm [&_svg:not([class*='size-'])]:size-4" },
+    sm: { root: "h-8", item: "gap-1.5 px-2.5 text-xs [&_svg:not([class*='size-'])]:size-4" },
+    md: { root: "h-9", item: "gap-2 px-3 text-[13px] [&_svg:not([class*='size-'])]:size-4" },
     lg: { root: "h-10", item: "gap-2 px-4 text-sm [&_svg:not([class*='size-'])]:size-4.5" },
     xl: { root: "h-11", item: "gap-2 px-5 text-base [&_svg:not([class*='size-'])]:size-5" },
 } as const;
@@ -104,7 +104,7 @@ export function SegmentedControl<Value = string>({ size = "sm", className, child
                 data-slot="segmented-control"
                 className={(state) =>
                     cn(
-                        "group/segmented-control relative isolate inline-flex w-fit items-stretch rounded-md border border-border bg-bg p-0.5",
+                        "group/segmented-control relative isolate inline-flex w-fit items-stretch rounded-md border border-border bg-raised p-0.5",
                         sizes[size].root,
                         typeof className === "function" ? className(state) : className,
                     )
@@ -116,7 +116,7 @@ export function SegmentedControl<Value = string>({ size = "sm", className, child
                     aria-hidden
                     data-slot="segmented-control-indicator"
                     className={cn(
-                        "pointer-events-none invisible absolute top-0 left-0 rounded-sm bg-hover shadow-sm shadow-black/30",
+                        "pointer-events-none invisible absolute top-0 left-0 rounded-sm bg-border shadow-sm shadow-black/10",
                         "transition-[translate,width,height] duration-200 ease-out motion-reduce:transition-none",
                         // Disabled items dim themselves; a disabled group dims the indicator too.
                         "group-data-disabled/segmented-control:opacity-50",

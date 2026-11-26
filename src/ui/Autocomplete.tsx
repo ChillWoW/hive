@@ -13,8 +13,8 @@ function withBase<State>(base: string, className: ClassName<State>) {
 // the border so their inset roughly matches the vertical one, like Input.Group.
 const inputSizes = {
     xs: "h-7 gap-1.5 px-2 text-xs [&_svg:not([class*='size-'])]:size-3.5 [&_button]:size-5 [&>[data-slot=autocomplete-actions]]:-mr-1.5",
-    sm: "h-8 gap-2 px-2.5 text-sm [&_svg:not([class*='size-'])]:size-4 [&_button]:size-6 [&>[data-slot=autocomplete-actions]]:-mr-2",
-    md: "h-9 gap-2 px-3 text-sm [&_svg:not([class*='size-'])]:size-4 [&_button]:size-7 [&>[data-slot=autocomplete-actions]]:-mr-2.5",
+    sm: "h-8 gap-2 px-2.5 text-xs [&_svg:not([class*='size-'])]:size-3.5 [&_button]:size-6 [&>[data-slot=autocomplete-actions]]:-mr-2",
+    md: "h-9 gap-2 px-3 text-[13px] [&_svg:not([class*='size-'])]:size-4 [&_button]:size-7 [&>[data-slot=autocomplete-actions]]:-mr-2.5",
     lg: "h-10 gap-2 px-3.5 text-sm [&_svg:not([class*='size-'])]:size-4.5 [&_button]:size-7 [&>[data-slot=autocomplete-actions]]:-mr-2.5",
     xl: "h-11 gap-2.5 px-4 text-base [&_svg:not([class*='size-'])]:size-5 [&_button]:size-8 [&>[data-slot=autocomplete-actions]]:-mr-3",
 } as const;
@@ -26,8 +26,8 @@ const SizeContext = createContext<AutocompleteSize>("sm");
 
 const itemSizes = {
     xs: "py-1 text-xs",
-    sm: "py-1.5 text-sm",
-    md: "py-1.5 text-sm",
+    sm: "py-1.5 text-xs",
+    md: "py-1.5 text-[13px]",
     lg: "py-2 text-sm",
     xl: "py-2 text-base",
 } as const;
@@ -166,7 +166,7 @@ function AutocompleteContent({
                     {...props}
                 >
                     {/* Stays mounted so screen readers announce the empty state. */}
-                    <AutocompletePrimitive.Empty className="empty:hidden px-3 py-2 text-sm text-muted">
+                    <AutocompletePrimitive.Empty className="empty:hidden px-3 py-2 text-xs text-muted">
                         {empty}
                     </AutocompletePrimitive.Empty>
                     <AutocompletePrimitive.List className="min-h-0 flex-1 scroll-py-1 overflow-y-auto overscroll-contain p-1 data-empty:hidden">
@@ -184,9 +184,9 @@ function AutocompleteItem({ className, ...props }: AutocompletePrimitive.Item.Pr
         <AutocompletePrimitive.Item
             className={withBase(
                 cn(
-                    "flex cursor-default items-center gap-2 rounded-sm px-2 text-text outline-none select-none",
+                    "flex cursor-pointer items-center gap-2 rounded-sm px-2.5 text-text outline-none select-none",
                     "data-highlighted:bg-hover data-disabled:pointer-events-none data-disabled:opacity-50",
-                    "[&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 [&_svg:not([class*='text-'])]:text-muted",
+                    "[&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-3.5 [&_svg:not([class*='text-'])]:text-muted",
                     itemSizes[size],
                 ),
                 className,
@@ -200,7 +200,7 @@ function AutocompleteItem({ className, ...props }: AutocompletePrimitive.Item.Pr
 function AutocompleteLabel({ className, ...props }: AutocompletePrimitive.GroupLabel.Props) {
     return (
         <AutocompletePrimitive.GroupLabel
-            className={withBase("px-2 py-1.5 text-xs font-medium text-muted select-none", className)}
+            className={withBase("px-2.5 py-1 text-[11px] font-medium text-muted select-none", className)}
             {...props}
         />
     );

@@ -6,8 +6,8 @@ import { cn } from "@/lib/cn";
 // Stepper buttons are square: their width equals the group height.
 const sizes = {
     xs: { group: "h-7 text-xs", button: "w-7 [&_svg]:size-3" },
-    sm: { group: "h-8 text-sm", button: "w-8 [&_svg]:size-3.5" },
-    md: { group: "h-9 text-sm", button: "w-9 [&_svg]:size-4" },
+    sm: { group: "h-8 text-xs", button: "w-8 [&_svg]:size-3.5" },
+    md: { group: "h-9 text-[13px]", button: "w-9 [&_svg]:size-4" },
     lg: { group: "h-10 text-sm", button: "w-10 [&_svg]:size-4" },
     xl: { group: "h-11 text-base", button: "w-11 [&_svg]:size-4.5" },
 } as const;

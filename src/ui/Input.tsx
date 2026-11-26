@@ -5,8 +5,8 @@ import { cn } from "@/lib/cn";
 // Heights match Button sizes (28-44) so inputs and buttons line up in a row.
 const sizes = {
     xs: "h-7 px-2 text-xs file:text-xs",
-    sm: "h-8 px-2.5 text-sm file:text-sm",
-    md: "h-9 px-3 text-sm file:text-sm",
+    sm: "h-8 px-2.5 text-xs file:text-xs",
+    md: "h-9 px-3 text-[13px] file:text-[13px]",
     lg: "h-10 px-3.5 text-sm file:text-sm",
     xl: "h-11 px-4 text-base file:text-base",
 } as const;
@@ -15,8 +15,8 @@ const sizes = {
 // in an edge addon toward the border so its inset roughly matches the vertical one.
 const groupSizes = {
     xs: "h-7 gap-1.5 px-2 text-xs [&_svg:not([class*='size-'])]:size-3.5 [&>:first-child>button]:-ml-1.5 [&>:last-child>button]:-mr-1.5",
-    sm: "h-8 gap-2 px-2.5 text-sm [&_svg:not([class*='size-'])]:size-4 [&>:first-child>button]:-ml-2 [&>:last-child>button]:-mr-2",
-    md: "h-9 gap-2 px-3 text-sm [&_svg:not([class*='size-'])]:size-4 [&>:first-child>button]:-ml-2 [&>:last-child>button]:-mr-2",
+    sm: "h-8 gap-2 px-2.5 text-xs [&_svg:not([class*='size-'])]:size-3.5 [&>:first-child>button]:-ml-2 [&>:last-child>button]:-mr-2",
+    md: "h-9 gap-2 px-3 text-[13px] [&_svg:not([class*='size-'])]:size-4 [&>:first-child>button]:-ml-2 [&>:last-child>button]:-mr-2",
     lg: "h-10 gap-2 px-3.5 text-sm [&_svg:not([class*='size-'])]:size-4.5 [&>:first-child>button]:-ml-2.5 [&>:last-child>button]:-mr-2.5",
     xl: "h-11 gap-2.5 px-4 text-base [&_svg:not([class*='size-'])]:size-5 [&>:first-child>button]:-ml-3 [&>:last-child>button]:-mr-3",
 } as const;

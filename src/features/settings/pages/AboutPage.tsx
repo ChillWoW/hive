@@ -55,7 +55,7 @@ function UpdatesSection() {
                 controlClassName="w-auto"
                 control={
                     <SegmentedControl
-                        size="sm"
+                        size="xs"
                         value={channel.value}
                         onValueChange={(value) => channel.set(value as UpdateChannel)}
                         aria-label="Update channel"
