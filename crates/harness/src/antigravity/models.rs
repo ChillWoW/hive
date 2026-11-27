@@ -75,7 +75,12 @@ impl Cache {
     }
 }
 
+/// `agy models`, once ACP says the CLI is signed in: signed out, it would
+/// start Google's sign-in in the browser by itself.
 async fn list(exe: &Path) -> Result<Models, String> {
+    if !super::provider::signed_in(exe).await.map_err(|e| e.to_string())? {
+        return Ok(Models::default());
+    }
     let mut cmd = cli::command(exe);
     cmd.arg("models")
         .stdin(Stdio::null())

@@ -28,8 +28,9 @@ pub struct SignIns(Mutex<Option<SignInControl>>);
 pub struct SignInResult(Mutex<Option<tokio::sync::oneshot::Receiver<Result<(), String>>>>);
 
 /// Starts Google's sign-in and opens its page in the browser; the URL is
-/// the fallback, for when that didn't work. [`antigravity_sign_in_wait`]
-/// waits for the end.
+/// the fallback, for when that didn't work. The page ends on a code to paste
+/// ([`antigravity_sign_in_code`]); [`antigravity_sign_in_wait`] waits for
+/// the end.
 #[tauri::command]
 pub async fn antigravity_sign_in_start(app: AppHandle, sign_ins: State<'_, SignIns>) -> Result<SignInStarted, String> {
     if let Some(old) = sign_ins.0.lock().unwrap().take() {
@@ -61,6 +62,16 @@ pub async fn antigravity_sign_in_wait(
     let outcome = rx.await.unwrap_or_else(|_| Err("Sign-in ended.".into()));
     sign_ins.0.lock().unwrap().take();
     outcome
+}
+
+/// Hands the sign-in in progress the code from the Antigravity page.
+#[tauri::command]
+pub async fn antigravity_sign_in_code(sign_ins: State<'_, SignIns>, code: String) -> Result<(), String> {
+    let control = sign_ins.0.lock().unwrap().clone();
+    let Some(control) = control else {
+        return Err("No sign-in is in progress.".into());
+    };
+    control.submit(&code).await.map_err(err)
 }
 
 #[tauri::command]

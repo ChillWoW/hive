@@ -121,6 +121,7 @@ pub fn run() {
             antigravity::antigravity_status,
             antigravity::antigravity_sign_in_start,
             antigravity::antigravity_sign_in_wait,
+            antigravity::antigravity_sign_in_code,
             antigravity::antigravity_sign_in_cancel,
             antigravity::antigravity_sign_out,
             antigravity::antigravity_update,

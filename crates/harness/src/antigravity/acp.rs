@@ -1,8 +1,7 @@
 //! A JSON-RPC 2.0 connection to an `agy acp` child: the Agent Client
 //! Protocol, one JSON object per line each way. Our requests get numeric ids;
 //! the agent's own requests (permissions) arrive with its ids and are
-//! answered with [`Client::respond`]. Lines that aren't JSON (a sign-in link)
-//! go to [`Server::other`].
+//! answered with [`Client::respond`]; lines that aren't JSON are dropped.
 
 use std::collections::HashMap;
 use std::future::Future;
@@ -80,8 +79,6 @@ pub(super) struct Server {
     pub child: Child,
     pub client: Client,
     pub incoming: mpsc::Receiver<Incoming>,
-    /// Lines on stdout that aren't JSON-RPC.
-    pub other: mpsc::UnboundedReceiver<String>,
     pub stderr: StderrTail,
     /// `initialize`'s answer: the agent's capabilities and version.
     pub info: Value,
@@ -108,8 +105,7 @@ impl Server {
 
         let waiters: Waiters = Arc::default();
         let (incoming_tx, incoming) = mpsc::channel(512);
-        let (other_tx, other) = mpsc::unbounded_channel();
-        tokio::spawn(read_stdout(stdout, Arc::clone(&waiters), incoming_tx, other_tx));
+        tokio::spawn(read_stdout(stdout, Arc::clone(&waiters), incoming_tx));
 
         let client = Client {
             lines,
@@ -147,7 +143,6 @@ impl Server {
             child,
             client,
             incoming,
-            other,
             stderr,
             info,
         })
@@ -187,7 +182,6 @@ async fn read_stdout(
     stdout: ChildStdout,
     waiters: Waiters,
     incoming: mpsc::Sender<Incoming>,
-    other: mpsc::UnboundedSender<String>,
 ) {
     let mut lines = BufReader::new(stdout).lines();
     let trace = tracing();
@@ -204,9 +198,7 @@ async fn read_stdout(
                     let _ = waiter.send(result);
                 }
             }
-            None => {
-                let _ = other.send(line);
-            }
+            None => {}
         }
     }
     // Fail whatever is still waiting.

@@ -239,7 +239,11 @@ impl Session {
         let (session_id, result) = match opened {
             Ok(opened) => opened,
             Err(e) => {
-                let message = stderr.under(format!("Antigravity couldn't start a session: {e}"));
+                let message = if e.contains(super::provider::SIGNED_OUT) {
+                    "Antigravity isn't signed in. Sign in under Settings › Providers › Antigravity.".to_owned()
+                } else {
+                    stderr.under(format!("Antigravity couldn't start a session: {e}"))
+                };
                 drop(client);
                 tokio::spawn(async move { retire(&mut child).await });
                 return Err(message);

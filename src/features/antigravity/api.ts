@@ -16,7 +16,7 @@ const DEV_USAGE: UsageWindow[] = [
     { label: "Claude & GPT · 5 hours", used: 0 }
 ];
 
-/** Antigravity as a provider (`src-tauri/src/antigravity.rs`). Sign-in is Google's browser flow; nothing to paste. */
+/** Antigravity as a provider (`src-tauri/src/antigravity.rs`). Sign-in is Google's page, which ends on a code to paste. */
 export const antigravityApi: ProviderApi = {
     status: () => backend<ProviderStatus>("antigravity_status", {}, () => DEV_STATUS),
     startSignIn: () =>
@@ -24,6 +24,7 @@ export const antigravityApi: ProviderApi = {
             url: "https://accounts.google.com/o/oauth2/auth"
         })),
     waitSignIn: () => backend<void>("antigravity_sign_in_wait", {}, () => new Promise((r) => setTimeout(r, 1500))),
+    submitCode: (code: string) => backend<void>("antigravity_sign_in_code", { code }, () => undefined),
     cancelSignIn: () => backend<void>("antigravity_sign_in_cancel", {}, () => undefined),
     signOut: () => backend<void>("antigravity_sign_out", {}, () => undefined),
     update: () => backend<void>("antigravity_update", {}, () => undefined),

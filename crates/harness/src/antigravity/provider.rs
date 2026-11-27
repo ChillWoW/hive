@@ -1,8 +1,12 @@
 //! Antigravity's CLI as a provider: its version (`agy --version`), whether
-//! it's signed in and the plan's quota (the print-mode `/credits` and
-//! `/usage`, which answer without starting a turn or spending quota),
-//! updating it (`agy update`), and signing in and out over ACP
-//! (`authenticate`, `logout`).
+//! it's signed in (ACP `session/list`), the plan's quota (print mode's
+//! `/usage`, which answers without starting a turn or spending quota),
+//! updating it (`agy update`), signing in (`agy acp --login`: a Google link,
+//! then the code its page shows, pasted back) and out (ACP `logout`).
+//!
+//! ⚠ Signed out, print mode starts Google's sign-in in the browser by
+//! itself, so `/usage` only runs once ACP says the CLI is signed in; ACP
+//! just answers "Authentication required".
 //!
 //! ⚠ Before 1.1.11 print mode sent a slash command to the model as a prompt,
 //! so nothing is asked of a CLI older than [`MIN_VERSION`].
@@ -14,12 +18,16 @@ use std::time::Duration;
 
 use outcode_proto::{ProviderAccount, ProviderStatus, UsageWindow};
 use serde_json::{Value, json};
-use tokio::process::Command;
-use tokio::sync::Notify;
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tokio::process::{Child, ChildStdin, Command};
+use tokio::sync::{Mutex as AsyncMutex, Notify};
 
 use super::acp::{Server, retire};
 use super::find;
 use crate::{HarnessError, cli};
+
+/// What ACP answers a signed-out CLI.
+pub(super) const SIGNED_OUT: &str = "Authentication required";
 
 /// The oldest `agy` Outcode drives: open model access over ACP.
 pub const MIN_VERSION: [u32; 3] = [1, 5, 1];
@@ -146,12 +154,23 @@ async fn slash(exe: &Path, name: &str) -> Result<Result<Value, Output>, HarnessE
     Ok(Ok(parsed["command"]["data"].clone()))
 }
 
-/// What a failed command says about the login.
-fn signed_out(out: &Output) -> bool {
-    let text = format!("{}\n{}", out.stdout, out.stderr).to_lowercase();
-    ["auth", "sign in", "sign-in", "log in", "login", "credential"]
-        .iter()
-        .any(|w| text.contains(w))
+/// Whether the CLI is signed in, asked over ACP (`session/list`), which
+/// neither starts a sign-in nor leaves a conversation behind.
+pub(super) async fn signed_in(exe: &Path) -> Result<bool, HarnessError> {
+    let server = tokio::time::timeout(PROBE_TIMEOUT, Server::start(exe, cli::home_dir().as_deref()))
+        .await
+        .map_err(|_| failed("agy acp didn't start"))??;
+    let Server { client, mut child, .. } = server;
+    let answer = tokio::time::timeout(PROBE_TIMEOUT, client.request("session/list", json!({})))
+        .await
+        .unwrap_or_else(|_| Err("agy didn't answer session/list".into()));
+    drop(client);
+    tokio::spawn(async move { retire(&mut child).await });
+    match answer {
+        Ok(_) => Ok(true),
+        Err(e) if e.contains(SIGNED_OUT) => Ok(false),
+        Err(e) => Err(failed(e)),
+    }
 }
 
 /// The installed CLI, its version and whether it's signed in.
@@ -176,24 +195,14 @@ pub async fn status(binary: Option<&Path>) -> ProviderStatus {
         status.error = Some(too_old(&version).to_string());
         return status;
     }
-    match slash(&exe, "credits").await {
-        Ok(Ok(_)) => {
+    match signed_in(&exe).await {
+        Ok(logged_in) => {
             status.account = Some(ProviderAccount {
-                logged_in: true,
-                method: Some("Google".into()),
+                logged_in,
+                method: logged_in.then(|| "Google".into()),
                 ..ProviderAccount::default()
             });
         }
-        Ok(Err(out)) if signed_out(&out) => status.account = Some(ProviderAccount::default()),
-        // An API key has no credits to show.
-        Ok(Err(out)) if out.code == Some(2) => {
-            status.account = Some(ProviderAccount {
-                logged_in: true,
-                method: Some("api-key".into()),
-                ..ProviderAccount::default()
-            });
-        }
-        Ok(Err(out)) => status.error = Some(format!("Login check failed: {}", out.complaint())),
         Err(e) => status.error = Some(format!("Login check failed: {e}")),
     }
     status
@@ -203,12 +212,16 @@ pub async fn status(binary: Option<&Path>) -> ProviderStatus {
 /// have no account quota.
 pub async fn usage(binary: Option<&Path>) -> Result<Option<Vec<UsageWindow>>, HarnessError> {
     let exe = checked(binary).await?;
+    if !signed_in(&exe).await? {
+        return Ok(None);
+    }
     match slash(&exe, "usage").await? {
         Ok(data) => {
             let windows = usage_windows(&data);
             Ok((!windows.is_empty()).then_some(windows))
         }
-        Err(out) if out.code == Some(2) || signed_out(&out) => Ok(None),
+        // An API key has no account quota to show.
+        Err(out) if out.code == Some(2) => Ok(None),
         Err(out) => Err(failed(out.complaint())),
     }
 }
@@ -295,116 +308,157 @@ pub async fn sign_out(binary: Option<&Path>) -> Result<(), HarnessError> {
     answer.map(drop).map_err(failed)
 }
 
-/// A Google sign-in waiting on the browser. Dropping it stops the agent,
-/// which ends the sign-in.
+/// A Google sign-in through `agy acp --login`, waiting for the code the
+/// Antigravity page shows. Dropping it stops the CLI, which ends the sign-in.
 pub struct SignIn {
-    server: Server,
+    child: Child,
     url: String,
-    done: tokio::task::JoinHandle<Result<Value, String>>,
-    cancel: Arc<Notify>,
+    control: SignInControl,
+    /// The end of what it printed, for an error.
+    printed: Arc<std::sync::Mutex<String>>,
 }
 
-/// Cancels a [`SignIn`] from elsewhere; cheap to clone.
+/// Answers or cancels a [`SignIn`] from elsewhere; cheap to clone.
 #[derive(Clone)]
 pub struct SignInControl {
     cancel: Arc<Notify>,
+    stdin: Arc<AsyncMutex<Option<ChildStdin>>>,
 }
 
 impl SignInControl {
     pub fn cancel(&self) {
         self.cancel.notify_one();
     }
+
+    /// Hands the CLI the code from the Antigravity page (or that page's
+    /// full URL).
+    pub async fn submit(&self, code: &str) -> Result<(), HarnessError> {
+        let code = login_response(code).ok_or_else(|| failed("Paste the code from the Antigravity page, or its full URL."))?;
+        let mut stdin = self.stdin.lock().await;
+        let Some(pipe) = stdin.as_mut() else {
+            return Err(failed("No sign-in is waiting for a code."));
+        };
+        let line = format!("{code}\n");
+        if pipe.write_all(line.as_bytes()).await.is_err() || pipe.flush().await.is_err() {
+            *stdin = None;
+            return Err(failed("Antigravity stopped before the code arrived."));
+        }
+        Ok(())
+    }
+}
+
+/// What `--login` reads: one line, no spaces in it.
+fn login_response(code: &str) -> Option<&str> {
+    let code = code.trim();
+    (!code.is_empty() && code.len() <= 16 * 1024 && !code.chars().any(char::is_whitespace)).then_some(code)
 }
 
 impl SignIn {
-    /// The page that finishes it, should the browser not have opened.
+    /// The Google page to sign in on.
     pub fn url(&self) -> &str {
         &self.url
     }
 
     pub fn control(&self) -> SignInControl {
-        SignInControl {
-            cancel: Arc::clone(&self.cancel),
-        }
+        self.control.clone()
     }
 
-    /// Waits for the browser to finish, a cancel, or [`SIGN_IN_TIMEOUT`].
-    pub async fn finish(self) -> Result<(), HarnessError> {
-        let Self {
-            server: Server { client, mut child, .. },
-            mut done,
-            cancel,
-            ..
-        } = self;
+    /// Waits for the CLI to take the code and exit, a cancel, or
+    /// [`SIGN_IN_TIMEOUT`].
+    pub async fn finish(mut self) -> Result<(), HarnessError> {
         let outcome = tokio::select! {
-            answer = &mut done => match answer {
-                Ok(Ok(_)) => Ok(()),
-                Ok(Err(e)) => Err(failed(e)),
-                Err(_) => Err(failed("Antigravity stopped before the sign-in finished.")),
+            status = self.child.wait() => match status {
+                Ok(status) if status.success() => Ok(()),
+                Ok(_) => {
+                    let printed = self.printed.lock().unwrap().clone();
+                    let last = printed.lines().map(str::trim).rfind(|l| !l.is_empty()).unwrap_or_default().to_owned();
+                    Err(failed(if last.is_empty() {
+                        "Antigravity couldn't finish the sign-in. Start it again.".to_owned()
+                    } else {
+                        format!("Antigravity couldn't finish the sign-in: {last}")
+                    }))
+                }
+                Err(e) => Err(failed(e.to_string())),
             },
-            () = cancel.notified() => Err(failed("Sign-in cancelled.")),
+            () = self.control.cancel.notified() => Err(failed("Sign-in cancelled.")),
             () = tokio::time::sleep(SIGN_IN_TIMEOUT) => Err(failed("The sign-in timed out.")),
         };
-        done.abort();
-        drop(client);
-        cli::kill_tree(&mut child).await;
+        self.control.stdin.lock().await.take();
+        if outcome.is_err() {
+            cli::kill_tree(&mut self.child).await;
+        }
         outcome
     }
 }
 
-/// A Google sign-in link in what the agent printed.
+/// A Google sign-in link in what the CLI printed.
 fn sign_in_link(text: &str) -> Option<String> {
-    let start = text.find("https://accounts.google.com")?;
+    let start = text.find("https://accounts.google.com/")?;
     let link: String = text[start..].chars().take_while(|c| !c.is_whitespace()).collect();
     Some(link)
 }
 
-/// Starts Google's browser sign-in over ACP (`authenticate`): the agent
-/// prints its link (and may open the browser itself); open
-/// [`SignIn::url`], then [`SignIn::finish`].
+/// Starts Google's sign-in with `agy acp --login`, which prints a link and
+/// waits for the code the Antigravity page shows: open [`SignIn::url`],
+/// [`SignInControl::submit`] the code, then [`SignIn::finish`].
 pub async fn start_sign_in(binary: Option<&Path>) -> Result<SignIn, HarnessError> {
     let exe = checked(binary).await?;
-    let mut server = tokio::time::timeout(PROBE_TIMEOUT, Server::start(&exe, cli::home_dir().as_deref()))
-        .await
-        .map_err(|_| failed("agy acp didn't start"))??;
-    let authenticate = server
-        .client
-        .request("authenticate", json!({ "methodId": "oauth-personal" }));
-    let mut done = tokio::spawn(authenticate);
-    let deadline = tokio::time::sleep(LINK_TIMEOUT);
-    tokio::pin!(deadline);
-    let mut poll = tokio::time::interval(Duration::from_millis(200));
-    let url = loop {
-        tokio::select! {
-            line = server.other.recv() => {
-                if let Some(link) = line.as_deref().and_then(sign_in_link) {
-                    break link;
-                }
+    let mut cmd = cli::command(&exe);
+    cmd.args(["acp", "--login"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .kill_on_drop(true);
+    if let Some(home) = cli::home_dir() {
+        cmd.current_dir(home);
+    }
+    let mut child = cmd.spawn().map_err(|e| HarnessError::Spawn(super::NAME, e))?;
+    let stdin = child.stdin.take().expect("piped stdin");
+    let stdout = child.stdout.take().expect("piped stdout");
+    let stderr = cli::StderrTail::collect(child.stderr.take().expect("piped stderr"));
+
+    // Everything it prints is kept; the link goes out as soon as it shows.
+    let printed = Arc::new(std::sync::Mutex::new(String::new()));
+    let (link_tx, link_rx) = tokio::sync::oneshot::channel();
+    let kept = Arc::clone(&printed);
+    tokio::spawn(async move {
+        let mut link_tx = Some(link_tx);
+        let mut lines = BufReader::new(stdout).lines();
+        while let Ok(Some(line)) = lines.next_line().await {
+            if let Some(link) = sign_in_link(&line)
+                && let Some(tx) = link_tx.take()
+            {
+                let _ = tx.send(link);
             }
-            _ = poll.tick() => {
-                if let Some(link) = sign_in_link(&server.stderr.text()) {
-                    break link;
-                }
+            let mut kept = kept.lock().unwrap();
+            kept.push_str(&line);
+            kept.push('\n');
+            if kept.len() > 8 * 1024 {
+                let cut = kept.len() - 8 * 1024;
+                let cut = (cut..kept.len()).find(|i| kept.is_char_boundary(*i)).unwrap_or(0);
+                kept.drain(..cut);
             }
-            answer = &mut done => {
-                // Signed in already, or refused outright.
-                let Server { client, mut child, .. } = server;
-                drop(client);
-                tokio::spawn(async move { retire(&mut child).await });
-                return match answer {
-                    Ok(Ok(_)) => Err(failed("Already signed in.")),
-                    Ok(Err(e)) => Err(failed(e)),
-                    Err(_) => Err(failed("Antigravity stopped before the sign-in started.")),
-                };
-            }
-            () = &mut deadline => break INSTALL_URL.to_owned(),
+        }
+    });
+    let url = match tokio::time::timeout(LINK_TIMEOUT, link_rx).await {
+        Ok(Ok(url)) => url,
+        _ => {
+            cli::kill_tree(&mut child).await;
+            let said = printed.lock().unwrap().clone();
+            return Err(failed(stderr.under(format!(
+                "Antigravity didn't give a sign-in link.{}",
+                if said.trim().is_empty() { String::new() } else { format!("\n{}", said.trim()) }
+            ))));
         }
     };
     Ok(SignIn {
-        server,
+        child,
         url,
-        done,
-        cancel: Arc::new(Notify::new()),
+        control: SignInControl {
+            cancel: Arc::new(Notify::new()),
+            stdin: Arc::new(AsyncMutex::new(Some(stdin))),
+        },
+        printed,
     })
 }
 
@@ -445,23 +499,70 @@ mod tests {
     }
 
     #[test]
-    fn finds_the_sign_in_link() {
-        let line = "Open the following link to authenticate the ACP server: https://accounts.google.com/o/oauth2/auth?x=1 ";
-        assert_eq!(sign_in_link(line).as_deref(), Some("https://accounts.google.com/o/oauth2/auth?x=1"));
-        assert_eq!(sign_in_link("nothing"), None);
+    fn finds_the_sign_in_link_and_takes_one_line_codes() {
+        // As `agy acp --login` 1.5.18 prints it.
+        let line = "  https://accounts.google.com/o/oauth2/auth?access_type=offline&state=x ";
+        assert_eq!(
+            sign_in_link(line).as_deref(),
+            Some("https://accounts.google.com/o/oauth2/auth?access_type=offline&state=x")
+        );
+        assert_eq!(sign_in_link("Then paste the authorization code"), None);
+        assert_eq!(login_response("  4/0AUn6Hd-abc_DEF \n"), Some("4/0AUn6Hd-abc_DEF"));
+        assert_eq!(
+            login_response("https://antigravity.google/oauth-callback?code=4/0A&state=x"),
+            Some("https://antigravity.google/oauth-callback?code=4/0A&state=x")
+        );
+        assert_eq!(login_response("two words"), None);
+        assert_eq!(login_response("a\nb"), None);
+        assert_eq!(login_response("   "), None);
     }
 
-    /// Reads this machine's agy (no turns, no quota spent):
-    /// `cargo test -p outcode-harness antigravity::provider -- --ignored --nocapture`.
+    /// Reads this machine's agy (no turns, no quota spent, and signed out
+    /// no sign-in starts): `cargo test -p outcode-harness antigravity::provider::tests::live_status -- --ignored --nocapture`.
     #[tokio::test]
-    #[ignore = "needs agy installed and signed in"]
+    #[ignore = "needs agy installed"]
     async fn live_status_and_usage() {
         let status = status(None).await;
         println!("{status:?}");
         assert!(status.installed && status.version.is_some(), "{status:?}");
-        assert!(status.account.as_ref().is_some_and(|a| a.logged_in), "{status:?}");
+        assert!(status.error.is_none(), "{status:?}");
+        let signed_in = status.account.as_ref().is_some_and(|a| a.logged_in);
         let usage = usage(None).await.unwrap();
         println!("{usage:?}");
-        assert!(usage.is_some_and(|w| !w.is_empty()));
+        assert_eq!(usage.is_some_and(|w| !w.is_empty()), signed_in);
+    }
+
+    /// Signs in for real: prints the link, then waits for the code to be
+    /// written to `$OUTCODE_AGY_CODE_FILE`.
+    #[tokio::test]
+    #[ignore = "needs a person to open the link and paste the code"]
+    async fn live_sign_in() {
+        let file = std::path::PathBuf::from(std::env::var("OUTCODE_AGY_CODE_FILE").expect("OUTCODE_AGY_CODE_FILE"));
+        let _ = std::fs::remove_file(&file);
+        let sign_in = start_sign_in(None).await.unwrap();
+        println!("LINK {}", sign_in.url());
+        let control = sign_in.control();
+        tokio::spawn(async move {
+            loop {
+                if let Ok(code) = std::fs::read_to_string(&file) {
+                    println!("submitting the code: {:?}", control.submit(&code).await);
+                    return;
+                }
+                tokio::time::sleep(Duration::from_millis(500)).await;
+            }
+        });
+        sign_in.finish().await.unwrap();
+        assert!(signed_in(&find(None).unwrap()).await.unwrap());
+        println!("signed in");
+    }
+
+    /// Signs out for real; sign in again afterwards.
+    #[tokio::test]
+    #[ignore = "signs this machine's agy out"]
+    async fn live_sign_out() {
+        sign_out(None).await.unwrap();
+        assert!(!signed_in(&find(None).unwrap()).await.unwrap());
+        assert_eq!(usage(None).await.unwrap(), None);
+        println!("signed out");
     }
 }
