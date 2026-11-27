@@ -214,6 +214,16 @@ export async function openDoc(id: string, cwd: string, path: string) {
     }
 }
 
+/** Follows a rename on disk: `cwd`'s open files at or under `from` are under `to` now. */
+export function moveDocs(cwd: string, from: string, to: string) {
+    for (const [id, doc] of Object.entries(useDocsStore.getState().docs)) {
+        if (doc.cwd !== cwd || (doc.path !== from && !doc.path.startsWith(`${from}/`))) continue;
+        const path = to + doc.path.slice(from.length);
+        setDoc(id, { path });
+        void loadLanguage(id, path);
+    }
+}
+
 /** Forgets the tab `id`'s file (its tab closed). */
 export function dropDoc(id: string) {
     views.get(id)?.destroy();

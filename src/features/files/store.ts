@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import { openFileTab } from "@/features/editor/open";
-import { ancestorsOf } from "./tree";
+import { ancestorsOf, isUnder, movedPath } from "./tree";
 
 type FilesState = {
     /** The search field's text; lists matching files instead of the tree while not blank. */
@@ -54,6 +54,30 @@ export const files = {
         setExpanded(root, (open) => ancestorsOf(path).forEach((folder) => open.add(folder)));
         files.select(root, path);
     },
+    /** Follows a rename: open folders and the pick at or under `from` are under `to` now. */
+    moved: (root: string, from: string, to: string) =>
+        useFilesStore.setState((s) => {
+            const pick = s.selected[root];
+            return {
+                expanded: {
+                    ...s.expanded,
+                    [root]: (s.expanded[root] ?? []).map((path) => movedPath(path, from, to))
+                },
+                selected: pick === undefined ? s.selected : { ...s.selected, [root]: movedPath(pick, from, to) }
+            };
+        }),
+    /** Forgets the open folders and the pick at or under `path`, which is gone. */
+    removed: (root: string, path: string) =>
+        useFilesStore.setState((s) => {
+            const { [root]: pick, ...others } = s.selected;
+            return {
+                expanded: {
+                    ...s.expanded,
+                    [root]: (s.expanded[root] ?? []).filter((open) => !isUnder(open, path))
+                },
+                selected: pick !== undefined && isUnder(pick, path) ? others : s.selected
+            };
+        }),
     /** Picks a file and opens it in an editor tab. */
     open: (root: string, path: string) => {
         files.select(root, path);

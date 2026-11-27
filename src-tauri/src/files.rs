@@ -1,7 +1,8 @@
 //! Files the user opens from the app, and a chat folder's files for the
 //! composer's `@` menu and the file panel: every file and folder that
 //! `.gitignore` (and `.ignore`) doesn't hide, dotfiles included, `.git`
-//! never. The file panel can ask for the ignored ones too.
+//! never. The file panel can ask for the ignored ones too, and renames and
+//! deletes (to the system's trash) what it lists.
 
 use std::collections::HashSet;
 use std::path::{Component, Path};
@@ -9,6 +10,8 @@ use std::path::{Component, Path};
 use outcode_proto::WorkspaceEntry;
 use tauri::AppHandle;
 use tauri_plugin_opener::OpenerExt;
+
+use crate::editor::resolve;
 
 /// Past this the walk stops; ranking happens in the webview.
 const MAX_ENTRIES: usize = 50_000;
@@ -156,9 +159,64 @@ pub async fn list_folder(cwd: String, path: String) -> Result<Vec<WorkspaceEntry
         .map_err(|e| e.to_string())?
 }
 
+/// Whether both paths name one file, as `a.txt` and `A.txt` do where case doesn't count.
+fn same_file(a: &Path, b: &Path) -> bool {
+    matches!((a.canonicalize(), b.canonicalize()), (Ok(a), Ok(b)) if a == b)
+}
+
+fn rename(source: &Path, target: &Path) -> Result<(), String> {
+    if std::fs::symlink_metadata(source).is_err() {
+        return Err(format!("{} doesn't exist", source.display()));
+    }
+    // A rename would replace what's there.
+    if std::fs::symlink_metadata(target).is_ok() && !same_file(source, target) {
+        let name = target.file_name().unwrap_or_default().to_string_lossy();
+        return Err(format!("{name} already exists"));
+    }
+    std::fs::rename(source, target).map_err(|e| e.to_string())
+}
+
+/// Renames the file or folder `from` to `to` (both relative to `cwd`);
+/// refused when `to` is taken.
+#[tauri::command]
+pub async fn rename_path(cwd: String, from: String, to: String) -> Result<(), String> {
+    let (source, target) = (resolve(&cwd, &from)?, resolve(&cwd, &to)?);
+    tauri::async_runtime::spawn_blocking(move || rename(&source, &target))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+/// Moves the file or folder `path` (relative to `cwd`) to the system's trash.
+#[tauri::command]
+pub async fn trash_path(cwd: String, path: String) -> Result<(), String> {
+    let target = resolve(&cwd, &path)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        if std::fs::symlink_metadata(&target).is_err() {
+            return Err(format!("{} doesn't exist", target.display()));
+        }
+        trash::delete(&target).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn renames_unless_taken() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        std::fs::write(root.join("a.txt"), "a").unwrap();
+        std::fs::write(root.join("b.txt"), "b").unwrap();
+
+        assert!(rename(&root.join("a.txt"), &root.join("b.txt")).is_err());
+        assert!(rename(&root.join("gone.txt"), &root.join("c.txt")).is_err());
+        rename(&root.join("a.txt"), &root.join("c.txt")).unwrap();
+        assert_eq!(std::fs::read_to_string(root.join("c.txt")).unwrap(), "a");
+        assert_eq!(std::fs::read_to_string(root.join("b.txt")).unwrap(), "b");
+    }
 
     #[test]
     fn lists_what_git_would_track() {

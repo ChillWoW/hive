@@ -9,6 +9,13 @@ export const parentOf = (path: string) => {
 /** The last segment of a `/`-separated relative path. */
 export const nameOf = (path: string) => path.slice(path.lastIndexOf("/") + 1);
 
+/** Whether `path` is `folder` or inside it. */
+export const isUnder = (path: string, folder: string) => path === folder || path.startsWith(`${folder}/`);
+
+/** `path` once `from` was renamed to `to`: moved with it when at or under it, else as it was. */
+export const movedPath = (path: string, from: string, to: string) =>
+    isUnder(path, from) ? to + path.slice(from.length) : path;
+
 /** Every folder `path` sits in, outermost first. */
 export function ancestorsOf(path: string): string[] {
     const parts = path.split("/");

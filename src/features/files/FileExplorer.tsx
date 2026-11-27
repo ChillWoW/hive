@@ -1,10 +1,15 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type RefObject } from "react";
 import {
     ArrowClockwiseIcon,
+    AtIcon,
     CaretRightIcon,
+    CopyIcon,
+    CopySimpleIcon,
     EyeIcon,
     EyeSlashIcon,
     MagnifyingGlassIcon,
+    PencilSimpleIcon,
+    TrashIcon,
     XIcon
 } from "@phosphor-icons/react";
 import type { WorkspaceEntry } from "@/proto";
@@ -12,7 +17,16 @@ import { useActiveChat, useChatsStore, workDir } from "@/features/chats";
 import { cn } from "@/lib/cn";
 import { fuzzyPositions } from "@/lib/fuzzy";
 import { baseName } from "@/lib/paths";
-import { CollapseAllIcon, FileIcon, IconButton } from "@/ui";
+import {
+    CollapseAllIcon,
+    ConfirmDialog,
+    ContextMenu,
+    FileIcon,
+    IconButton,
+    useInlineRename,
+    useLastNonNull
+} from "@/ui";
+import { addToChat, copyPath, renameEntry, trashEntry } from "./actions";
 import { loadFolder, rankEntries, refreshFiles, useOpenedFolders, useWorkspaceFiles } from "./listing";
 import { files, useExpanded, useFilesStore } from "./store";
 import { childrenByFolder, nameOf, parentOf, visibleRows, type TreeRow } from "./tree";
@@ -39,7 +53,9 @@ function useRoot(): string {
 
 /**
  * The file panel's content: a search over the chat folder's files, then its
- * tree (or, while searching, the best matches). Listed while `shown`.
+ * tree (or, while searching, the best matches). Listed while `shown`. A
+ * right-click on an entry opens its menu: Add to chat, Copy path, Rename
+ * (in place, in the tree), Delete (to the trash, once confirmed).
  */
 export function FileExplorer({ shown }: { shown: boolean }) {
     const root = useRoot();
@@ -70,6 +86,16 @@ export function FileExplorer({ shown }: { shown: boolean }) {
         setHighlighted(0);
     }
     const resultsRef = useRef<HTMLDivElement>(null);
+    /** The entry whose name is being edited, by path. */
+    const [renaming, setRenaming] = useState<string | null>(null);
+    const [deleting, setDeleting] = useState<WorkspaceEntry | null>(null);
+
+    const startRename = (entry: WorkspaceEntry) => {
+        // The field is in the tree.
+        files.reveal(root, entry.path);
+        files.setQuery("");
+        setRenaming(entry.path);
+    };
 
     const pickResult = (entry: WorkspaceEntry) => {
         if (entry.dir) {
@@ -110,7 +136,6 @@ export function FileExplorer({ shown }: { shown: boolean }) {
                 {/* The folder shown, and the tree's actions. */}
                 <div className="flex h-7 min-w-0 items-center gap-0.5 pr-0.5 pl-2">
                     <span
-                        title={root || undefined}
                         className="min-w-0 flex-1 truncate text-xs font-medium text-text/85"
                     >
                         {root ? baseName(root) : "Files"}
@@ -181,10 +206,20 @@ export function FileExplorer({ shown }: { shown: boolean }) {
                     highlighted={highlighted}
                     onHighlight={setHighlighted}
                     onPick={pickResult}
+                    onRename={startRename}
+                    onDelete={setDeleting}
                 />
             ) : (
-                <Tree root={root} entries={entries} />
+                <Tree
+                    root={root}
+                    entries={entries}
+                    renaming={renaming}
+                    onRename={startRename}
+                    onRenameEnd={() => setRenaming(null)}
+                    onDelete={setDeleting}
+                />
             )}
+            <DeleteEntryDialog root={root} entry={deleting} onClose={() => setDeleting(null)} />
         </>
     );
 }
@@ -193,8 +228,166 @@ function Note({ children }: { children: string }) {
     return <div className="px-4 py-6 text-center text-xs text-muted">{children}</div>;
 }
 
-/** The folder's tree: folders open and close in place; arrows move the pick, as in an editor. */
-function Tree({ root, entries }: { root: string; entries: readonly WorkspaceEntry[] }) {
+/** An entry's right-click menu. */
+function EntryMenu({
+    root,
+    entry,
+    onRename,
+    onDelete
+}: {
+    root: string;
+    entry: WorkspaceEntry;
+    onRename: (entry: WorkspaceEntry) => void;
+    onDelete: (entry: WorkspaceEntry) => void;
+}) {
+    // The composer or the name's field takes the caret; the closing menu mustn't take it back.
+    const keepFocus = useRef(false);
+    const finalFocus = () => {
+        const keep = keepFocus.current;
+        keepFocus.current = false;
+        return !keep;
+    };
+    return (
+        <ContextMenu.Content finalFocus={finalFocus} className="w-52 min-w-0">
+            <ContextMenu.Item
+                onClick={() => {
+                    keepFocus.current = true;
+                    addToChat(entry);
+                }}
+            >
+                <AtIcon />
+                Add to chat
+            </ContextMenu.Item>
+            <ContextMenu.Separator />
+            <ContextMenu.Item onClick={() => copyPath(root, entry.path)}>
+                <CopyIcon />
+                Copy path
+            </ContextMenu.Item>
+            <ContextMenu.Item onClick={() => copyPath(root, entry.path, true)}>
+                <CopySimpleIcon />
+                Copy relative path
+            </ContextMenu.Item>
+            <ContextMenu.Separator />
+            <ContextMenu.Item
+                onClick={() => {
+                    keepFocus.current = true;
+                    onRename(entry);
+                }}
+            >
+                <PencilSimpleIcon />
+                Rename
+                <ContextMenu.Shortcut>F2</ContextMenu.Shortcut>
+            </ContextMenu.Item>
+            <ContextMenu.Item variant="destructive" onClick={() => onDelete(entry)}>
+                <TrashIcon />
+                Delete…
+                <ContextMenu.Shortcut>Del</ContextMenu.Shortcut>
+            </ContextMenu.Item>
+        </ContextMenu.Content>
+    );
+}
+
+/** Asks before `entry` goes to the trash. Closed while null. */
+function DeleteEntryDialog({
+    root,
+    entry,
+    onClose
+}: {
+    root: string;
+    entry: WorkspaceEntry | null;
+    onClose: () => void;
+}) {
+    const shown = useLastNonNull(entry);
+    return (
+        <ConfirmDialog
+            open={entry !== null}
+            title={shown?.dir ? "Delete folder?" : "Delete file?"}
+            confirmLabel="Move to trash"
+            onConfirm={async () => {
+                if (shown) await trashEntry(root, shown);
+            }}
+            onClose={onClose}
+        >
+            <p>
+                <span className="font-medium break-all text-text">{shown ? nameOf(shown.path) : ""}</span>
+                {shown?.dir ? " and everything in it" : ""} will be moved to the trash.
+            </p>
+        </ConfirmDialog>
+    );
+}
+
+/**
+ * An entry's name in place, editable: Enter or leaving saves, Escape cancels.
+ * `byKey` says a key ended it, so the row can take focus back.
+ */
+function RenameField({
+    entry,
+    onSubmit,
+    onCancel
+}: {
+    entry: WorkspaceEntry;
+    onSubmit: (name: string, byKey: boolean) => void;
+    onCancel: (byKey: boolean) => void;
+}) {
+    const name = nameOf(entry.path);
+    const { finish, value, inputProps } = useInlineRename({
+        // A file's name up to its extension, which usually stays.
+        select: (field) => {
+            const dot = entry.dir ? -1 : name.lastIndexOf(".");
+            field.setSelectionRange(0, dot > 0 ? dot : name.length);
+        },
+        onEnter: () => end(true, true),
+        onEscape: () => end(false, true),
+        onBlur: () => end(true, false)
+    });
+
+    const end = (save: boolean, byKey: boolean) =>
+        finish(() => {
+            const next = value();
+            // Blank keeps the current name.
+            if (save && next && next !== name) onSubmit(next, byKey);
+            else onCancel(byKey);
+        });
+
+    return (
+        <input
+            {...inputProps}
+            // The tree's keys and the row's click aren't for the field.
+            onKeyDown={(event) => {
+                event.stopPropagation();
+                inputProps.onKeyDown(event);
+            }}
+            onClick={(event) => event.stopPropagation()}
+            onContextMenu={(event) => event.stopPropagation()}
+            defaultValue={name}
+            aria-label="Name"
+            spellCheck={false}
+            autoComplete="off"
+            className="-ml-1 h-5 min-w-0 flex-1 cursor-text rounded-sm bg-transparent px-1 text-xs text-text outline-none ring-1 ring-border select-text"
+        />
+    );
+}
+
+/**
+ * The folder's tree: folders open and close in place; arrows move the pick,
+ * as in an editor; F2 renames it and Delete deletes it.
+ */
+function Tree({
+    root,
+    entries,
+    renaming,
+    onRename,
+    onRenameEnd,
+    onDelete
+}: {
+    root: string;
+    entries: readonly WorkspaceEntry[];
+    /** The entry whose name is being edited, by path. */
+    renaming: string | null;
+    onRename: (entry: WorkspaceEntry) => void;
+    onRenameEnd: () => void;
+    onDelete: (entry: WorkspaceEntry) => void;
+}) {
     const children = useMemo(() => childrenByFolder(entries), [entries]);
     const expandedList = useExpanded(root);
     const expanded = useMemo(() => new Set(expandedList), [expandedList]);
@@ -236,7 +429,25 @@ function Tree({ root, entries }: { root: string; entries: readonly WorkspaceEntr
         rowEl(path)?.focus();
     };
 
+    const focusRow = (path: string) => requestAnimationFrame(() => rowEl(path)?.focus());
+
+    const submitRename = async (entry: WorkspaceEntry, name: string, byKey: boolean) => {
+        onRenameEnd();
+        if (byKey) focusRow(entry.path);
+        const to = await renameEntry(root, entry, name);
+        // Its row is a new one; back to it unless focus went elsewhere meanwhile.
+        const active = document.activeElement;
+        if (to && byKey && (active === document.body || treeRef.current?.contains(active))) focusRow(to);
+    };
+
+    const cancelRename = (entry: WorkspaceEntry, byKey: boolean) => {
+        onRenameEnd();
+        if (byKey) focusRow(entry.path);
+    };
+
     const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+        // A row's menu is portalled, but its keys still bubble here.
+        if (!(event.target instanceof Node) || !event.currentTarget.contains(event.target)) return;
         const index = Math.max(at, 0);
         const row = rows[index];
         if (!row) return;
@@ -268,6 +479,12 @@ function Tree({ root, entries }: { root: string; entries: readonly WorkspaceEntr
                 case " ":
                     activate(row);
                     return true;
+                case "F2":
+                    onRename(entry);
+                    return true;
+                case "Delete":
+                    onDelete(entry);
+                    return true;
                 default:
                     return false;
             }
@@ -286,39 +503,52 @@ function Tree({ root, entries }: { root: string; entries: readonly WorkspaceEntr
             {rows.map((row) => {
                 const { entry, depth, open } = row;
                 const name = nameOf(entry.path);
+                const editing = entry.path === renaming;
                 return (
-                    <div
-                        key={entry.path}
-                        role="treeitem"
-                        aria-level={depth + 1}
-                        aria-expanded={entry.dir ? open : undefined}
-                        aria-selected={entry.path === selected}
-                        data-path={entry.path}
-                        tabIndex={entry.path === cursor ? 0 : -1}
-                        title={entry.path}
-                        onClick={() => activate(row)}
-                        style={{ paddingLeft: 6 + depth * INDENT }}
-                        className={rowClass(entry.path === selected)}
-                    >
-                        {entry.dir ? (
-                            <CaretRightIcon
-                                weight="bold"
-                                className={cn(
-                                    "size-2.5 shrink-0 text-muted transition-transform duration-100",
-                                    open && "rotate-90"
-                                )}
+                    <ContextMenu key={entry.path}>
+                        <ContextMenu.Trigger
+                            role="treeitem"
+                            aria-level={depth + 1}
+                            aria-expanded={entry.dir ? open : undefined}
+                            aria-selected={entry.path === selected}
+                            data-path={entry.path}
+                            tabIndex={entry.path === cursor ? 0 : -1}
+                            onClick={() => activate(row)}
+                            onContextMenu={() => files.select(root, entry.path)}
+                            style={{ paddingLeft: 6 + depth * INDENT }}
+                            className={rowClass(entry.path === selected)}
+                        >
+                            {entry.dir ? (
+                                <CaretRightIcon
+                                    weight="bold"
+                                    className={cn(
+                                        "size-2.5 shrink-0 text-muted transition-transform duration-100",
+                                        open && "rotate-90"
+                                    )}
+                                />
+                            ) : (
+                                <span className="size-2.5 shrink-0" />
+                            )}
+                            <FileIcon
+                                name={name}
+                                folder={entry.dir}
+                                open={open}
+                                className={cn("size-3.5", entry.ignored && "opacity-50")}
                             />
-                        ) : (
-                            <span className="size-2.5 shrink-0" />
-                        )}
-                        <FileIcon
-                            name={name}
-                            folder={entry.dir}
-                            open={open}
-                            className={cn("size-3.5", entry.ignored && "opacity-50")}
-                        />
-                        <span className={cn("min-w-0 truncate", entry.ignored && "opacity-50")}>{name}</span>
-                    </div>
+                            {editing ? (
+                                <RenameField
+                                    entry={entry}
+                                    onSubmit={(next, byKey) => void submitRename(entry, next, byKey)}
+                                    onCancel={(byKey) => cancelRename(entry, byKey)}
+                                />
+                            ) : (
+                                <span className={cn("min-w-0 truncate", entry.ignored && "opacity-50")}>
+                                    {name}
+                                </span>
+                            )}
+                        </ContextMenu.Trigger>
+                        <EntryMenu root={root} entry={entry} onRename={onRename} onDelete={onDelete} />
+                    </ContextMenu>
                 );
             })}
         </div>
@@ -333,7 +563,9 @@ function SearchResults({
     results,
     highlighted,
     onHighlight,
-    onPick
+    onPick,
+    onRename,
+    onDelete
 }: {
     listRef: RefObject<HTMLDivElement | null>;
     root: string;
@@ -342,6 +574,8 @@ function SearchResults({
     highlighted: number;
     onHighlight: (index: number) => void;
     onPick: (entry: WorkspaceEntry) => void;
+    onRename: (entry: WorkspaceEntry) => void;
+    onDelete: (entry: WorkspaceEntry) => void;
 }) {
     const selected = useFilesStore((s) => s.selected[root]);
     if (results.length === 0) return <Note>No matching files</Note>;
@@ -356,30 +590,33 @@ function SearchResults({
                 const name = nameOf(entry.path);
                 const folder = parentOf(entry.path);
                 return (
-                    <div
-                        key={entry.path}
-                        role="option"
-                        aria-selected={index === highlighted}
-                        data-index={index}
-                        title={entry.path}
-                        onMouseMove={() => onHighlight(index)}
-                        onClick={() => onPick(entry)}
-                        className={cn(
-                            rowClass(entry.path === selected || index === highlighted),
-                            "pl-2"
-                        )}
-                    >
-                        <FileIcon
-                            name={name}
-                            folder={entry.dir}
-                            className={cn("size-3.5", entry.ignored && "opacity-50")}
-                        />
-                        <span className={cn("max-w-[70%] shrink-0 truncate", entry.ignored && "opacity-50")}>
-                            <Highlighted text={name} query={query} />
-                            {entry.dir && "/"}
-                        </span>
-                        {folder && <span className="min-w-0 truncate text-muted">{folder}</span>}
-                    </div>
+                    <ContextMenu key={entry.path}>
+                        <ContextMenu.Trigger
+                            role="option"
+                            aria-selected={index === highlighted}
+                            data-index={index}
+                            onMouseMove={() => onHighlight(index)}
+                            onClick={() => onPick(entry)}
+                            className={cn(
+                                rowClass(entry.path === selected || index === highlighted),
+                                "pl-2"
+                            )}
+                        >
+                            <FileIcon
+                                name={name}
+                                folder={entry.dir}
+                                className={cn("size-3.5", entry.ignored && "opacity-50")}
+                            />
+                            <span
+                                className={cn("max-w-[70%] shrink-0 truncate", entry.ignored && "opacity-50")}
+                            >
+                                <Highlighted text={name} query={query} />
+                                {entry.dir && "/"}
+                            </span>
+                            {folder && <span className="min-w-0 truncate text-muted">{folder}</span>}
+                        </ContextMenu.Trigger>
+                        <EntryMenu root={root} entry={entry} onRename={onRename} onDelete={onDelete} />
+                    </ContextMenu>
                 );
             })}
         </div>

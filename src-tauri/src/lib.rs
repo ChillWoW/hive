@@ -151,6 +151,8 @@ pub fn run() {
             files::file_open,
             files::list_files,
             files::list_folder,
+            files::rename_path,
+            files::trash_path,
             settings::settings_get,
             settings::settings_update,
             settings::settings_reset,

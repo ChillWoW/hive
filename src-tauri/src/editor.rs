@@ -36,7 +36,7 @@ fn hash(bytes: &[u8]) -> String {
 }
 
 /// `path` (relative, `/`-separated, not "") under `cwd`, refused when it would leave it.
-fn resolve(cwd: &str, path: &str) -> Result<PathBuf, String> {
+pub(crate) fn resolve(cwd: &str, path: &str) -> Result<PathBuf, String> {
     let relative = Path::new(path);
     if path.is_empty() || !relative.components().all(|c| matches!(c, Component::Normal(_))) {
         return Err(format!("{path} is not inside the folder"));
