@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type Ref } from "react";
 import type { Attachment, BackgroundTask, Message } from "@/proto";
 import { cn } from "@/lib/cn";
 import { chats, useActiveChat, useChatsStore, useSession, workDir } from "@/features/chats/store";
@@ -34,6 +34,9 @@ import { findSpawnIn, subagentName } from "./transcript/subagents";
 export const laneClassName = "mx-auto w-full max-w-3xl";
 
 const NO_TASKS: readonly BackgroundTask[] = [];
+
+/** How long the composer takes to drop from the new-chat view into a thread. */
+const MORPH_MS = 320;
 
 /** How close to the end counts as following it, in px. */
 const FOLLOW_SLACK = 48;
@@ -139,36 +142,55 @@ export function ChatView() {
     // A worktree being made, then its chat until the prompt lands: the
     // prompt with the setup under it.
     const pendingSetup = making ? draftSetup : chat && messages.length === 0 ? chatSetup : undefined;
-    if (pendingSetup) {
-        return (
-            <div className="flex h-full w-full flex-col">
-                <TranscriptScroller follow={pendingSetup}>
-                    <PendingPrompt setup={pendingSetup} />
-                    <WorktreeDivider setup={pendingSetup} worktree={chat?.worktree} />
-                </TranscriptScroller>
-                <Bottom>{composer}</Bottom>
-            </div>
-        );
-    }
 
-    // A chat opening: its messages are on their way.
-    if (chat && !loaded) return <div className="h-full w-full" />;
+    // Nothing to show yet: the composer sits centred under a heading. A chat
+    // still opening keeps the layout that was up, so the composer never
+    // blinks out between the two.
+    const wantCentred = !pendingSetup && messages.length === 0;
+    const settled = !!pendingSetup || !chat || loaded;
+    const [centred, setCentred] = useState(wantCentred);
+    const bottomRef = useRef<HTMLDivElement>(null);
+    // Where the composer was when the layout last flipped, for its morph.
+    const fromRef = useRef<number | null>(null);
+    // The flip waits for a commit of the old layout, so the composer can be
+    // measured where it was; that commit is never painted.
+    useLayoutEffect(() => {
+        if (!settled || centred === wantCentred) return;
+        // Only the way down morphs: a new chat becoming a thread.
+        fromRef.current = centred ? (bottomRef.current?.getBoundingClientRect().top ?? null) : null;
+        setCentred(wantCentred);
+    }, [settled, centred, wantCentred]);
+    useLayoutEffect(() => {
+        const el = bottomRef.current;
+        const from = fromRef.current;
+        fromRef.current = null;
+        if (!el || from === null) return;
+        const dy = from - el.getBoundingClientRect().top;
+        if (!dy || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+        el.animate([{ transform: `translateY(${dy}px)` }, { transform: "none" }], {
+            duration: MORPH_MS,
+            easing: "cubic-bezier(0.22, 1, 0.36, 1)"
+        });
+    }, [centred]);
 
-    if (messages.length === 0) {
-        return (
-            <div className="relative flex h-full w-full flex-col items-center justify-center pb-16">
+    let top: ReactNode;
+    if (centred) {
+        top = (
+            <div className="flex min-h-0 flex-1 flex-col justify-end">
                 <h1 className="mb-8 text-center text-2xl font-medium tracking-tight text-text">
                     What should we build?
                 </h1>
-                <div className="w-full">
-                    <Bottom>{composer}</Bottom>
-                </div>
             </div>
         );
-    }
-
-    return (
-        <div className="flex h-full w-full flex-col">
+    } else if (pendingSetup) {
+        top = (
+            <TranscriptScroller follow={pendingSetup}>
+                <PendingPrompt setup={pendingSetup} />
+                <WorktreeDivider setup={pendingSetup} worktree={chat?.worktree} />
+            </TranscriptScroller>
+        );
+    } else {
+        top = (
             <ChatCwd value={cwd || undefined}>
                 <KnownFiles value={known}>
                     <LiveTasks value={session?.tasks ?? NO_TASKS}>
@@ -190,7 +212,20 @@ export function ChatView() {
                     </LiveTasks>
                 </KnownFiles>
             </ChatCwd>
-            {!openSpawn && <Bottom>{composer}</Bottom>}
+        );
+    }
+
+    // The composer keeps its place in the tree across the layouts, so it
+    // stays mounted (focus, caret) while it moves.
+    return (
+        <div className={cn("flex h-full w-full flex-col", centred && "pb-16")}>
+            {top}
+            {(centred || pendingSetup || !openSpawn) && (
+                <Bottom key="composer" ref={bottomRef}>
+                    {composer}
+                </Bottom>
+            )}
+            {centred && <div className="flex-1" />}
         </div>
     );
 }
@@ -257,9 +292,17 @@ function PendingPrompt({ setup }: { setup: WorktreeSetup }) {
 }
 
 /** Under the transcript (or the heading): the composer. */
-function Bottom({ className, children }: { className?: string; children?: ReactNode }) {
+function Bottom({
+    ref,
+    className,
+    children
+}: {
+    ref?: Ref<HTMLDivElement>;
+    className?: string;
+    children?: ReactNode;
+}) {
     return (
-        <div className="shrink-0 px-6 pb-3">
+        <div ref={ref} className="shrink-0 px-6 pb-3">
             <div className={cn(laneClassName, className)}>{children}</div>
         </div>
     );
