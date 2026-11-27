@@ -73,14 +73,16 @@ export function FileTab({ id, cwd, path }: { id: string; cwd: string; path: stri
 
     return (
         <div
-            // The close-tab shortcut closes this tab while focus is in it (as a
-            // terminal's does), not the chat's tab.
+            // Focusable, so a click on a preview (not focusable itself) puts
+            // focus in here; then the close-tab shortcut closes this tab (as a
+            // terminal's does), not the chat's.
+            tabIndex={-1}
             onKeyDown={(event) => {
                 if (!isShortcutOf(event.nativeEvent, "closeTab")) return;
                 event.preventDefault();
                 panelTabs.close(id);
             }}
-            className="flex min-h-0 flex-1 flex-col"
+            className="flex min-h-0 flex-1 flex-col outline-none"
         >
             <Toolbar id={id} cwd={cwd} path={path} doc={doc} image={!!image} />
             {doc && !image && <Banners id={id} doc={doc} />}
