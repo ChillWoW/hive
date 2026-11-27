@@ -7,6 +7,8 @@ mod fonts;
 mod git;
 mod http;
 mod mcp;
+#[cfg(target_os = "macos")]
+mod menu;
 mod settings;
 mod themes;
 mod updater;
@@ -20,7 +22,10 @@ use tauri_plugin_window_state::StateFlags;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let builder = tauri::Builder::default();
+    #[cfg(target_os = "macos")]
+    let builder = builder.menu(menu::build);
+    builder
         // Geometry only: the saved file would otherwise also pin `decorations`
         // and visibility, so a later change to either in tauri.conf.json would
         // be overridden by whatever the last run left behind.
