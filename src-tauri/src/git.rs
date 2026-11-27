@@ -1,9 +1,10 @@
 //! The branch picker's, changes tab's and history tab's git commands, over
 //! `outcode_git`, for a chat's folder.
 
+use std::collections::HashMap;
 use std::path::Path;
 
-use outcode_proto::{GitChanges, GitCommitDetail, GitHistoryPage, GitRepo};
+use outcode_proto::{GitChanges, GitCommitDetail, GitFileState, GitHistoryPage, GitRepo};
 
 fn err(error: impl std::fmt::Display) -> String {
     error.to_string()
@@ -35,6 +36,14 @@ pub async fn git_delete_branch(cwd: String, name: String) -> Result<(), String> 
 #[tauri::command]
 pub async fn git_changes(cwd: String) -> Result<Option<GitChanges>, String> {
     outcode_git::changes(Path::new(&cwd)).await.map_err(err)
+}
+
+/// Each uncommitted file at or under `cwd`, by its path from `cwd`; null when
+/// `cwd` isn't in a checkout.
+#[tauri::command]
+pub async fn git_status(cwd: String) -> Result<Option<HashMap<String, GitFileState>>, String> {
+    let files = outcode_git::status_under(Path::new(&cwd)).await.map_err(err)?;
+    Ok(files.map(|files| files.into_iter().collect()))
 }
 
 /// `limit` commits of the checkout's history from `cursor` on (every branch,

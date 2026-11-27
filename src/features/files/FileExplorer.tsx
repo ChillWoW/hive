@@ -12,8 +12,9 @@ import {
     TrashIcon,
     XIcon
 } from "@phosphor-icons/react";
-import type { WorkspaceEntry } from "@/proto";
+import type { GitFileState, WorkspaceEntry } from "@/proto";
 import { useActiveChat, useChatsStore, workDir } from "@/features/chats";
+import { gitMarks, refreshGitStatus, useGitStatus, type GitMark, type GitStatus } from "@/features/git/status";
 import { cn } from "@/lib/cn";
 import { fuzzyPositions } from "@/lib/fuzzy";
 import { baseName } from "@/lib/paths";
@@ -44,6 +45,58 @@ const rowClass = (selected: boolean) =>
         selected ? "bg-hover text-text" : "text-text/85 hover:bg-raised hover:text-text"
     );
 
+/** A changed entry's name, tinted by its mark. */
+const MARK_TEXT: Record<GitMark, string> = {
+    modified: "text-warning",
+    added: "text-success",
+    conflict: "text-danger"
+};
+
+const MARK_DOT: Record<GitMark, string> = {
+    modified: "bg-warning",
+    added: "bg-success",
+    conflict: "bg-danger"
+};
+
+/** A changed file's letter at the row's end, and what it stands for. */
+const STATE_LETTER: Record<GitFileState, [letter: string, label: string]> = {
+    modified: ["M", "Modified"],
+    added: ["A", "Added"],
+    untracked: ["U", "Untracked"],
+    renamed: ["R", "Renamed"],
+    deleted: ["D", "Deleted"],
+    conflict: ["!", "Conflict"]
+};
+
+const NO_MARKS: ReadonlyMap<string, GitMark> = new Map();
+
+/** A folder's uncommitted files and the marks they give the rows. */
+type GitMarks = { status: GitStatus | null | undefined; marks: ReadonlyMap<string, GitMark> };
+
+/** The end of a changed row: a file's letter, or a dot for a folder with changes inside. */
+function GitBadge({ entry, git }: { entry: WorkspaceEntry; git: GitMarks }) {
+    const mark = git.marks.get(entry.path);
+    if (!mark) return null;
+    const state = entry.dir ? undefined : git.status?.[entry.path];
+    if (!state) {
+        return (
+            <span
+                title="Contains changes"
+                className={cn("mr-[3px] ml-auto size-1.5 shrink-0 rounded-full opacity-80", MARK_DOT[mark])}
+            />
+        );
+    }
+    const [letter, label] = STATE_LETTER[state];
+    return (
+        <span
+            title={label}
+            className={cn("ml-auto w-3 shrink-0 text-center text-[10px] font-medium", MARK_TEXT[mark])}
+        >
+            {letter}
+        </span>
+    );
+}
+
 /** The folder the open chat works in (its worktree, else its folder), or the new-chat view's pick. */
 function useRoot(): string {
     const chat = useActiveChat();
@@ -62,6 +115,8 @@ export function FileExplorer({ shown }: { shown: boolean }) {
     const showIgnored = useFilesStore((s) => s.showIgnored);
     const listed = useWorkspaceFiles(root, shown, showIgnored);
     const opened = useOpenedFolders(root);
+    const status = useGitStatus(root, shown);
+    const git = useMemo<GitMarks>(() => ({ status, marks: status ? gitMarks(status) : NO_MARKS }), [status]);
     // With ignored files shown, what's inside the ignored folders opened so far too.
     const entries = useMemo(
         () => {
@@ -159,7 +214,10 @@ export function FileExplorer({ shown }: { shown: boolean }) {
                     <IconButton
                         label="Refresh"
                         disabled={!root}
-                        onClick={() => void refreshFiles(root, { force: true, ignored: showIgnored })}
+                        onClick={() => {
+                            void refreshFiles(root, { force: true, ignored: showIgnored });
+                            void refreshGitStatus(root);
+                        }}
                     >
                         <ArrowClockwiseIcon className="size-3.5" />
                     </IconButton>
@@ -203,6 +261,7 @@ export function FileExplorer({ shown }: { shown: boolean }) {
                     root={root}
                     query={query.trim()}
                     results={results}
+                    git={git}
                     highlighted={highlighted}
                     onHighlight={setHighlighted}
                     onPick={pickResult}
@@ -213,6 +272,7 @@ export function FileExplorer({ shown }: { shown: boolean }) {
                 <Tree
                     root={root}
                     entries={entries}
+                    git={git}
                     renaming={renaming}
                     onRename={startRename}
                     onRenameEnd={() => setRenaming(null)}
@@ -375,6 +435,7 @@ function RenameField({
 function Tree({
     root,
     entries,
+    git,
     renaming,
     onRename,
     onRenameEnd,
@@ -382,6 +443,7 @@ function Tree({
 }: {
     root: string;
     entries: readonly WorkspaceEntry[];
+    git: GitMarks;
     /** The entry whose name is being edited, by path. */
     renaming: string | null;
     onRename: (entry: WorkspaceEntry) => void;
@@ -504,6 +566,7 @@ function Tree({
                 const { entry, depth, open } = row;
                 const name = nameOf(entry.path);
                 const editing = entry.path === renaming;
+                const mark = git.marks.get(entry.path);
                 return (
                     <ContextMenu key={entry.path}>
                         <ContextMenu.Trigger
@@ -542,10 +605,17 @@ function Tree({
                                     onCancel={(byKey) => cancelRename(entry, byKey)}
                                 />
                             ) : (
-                                <span className={cn("min-w-0 truncate", entry.ignored && "opacity-50")}>
+                                <span
+                                    className={cn(
+                                        "min-w-0 truncate",
+                                        entry.ignored && "opacity-50",
+                                        mark && MARK_TEXT[mark]
+                                    )}
+                                >
                                     {name}
                                 </span>
                             )}
+                            <GitBadge entry={entry} git={git} />
                         </ContextMenu.Trigger>
                         <EntryMenu root={root} entry={entry} onRename={onRename} onDelete={onDelete} />
                     </ContextMenu>
@@ -561,6 +631,7 @@ function SearchResults({
     root,
     query,
     results,
+    git,
     highlighted,
     onHighlight,
     onPick,
@@ -571,6 +642,7 @@ function SearchResults({
     root: string;
     query: string;
     results: WorkspaceEntry[];
+    git: GitMarks;
     highlighted: number;
     onHighlight: (index: number) => void;
     onPick: (entry: WorkspaceEntry) => void;
@@ -589,6 +661,7 @@ function SearchResults({
             {results.map((entry, index) => {
                 const name = nameOf(entry.path);
                 const folder = parentOf(entry.path);
+                const mark = git.marks.get(entry.path);
                 return (
                     <ContextMenu key={entry.path}>
                         <ContextMenu.Trigger
@@ -608,12 +681,17 @@ function SearchResults({
                                 className={cn("size-3.5", entry.ignored && "opacity-50")}
                             />
                             <span
-                                className={cn("max-w-[70%] shrink-0 truncate", entry.ignored && "opacity-50")}
+                                className={cn(
+                                    "max-w-[70%] shrink-0 truncate",
+                                    entry.ignored && "opacity-50",
+                                    mark && MARK_TEXT[mark]
+                                )}
                             >
                                 <Highlighted text={name} query={query} />
                                 {entry.dir && "/"}
                             </span>
                             {folder && <span className="min-w-0 truncate text-muted">{folder}</span>}
+                            <GitBadge entry={entry} git={git} />
                         </ContextMenu.Trigger>
                         <EntryMenu root={root} entry={entry} onRename={onRename} onDelete={onDelete} />
                     </ContextMenu>

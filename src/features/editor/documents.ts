@@ -16,6 +16,7 @@ import {
 } from "@codemirror/view";
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
+import { refreshGitStatus } from "@/features/git/status";
 import { errorMessage } from "@/lib/errors";
 import type { FileText } from "@/proto";
 import { readFile, writeFile } from "./api";
@@ -347,6 +348,8 @@ export async function save(id: string): Promise<boolean> {
         );
         if (outcome.kind === "written") {
             saved.set(id, text);
+            // The file tree's mark for it may be another now.
+            void refreshGitStatus(doc.cwd);
             const now = currentState(id);
             setDoc(id, (d) => ({
                 saving: false,

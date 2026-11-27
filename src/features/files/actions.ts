@@ -3,6 +3,7 @@ import { useChatsStore } from "@/features/chats";
 import { fileMention } from "@/features/composer/files";
 import { composer } from "@/features/composer/store";
 import { moveDocs } from "@/features/editor/documents";
+import { refreshGitStatus } from "@/features/git/status";
 import { panelTabs, usePanelTabsStore } from "@/features/panel-tabs/store";
 import { backend } from "@/lib/backend";
 import { copyText } from "@/lib/clipboard";
@@ -12,8 +13,9 @@ import { refreshFiles } from "./listing";
 import { files, useFilesStore } from "./store";
 import { isUnder, movedPath, nameOf, parentOf } from "./tree";
 
-/** Lists `root` again after a change to it: what the panel shows, and the composer's `@` menu. */
+/** Lists `root` again after a change to it: what the panel shows (its git marks too), and the composer's `@` menu. */
 function relist(root: string): Promise<unknown> {
+    void refreshGitStatus(root);
     const { showIgnored } = useFilesStore.getState();
     const plain = refreshFiles(root, { force: true });
     return showIgnored ? Promise.all([plain, refreshFiles(root, { force: true, ignored: true })]) : plain;

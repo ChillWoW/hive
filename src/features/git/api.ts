@@ -1,5 +1,5 @@
 import { backend } from "@/lib/backend";
-import type { GitBranch, GitChanges, GitRepo } from "@/proto";
+import type { GitBranch, GitChanges, GitFileState, GitRepo } from "@/proto";
 
 /**
  * Transport for a folder's branches (`src-tauri/src/git.rs`). Under a plain
@@ -72,6 +72,13 @@ export const gitApi = {
     /** The uncommitted changes as a patch; null outside a checkout. */
     changes: (cwd: string) =>
         backend<GitChanges | null>("git_changes", { cwd }, () => ({ root: cwd, patch: FAKE_PATCH, skipped: 0 })),
+    /** Each uncommitted file at or under `cwd`, by its path from it; null outside a checkout. */
+    status: (cwd: string) =>
+        backend<Record<string, GitFileState> | null>("git_status", { cwd }, () => ({
+            "src/App.tsx": "modified",
+            "src/features/composer/Composer.tsx": "untracked",
+            "package.json": "conflict"
+        })),
     /** Null outside a checkout. */
     repo: (cwd: string) => backend<GitRepo | null>("git_repo", { cwd }, () => fakeRepo(cwd)),
     switchBranch: (cwd: string, name: string) =>

@@ -361,6 +361,28 @@ pub async fn status(cwd: &Path) -> Result<Option<(String, Vec<(String, GitFileSt
     Ok(Some((root, parse_status(&out))))
 }
 
+/// Each uncommitted file at or under `cwd` (untracked ones included), paths
+/// relative to `cwd`; `None` outside a checkout.
+pub async fn status_under(cwd: &Path) -> Result<Option<Vec<(String, GitFileState)>>, GitError> {
+    if toplevel(cwd).await?.is_none() {
+        return Ok(None);
+    }
+    // `cwd` from the checkout's top folder: `""`, or `src/app/`.
+    let prefix = git(cwd, &["rev-parse", "--show-prefix"]).await?.checked()?;
+    let prefix = prefix.trim();
+    let out = git(
+        cwd,
+        &["-c", "core.quotePath=false", "status", "--porcelain=v1", "-z", "--untracked-files=all", "--", "."],
+    )
+    .await?
+    .checked()?;
+    let files = parse_status(&out)
+        .into_iter()
+        .filter_map(|(path, state)| Some((path.strip_prefix(prefix)?.to_owned(), state)))
+        .collect();
+    Ok(Some(files))
+}
+
 /// `git status --porcelain=v1 -z`: `XY path`, a rename's or copy's old path
 /// after it as an entry of its own.
 fn parse_status(out: &str) -> Vec<(String, GitFileState)> {
@@ -763,6 +785,32 @@ mod tests {
 
         let plain = tempfile::tempdir().unwrap();
         assert_eq!(changes(plain.path()).await.unwrap(), None);
+    }
+
+    #[tokio::test]
+    async fn status_under_a_folder_is_relative_to_it() {
+        let Some(dir) = fixture().await else { return };
+        let path = dir.path();
+        std::fs::write(path.join("top.txt"), "top\n").unwrap();
+        std::fs::create_dir_all(path.join("sub/deep")).unwrap();
+        std::fs::write(path.join("sub/deep/new.txt"), "hello\n").unwrap();
+
+        let mut all = status_under(path).await.unwrap().unwrap();
+        all.sort_by(|a, b| a.0.cmp(&b.0));
+        assert_eq!(
+            all,
+            [
+                ("sub/deep/new.txt".to_owned(), GitFileState::Untracked),
+                ("top.txt".to_owned(), GitFileState::Untracked),
+            ]
+        );
+        assert_eq!(
+            status_under(&path.join("sub")).await.unwrap().unwrap(),
+            [("deep/new.txt".to_owned(), GitFileState::Untracked)]
+        );
+
+        let plain = tempfile::tempdir().unwrap();
+        assert_eq!(status_under(plain.path()).await.unwrap(), None);
     }
 
     #[test]

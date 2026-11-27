@@ -140,6 +140,7 @@ pub fn run() {
             git::git_create_branch,
             git::git_delete_branch,
             git::git_changes,
+            git::git_status,
             git::git_history,
             git::git_search_history,
             git::git_fetch_all,
