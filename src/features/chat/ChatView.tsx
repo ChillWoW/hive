@@ -9,6 +9,7 @@ import { HarnessMark } from "@/features/models";
 import { ChatMenuItems, DeleteChatDialog, UNTITLED } from "@/features/sidebar";
 import { Menu, toast, useInlineRename } from "@/ui";
 import { useChatConfig } from "./config";
+import { AgentUpdates } from "./AgentUpdates";
 import { AssistantMessage } from "./transcript/AssistantMessage";
 import { ChatCwd, KnownFiles, LiveTasks } from "./transcript/context";
 import { foldPath, fullPath, parseFileRef, resolveFileRef } from "./transcript/filePaths";
@@ -249,7 +250,7 @@ export function ChatView() {
     // The composer keeps its place in the tree across the layouts, so it
     // stays mounted (focus, caret) while it moves.
     return (
-        <div className={cn("flex h-full w-full flex-col", centred && "pb-16")}>
+        <div className={cn("relative flex h-full w-full flex-col", centred && "pb-16")}>
             {top}
             {(centred || pendingSetup || !openSpawn) && (
                 <Bottom key="composer" ref={bottomRef}>
@@ -257,6 +258,7 @@ export function ChatView() {
                 </Bottom>
             )}
             {centred && <div className="flex-1" />}
+            {centred && !chat && <AgentUpdates />}
         </div>
     );
 }

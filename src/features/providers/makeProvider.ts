@@ -34,6 +34,8 @@ export type ProviderState = {
     action?: ProviderAction;
     /** A sign-in in progress: the page that finishes it if the browser didn't open. */
     signIn?: { url: string };
+    /** When the status and newest release were last read (ms). */
+    checkedAt?: number;
 };
 
 export type UsageState = {
@@ -82,8 +84,19 @@ export function makeProvider(name: string, api: ProviderApi) {
         const [status, latest] = await Promise.allSettled([api.status(), api.latestVersion()]);
         useProvider.setState({
             ...(status.status === "fulfilled" ? { status: status.value } : {}),
-            ...(latest.status === "fulfilled" ? { latest: latest.value } : {})
+            ...(latest.status === "fulfilled" ? { latest: latest.value } : {}),
+            checkedAt: Date.now()
         });
+    }
+
+    let checking: Promise<void> | undefined;
+    /** Reads again unless a read finished under `maxAge` ms ago, or something is being done to it. */
+    function refreshIfStale(maxAge: number): Promise<void> {
+        if (checking) return checking;
+        const { checkedAt, action } = useProvider.getState();
+        if (action || (checkedAt && Date.now() - checkedAt < maxAge)) return Promise.resolve();
+        checking = refresh().finally(() => (checking = undefined));
+        return checking;
     }
 
     /** Runs `run` as `action`, toasting how it went, then reads the status again. */
@@ -164,7 +177,7 @@ export function makeProvider(name: string, api: ProviderApi) {
         }, [enabled]);
     }
 
-    return { name, useProvider, refresh, actions, useUsage, refreshUsage, useUsagePolling };
+    return { name, useProvider, refresh, refreshIfStale, actions,useUsage, refreshUsage, useUsagePolling };
 }
 
 export type Provider = ReturnType<typeof makeProvider>;

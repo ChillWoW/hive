@@ -26,7 +26,18 @@ export const claudeApi = {
     submitCode: (code: string) => backend<void>("claude_sign_in_code", { code }, () => undefined),
     cancelSignIn: () => backend<void>("claude_sign_in_cancel", {}, () => undefined),
     signOut: () => backend<void>("claude_sign_out", {}, () => undefined),
-    update: () => backend<void>("claude_update", {}, () => undefined),
+    update: () =>
+        backend<void>(
+            "claude_update",
+            {},
+            () =>
+                new Promise((resolve) =>
+                    setTimeout(() => {
+                        DEV_STATUS.version = "2.1.340";
+                        resolve();
+                    }, 1800)
+                )
+        ),
     install: () => backend<void>("claude_install", {}, () => undefined),
     latestVersion: () => backend<string>("claude_latest_version", {}, () => "2.1.340"),
     /** The plan's rate-limit windows; null without a subscription login. */
