@@ -29,6 +29,7 @@ pub struct Settings {
     pub chat: ChatSettings,
     pub worktrees: WorktreesSettings,
     pub diffs: DiffsSettings,
+    pub terminal: TerminalSettings,
 }
 
 impl Default for Settings {
@@ -43,6 +44,7 @@ impl Default for Settings {
             chat: ChatSettings::default(),
             worktrees: WorktreesSettings::default(),
             diffs: DiffsSettings::default(),
+            terminal: TerminalSettings::default(),
         }
     }
 }
@@ -201,6 +203,7 @@ pub struct KeyboardSettings {
     pub go_to_tab7: String,
     pub go_to_tab8: String,
     pub go_to_last_tab: String,
+    pub new_terminal: String,
 }
 
 impl Default for KeyboardSettings {
@@ -225,6 +228,7 @@ impl Default for KeyboardSettings {
             go_to_tab7: "Mod+7".into(),
             go_to_tab8: "Mod+8".into(),
             go_to_last_tab: "Mod+9".into(),
+            new_terminal: "Mod+J".into(),
         }
     }
 }
@@ -397,6 +401,89 @@ pub struct DiffsSettings {
     pub inline_changes: InlineChanges,
 }
 
+/// Where a new terminal starts.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum TerminalStartIn {
+    /// The open chat's folder (its worktree, if it has one).
+    #[default]
+    Workspace,
+    /// The home folder.
+    Home,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum TerminalCursor {
+    #[default]
+    Bar,
+    Block,
+    Underline,
+}
+
+/// What happens to a terminal's tab when its shell exits.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum TerminalCloseOnExit {
+    /// Close it after `exit` (code 0); keep it, with the code, otherwise.
+    #[default]
+    Clean,
+    Always,
+    /// Keep it, with how the shell ended.
+    Never,
+}
+
+/// Terminal tabs, in the code font (`appearance.codeFontFamily`): the shell, read by `src-tauri/src/terminal.rs` as each
+/// starts; the rest by the frontend (`src/features/terminal/`), live.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct TerminalSettings {
+    /// The shell to run. Empty: the login shell (`$SHELL`), or PowerShell on
+    /// Windows.
+    pub shell: String,
+    /// Its arguments, split like a shell would. Empty: the usual ones (a
+    /// login shell on macOS).
+    pub shell_args: String,
+    /// Extra environment variables, as `KEY=value` lines.
+    pub env: String,
+    pub start_in: TerminalStartIn,
+    /// In px.
+    pub font_size: u32,
+    /// A multiple of the font size.
+    pub line_height: f64,
+    pub cursor_style: TerminalCursor,
+    pub cursor_blink: bool,
+    /// Lines kept above the screen.
+    pub scrollback: u32,
+    /// Selecting text copies it.
+    pub copy_on_select: bool,
+    /// Option sends Meta (Alt) rather than typing special characters (macOS).
+    pub option_as_meta: bool,
+    pub close_on_exit: TerminalCloseOnExit,
+    /// Draw with WebGL; off, the slower DOM renderer.
+    pub gpu_acceleration: bool,
+}
+
+impl Default for TerminalSettings {
+    fn default() -> Self {
+        Self {
+            shell: String::new(),
+            shell_args: String::new(),
+            env: String::new(),
+            start_in: TerminalStartIn::Workspace,
+            font_size: 12,
+            line_height: 1.2,
+            cursor_style: TerminalCursor::Bar,
+            cursor_blink: true,
+            scrollback: 5000,
+            copy_on_select: false,
+            option_as_meta: false,
+            close_on_exit: TerminalCloseOnExit::Clean,
+            gpu_acceleration: true,
+        }
+    }
+}
+
 impl Settings {
     /// Arbitrary JSON in, a valid document out; never fails.
     pub fn sanitize(base: &Settings, input: &Value) -> Settings {
@@ -423,6 +510,17 @@ impl Settings {
         let worktrees = &mut settings.worktrees;
         worktrees.location = worktrees.location.trim().into();
         worktrees.branch_prefix = worktrees.branch_prefix.trim().trim_matches('/').into();
+        let terminal = &mut settings.terminal;
+        terminal.shell = terminal.shell.trim().into();
+        terminal.shell_args = terminal.shell_args.trim().into();
+        terminal.font_size = terminal.font_size.clamp(8, 32);
+        let line_height = terminal.line_height;
+        terminal.line_height = if line_height.is_finite() {
+            (line_height.clamp(1.0, 2.0) * 20.0).round() / 20.0
+        } else {
+            TerminalSettings::default().line_height
+        };
+        terminal.scrollback = terminal.scrollback.min(100_000);
         settings
     }
 }
@@ -573,6 +671,21 @@ mod tests {
             layout(json!(["dock", "terminal", "main"])),
             LayoutColumn::DEFAULT.to_vec()
         );
+    }
+
+    #[test]
+    fn terminal_numbers_are_clamped() {
+        let s = Settings::sanitize(
+            &Settings::default(),
+            &json!({ "terminal": { "fontSize": 200, "lineHeight": 1.234, "scrollback": 10_000_000, "shell": " /bin/zsh " } }),
+        );
+        assert_eq!(s.terminal.font_size, 32);
+        assert_eq!(s.terminal.line_height, 1.25);
+        assert_eq!(s.terminal.scrollback, 100_000);
+        assert_eq!(s.terminal.shell, "/bin/zsh");
+        let s = Settings::sanitize(&s, &json!({ "terminal": { "lineHeight": 0.2, "fontSize": 1 } }));
+        assert_eq!(s.terminal.line_height, 1.0);
+        assert_eq!(s.terminal.font_size, 8);
     }
 
     #[test]

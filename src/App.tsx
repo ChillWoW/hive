@@ -3,6 +3,7 @@ import { ChatHeader, ChatView, useChatRuntime } from "@/features/chat";
 import { useChatsRuntime } from "@/features/chats";
 import { SettingsModal, useSettingsRuntime } from "@/features/settings";
 import { useSidebarRuntime } from "@/features/sidebar";
+import { useTerminalRuntime } from "@/features/terminal";
 import { useFontRuntime } from "@/features/fonts/useFontRuntime";
 import { useThemeRuntime } from "@/features/theme/useThemeRuntime";
 import { useUpdaterRuntime } from "@/features/updater";
@@ -34,6 +35,7 @@ export function App() {
     useChatsRuntime();
     useChatRuntime();
     useSidebarRuntime();
+    useTerminalRuntime();
     const placement = usePlacement();
     const dockLeft = placement.dock === "left";
 

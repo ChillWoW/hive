@@ -6,6 +6,7 @@ import {
     KeyboardIcon,
     PaletteIcon,
     PlugsConnectedIcon,
+    TerminalWindowIcon,
     type Icon
 } from "@phosphor-icons/react";
 import type { SettingsPageId } from "../store";
@@ -14,6 +15,7 @@ import { AppearancePage } from "./AppearancePage";
 import { ChatsPage } from "./ChatsPage";
 import { ProvidersPage } from "./ProvidersPage";
 import { KeyboardPage } from "./KeyboardPage";
+import { TerminalPage } from "./TerminalPage";
 import { WorktreesPage } from "./WorktreesPage";
 
 export type SettingsCategoryId = "interface" | "agents" | "app";
@@ -38,7 +40,8 @@ export const SETTINGS_CATEGORIES: readonly SettingsCategory[] = [
         label: "Interface",
         pages: [
             { id: "appearance", label: "Appearance", icon: PaletteIcon, Component: AppearancePage },
-            { id: "keyboard", label: "Keyboard", icon: KeyboardIcon, Component: KeyboardPage }
+            { id: "keyboard", label: "Keyboard", icon: KeyboardIcon, Component: KeyboardPage },
+            { id: "terminal", label: "Terminal", icon: TerminalWindowIcon, Component: TerminalPage }
         ]
     },
     {

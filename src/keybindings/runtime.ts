@@ -105,6 +105,12 @@ export function isAppShortcut(event: KeyboardEvent) {
     );
 }
 
+/** Whether `event` is action `id`'s shortcut as bound now, handled or not. */
+export function isShortcutOf(event: KeyboardEvent, id: ActionId) {
+    const combo = comboOf(event);
+    return !!combo && canonical(useSettingsStore.getState().settings.keyboard[id]) === combo;
+}
+
 /** An action id, or a fixed combo the app doesn't let you rebind (`Escape`, `Mod+Enter`). */
 export type ShortcutRef = ActionId | (string & {});
 

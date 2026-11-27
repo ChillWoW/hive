@@ -58,6 +58,14 @@ export const ACTIONS: readonly Action[] = [
         scope: "global"
     },
     {
+        id: "newTerminal",
+        category: "general",
+        label: "New terminal",
+        description: "Opens a terminal in the tabs panel",
+        keywords: "terminal shell console new open pty command line",
+        scope: "global"
+    },
+    {
         id: "goBack",
         category: "general",
         label: "Go back",

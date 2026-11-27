@@ -49,6 +49,7 @@ export type KeyboardSettings = {
     goToTab7: string;
     goToTab8: string;
     goToLastTab: string;
+    newTerminal: string;
 };
 
 export type ClaudeSettings = {
@@ -124,6 +125,40 @@ export type DiffsSettings = {
     inlineChanges: InlineChanges;
 };
 
+/** Where a new terminal starts: the open chat's folder (its worktree, if any), or home. */
+export type TerminalStartIn = "workspace" | "home";
+
+export type TerminalCursor = "bar" | "block" | "underline";
+
+/** When a terminal's tab closes with its shell: after a clean `exit` (code 0), always, or never. */
+export type TerminalCloseOnExit = "clean" | "always" | "never";
+
+/** Terminal tabs, in the code font; see `src/features/terminal/`. The shell ones apply to terminals opened after a change. */
+export type TerminalSettings = {
+    /** The shell to run; empty: the login shell (`$SHELL`), or PowerShell on Windows. */
+    shell: string;
+    /** Its arguments, split like a shell would; empty: the usual ones (a login shell on macOS). */
+    shellArgs: string;
+    /** Extra environment variables, as `KEY=value` lines. */
+    env: string;
+    startIn: TerminalStartIn;
+    /** In px (8–32). */
+    fontSize: number;
+    /** A multiple of the font size (1–2). */
+    lineHeight: number;
+    cursorStyle: TerminalCursor;
+    cursorBlink: boolean;
+    /** Lines kept above the screen (0–100000). */
+    scrollback: number;
+    /** Selecting text copies it. */
+    copyOnSelect: boolean;
+    /** Option sends Meta (Alt) rather than typing special characters (macOS). */
+    optionAsMeta: boolean;
+    closeOnExit: TerminalCloseOnExit;
+    /** Draw with WebGL; off, the slower DOM renderer. */
+    gpuAcceleration: boolean;
+};
+
 export type Settings = {
     version: number;
     appearance: AppearanceSettings;
@@ -134,6 +169,7 @@ export type Settings = {
     chat: ChatSettings;
     worktrees: WorktreesSettings;
     diffs: DiffsSettings;
+    terminal: TerminalSettings;
 };
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -167,7 +203,8 @@ export const DEFAULT_SETTINGS: Settings = {
         goToTab6: "Mod+6",
         goToTab7: "Mod+7",
         goToTab8: "Mod+8",
-        goToLastTab: "Mod+9"
+        goToLastTab: "Mod+9",
+        newTerminal: "Mod+J"
     },
     claude: {
         binaryPath: "",
@@ -203,5 +240,20 @@ export const DEFAULT_SETTINGS: Settings = {
         wrapLines: false,
         indicators: "classic",
         inlineChanges: "word"
+    },
+    terminal: {
+        shell: "",
+        shellArgs: "",
+        env: "",
+        startIn: "workspace",
+        fontSize: 12,
+        lineHeight: 1.2,
+        cursorStyle: "bar",
+        cursorBlink: true,
+        scrollback: 5000,
+        copyOnSelect: false,
+        optionAsMeta: false,
+        closeOnExit: "clean",
+        gpuAcceleration: true
     }
 };

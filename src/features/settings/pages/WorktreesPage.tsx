@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
-import { FolderOpenIcon } from "@phosphor-icons/react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { backend } from "@/lib/backend";
 import { tildify, untildify, useHomeDir } from "@/lib/home";
 import { isTauri } from "@/lib/platform";
-import { Button, Input, Select } from "@/ui";
+import { Select } from "@/ui";
+import { CommitInput } from "../CommitFields";
 import { SettingRow, SettingsSection, SwitchRow } from "../SettingsSection";
 import { useSetting } from "../store";
 import type { BranchNaming } from "../types";
@@ -127,55 +127,5 @@ export function WorktreesPage() {
                 />
             </SettingsSection>
         </>
-    );
-}
-
-/** A text field saved on blur or Enter (Escape restores it), with an optional folder picker. */
-function CommitInput({
-    value,
-    placeholder,
-    label,
-    onCommit,
-    onBrowse
-}: {
-    value: string;
-    placeholder?: string;
-    label: string;
-    onCommit: (value: string) => void;
-    onBrowse?: () => void;
-}) {
-    const [draft, setDraft] = useState<string | null>(null);
-    const commit = () => {
-        if (draft !== null && draft.trim() !== value) onCommit(draft.trim());
-        setDraft(null);
-    };
-    return (
-        <Input.Group>
-            <Input
-                value={draft ?? value}
-                placeholder={placeholder}
-                aria-label={label}
-                spellCheck={false}
-                onChange={(e) => setDraft(e.target.value)}
-                onBlur={commit}
-                onKeyDown={(e) => {
-                    if (e.key === "Enter") e.currentTarget.blur();
-                    if (e.key === "Escape") setDraft(null);
-                }}
-            />
-            {onBrowse && (
-                <Input.Addon>
-                    <Button
-                        variant="ghost"
-                        size="icon-xs"
-                        aria-label="Choose a folder"
-                        onClick={onBrowse}
-                        className="size-6 text-muted hover:text-text"
-                    >
-                        <FolderOpenIcon />
-                    </Button>
-                </Input.Addon>
-            )}
-        </Input.Group>
     );
 }

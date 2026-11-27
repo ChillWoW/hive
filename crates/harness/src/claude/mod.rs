@@ -64,7 +64,7 @@ use normalize::Normalizer;
 use wire::{ControlRequestFrame, Frame};
 
 pub use models::catalog;
-pub use overrides::configure;
+pub use overrides::{configure, parse_env, split_args};
 
 const NAME: &str = "claude";
 const INITIALIZE_ID: &str = "outcode_initialize";

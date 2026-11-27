@@ -73,8 +73,9 @@ pub(crate) fn config_dir() -> Option<PathBuf> {
         .or_else(|| Some(cli::home_dir()?.join(".claude")))
 }
 
-/// `KEY=value` lines; malformed ones are skipped.
-fn parse_env(text: &str) -> Vec<(String, String)> {
+/// `KEY=value` lines; blank lines, `#` comments and malformed ones are
+/// skipped, an `export ` prefix and quotes around the value dropped.
+pub fn parse_env(text: &str) -> Vec<(String, String)> {
     text.lines()
         .map(str::trim)
         .filter(|line| !line.is_empty() && !line.starts_with('#'))
@@ -98,7 +99,7 @@ fn unquote(value: &str) -> &str {
 
 /// Splits like a shell: whitespace separates and quotes group. A backslash
 /// escapes only whitespace or a quote outside quotes, so Windows paths stay as typed.
-fn split_args(text: &str) -> Vec<String> {
+pub fn split_args(text: &str) -> Vec<String> {
     let mut args = Vec::new();
     let mut current = String::new();
     let mut started = false;

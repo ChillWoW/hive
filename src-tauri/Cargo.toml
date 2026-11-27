@@ -36,6 +36,7 @@ outcode-store.workspace = true
 outcode-engine.workspace = true
 outcode-mcp.workspace = true
 outcode-git.workspace = true
+outcode-terminal.workspace = true
 base64 = "0.22"
 # Walks a chat folder the way git sees it, for the `@` menu.
 ignore = "0.4"

@@ -4,6 +4,7 @@ export {
     canRunAction,
     runAction,
     isAppShortcut,
+    isShortcutOf,
     useBinding,
     useKeybindingsRuntime,
     useShortcut

@@ -5,7 +5,8 @@ import { isTauri } from "@/lib/platform";
 import type { AccessMode } from "@/proto";
 import { ACCESS_MODES } from "@/features/composer/access";
 import { useComposerStore } from "@/features/composer/store";
-import { Button, Input, NumberField, Select, Textarea } from "@/ui";
+import { Button, Input, NumberField, Select } from "@/ui";
+import { CommitInput, CommitTextarea } from "../CommitFields";
 import { SettingRow, SettingsSection } from "../SettingsSection";
 import { claude } from "@/features/claude/store";
 import { AccountSection, LocationRow, UsageSection } from "./ProviderSections";
@@ -210,46 +211,5 @@ function AdvancedSection() {
                 control={<CommitInput value={configDir.value} placeholder="~/.claude" onCommit={configDir.set} />}
             />
         </SettingsSection>
-    );
-}
-
-/** A text field saved on blur or Enter; Escape restores the saved value. */
-function CommitInput({ value, placeholder, onCommit }: { value: string; placeholder?: string; onCommit: (value: string) => void }) {
-    const [draft, setDraft] = useState<string | null>(null);
-    const commit = () => {
-        if (draft !== null && draft.trim() !== value) onCommit(draft.trim());
-        setDraft(null);
-    };
-    return (
-        <Input
-            value={draft ?? value}
-            placeholder={placeholder}
-            spellCheck={false}
-            onChange={(e) => setDraft(e.target.value)}
-            onBlur={commit}
-            onKeyDown={(e) => {
-                if (e.key === "Enter") e.currentTarget.blur();
-                if (e.key === "Escape") setDraft(null);
-            }}
-        />
-    );
-}
-
-/** Lines of text saved on blur. */
-function CommitTextarea({ value, placeholder, onCommit }: { value: string; placeholder?: string; onCommit: (value: string) => void }) {
-    const [draft, setDraft] = useState<string | null>(null);
-    return (
-        <Textarea
-            value={draft ?? value}
-            placeholder={placeholder}
-            spellCheck={false}
-            rows={3}
-            onChange={(e) => setDraft(e.target.value)}
-            onBlur={() => {
-                if (draft !== null && draft !== value) onCommit(draft);
-                setDraft(null);
-            }}
-            className="w-full"
-        />
     );
 }

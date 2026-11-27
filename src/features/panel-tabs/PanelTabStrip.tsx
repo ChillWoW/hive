@@ -1,14 +1,15 @@
 import { useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { GitDiffIcon, TerminalWindowIcon, XIcon } from "@phosphor-icons/react";
+import { GitDiffIcon, PlusIcon, TerminalWindowIcon, XIcon } from "@phosphor-icons/react";
 import { useRevealActive, useSidewaysWheel, useTabDrag } from "@/features/tabs";
+import { openTerminal } from "@/features/terminal";
 import { cn } from "@/lib/cn";
-import { ContextMenu, FileIcon, Menu, Tooltip } from "@/ui";
+import { ContextMenu, FileIcon, IconButton, Menu, Tooltip } from "@/ui";
 import { panelTabs, usePanelTabsStore, type PanelTab } from "./store";
 
 /**
- * The tabs panel's head: its tabs, editor-like. A press shows one, dragging
- * reorders, middle-click or × closes, right-click for more; past its room the
- * strip scrolls (the wheel scrolls it sideways).
+ * The tabs panel's head: its tabs, editor-like, then + for a new terminal.
+ * A press shows one, dragging reorders, middle-click or × closes, right-click
+ * for more; past its room the strip scrolls (the wheel scrolls it sideways).
  */
 export function PanelTabStrip() {
     const list = usePanelTabsStore((s) => s.tabs);
@@ -35,6 +36,14 @@ export function PanelTabStrip() {
                     />
                 ))}
             </div>
+            <IconButton
+                label="New terminal"
+                shortcut="newTerminal"
+                onClick={() => openTerminal()}
+                className="shrink-0"
+            >
+                <PlusIcon className="size-3.5" />
+            </IconButton>
         </div>
     );
 }

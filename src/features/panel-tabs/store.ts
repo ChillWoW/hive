@@ -34,14 +34,25 @@ function setTabs(tabs: PanelTab[], activeId = state().activeId, fallback?: strin
 
 /** Panel tab actions, outside React too. */
 export const panelTabs = {
-    /** Opens a tab just after the shown one and shows it. */
-    open: (tab: Omit<PanelTab, "id">) => {
+    /** Opens a tab just after the shown one and shows it; returns its id. */
+    open: (tab: Omit<PanelTab, "id">): string => {
         const { tabs, activeId } = state();
         const id = crypto.randomUUID();
         const at = tabs.findIndex((t) => t.id === activeId);
         const next = [...tabs];
         next.splice(at < 0 ? tabs.length : at + 1, 0, { ...tab, id });
         setTabs(next, id);
+        return id;
+    },
+    /** Changes a tab's title, detail or dirty mark. */
+    update: (id: string, patch: Partial<Omit<PanelTab, "id" | "kind">>) => {
+        const { tabs } = state();
+        const at = tabs.findIndex((t) => t.id === id);
+        const tab = tabs[at];
+        if (!tab) return;
+        const next = [...tabs];
+        next[at] = { ...tab, ...patch };
+        usePanelTabsStore.setState({ tabs: next });
     },
     select: (id: string) => usePanelTabsStore.setState({ activeId: id }),
     /** Closing the shown tab shows its right neighbour, else its left. */
