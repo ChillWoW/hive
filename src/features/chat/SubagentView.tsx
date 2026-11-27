@@ -46,7 +46,7 @@ function ThreadTranscript({ spawn, message }: { spawn: ToolPart; message: Messag
     return (
         <TranscriptScroller follow={spawn}>
             <UserMessage message={task} />
-            <AssistantMessage message={reply} />
+            <AssistantMessage message={reply} fold={false} />
         </TranscriptScroller>
     );
 }
