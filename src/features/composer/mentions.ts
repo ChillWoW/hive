@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import type { WorkspaceEntry } from "@/proto";
-import { fileMention, rankEntries, useWorkspaceFiles } from "./files";
+import { rankEntries, useWorkspaceFiles } from "@/features/files";
+import { fileMention } from "./files";
 
 /** Rows the menu shows at most. */
 const LIMIT = 50;

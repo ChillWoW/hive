@@ -7,6 +7,7 @@ export * from "./ContextMenu";
 export * from "./DotMatrixSpinner";
 export * from "./Field";
 export * from "./FileIcon";
+export * from "./CollapseAllIcon";
 export * from "./FolderTreeIcon";
 export * from "./IconButton";
 export * from "./Input";

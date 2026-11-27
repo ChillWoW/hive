@@ -1,10 +1,13 @@
+import { FileExplorer } from "@/features/files";
 import { SidePanel } from "./SidePanel";
+import { usePanelShown } from "./store";
 
-/** The file panel: the file tree to come. */
+/** The file panel: a search over the chat folder's files, then its tree. */
 export function FilePanel() {
+    const shown = usePanelShown("files");
     return (
         <SidePanel panel="files" label="Files">
-            <div className="min-h-0 flex-1" />
+            <FileExplorer shown={shown} />
         </SidePanel>
     );
 }
