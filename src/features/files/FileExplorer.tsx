@@ -11,6 +11,7 @@ import type { WorkspaceEntry } from "@/proto";
 import { useActiveChat, useChatsStore, workDir } from "@/features/chats";
 import { cn } from "@/lib/cn";
 import { fuzzyPositions } from "@/lib/fuzzy";
+import { baseName } from "@/lib/paths";
 import { CollapseAllIcon, FileIcon, IconButton } from "@/ui";
 import { loadFolder, rankEntries, refreshFiles, useOpenedFolders, useWorkspaceFiles } from "./listing";
 import { files, useExpanded, useFilesStore } from "./store";
@@ -105,8 +106,40 @@ export function FileExplorer({ shown }: { shown: boolean }) {
 
     return (
         <>
-            <div className="flex shrink-0 items-center gap-1 px-2 pt-2 pb-1">
-                <label className="flex h-7 min-w-0 flex-1 cursor-text items-center gap-1.5 rounded-md bg-raised px-2 transition-colors hover:bg-hover">
+            <div className="flex shrink-0 flex-col gap-1 px-2 pt-2 pb-1">
+                {/* The folder shown, and the tree's actions. */}
+                <div className="flex h-7 min-w-0 items-center gap-0.5 pr-0.5 pl-2">
+                    <span
+                        title={root || undefined}
+                        className="min-w-0 flex-1 truncate text-xs font-medium text-text/85"
+                    >
+                        {root ? baseName(root) : "Files"}
+                    </span>
+                    <IconButton
+                        label={showIgnored ? "Hide ignored files" : "Show ignored files"}
+                        aria-pressed={showIgnored}
+                        disabled={!root}
+                        onClick={files.toggleIgnored}
+                        className={cn(showIgnored && "bg-hover text-text")}
+                    >
+                        {showIgnored ? <EyeIcon className="size-3.5" /> : <EyeSlashIcon className="size-3.5" />}
+                    </IconButton>
+                    <IconButton
+                        label="Collapse folders"
+                        disabled={!root}
+                        onClick={() => files.collapseAll(root)}
+                    >
+                        <CollapseAllIcon className="size-3.5" />
+                    </IconButton>
+                    <IconButton
+                        label="Refresh"
+                        disabled={!root}
+                        onClick={() => void refreshFiles(root, { force: true, ignored: showIgnored })}
+                    >
+                        <ArrowClockwiseIcon className="size-3.5" />
+                    </IconButton>
+                </div>
+                <label className="flex h-7 min-w-0 cursor-text items-center gap-1.5 rounded-md bg-raised px-2 transition-colors hover:bg-hover">
                     <MagnifyingGlassIcon className="size-3.5 shrink-0 text-muted" />
                     <input
                         type="text"
@@ -131,31 +164,6 @@ export function FileExplorer({ shown }: { shown: boolean }) {
                         </button>
                     )}
                 </label>
-                <IconButton
-                    label={showIgnored ? "Hide ignored files" : "Show ignored files"}
-                    aria-pressed={showIgnored}
-                    disabled={!root}
-                    onClick={files.toggleIgnored}
-                    className={cn("size-7 rounded-md", showIgnored && "bg-hover text-text")}
-                >
-                    {showIgnored ? <EyeIcon className="size-4" /> : <EyeSlashIcon className="size-4" />}
-                </IconButton>
-                <IconButton
-                    label="Collapse folders"
-                    disabled={!root}
-                    onClick={() => files.collapseAll(root)}
-                    className="size-7 rounded-md"
-                >
-                    <CollapseAllIcon className="size-4" />
-                </IconButton>
-                <IconButton
-                    label="Refresh"
-                    disabled={!root}
-                    onClick={() => void refreshFiles(root, { force: true, ignored: showIgnored })}
-                    className="size-7 rounded-md"
-                >
-                    <ArrowClockwiseIcon className="size-4" />
-                </IconButton>
             </div>
 
             {!root ? (
