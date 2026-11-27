@@ -205,6 +205,7 @@ pub struct KeyboardSettings {
     pub go_to_tab8: String,
     pub go_to_last_tab: String,
     pub new_terminal: String,
+    pub show_changes: String,
 }
 
 impl Default for KeyboardSettings {
@@ -231,6 +232,7 @@ impl Default for KeyboardSettings {
             go_to_tab8: "Mod+8".into(),
             go_to_last_tab: "Mod+9".into(),
             new_terminal: "Mod+J".into(),
+            show_changes: "Mod+Shift+G".into(),
         }
     }
 }
@@ -393,7 +395,17 @@ pub enum InlineChanges {
     Off,
 }
 
-/// Diff views, read by the frontend (`src/features/chat/transcript/DiffView.tsx`).
+/// How the changes tab lays out a diff: one column, or old and new side by side.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum DiffStyle {
+    #[default]
+    Unified,
+    Split,
+}
+
+/// Diff views, read by the frontend (`src/features/chat/transcript/DiffView.tsx`,
+/// `src/features/changes/`).
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct DiffsSettings {
@@ -401,6 +413,8 @@ pub struct DiffsSettings {
     pub wrap_lines: bool,
     pub indicators: DiffIndicators,
     pub inline_changes: InlineChanges,
+    /// The changes tab's layout; the transcript's diffs are always unified.
+    pub style: DiffStyle,
 }
 
 /// Where a new terminal starts.

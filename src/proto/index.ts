@@ -17,6 +17,7 @@ export type { DoneStatus } from "./DoneStatus";
 export type { FileText } from "./FileText";
 export type { FinishedTask } from "./FinishedTask";
 export type { GitBranch } from "./GitBranch";
+export type { GitChanges } from "./GitChanges";
 export type { GitRepo } from "./GitRepo";
 export type { HarnessId } from "./HarnessId";
 export type { InputRequest } from "./InputRequest";

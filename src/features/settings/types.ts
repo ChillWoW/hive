@@ -51,6 +51,7 @@ export type KeyboardSettings = {
     goToTab8: string;
     goToLastTab: string;
     newTerminal: string;
+    showChanges: string;
 };
 
 export type ClaudeSettings = {
@@ -119,11 +120,16 @@ export type DiffIndicators = "classic" | "bars" | "none";
 /** What a diff highlights inside a changed line. */
 export type InlineChanges = "word" | "char" | "off";
 
+/** How the changes tab lays out a diff: one column, or old and new side by side. */
+export type DiffStyle = "unified" | "split";
+
 export type DiffsSettings = {
     /** Long lines wrap rather than scroll sideways. */
     wrapLines: boolean;
     indicators: DiffIndicators;
     inlineChanges: InlineChanges;
+    /** The changes tab's layout; the transcript's diffs are always unified. */
+    style: DiffStyle;
 };
 
 /** Where a new terminal starts: the open chat's folder (its worktree, if any), or home. */
@@ -206,7 +212,8 @@ export const DEFAULT_SETTINGS: Settings = {
         goToTab7: "Mod+7",
         goToTab8: "Mod+8",
         goToLastTab: "Mod+9",
-        newTerminal: "Mod+J"
+        newTerminal: "Mod+J",
+        showChanges: "Mod+Shift+G"
     },
     claude: {
         binaryPath: "",
@@ -241,7 +248,8 @@ export const DEFAULT_SETTINGS: Settings = {
     diffs: {
         wrapLines: false,
         indicators: "classic",
-        inlineChanges: "word"
+        inlineChanges: "word",
+        style: "unified"
     },
     terminal: {
         shell: "",

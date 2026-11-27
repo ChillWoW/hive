@@ -123,6 +123,7 @@ pub fn run() {
             git::git_switch_branch,
             git::git_create_branch,
             git::git_delete_branch,
+            git::git_changes,
             editor::read_file,
             editor::read_file_bytes,
             editor::write_file,

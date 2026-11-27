@@ -39,3 +39,17 @@ pub struct GitBranch {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub worktree: Option<String>,
 }
+
+/// A checkout's uncommitted changes, as the changes tab shows them.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(optional_fields)]
+pub struct GitChanges {
+    /// The checkout's top folder; the patch's paths are relative to it.
+    pub root: String,
+    /// A git patch from HEAD to the working tree, untracked files included
+    /// as new ones.
+    pub patch: String,
+    /// Untracked files left out of the patch: too many, or too big.
+    pub skipped: u32,
+}

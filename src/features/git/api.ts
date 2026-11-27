@@ -1,5 +1,5 @@
 import { backend } from "@/lib/backend";
-import type { GitBranch, GitRepo } from "@/proto";
+import type { GitBranch, GitChanges, GitRepo } from "@/proto";
 
 /**
  * Transport for a folder's branches (`src-tauri/src/git.rs`). Under a plain
@@ -32,11 +32,46 @@ function fakeRepo(cwd: string): GitRepo {
     return { root: cwd, branch: fake.current, commit: "5c93f90", changes: 0, branches };
 }
 
+const FAKE_PATCH = `diff --git a/src/app.ts b/src/app.ts
+index 1111111..2222222 100644
+--- a/src/app.ts
++++ b/src/app.ts
+@@ -1,5 +1,6 @@
+ import { start } from "./start";
+-const port = 3000;
++const port = Number(process.env.PORT ?? 3000);
++const host = "localhost";
+ 
+-start(port);
++start(port, host);
+ export {};
+diff --git a/notes/todo.md b/notes/todo.md
+new file mode 100644
+index 0000000..3333333
+--- /dev/null
++++ b/notes/todo.md
+@@ -0,0 +1,3 @@
++# Todo
++
++- Ship the changes tab
+diff --git a/old.txt b/old.txt
+deleted file mode 100644
+index 4444444..0000000
+--- a/old.txt
++++ /dev/null
+@@ -1,2 +0,0 @@
+-gone
+-soon
+`;
+
 async function fakeChange(change: () => void): Promise<void> {
     change();
 }
 
 export const gitApi = {
+    /** The uncommitted changes as a patch; null outside a checkout. */
+    changes: (cwd: string) =>
+        backend<GitChanges | null>("git_changes", { cwd }, () => ({ root: cwd, patch: FAKE_PATCH, skipped: 0 })),
     /** Null outside a checkout. */
     repo: (cwd: string) => backend<GitRepo | null>("git_repo", { cwd }, () => fakeRepo(cwd)),
     switchBranch: (cwd: string, name: string) =>

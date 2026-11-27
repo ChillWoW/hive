@@ -4,7 +4,7 @@ import { defaultConfig, ModelPicker, useCatalog } from "@/features/models";
 import { SegmentedControl, Select } from "@/ui";
 import { SettingRow, SettingsSection, SwitchRow } from "../SettingsSection";
 import { useSetting, useSettingsStore } from "../store";
-import { DEFAULT_SETTINGS, type BusySend, type DiffIndicators, type InlineChanges } from "../types";
+import { DEFAULT_SETTINGS, type BusySend, type DiffIndicators, type DiffStyle, type InlineChanges } from "../types";
 
 export function ChatsPage() {
     return (
@@ -167,9 +167,28 @@ function DiffsSection() {
     const wrap = useSetting("diffs", "wrapLines");
     const indicators = useSetting("diffs", "indicators");
     const inline = useSetting("diffs", "inlineChanges");
+    const style = useSetting("diffs", "style");
 
     return (
         <SettingsSection title="Diffs">
+            <SettingRow
+                label="Changes layout"
+                description="How the changes tab shows a diff"
+                keywords="diff split unified side by side columns layout changes tab"
+                setting={style}
+                controlClassName="w-auto"
+                control={
+                    <SegmentedControl
+                        size="xs"
+                        value={style.value}
+                        onValueChange={(value) => style.set(value as DiffStyle)}
+                        aria-label="Changes layout"
+                    >
+                        <SegmentedControl.Item value="unified">Unified</SegmentedControl.Item>
+                        <SegmentedControl.Item value="split">Split</SegmentedControl.Item>
+                    </SegmentedControl>
+                }
+            />
             <SwitchRow
                 label="Wrap lines"
                 description="Long lines wrap rather than scroll sideways"

@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::time::Duration;
 
-use outcode_proto::{GitBranch, GitRepo, Worktree};
+use outcode_proto::{GitBranch, GitChanges, GitRepo, Worktree};
 use tokio::process::Command;
 
 #[derive(Debug, thiserror::Error)]
@@ -265,6 +265,77 @@ pub async fn delete(cwd: &Path, name: &str) -> Result<(), GitError> {
     }
     git(cwd, &["branch", "-D", "--", name]).await?.checked()?;
     Ok(())
+}
+
+// Changes
+
+/// Git's empty tree, to diff against before the first commit.
+const EMPTY_TREE: &str = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
+
+/// At most this many untracked files are diffed, each at most this big.
+const MAX_UNTRACKED: usize = 200;
+const MAX_UNTRACKED_BYTES: u64 = 1024 * 1024;
+
+/// Plain patch output whatever the user's config: no colour, external diff
+/// tools or odd prefixes, paths unquoted.
+const PATCH_ARGS: [&str; 6] = [
+    "--no-color",
+    "--no-ext-diff",
+    "--src-prefix=a/",
+    "--dst-prefix=b/",
+    "--find-renames",
+    "--submodule=short",
+];
+
+/// The uncommitted changes in the checkout `cwd` is in (staged or not, and
+/// untracked files as new ones), as one patch; `None` outside a checkout.
+pub async fn changes(cwd: &Path) -> Result<Option<GitChanges>, GitError> {
+    let Some(root) = toplevel(cwd).await? else {
+        return Ok(None);
+    };
+    let top = Path::new(&root);
+    let has_head = git(top, &["rev-parse", "--verify", "--quiet", "HEAD"]).await?.ok();
+    let base = if has_head { "HEAD" } else { EMPTY_TREE };
+
+    let mut args = vec!["-c", "core.quotePath=false", "diff"];
+    args.extend(PATCH_ARGS);
+    args.extend([base, "--"]);
+    let mut patch = git(top, &args).await?.checked()?;
+
+    let listed = git(top, &["ls-files", "--others", "--exclude-standard", "-z"])
+        .await?
+        .checked()?;
+    let untracked: Vec<&str> = listed.split('\0').filter(|p| !p.is_empty()).collect();
+    let mut skipped = untracked.len().saturating_sub(MAX_UNTRACKED) as u32;
+    let mut diffs = tokio::task::JoinSet::new();
+    for (at, path) in untracked.into_iter().take(MAX_UNTRACKED).enumerate() {
+        let small = std::fs::metadata(top.join(path)).is_ok_and(|m| m.len() <= MAX_UNTRACKED_BYTES);
+        if !small {
+            skipped += 1;
+            continue;
+        }
+        let (top, path) = (top.to_path_buf(), path.to_owned());
+        diffs.spawn(async move {
+            let mut args = vec!["-c", "core.quotePath=false", "diff", "--no-index"];
+            args.extend(PATCH_ARGS);
+            args.extend(["--", "/dev/null", &path]);
+            // Exit 1: they differ, as they always do here.
+            let out = git(&top, &args).await.ok().filter(|o| matches!(o.code, Some(0 | 1)));
+            (at, out.map(|o| o.stdout))
+        });
+    }
+    let mut added: Vec<(usize, String)> = Vec::new();
+    while let Some(done) = diffs.join_next().await {
+        match done {
+            Ok((at, Some(text))) => added.push((at, text)),
+            _ => skipped += 1,
+        }
+    }
+    added.sort_by_key(|(at, _)| *at);
+    for (_, text) in added {
+        patch.push_str(&text);
+    }
+    Ok(Some(GitChanges { root, patch, skipped }))
 }
 
 // Worktrees
@@ -603,6 +674,30 @@ mod tests {
             remove_worktree(path, w).await.unwrap();
         }
         assert!(!dir2.exists());
+    }
+
+    #[tokio::test]
+    async fn changes_cover_tracked_and_untracked_files() {
+        let Some(dir) = fixture().await else { return };
+        let path = dir.path();
+        assert!(changes(path).await.unwrap().unwrap().patch.is_empty());
+
+        std::fs::write(path.join("a.txt"), "one\n").unwrap();
+        git(path, &["add", "a.txt"]).await.unwrap().checked().unwrap();
+        git(path, &["commit", "-q", "-m", "a"]).await.unwrap().checked().unwrap();
+        std::fs::write(path.join("a.txt"), "two\n").unwrap();
+        std::fs::create_dir(path.join("sub")).unwrap();
+        std::fs::write(path.join("sub/new file.txt"), "hello\n").unwrap();
+
+        let c = changes(&path.join("sub")).await.unwrap().unwrap();
+        assert!(c.patch.contains("diff --git a/a.txt b/a.txt"));
+        assert!(c.patch.contains("-one\n+two\n"));
+        assert!(c.patch.contains("+++ b/sub/new file.txt"));
+        assert!(c.patch.contains("+hello\n"));
+        assert_eq!(c.skipped, 0);
+
+        let plain = tempfile::tempdir().unwrap();
+        assert_eq!(changes(plain.path()).await.unwrap(), None);
     }
 
     #[test]

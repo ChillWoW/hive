@@ -8,6 +8,7 @@ import { useTerminalRuntime } from "@/features/terminal";
 import { useFontRuntime } from "@/features/fonts/useFontRuntime";
 import { useThemeRuntime } from "@/features/theme/useThemeRuntime";
 import { useUpdaterRuntime } from "@/features/updater";
+import { useChangesRuntime } from "@/features/changes";
 import { useKeybindingsRuntime } from "@/keybindings";
 import {
     BOX_INSET,
@@ -41,6 +42,7 @@ export function App() {
     useSidebarRuntime();
     useTerminalRuntime();
     useEditorRuntime();
+    useChangesRuntime();
     const placement = usePlacement();
     const dockLeft = placement.dock === "left";
 

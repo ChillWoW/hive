@@ -13,6 +13,8 @@ export type PanelTab = {
     dirty?: boolean;
     /** A file tab's file: `path` relative to `cwd`, `/`-separated. */
     file?: { cwd: string; path: string };
+    /** A diff tab's folder: its checkout's uncommitted changes. */
+    diff?: { cwd: string };
 };
 
 /**

@@ -1,4 +1,5 @@
-import { TerminalWindowIcon } from "@phosphor-icons/react";
+import { GitDiffIcon, TerminalWindowIcon } from "@phosphor-icons/react";
+import { ChangesTab, openChangesTab, useCurrentFolder } from "@/features/changes";
 import { FileTab } from "@/features/editor";
 import { openTerminal, TerminalView } from "@/features/terminal";
 import { ShortcutKeys, useBinding } from "@/keybindings";
@@ -23,19 +24,34 @@ export function PanelTabView() {
             </div>
         );
     }
-    // Diffs bring their own view.
+    if (tab.kind === "diff" && tab.diff) {
+        return (
+            <div role="tabpanel" className="flex min-h-0 flex-1 flex-col">
+                <ChangesTab key={tab.id} id={tab.id} cwd={tab.diff.cwd} />
+            </div>
+        );
+    }
     return <div role="tabpanel" className="min-h-0 flex-1 overflow-auto" />;
 }
 
 function Empty() {
-    const shortcut = useBinding("newTerminal");
+    const terminal = useBinding("newTerminal");
+    const changes = useBinding("showChanges");
+    const folder = useCurrentFolder();
     return (
-        <div className="flex min-h-0 flex-1 flex-col items-center justify-center">
-            <Button variant="outline" size="sm" onClick={() => openTerminal()} className="gap-2">
+        <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2">
+            <Button variant="outline" size="sm" onClick={() => openTerminal()} className="w-44 gap-2">
                 <TerminalWindowIcon className="size-3.5" />
                 New terminal
-                <ShortcutKeys shortcut={shortcut} variant="plain" />
+                <ShortcutKeys shortcut={terminal} variant="plain" className="ml-auto" />
             </Button>
+            {folder && (
+                <Button variant="outline" size="sm" onClick={() => openChangesTab(folder)} className="w-44 gap-2">
+                    <GitDiffIcon className="size-3.5" />
+                    Show changes
+                    <ShortcutKeys shortcut={changes} variant="plain" className="ml-auto" />
+                </Button>
+            )}
         </div>
     );
 }

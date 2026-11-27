@@ -7,16 +7,19 @@ import {
     TerminalWindowIcon,
     XIcon
 } from "@phosphor-icons/react";
+import { openChangesTab, useCurrentFolder } from "@/features/changes";
 import { useRevealActive, useSidewaysWheel, useTabDrag } from "@/features/tabs";
 import { openTerminal } from "@/features/terminal";
+import { ShortcutKeys, useBinding } from "@/keybindings";
 import { useLayoutStore, usePanelLayout } from "@/layout/store";
 import { cn } from "@/lib/cn";
-import { ContextMenu, FileIcon, IconButton, Menu, Tooltip } from "@/ui";
+import { ContextMenu, FileIcon, IconButton, iconButtonClassName, Menu, Tooltip } from "@/ui";
 import { panelTabs, usePanelTabsStore, type PanelTab } from "./store";
 
 /**
- * The tabs panel's head: its tabs, editor-like, then + for a new terminal and
- * the toggle that maximizes the panel over the chat.
+ * The tabs panel's head: its tabs, editor-like, then + for what can be opened
+ * (a terminal, the folder's changes) and the toggle that maximizes the panel
+ * over the chat.
  * A press shows one, dragging reorders, middle-click or × closes, right-click
  * for more; past its room the strip scrolls (the wheel scrolls it sideways).
  */
@@ -45,16 +48,40 @@ export function PanelTabStrip() {
                     />
                 ))}
             </div>
-            <IconButton
-                label="New terminal"
-                shortcut="newTerminal"
-                onClick={() => openTerminal()}
-                className="shrink-0"
-            >
-                <PlusIcon className="size-3.5" />
-            </IconButton>
+            <NewTabMenu />
             <MaximizeButton />
         </div>
+    );
+}
+
+/** +: a menu of the tabs that can be opened. */
+function NewTabMenu() {
+    const folder = useCurrentFolder();
+    const terminal = useBinding("newTerminal");
+    const changes = useBinding("showChanges");
+    return (
+        <Menu>
+            <Tooltip>
+                <Tooltip.Trigger
+                    render={<Menu.Trigger aria-label="Open a tab" className={cn(iconButtonClassName, "shrink-0")} />}
+                >
+                    <PlusIcon className="size-3.5" />
+                </Tooltip.Trigger>
+                <Tooltip.Content side="bottom">Open a tab</Tooltip.Content>
+            </Tooltip>
+            <Menu.Content align="end" sideOffset={6} className="w-52 min-w-0">
+                <Menu.Item onClick={() => openTerminal()}>
+                    <TerminalWindowIcon className="size-3.5 text-muted" />
+                    New terminal
+                    <ShortcutKeys shortcut={terminal} variant="plain" className="ml-auto pl-4" />
+                </Menu.Item>
+                <Menu.Item disabled={!folder} onClick={() => openChangesTab(folder)}>
+                    <GitDiffIcon className="size-3.5 text-muted" />
+                    Show changes
+                    <ShortcutKeys shortcut={changes} variant="plain" className="ml-auto pl-4" />
+                </Menu.Item>
+            </Menu.Content>
+        </Menu>
     );
 }
 

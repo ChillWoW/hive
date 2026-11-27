@@ -74,6 +74,14 @@ export const ACTIONS: readonly Action[] = [
         scope: "global"
     },
     {
+        id: "showChanges",
+        category: "general",
+        label: "Show changes",
+        description: "Shows the folder's uncommitted changes in the tabs panel",
+        keywords: "changes diff git uncommitted modified working tree review",
+        scope: "global"
+    },
+    {
         id: "goBack",
         category: "general",
         label: "Go back",

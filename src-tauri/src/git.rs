@@ -2,7 +2,7 @@
 
 use std::path::Path;
 
-use outcode_proto::GitRepo;
+use outcode_proto::{GitChanges, GitRepo};
 
 fn err(error: impl std::fmt::Display) -> String {
     error.to_string()
@@ -28,4 +28,10 @@ pub async fn git_create_branch(cwd: String, name: String, from: String) -> Resul
 #[tauri::command]
 pub async fn git_delete_branch(cwd: String, name: String) -> Result<(), String> {
     outcode_git::delete(Path::new(&cwd), &name).await.map_err(err)
+}
+
+/// The checkout's uncommitted changes as a patch; null when `cwd` isn't in one.
+#[tauri::command]
+pub async fn git_changes(cwd: String) -> Result<Option<GitChanges>, String> {
+    outcode_git::changes(Path::new(&cwd)).await.map_err(err)
 }
