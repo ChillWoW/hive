@@ -1,6 +1,6 @@
 # outcode
 
-Repo: https://github.com/ChillWoW/hive (private) — licensed under GPL-3.0.
+Repo: https://github.com/ChillWoW/outcode — licensed under GPL-3.0.
 
 ## What it is
 

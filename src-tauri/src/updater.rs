@@ -18,7 +18,7 @@ use crate::settings::{SettingsFile, UpdateChannel};
 
 /// Where releases are published; the same repository as
 /// `plugins.updater.endpoints` in tauri.conf.json.
-const REPO: &str = "ChillWoW/hive";
+const REPO: &str = "ChillWoW/outcode";
 /// Releases read for the pre-release channel, newest first.
 const RELEASES_PAGE: usize = 30;
 /// Progress is reported at most this often (in bytes).

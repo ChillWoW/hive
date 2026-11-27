@@ -4,7 +4,7 @@ version = "0.1.1"
 description = "Outcode desktop app"
 authors = ["ChillWoW"]
 license = "GPL-3.0-only"
-repository = "https://github.com/ChillWoW/hive"
+repository = "https://github.com/ChillWoW/outcode"
 edition = "2024"
 
 [lib]
