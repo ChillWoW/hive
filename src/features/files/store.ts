@@ -15,7 +15,7 @@ type FilesState = {
 
 /** The file panel's search, open folders and pick; open folders and `showIgnored` persist per device. */
 export const useFilesStore = create<FilesState>()(
-    persist(() => ({ query: "", expanded: {}, selected: {}, showIgnored: false }), {
+    persist((): FilesState => ({ query: "", expanded: {}, selected: {}, showIgnored: false }), {
         name: "outcode.files",
         version: 0,
         storage: createJSONStorage(() => localStorage),
