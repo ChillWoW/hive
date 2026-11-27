@@ -168,6 +168,7 @@ export function ChatView() {
     const settled = !!pendingSetup || !chat || loaded;
     const [centred, setCentred] = useState(wantCentred);
     const bottomRef = useRef<HTMLDivElement>(null);
+    const rootRef = useRef<HTMLDivElement>(null);
     // Where the composer was when the layout last flipped, for its morph.
     const fromRef = useRef<number | null>(null);
     // The flip waits for a commit of the old layout, so the composer can be
@@ -188,6 +189,16 @@ export function ChatView() {
             duration: MORPH_MS,
             easing: "cubic-bezier(0.22, 1, 0.36, 1)"
         });
+        // What the composer moves over (the transcript, or the heading) comes
+        // in behind it, once it is most of the way there, rather than
+        // standing under it from the first frame.
+        const above = rootRef.current?.firstElementChild;
+        if (above && above !== el) {
+            above.animate([{ opacity: 0 }, { opacity: 0, offset: 0.4 }, { opacity: 1 }], {
+                duration: MORPH_MS,
+                easing: "ease-out"
+            });
+        }
     }, [centred]);
 
     let top: ReactNode;
@@ -250,7 +261,10 @@ export function ChatView() {
     // The composer keeps its place in the tree across the layouts, so it
     // stays mounted (focus, caret) while it moves.
     return (
-        <div className={cn("relative flex h-full w-full flex-col", centred && "pb-16")}>
+        // A chat brings its header (h-9) in above this view: the extra foot
+        // keeps the centred composer where it is without one, so it doesn't
+        // jump as the header comes in ahead of the morph.
+        <div ref={rootRef} className={cn("relative flex h-full w-full flex-col", centred && (chat ? "pb-25" : "pb-16"))}>
             {top}
             {(centred || pendingSetup || !openSpawn) && (
                 <Bottom key="composer" ref={bottomRef}>
