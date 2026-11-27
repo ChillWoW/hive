@@ -34,6 +34,9 @@ const clampWidth = (panel: Panel, width: number) => {
     return Math.round(clamp(Number.isFinite(width) ? width : PANEL_WIDTHS[panel].default, min, max));
 };
 
+/** How long a panel takes to slide open, closed or to a new width; `SidePanel`'s transition. */
+export const SLIDE_MS = 200;
+
 const perPanel = <T,>(value: (panel: Panel) => T) =>
     Object.fromEntries(PANELS.map((p) => [p, value(p)])) as Record<Panel, T>;
 
@@ -48,6 +51,14 @@ type LayoutState = {
     usedAt: Record<Panel, number>;
     /** An edge is being dragged: widths follow the pointer, unanimated. */
     resizing: boolean;
+    /** The tabs panel takes the main column's room too; the other panels stay. Not persisted. */
+    maximized: boolean;
+    /**
+     * The tabs panel is sliding to or from maximized: its content follows its
+     * edge (terminals fit once it's over), while the main column's keeps its
+     * width, to be covered or uncovered rather than reflowed.
+     */
+    sliding: boolean;
     /** Opens or closes a panel; one open but hidden for room is brought back instead. */
     toggle: (panel: Panel) => void;
     /** Clamped to the panel's min and max. */
@@ -55,6 +66,8 @@ type LayoutState = {
     /** Marks a panel the most recently used, so it's the last to give way. */
     touch: (panel: Panel) => void;
     setResizing: (resizing: boolean) => void;
+    /** Maximizes the tabs panel (opening it if need be), or restores it. */
+    toggleMaximized: () => void;
 };
 
 type FitInput = Pick<LayoutState, "open" | "widths" | "usedAt">;
@@ -80,6 +93,10 @@ export function fitPanels(viewport: number, state: FitInput): Record<Panel, bool
 
 export type PanelLayout = {
     visible: Record<Panel, boolean>;
+    /** The tabs panel is shown and maximized: it has the main column's width as well. */
+    maximized: boolean;
+    /** The main column's width, as if not maximized. */
+    mainWidth: number;
     /** Shown widths: 0 while closed or hidden for room. */
     widths: Record<Panel, number>;
     /** How wide a drag may make each panel right now. */
@@ -91,7 +108,7 @@ export type PanelLayout = {
  * under its comfortable width. Then panels give way, least recently used
  * first, down to their minimums; past that the main column shrinks to its own.
  */
-export function panelLayout(viewport: number, state: FitInput): PanelLayout {
+export function panelLayout(viewport: number, state: FitInput, maximize = false): PanelLayout {
     const visible = fitPanels(viewport, state);
     const shown = PANELS.filter((p) => visible[p]);
     const minimums = shown.reduce((sum, p) => sum + PANEL_WIDTHS[p].min, 0);
@@ -117,7 +134,11 @@ export function panelLayout(viewport: number, state: FitInput): PanelLayout {
             Math.min(PANEL_WIDTHS[p].max, viewport - main - others)
         );
     }
-    return { visible, widths, dragMax };
+
+    const mainWidth = viewport - shown.reduce((sum, p) => sum + widths[p], 0);
+    const maximized = maximize && visible.tabs;
+    if (maximized) widths.tabs += mainWidth;
+    return { visible, maximized, mainWidth, widths, dragMax };
 }
 
 /** Version 0 named panels by their old fixed sides. */
@@ -149,27 +170,57 @@ const migrateV0 = (saved: SavedV0): Partial<FitInput> => ({
     }
 });
 
+let slideTimer: ReturnType<typeof setTimeout> | undefined;
+
 /** Which panels are open and how wide; persisted per device. Where they sit is a setting (`placement.ts`). */
 export const useLayoutStore = create<LayoutState>()(
     persist(
-        (set, get) => ({
-            open: { chats: true, tabs: false, files: false },
-            widths: perPanel((p) => PANEL_WIDTHS[p].default),
-            usedAt: perPanel(() => 0),
-            resizing: false,
-            toggle: (panel) => {
+        (set, get) => {
+            /** Maximizes or restores; `sliding` until the slide is over. */
+            const slide = (maximized: boolean) => {
+                clearTimeout(slideTimer);
+                slideTimer = setTimeout(() => set({ sliding: false }), SLIDE_MS + 50);
+                return { maximized, sliding: true };
+            };
+            const shownNow = (panel: Panel) => {
                 const state = get();
-                const shown = state.open[panel] && fitPanels(roomWidth(), state)[panel];
-                set({
-                    open: { ...state.open, [panel]: !shown },
-                    ...(!shown && { usedAt: { ...state.usedAt, [panel]: Date.now() } })
-                });
-            },
-            setWidth: (panel, width) =>
-                set((s) => ({ widths: { ...s.widths, [panel]: clampWidth(panel, width) } })),
-            touch: (panel) => set((s) => ({ usedAt: { ...s.usedAt, [panel]: Date.now() } })),
-            setResizing: (resizing) => set({ resizing })
-        }),
+                return state.open[panel] && fitPanels(roomWidth(), state)[panel];
+            };
+            return {
+                open: { chats: true, tabs: false, files: false },
+                widths: perPanel((p) => PANEL_WIDTHS[p].default),
+                usedAt: perPanel(() => 0),
+                resizing: false,
+                maximized: false,
+                sliding: false,
+                toggle: (panel) => {
+                    const state = get();
+                    const shown = shownNow(panel);
+                    set({
+                        open: { ...state.open, [panel]: !shown },
+                        ...(!shown && { usedAt: { ...state.usedAt, [panel]: Date.now() } }),
+                        // A maximized panel that closes opens again restored.
+                        ...(shown && panel === "tabs" && { maximized: false })
+                    });
+                },
+                toggleMaximized: () => {
+                    const state = get();
+                    const shown = shownNow("tabs");
+                    const maximize = !(state.maximized && shown);
+                    set({
+                        ...slide(maximize),
+                        ...(maximize && {
+                            open: { ...state.open, tabs: true },
+                            usedAt: { ...state.usedAt, tabs: Date.now() }
+                        })
+                    });
+                },
+                setWidth: (panel, width) =>
+                    set((s) => ({ widths: { ...s.widths, [panel]: clampWidth(panel, width) } })),
+                touch: (panel) => set((s) => ({ usedAt: { ...s.usedAt, [panel]: Date.now() } })),
+                setResizing: (resizing) => set({ resizing })
+            };
+        },
         {
             name: "outcode.layout",
             version: 1,
@@ -193,7 +244,10 @@ export const useLayoutStore = create<LayoutState>()(
 );
 
 /** The layout for the window's width right now, outside React. */
-export const getPanelLayout = () => panelLayout(roomWidth(), useLayoutStore.getState());
+export const getPanelLayout = () => {
+    const state = useLayoutStore.getState();
+    return panelLayout(roomWidth(), state, state.maximized);
+};
 
 const subscribeResize = (onChange: () => void) => {
     window.addEventListener("resize", onChange);
@@ -208,7 +262,8 @@ export function usePanelLayout(): PanelLayout {
     const state = useLayoutStore(
         useShallow((s) => ({ open: s.open, widths: s.widths, usedAt: s.usedAt }))
     );
-    return useMemo(() => panelLayout(viewport, state), [viewport, state]);
+    const maximized = useLayoutStore((s) => s.maximized);
+    return useMemo(() => panelLayout(viewport, state, maximized), [viewport, state, maximized]);
 }
 
 /** A panel is open and has room to show. */

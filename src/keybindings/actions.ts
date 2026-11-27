@@ -58,6 +58,14 @@ export const ACTIONS: readonly Action[] = [
         scope: "global"
     },
     {
+        id: "maximizeTabsPanel",
+        category: "general",
+        label: "Maximize tabs panel",
+        description: "Lets the tabs panel take the chat's room, or gives it back",
+        keywords: "maximize fullscreen full screen expand restore tabs panel terminal",
+        scope: "global"
+    },
+    {
         id: "newTerminal",
         category: "general",
         label: "New terminal",

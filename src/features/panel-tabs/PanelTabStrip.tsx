@@ -1,13 +1,22 @@
 import { useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { GitDiffIcon, PlusIcon, TerminalWindowIcon, XIcon } from "@phosphor-icons/react";
+import {
+    ArrowsInLineHorizontalIcon,
+    ArrowsOutLineHorizontalIcon,
+    GitDiffIcon,
+    PlusIcon,
+    TerminalWindowIcon,
+    XIcon
+} from "@phosphor-icons/react";
 import { useRevealActive, useSidewaysWheel, useTabDrag } from "@/features/tabs";
 import { openTerminal } from "@/features/terminal";
+import { useLayoutStore, usePanelLayout } from "@/layout/store";
 import { cn } from "@/lib/cn";
 import { ContextMenu, FileIcon, IconButton, Menu, Tooltip } from "@/ui";
 import { panelTabs, usePanelTabsStore, type PanelTab } from "./store";
 
 /**
- * The tabs panel's head: its tabs, editor-like, then + for a new terminal.
+ * The tabs panel's head: its tabs, editor-like, then + for a new terminal and
+ * the toggle that maximizes the panel over the chat.
  * A press shows one, dragging reorders, middle-click or × closes, right-click
  * for more; past its room the strip scrolls (the wheel scrolls it sideways).
  */
@@ -44,7 +53,26 @@ export function PanelTabStrip() {
             >
                 <PlusIcon className="size-3.5" />
             </IconButton>
+            <MaximizeButton />
         </div>
+    );
+}
+
+function MaximizeButton() {
+    const maximized = usePanelLayout().maximized;
+    const toggleMaximized = useLayoutStore((s) => s.toggleMaximized);
+    const Glyph = maximized ? ArrowsInLineHorizontalIcon : ArrowsOutLineHorizontalIcon;
+
+    return (
+        <IconButton
+            label={maximized ? "Restore tabs panel" : "Maximize tabs panel"}
+            shortcut="maximizeTabsPanel"
+            onClick={toggleMaximized}
+            aria-pressed={maximized}
+            className="shrink-0"
+        >
+            <Glyph className="size-3.5" />
+        </IconButton>
     );
 }
 

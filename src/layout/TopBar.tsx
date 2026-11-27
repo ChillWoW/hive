@@ -42,6 +42,7 @@ export function TopBar() {
     useShortcut("toggleSidebar", () => toggle("chats"));
     useShortcut("toggleRightSidebar", () => toggle("tabs"));
     useShortcut("toggleFilePanel", () => toggle("files"));
+    useShortcut("maximizeTabsPanel", useLayoutStore.getState().toggleMaximized);
     const dockLeft = placement.dock === "left";
 
     return (

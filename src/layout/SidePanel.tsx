@@ -16,7 +16,8 @@ import {
  * as wide as the layout gives it (see `panelLayout`). It closes, or hides for
  * room, by sliding its width to 0; the content keeps its last width meanwhile,
  * so it's uncovered rather than reflowed. Dragging its inner edge resizes it;
- * a double-click there resets it. It shares the inset box's colour, set apart
+ * a double-click there resets it. Maximized (the tabs panel), it also takes
+ * the main column's room. It shares the inset box's colour, set apart
  * by its border.
  */
 export function SidePanel({
@@ -32,6 +33,9 @@ export function SidePanel({
     const open = layout.visible[panel];
     const width = layout.widths[panel];
     const resizing = useLayoutStore((s) => s.resizing);
+    const maximized = layout.maximized && panel === "tabs";
+    // Sliding to or from maximized, the content follows the edge instead.
+    const sliding = useLayoutStore((s) => s.sliding) && panel === "tabs";
     const side = sideOf(usePlacement(), panel);
     // The last shown width, kept while it slides closed.
     const [contentWidth, setContentWidth] = useState(width);
@@ -49,15 +53,16 @@ export function SidePanel({
             )}
         >
             <div
-                style={{ width: contentWidth }}
+                style={{ width: sliding ? "100%" : contentWidth }}
                 className={cn(
                     "flex h-full shrink-0 flex-col border-border",
-                    side === "left" ? "border-r" : "border-l"
+                    // Maximized, the panel beyond the (empty) main column has the border.
+                    !maximized && (side === "left" ? "border-r" : "border-l")
                 )}
             >
                 {children}
             </div>
-            {open && <ResizeHandle panel={panel} label={label} side={side} />}
+            {open && !maximized && <ResizeHandle panel={panel} label={label} side={side} />}
         </aside>
     );
 }

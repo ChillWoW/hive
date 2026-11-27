@@ -6,6 +6,7 @@ import { Terminal, type ITerminalOptions } from "@xterm/xterm";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { settings } from "@/features/settings/store";
 import { isAppShortcut, isShortcutOf } from "@/keybindings";
+import { useLayoutStore } from "@/layout/store";
 import { copyText } from "@/lib/clipboard";
 import { errorMessage } from "@/lib/errors";
 import { isMac, isTauri } from "@/lib/platform";
@@ -373,6 +374,12 @@ function fitSoon(session: Session) {
     });
 }
 
+// The terminals on screen fit once the tabs panel's slide is over.
+useLayoutStore.subscribe((state, prev) => {
+    if (state.sliding || !prev.sliding) return;
+    for (const session of sessions.values()) if (session.host.isConnected) fitSoon(session);
+});
+
 /** Shows tab `id`'s terminal in `parent` (starting its shell the first time) and focuses it. */
 export function attachSession(id: string, parent: HTMLElement) {
     const session = sessions.get(id);
@@ -390,7 +397,10 @@ export function attachSession(id: string, parent: HTMLElement) {
     else session.term.refresh(0, session.term.rows - 1);
     session.term.focus();
 
-    const observer = new ResizeObserver(() => fitSoon(session));
+    // Not while the tabs panel slides to or from maximized: once, after.
+    const observer = new ResizeObserver(() => {
+        if (!useLayoutStore.getState().sliding) fitSoon(session);
+    });
     observer.observe(parent);
     return () => {
         observer.disconnect();

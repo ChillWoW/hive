@@ -15,9 +15,12 @@ import {
     RightSidebar,
     Sidebar,
     TopBar,
+    useLayoutStore,
+    usePanelLayout,
     usePlacement,
     type Panel
 } from "@/layout";
+import { cn } from "@/lib/cn";
 import { Toaster } from "@/ui";
 
 const PANELS: Record<Panel, ComponentType> = {
@@ -57,16 +60,7 @@ export function App() {
                     {/* One keyed list, so a panel moved across the main column keeps its state. */}
                     {placement.columns.map((column) => {
                         if (column === "dock") return null;
-                        if (column === "main") {
-                            return (
-                                <main key="main" className="flex min-w-0 flex-1 flex-col overflow-hidden">
-                                    <ChatHeader />
-                                    <div className="min-h-0 flex-1">
-                                        <ChatView />
-                                    </div>
-                                </main>
-                            );
-                        }
+                        if (column === "main") return <Main key="main" />;
                         const PanelView = PANELS[column];
                         return <PanelView key={column} />;
                     })}
@@ -75,5 +69,33 @@ export function App() {
             <SettingsModal />
             <Toaster />
         </div>
+    );
+}
+
+/**
+ * The chat: whatever room the panels leave. While the tabs panel is maximized
+ * it has none; its content keeps its width meanwhile, anchored away from the
+ * tabs panel, so it's covered and uncovered rather than reflowed.
+ */
+function Main() {
+    const { maximized, mainWidth } = usePanelLayout();
+    const sliding = useLayoutStore((s) => s.sliding);
+    const tabsLeft = usePlacement().left.includes("tabs");
+
+    return (
+        <main
+            inert={maximized}
+            className={cn("flex min-w-0 flex-1 overflow-hidden", tabsLeft && "justify-end")}
+        >
+            <div
+                style={{ minWidth: maximized || sliding ? mainWidth : undefined }}
+                className="flex min-w-0 flex-1 flex-col"
+            >
+                <ChatHeader />
+                <div className="min-h-0 flex-1">
+                    <ChatView />
+                </div>
+            </div>
+        </main>
     );
 }
