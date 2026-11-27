@@ -1,4 +1,5 @@
 export { ChatList } from "./ChatList";
+export { StatusFilter } from "./StatusFilter";
 export { SidebarSearch } from "./SidebarSearch";
 export { useSidebarRuntime } from "./useSidebarRuntime";
 export { ChatMenuItems, UNTITLED } from "./ChatRow";

@@ -7,7 +7,7 @@ import { ChatCard } from "@/features/sidebar/ChatCard";
 import { CARD_DWELL, UNTITLED } from "@/features/sidebar/ChatRow";
 import { useShortcut } from "@/keybindings";
 import { cn } from "@/lib/cn";
-import { ContextMenu, DotMatrixSpinner, IconButton, iconButtonClassName, Menu, Tooltip } from "@/ui";
+import { ContextMenu, IconButton, iconButtonClassName, Menu, Tooltip } from "@/ui";
 import { isLoneNewTab, tabs, useTabsStore, type Tab } from "./store";
 import { useRevealActive, useSidewaysWheel, useTabDrag } from "./strip";
 
@@ -134,26 +134,33 @@ function OverflowMenu({ hidden }: { hidden: Tab[] }) {
 function OverflowItem({ tab }: { tab: Tab }) {
     const chat = useChatsStore((s) => (tab ? s.chats.find((c) => c.id === tab) : undefined));
     const working = useWorking(tab);
+    const asking = useAsking(tab);
     const title = tab === null ? UNTITLED : chat?.title?.trim() || UNTITLED;
     return (
         <Menu.Item onClick={() => useChatsStore.getState().select(tab)}>
-            <TabIcon tab={tab} harness={chat?.config.harness} working={working} />
-            <span className="min-w-0 flex-1 truncate">
-                {title}
-            </span>
+            <TabIcon tab={tab} harness={chat?.config.harness} />
+            <TabTitle title={title} working={working && !asking} />
         </Menu.Item>
     );
 }
 
-/** A tab's mark: a pulsing dot while it waits on the user, working dots, the new-chat pencil, or the provider's mark. */
-function TabIcon({ tab, harness, working }: { tab: Tab; harness: HarnessId | undefined; working: boolean }) {
+/** A tab's title; light sweeps across it, dimmed, while its chat works (as the sidebar's rows). */
+function TabTitle({ title, working }: { title: string; working: boolean }) {
+    return (
+        <span className="flex min-w-0 flex-1">
+            {/* On a span the text's width, so the band crosses the title, not the tab. */}
+            <span className={cn("min-w-0 truncate", working && "shimmer text-muted")}>{title}</span>
+        </span>
+    );
+}
+
+/** A tab's mark: a pulsing dot while it waits on the user, the new-chat pencil, or the provider's mark. */
+function TabIcon({ tab, harness }: { tab: Tab; harness: HarnessId | undefined }) {
     const asking = useAsking(tab);
     return (
         <span className="flex w-3.5 shrink-0 justify-center">
             {asking ? (
                 <span role="img" aria-label="Needs your answer" className="size-1.5 animate-pulse rounded-full bg-warning" />
-            ) : working ? (
-                <DotMatrixSpinner label="Working" className="size-2.5 text-text/85" />
             ) : tab === null ? (
                 <NotePencilIcon className="size-3.5" />
             ) : (
@@ -214,8 +221,8 @@ function TabItem({
                             : "text-text/70 hover:bg-raised hover:text-text data-[popup-open]:bg-raised"
                     )}
                 >
-                    <TabIcon tab={tab} harness={chat?.config.harness} working={working} />
-                    <span className="min-w-0 flex-1 truncate">{title}</span>
+                    <TabIcon tab={tab} harness={chat?.config.harness} />
+                    <TabTitle title={title} working={working && !asking} />
                     {closable && (
                         <button
                             type="button"

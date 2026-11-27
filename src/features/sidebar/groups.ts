@@ -2,76 +2,91 @@ import { useMemo } from "react";
 import { useChatsStore } from "@/features/chats";
 import { useHiddenFolders, useProjects } from "@/features/projects";
 import type { Chat } from "@/proto";
+import { LIVE, type LiveStatus } from "./status";
 import { isUnread, useSidebarStore } from "./store";
 
-export type ProjectGroup = {
-    path: string;
-    chats: Chat[];
-    /** How many of its chats show in Active instead. */
-    active: number;
-};
+export type ProjectGroup = { path: string; chats: Chat[] };
 
 export type SidebarGroups = {
-    /** Chats whose turn is running or that have unseen replies, from any project. */
-    active: Chat[];
-    /** In pin order, first pinned first. */
-    pinned: Chat[];
     /** Every project in `useProjects` order, then folders that only chats remember. */
     projects: ProjectGroup[];
     archived: Chat[];
 };
 
+export type Counts = Record<LiveStatus, number>;
+
+export type Statuses = {
+    /** Chats that aren't idle, by id. */
+    of: Map<string, LiveStatus>;
+    /** How many listed chats have each status; archived ones don't count. */
+    counts: Counts;
+};
+
 /**
- * The sidebar's sections. A chat is in at most one: Archived if archived,
- * else Active while its turn runs or it's unread (`isUnread`), or another chat
- * of its thread (its parent, a chat its agent started) is, else Pinned if
- * pinned, else its folder's project (none while that project is deleted).
- * Chats keep the store's order (most recently active first).
- *
- * The open chat counts as unread until the user leaves it, so a chat that
- * finishes while they read it stays put instead of jumping out of Active.
+ * Every chat's status: asking while its turn waits on the user, working
+ * while it runs, unread when it replied since the user last left it
+ * (`isUnread`; never the open chat, which is being read), else idle.
  */
-export function useSidebarGroups(): SidebarGroups {
+export function useStatuses(): Statuses {
     const chats = useChatsStore((s) => s.chats);
-    // A string, so session updates that don't start or end a turn don't regroup.
-    const workingKey = useChatsStore((s) =>
+    // A string, so session updates that change no status don't recompute.
+    const liveKey = useChatsStore((s) =>
         Object.values(s.sessions)
-            .filter((session) => session.working)
-            .map((session) => session.chatId)
+            .filter((x) => x.working || x.asking || x.secrets.length > 0)
+            .map((x) => `${x.chatId} ${x.asking || x.secrets.length > 0 ? "asking" : "working"}`)
             .sort()
             .join("\n")
     );
+    const openId = useChatsStore((s) => s.activeChatId);
     const seen = useSidebarStore((s) => s.seen);
+    const since = useSidebarStore((s) => s.since);
+    const hidden = useHiddenFolders();
+
+    return useMemo(() => {
+        const live = new Map(
+            liveKey
+                .split("\n")
+                .filter(Boolean)
+                .map((line) => line.split(" ") as [string, LiveStatus])
+        );
+        const of = new Map<string, LiveStatus>();
+        const counts: Counts = { asking: 0, working: 0, unread: 0 };
+        for (const chat of chats) {
+            const status =
+                live.get(chat.id) ?? (chat.id !== openId && isUnread(chat, seen, since) ? "unread" : null);
+            if (!status) continue;
+            of.set(chat.id, status);
+            if (!chat.archived && !hidden.has(chat.cwd)) counts[status]++;
+        }
+        return { of, counts };
+    }, [chats, liveKey, openId, seen, since, hidden]);
+}
+
+/** The filter in effect: the picked status, while some chat still has it. */
+export function activeFilter(filter: LiveStatus | null, counts: Counts): LiveStatus | null {
+    return filter && counts[filter] > 0 ? filter : null;
+}
+
+/**
+ * The sidebar's groups. A chat has one place and keeps it whatever it's
+ * doing: Archived if archived, else its folder's project (none while that
+ * project is deleted). In a project, pinned chats come first, in pin order,
+ * then the rest, most recently active first; a chat an agent started sits
+ * right under its parent.
+ */
+export function useSidebarGroups(): SidebarGroups {
+    const chats = useChatsStore((s) => s.chats);
     const known = useProjects();
     const hidden = useHiddenFolders();
 
     return useMemo(() => {
-        const working = new Set(workingKey.split("\n"));
-        const active: Chat[] = [];
-        const pinned: Chat[] = [];
         const archived: Chat[] = [];
         const byPath = new Map<string, Chat[]>(known.map((path) => [path, []]));
-        const activeIn = new Map<string, number>();
         // Folders only chats remember (not a deleted project's), at the bottom.
         const orphans: string[] = [];
 
-        // A thread: a chat and the chats its agent started. One of them
-        // active brings the whole thread to Active.
-        const ids = new Set(chats.map((c) => c.id));
-        const threadOf = (chat: Chat) =>
-            chat.parentChatId != null && ids.has(chat.parentChatId) ? chat.parentChatId : chat.id;
-        const activeThreads = new Set(
-            chats
-                .filter((c) => !c.archived && (working.has(c.id) || isUnread(c, seen)))
-                .map(threadOf)
-        );
-
         for (const chat of chats) {
             if (chat.archived) archived.push(chat);
-            else if (activeThreads.has(threadOf(chat))) {
-                active.push(chat);
-                activeIn.set(chat.cwd, (activeIn.get(chat.cwd) ?? 0) + 1);
-            } else if (chat.pinnedAt != null) pinned.push(chat);
             else if (!hidden.has(chat.cwd)) {
                 let list = byPath.get(chat.cwd);
                 if (!list) {
@@ -82,19 +97,23 @@ export function useSidebarGroups(): SidebarGroups {
                 list.push(chat);
             }
         }
-        pinned.sort((a, b) => (a.pinnedAt ?? 0) - (b.pinnedAt ?? 0));
-        // Fixed by their first chat, so they don't move either.
+        // Fixed by their first chat, so they don't move.
         const firstAt = (path: string) =>
             Math.min(...(byPath.get(path) ?? []).map((c) => c.createdAt));
         orphans.sort((a, b) => firstAt(a) - firstAt(b));
 
         const projects = [...known, ...orphans].map((path) => ({
             path,
-            chats: nest(byPath.get(path) ?? []),
-            active: activeIn.get(path) ?? 0
+            chats: nest(pinnedFirst(byPath.get(path) ?? []))
         }));
-        return { active: nest(active), pinned: nest(pinned), projects, archived: nest(archived) };
-    }, [chats, known, hidden, workingKey, seen]);
+        return { projects, archived: nest(archived) };
+    }, [chats, known, hidden]);
+}
+
+/** Pinned chats in pin order (first pinned first), then the rest as they were. */
+function pinnedFirst(list: Chat[]): Chat[] {
+    const pinned = list.filter((c) => c.pinnedAt != null).sort((a, b) => a.pinnedAt! - b.pinnedAt!);
+    return pinned.length ? [...pinned, ...list.filter((c) => c.pinnedAt == null)] : list;
 }
 
 /**
@@ -118,3 +137,16 @@ function nest(list: Chat[]): Chat[] {
 export function isNested(chat: Chat, list: Chat[]): boolean {
     return chat.parentChatId != null && list.some((c) => c.id === chat.parentChatId);
 }
+
+/** How many of `chats` have each status. */
+export function countStatuses(chats: Chat[], statuses: Statuses["of"]): Counts {
+    const counts: Counts = { asking: 0, working: 0, unread: 0 };
+    for (const chat of chats) {
+        const status = statuses.get(chat.id);
+        if (status) counts[status]++;
+    }
+    return counts;
+}
+
+/** The statuses some chat has, most urgent first. */
+export const present = (counts: Counts) => LIVE.filter((status) => counts[status] > 0);

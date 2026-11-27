@@ -52,8 +52,9 @@ function seed() {
     const now = Date.now();
     const chat = (cwd: string, title: string | undefined, ago: number, extra: Partial<Chat> = {}) => {
         const at = now - ago;
+        const id = crypto.randomUUID();
         chats.push({
-            id: crypto.randomUUID(),
+            id,
             cwd,
             title,
             config: { harness: "claude", modelOptions: {}, access: "full-access", plan: false },
@@ -62,12 +63,64 @@ function seed() {
             lastMessageAt: at,
             ...extra
         });
+        return id;
     };
-    chat("C:\\dev\\outcode", "Sidebar chat list", 0.2 * HOUR);
-    chat("C:\\dev\\outcode", "Fix the resize handle", 5 * HOUR, { pinnedAt: now - HOUR });
-    chat("C:\\dev\\outcode", undefined, 26 * HOUR);
-    chat("C:\\dev\\website", "Landing page copy", 3 * 24 * HOUR);
-    chat("C:\\dev\\website", "Old experiment", 20 * 24 * HOUR, { archived: true });
+    const DAY = 24 * HOUR;
+    const harness = (id: ChatConfig["harness"]): Partial<Chat> => ({
+        config: { harness: id, modelOptions: {}, access: "full-access", plan: false }
+    });
+    const outcode = "C:\\dev\\outcode";
+    const website = "C:\\dev\\website";
+    const api = "C:\\dev\\api-server";
+
+    // outcode: every kind of row, and enough of them for "Show more".
+    chat(outcode, "Sidebar chat list", 0.2 * HOUR);
+    chat(outcode, "Fix the resize handle", 5 * HOUR, { pinnedAt: now - HOUR });
+    chat(outcode, "Release checklist", 9 * DAY, { pinnedAt: now - 2 * HOUR, ...harness("codex") });
+    const orchestrator = chat(outcode, "Split the settings schema", 0.5 * HOUR);
+    const child = chat(outcode, "Migrate the theme settings", 0.4 * HOUR, { parentChatId: orchestrator });
+    chat(outcode, "Update the keybinding docs", 0.45 * HOUR, { parentChatId: orchestrator, ...harness("codex") });
+    const waiting = chat(outcode, "Collapse the sidebar", HOUR);
+    chat(outcode, undefined, 26 * HOUR);
+    chat(outcode, "Terminal tab titles on Windows", 2 * DAY, {
+        ...harness("antigravity"),
+        worktree: {
+            root: "~/.outcode/worktrees/a1b2c3d4/outcode",
+            path: "~/.outcode/worktrees/a1b2c3d4/outcode",
+            branch: "outcode/terminal-tab-titles",
+            base: "main"
+        }
+    });
+    chat(outcode, "A much longer chat title that has to be cut off somewhere in the row", 3 * DAY);
+    chat(outcode, "Updater retry on flaky networks", 5 * DAY, harness("codex"));
+    chat(outcode, "Toast stacking order", 12 * DAY);
+    const buried = chat(outcode, "Font fallback for CJK", 40 * DAY);
+
+    // website: one chat that replies while another is open.
+    const replying = chat(website, "Landing page copy", 3 * DAY);
+    chat(website, "Pricing table", 6 * DAY, harness("antigravity"));
+    chat(website, "Old experiment", 20 * DAY, { archived: true });
+    chat(website, "Blog engine spike", 70 * DAY, { archived: true, ...harness("codex") });
+
+    // api-server: nothing going on.
+    chat(api, "Rate limiter", 4 * DAY, harness("codex"));
+    chat(api, "Move to SQLite", 400 * DAY);
+
+    // Their live states, once the scripts below exist: a turn held mid-run
+    // (Stop ends it), one waiting on a question, and two that finish on
+    // their own, so they turn unread unless they're the open chat.
+    window.setTimeout(() => {
+        for (const id of [child, buried]) {
+            start(id, "Keep going until it's done.", []);
+            window.setTimeout(() => {
+                window.clearInterval(timers.get(id));
+                timers.delete(id);
+            }, 400);
+        }
+        start(waiting, "Ask me a question first.", []);
+        start(replying, "Tighten the hero copy.", []);
+        start(orchestrator, "Split the schema and hand the parts out.", []);
+    }, 0);
 }
 seed();
 
@@ -249,6 +302,7 @@ function play(chatId: string) {
             feed(chatId, turn.reply, event);
             if (event.type === "inputRequested") {
                 turn.waiting = event.requestId;
+                setSession(chatId, { asking: true });
                 window.clearInterval(timers.get(chatId));
                 timers.delete(chatId);
             }
@@ -268,7 +322,7 @@ function finish(chatId: string, status: "completed" | "interrupted") {
     save({ ...chatOf(chatId), lastMessageAt: Date.now() });
     const session = sessionOf(chatId);
     const held = session.held && status === "interrupted";
-    setSession(chatId, { working: false, held });
+    setSession(chatId, { working: false, asking: false, held });
     const [next, ...rest] = session.queued;
     if (next && !held) {
         setSession(chatId, { queued: rest });
@@ -388,6 +442,7 @@ export const dev = {
         const turn = scripts.get(chatId);
         if (!turn || turn.waiting !== requestId) return;
         turn.waiting = undefined;
+        setSession(chatId, { asking: false });
         feed(chatId, turn.reply, { type: "inputResolved", requestId, response });
         const refused =
             (response.kind === "approval" && response.decision === "deny") ||

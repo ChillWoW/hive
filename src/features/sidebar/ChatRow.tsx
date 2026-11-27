@@ -9,18 +9,17 @@ import {
     PushPinSlashIcon,
     TrashIcon
 } from "@phosphor-icons/react";
-import { activity, chats, useAsking, useChatsStore, useWorking } from "@/features/chats";
+import { activity, chats, useChatsStore, useWorking } from "@/features/chats";
 import { handOff, handoffBlocked } from "@/features/chat/handoff";
 import { HarnessMark } from "@/features/models";
-import { ProjectIcon } from "@/features/projects";
 import { cn } from "@/lib/cn";
 import { timeAgo, useMinuteClock } from "@/lib/time";
 import type { Chat } from "@/proto";
 import { ContextMenu, Menu, Tooltip, useInlineRename } from "@/ui";
 import { ChatCard } from "./ChatCard";
 import { ROW_ACTION, rowClassName, warn } from "./rows";
-import { StatusMark } from "./StatusMark";
-import { isUnread, useSidebarStore } from "./store";
+import { STATUS, type ChatStatus } from "./status";
+import { useSidebarStore } from "./store";
 
 export const UNTITLED = "New chat";
 
@@ -28,38 +27,34 @@ export const UNTITLED = "New chat";
 export const CARD_DWELL = 300;
 
 /**
- * One chat in the sidebar: status mark, title, time since its last activity
- * and its provider's mark. The "⋯" button (on hover, over the mark) and a right-click open the same menu:
- * Rename (in place), Pin, Archive, Delete. Resting on it shows its card
- * (`ChatCard`) beside the sidebar; a click or a menu hides it. `showProject`
- * puts its project's icon in place of the provider's mark; `nested` indents
- * a chat an agent started under its parent's row.
+ * One chat in the sidebar: its provider's mark, its title (a pin after it
+ * when pinned), then "Needs you" while it waits on the user, else the time
+ * since its last activity, with a dot while it has unread replies. The title
+ * shimmers while it works. Idle chats are dimmed, so the others stand out.
+ * The "⋯" button (on hover, over the status) and a right-click open the
+ * same menu: Rename (in place), Pin, Archive, Delete. Resting on it shows
+ * its card (`ChatCard`) beside the sidebar; a click or a menu hides it.
+ * `nested` indents a chat an agent started under its parent's row.
  */
 export function ChatRow({
     chat,
+    status,
     onDelete,
-    showProject = false,
     nested = false
 }: {
     chat: Chat;
+    status: ChatStatus;
     onDelete: (chat: Chat) => void;
-    showProject?: boolean;
     nested?: boolean;
 }) {
     const active = useChatsStore((s) => s.activeChatId === chat.id);
-    const working = useWorking(chat.id);
-    const asking = useAsking(chat.id);
     const renaming = useSidebarStore((s) => s.renaming === chat.id);
     const setRenaming = useSidebarStore((s) => s.setRenaming);
-    const now = useMinuteClock();
     // Rename puts the caret in the field; the closing menu mustn't take it back.
     const keepFocus = useRef(false);
     const [menuOpen, setMenuOpen] = useState(false);
     const [contextOpen, setContextOpen] = useState(false);
 
-    // The open chat is being read, so it shows no unread dot.
-    const unread = useSidebarStore((s) => !active && isUnread(chat, s.seen));
-    const status = asking ? "asking" : working ? "working" : unread ? "unread" : "idle";
     const title = chat.title?.trim() || UNTITLED;
 
     const startRename = () => {
@@ -83,7 +78,7 @@ export function ChatRow({
                     className="group/chat relative"
                 >
                     {renaming ? (
-                        <RenameField chat={chat} onDone={() => setRenaming(null)} />
+                        <RenameField chat={chat} nested={nested} onDone={() => setRenaming(null)} />
                     ) : (
                         <button
                             type="button"
@@ -91,29 +86,43 @@ export function ChatRow({
                             aria-current={active ? "page" : undefined}
                             className={cn(
                                 rowClassName(active),
+                                // Idle chats step back; the open one and those doing something don't.
+                                !active && (status === "idle" ? "text-text/70" : "text-text"),
                                 nested && "pl-6",
                                 "group-has-[[data-popup-open]]/chat:bg-raised"
                             )}
                         >
-                            <StatusMark status={status} />
-                            <span className={cn("min-w-0 flex-1 truncate", !chat.title && "text-muted")}>
-                                {title}
+                            <span className="flex w-4 shrink-0 justify-center">
+                                <HarnessMark harness={chat.config.harness} className="size-3 shrink-0" />
                             </span>
-                            <span className="flex w-7 shrink-0 justify-end text-[11px] text-muted/75 tabular-nums">
-                                {timeAgo(activity(chat), now)}
+                            <span className="flex min-w-0 flex-1 items-center gap-1.5">
+                                <span
+                                    className={cn(
+                                        "min-w-0 truncate",
+                                        !chat.title && "text-muted",
+                                        status === "unread" && "font-medium",
+                                        // Light sweeps across a dimmed title while it works.
+                                        status === "working" && "shimmer text-muted"
+                                    )}
+                                >
+                                    {title}
+                                </span>
+                                {chat.pinnedAt != null && (
+                                    <PushPinIcon
+                                        weight="fill"
+                                        role="img"
+                                        aria-label="Pinned"
+                                        className="size-2.5 shrink-0 text-muted/75"
+                                    />
+                                )}
                             </span>
                             <span
                                 className={cn(
-                                    "flex w-4 shrink-0 justify-center",
+                                    "flex min-w-7 shrink-0 items-center justify-end gap-1.5 text-[11px]",
                                     "group-hover/chat:invisible group-has-[[data-popup-open]]/chat:invisible"
                                 )}
                             >
-                                {showProject ? (
-                                    <ProjectIcon path={chat.cwd} className="size-3.5 shrink-0" />
-                                ) : (
-                                    // The chat's harness.
-                                    <HarnessMark harness={chat.config.harness} className="size-3 shrink-0" />
-                                )}
+                                <RowStatus chat={chat} status={status} />
                             </span>
                         </button>
                     )}
@@ -124,7 +133,7 @@ export function ChatRow({
                                 aria-label={`Options for ${title}`}
                                 className={cn(
                                     ROW_ACTION,
-                                    // Over the time, which hides on hover.
+                                    // Over the status, which hides on hover.
                                     "right-1.5 group-hover/chat:opacity-100",
                                     "data-[popup-open]:bg-border data-[popup-open]:text-text data-[popup-open]:opacity-100"
                                 )}
@@ -153,9 +162,41 @@ export function ChatRow({
                 collisionPadding={12}
                 className="w-[284px] max-w-none p-3 font-normal"
             >
-                <ChatCard chat={chat} title={title} working={working} asking={asking} />
+                <ChatCard
+                    chat={chat}
+                    title={title}
+                    working={status === "working"}
+                    asking={status === "asking"}
+                />
             </Tooltip.Content>
         </Tooltip>
+    );
+}
+
+/** A row's right end: what the chat is doing, else when it was last active. */
+function RowStatus({ chat, status }: { chat: Chat; status: ChatStatus }) {
+    const now = useMinuteClock();
+    if (status === "asking") {
+        return (
+            <>
+                <span className={cn("size-1.5 rounded-full", STATUS.asking.className)} />
+                <span className="font-medium text-warning">{STATUS.asking.label}</span>
+            </>
+        );
+    }
+    return (
+        <>
+            {status === "unread" && (
+                <span
+                    role="img"
+                    aria-label={STATUS.unread.label}
+                    className={cn("size-1.5 rounded-full", STATUS.unread.className)}
+                />
+            )}
+            <span className={cn("tabular-nums", status === "unread" ? "text-text/85" : "text-muted/75")}>
+                {timeAgo(activity(chat), now)}
+            </span>
+        </>
     );
 }
 
@@ -207,7 +248,7 @@ export function ChatMenuItems({
 }
 
 /** The title in place, editable: Enter or leaving saves, Escape cancels. */
-function RenameField({ chat, onDone }: { chat: Chat; onDone: () => void }) {
+function RenameField({ chat, nested, onDone }: { chat: Chat; nested: boolean; onDone: () => void }) {
     const { finish, value, inputProps } = useInlineRename({
         onEnter: () => end(true),
         onEscape: () => end(false),
@@ -223,8 +264,15 @@ function RenameField({ chat, onDone }: { chat: Chat; onDone: () => void }) {
         });
 
     return (
-        <div className="flex h-7 items-center gap-2 rounded-md bg-raised pr-1.5 pl-2 ring-1 ring-border">
-            <span className="w-4 shrink-0" />
+        <div
+            className={cn(
+                "flex h-7 items-center gap-2 rounded-md bg-raised pr-1.5 pl-2 ring-1 ring-border",
+                nested && "pl-6"
+            )}
+        >
+            <span className="flex w-4 shrink-0 justify-center">
+                <HarnessMark harness={chat.config.harness} className="size-3 shrink-0" />
+            </span>
             <input
                 {...inputProps}
                 defaultValue={chat.title ?? ""}
