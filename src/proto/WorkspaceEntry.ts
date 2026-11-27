@@ -7,4 +7,8 @@ export type WorkspaceEntry = {
 /**
  * Relative to the folder, `/`-separated, without a trailing slash.
  */
-path: string, dir: boolean, };
+path: string, dir: boolean, 
+/**
+ * Hidden by `.gitignore` (or `.ignore`); listed only when asked for.
+ */
+ignored: boolean, };

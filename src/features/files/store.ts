@@ -9,15 +9,17 @@ type FilesState = {
     expanded: Record<string, string[]>;
     /** The picked entry, by root. */
     selected: Record<string, string>;
+    /** What `.gitignore` hides shows too, dimmed. */
+    showIgnored: boolean;
 };
 
-/** The file panel's search, open folders and pick; open folders persist per device. */
+/** The file panel's search, open folders and pick; open folders and `showIgnored` persist per device. */
 export const useFilesStore = create<FilesState>()(
-    persist(() => ({ query: "", expanded: {}, selected: {} }), {
+    persist(() => ({ query: "", expanded: {}, selected: {}, showIgnored: false }), {
         name: "outcode.files",
         version: 0,
         storage: createJSONStorage(() => localStorage),
-        partialize: (s) => ({ expanded: s.expanded })
+        partialize: (s) => ({ expanded: s.expanded, showIgnored: s.showIgnored })
     })
 );
 
@@ -36,6 +38,7 @@ const setExpanded = (root: string, update: (open: Set<string>) => void) =>
 /** File panel actions, outside React too. Paths are relative to `root`, `/`-separated. */
 export const files = {
     setQuery: (query: string) => useFilesStore.setState({ query }),
+    toggleIgnored: () => useFilesStore.setState((s) => ({ showIgnored: !s.showIgnored })),
     toggleFolder: (root: string, path: string) =>
         setExpanded(root, (open) => (open.has(path) ? open.delete(path) : open.add(path))),
     setFolderOpen: (root: string, path: string, on: boolean) =>

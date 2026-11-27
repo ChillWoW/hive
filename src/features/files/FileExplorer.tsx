@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type RefObjec
 import {
     ArrowClockwiseIcon,
     CaretRightIcon,
+    EyeIcon,
+    EyeSlashIcon,
     MagnifyingGlassIcon,
     XIcon
 } from "@phosphor-icons/react";
@@ -10,7 +12,7 @@ import { useActiveChat, useChatsStore, workDir } from "@/features/chats";
 import { cn } from "@/lib/cn";
 import { fuzzyPositions } from "@/lib/fuzzy";
 import { CollapseAllIcon, FileIcon, IconButton } from "@/ui";
-import { rankEntries, refreshFiles, useWorkspaceFiles } from "./listing";
+import { loadFolder, rankEntries, refreshFiles, useOpenedFolders, useWorkspaceFiles } from "./listing";
 import { files, useExpanded, useFilesStore } from "./store";
 import { childrenByFolder, nameOf, parentOf, visibleRows, type TreeRow } from "./tree";
 
@@ -40,7 +42,20 @@ function useRoot(): string {
  */
 export function FileExplorer({ shown }: { shown: boolean }) {
     const root = useRoot();
-    const entries = useWorkspaceFiles(root, shown);
+    const showIgnored = useFilesStore((s) => s.showIgnored);
+    const listed = useWorkspaceFiles(root, shown, showIgnored);
+    const opened = useOpenedFolders(root);
+    // With ignored files shown, what's inside the ignored folders opened so far too.
+    const entries = useMemo(
+        () => {
+            if (!listed || !showIgnored) return listed;
+            // A folder `.gitignore` stopped hiding is in the listing itself now.
+            const known = new Set(listed.map((e) => e.path));
+            const inside = Object.values(opened).flat().filter((e) => !known.has(e.path));
+            return [...listed, ...inside];
+        },
+        [listed, showIgnored, opened]
+    );
     const query = useFilesStore((s) => s.query);
     const searching = query.trim() !== "";
     const results = useMemo(
@@ -117,6 +132,15 @@ export function FileExplorer({ shown }: { shown: boolean }) {
                     )}
                 </label>
                 <IconButton
+                    label={showIgnored ? "Hide ignored files" : "Show ignored files"}
+                    aria-pressed={showIgnored}
+                    disabled={!root}
+                    onClick={files.toggleIgnored}
+                    className={cn("size-7 rounded-md", showIgnored && "bg-hover text-text")}
+                >
+                    {showIgnored ? <EyeIcon className="size-4" /> : <EyeSlashIcon className="size-4" />}
+                </IconButton>
+                <IconButton
                     label="Collapse folders"
                     disabled={!root}
                     onClick={() => files.collapseAll(root)}
@@ -127,7 +151,7 @@ export function FileExplorer({ shown }: { shown: boolean }) {
                 <IconButton
                     label="Refresh"
                     disabled={!root}
-                    onClick={() => void refreshFiles(root, true)}
+                    onClick={() => void refreshFiles(root, { force: true, ignored: showIgnored })}
                     className="size-7 rounded-md"
                 >
                     <ArrowClockwiseIcon className="size-4" />
@@ -167,6 +191,14 @@ function Tree({ root, entries }: { root: string; entries: readonly WorkspaceEntr
     const expandedList = useExpanded(root);
     const expanded = useMemo(() => new Set(expandedList), [expandedList]);
     const rows = useMemo(() => visibleRows(children, expanded), [children, expanded]);
+    const byPath = useMemo(() => new Map(entries.map((e) => [e.path, e])), [entries]);
+    // An open ignored folder wasn't walked into: list it now.
+    useEffect(() => {
+        for (const path of expandedList) {
+            const entry = byPath.get(path);
+            if (entry?.dir && entry.ignored) loadFolder(root, path);
+        }
+    }, [root, expandedList, byPath]);
     const selected = useFilesStore((s) => s.selected[root]);
     const at = rows.findIndex((row) => row.entry.path === selected);
     // The row Tab lands on: the pick while it's shown, else the first.
@@ -271,8 +303,13 @@ function Tree({ root, entries }: { root: string; entries: readonly WorkspaceEntr
                         ) : (
                             <span className="size-2.5 shrink-0" />
                         )}
-                        <FileIcon name={name} folder={entry.dir} open={open} className="size-3.5" />
-                        <span className="min-w-0 truncate">{name}</span>
+                        <FileIcon
+                            name={name}
+                            folder={entry.dir}
+                            open={open}
+                            className={cn("size-3.5", entry.ignored && "opacity-50")}
+                        />
+                        <span className={cn("min-w-0 truncate", entry.ignored && "opacity-50")}>{name}</span>
                     </div>
                 );
             })}
@@ -324,8 +361,12 @@ function SearchResults({
                             "pl-2"
                         )}
                     >
-                        <FileIcon name={name} folder={entry.dir} className="size-3.5" />
-                        <span className="max-w-[70%] shrink-0 truncate">
+                        <FileIcon
+                            name={name}
+                            folder={entry.dir}
+                            className={cn("size-3.5", entry.ignored && "opacity-50")}
+                        />
+                        <span className={cn("max-w-[70%] shrink-0 truncate", entry.ignored && "opacity-50")}>
                             <Highlighted text={name} query={query} />
                             {entry.dir && "/"}
                         </span>

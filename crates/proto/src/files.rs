@@ -10,4 +10,6 @@ pub struct WorkspaceEntry {
     /// Relative to the folder, `/`-separated, without a trailing slash.
     pub path: String,
     pub dir: bool,
+    /// Hidden by `.gitignore` (or `.ignore`); listed only when asked for.
+    pub ignored: bool,
 }

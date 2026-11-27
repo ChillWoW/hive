@@ -13,6 +13,7 @@ const FRESH_MS = 15_000;
 const FAKE: WorkspaceEntry[] = [
     "src/",
     "src-tauri/",
+    "!node_modules/",
     "README.md",
     "package.json",
     "src/App.tsx",
@@ -22,57 +23,99 @@ const FAKE: WorkspaceEntry[] = [
     "src/features/composer/Composer.tsx",
     "src-tauri/src/",
     "src-tauri/src/lib.rs"
-].map((path) => ({ path: path.replace(/\/$/, ""), dir: path.endsWith("/") }));
+].map((mark) => {
+    const path = mark.replace(/^!/, "").replace(/\/$/, "");
+    return { path, dir: mark.endsWith("/"), ignored: mark.startsWith("!") };
+});
 
-/** Every file and folder under `cwd` that `.gitignore` doesn't hide, shallowest first (`src-tauri/src/files.rs`). */
-function listFiles(cwd: string): Promise<WorkspaceEntry[]> {
-    return backend("list_files", { cwd }, () => FAKE);
+/**
+ * Every file and folder under `cwd` that `.gitignore` doesn't hide,
+ * shallowest first; with `ignored`, also the ignored ones right inside them
+ * (`src-tauri/src/files.rs`).
+ */
+function listFiles(cwd: string, ignored: boolean): Promise<WorkspaceEntry[]> {
+    return backend("list_files", { cwd, ignored }, () => FAKE.filter((e) => ignored || !e.ignored));
 }
 
 type Listing = { at: number; entries: WorkspaceEntry[] };
 
-/** Each folder's last listing, shared by every composer and the file panel. */
-const useListingsStore = create<{ listings: Record<string, Listing> }>()(() => ({ listings: {} }));
+type ListingsState = {
+    /** Each folder's last listing, by `listingKey`; shared by every composer and the file panel. */
+    listings: Record<string, Listing>;
+    /** Ignored folders opened in the file panel: their entries, by root, then by path. */
+    folders: Record<string, Record<string, WorkspaceEntry[]>>;
+};
+
+const useListingsStore = create<ListingsState>()(() => ({ listings: {}, folders: {} }));
+
+/** The cache key of `cwd`'s listing, with or without its ignored entries. */
+const listingKey = (cwd: string, ignored: boolean) => (ignored ? `${cwd}\0ignored` : cwd);
 
 const pending = new Map<string, Promise<void>>();
 
 /**
- * Re-lists `cwd` unless its last listing is fresh (or `force`); one listing
- * at a time per folder.
+ * Re-lists `cwd` unless its last listing is fresh (or `force`, which also
+ * forgets its opened ignored folders); one listing at a time per folder.
  */
-export function refreshFiles(cwd: string, force = false): Promise<void> {
-    const last = useListingsStore.getState().listings[cwd];
+export function refreshFiles(cwd: string, { force = false, ignored = false } = {}): Promise<void> {
+    const key = listingKey(cwd, ignored);
+    const last = useListingsStore.getState().listings[key];
     if (!force && last && Date.now() - last.at < FRESH_MS) return Promise.resolve();
-    let listing = pending.get(cwd);
+    if (force) useListingsStore.setState((s) => ({ folders: { ...s.folders, [cwd]: {} } }));
+    let listing = pending.get(key);
     if (!listing) {
-        listing = listFiles(cwd)
+        listing = listFiles(cwd, ignored)
             .then(
                 (entries) =>
                     useListingsStore.setState((s) => ({
-                        listings: { ...s.listings, [cwd]: { at: Date.now(), entries } }
+                        listings: { ...s.listings, [key]: { at: Date.now(), entries } }
                     })),
                 (error: unknown) => console.warn("[files] listing failed", error)
             )
-            .finally(() => pending.delete(cwd));
-        pending.set(cwd, listing);
+            .finally(() => pending.delete(key));
+        pending.set(key, listing);
     }
     return listing;
 }
 
 /**
- * `cwd`'s files and folders, re-listed while `active` whenever the last
- * listing went stale and on window focus; undefined until the first listing
- * arrives. The last listing stays shown while a new one loads.
+ * `cwd`'s files and folders (with `ignored`, the ignored ones too),
+ * re-listed while `active` whenever the last listing went stale and on
+ * window focus; undefined until the first listing arrives. The last listing
+ * stays shown while a new one loads.
  */
-export function useWorkspaceFiles(cwd: string, active: boolean): WorkspaceEntry[] | undefined {
-    const entries = useListingsStore((s) => (cwd ? s.listings[cwd]?.entries : undefined));
+export function useWorkspaceFiles(cwd: string, active: boolean, ignored = false): WorkspaceEntry[] | undefined {
+    const entries = useListingsStore((s) => (cwd ? s.listings[listingKey(cwd, ignored)]?.entries : undefined));
     useEffect(() => {
         if (!cwd || !active) return;
-        const refresh = () => void refreshFiles(cwd);
+        const refresh = () => void refreshFiles(cwd, { ignored });
         refresh();
         return onWindowFocus(refresh);
-    }, [cwd, active]);
+    }, [cwd, active, ignored]);
     return entries;
+}
+
+const NO_FOLDERS: Record<string, WorkspaceEntry[]> = {};
+
+/** The ignored folders opened under `cwd`, by path. */
+export const useOpenedFolders = (cwd: string) => useListingsStore((s) => s.folders[cwd] ?? NO_FOLDERS);
+
+const loading = new Set<string>();
+
+/** Lists what's inside the ignored folder `path` under `cwd`, once; refreshing forgets it. */
+export function loadFolder(cwd: string, path: string): void {
+    const key = `${cwd}\0${path}`;
+    if (loading.has(key) || useListingsStore.getState().folders[cwd]?.[path]) return;
+    loading.add(key);
+    backend<WorkspaceEntry[]>("list_folder", { cwd, path }, () => [])
+        .then(
+            (entries) =>
+                useListingsStore.setState((s) => ({
+                    folders: { ...s.folders, [cwd]: { ...s.folders[cwd], [path]: entries } }
+                })),
+            (error: unknown) => console.warn("[files] listing a folder failed", error)
+        )
+        .finally(() => loading.delete(key));
 }
 
 /**

@@ -1,8 +1,10 @@
 //! Files the user opens from the app, and a chat folder's files for the
-//! composer's `@` menu: every file and folder that `.gitignore` (and
-//! `.ignore`) doesn't hide, dotfiles included, `.git` never.
+//! composer's `@` menu and the file panel: every file and folder that
+//! `.gitignore` (and `.ignore`) doesn't hide, dotfiles included, `.git`
+//! never. The file panel can ask for the ignored ones too.
 
-use std::path::Path;
+use std::collections::HashSet;
+use std::path::{Component, Path};
 
 use outcode_proto::WorkspaceEntry;
 use tauri::AppHandle;
@@ -40,7 +42,44 @@ fn is_dir(entry: &ignore::DirEntry) -> Option<bool> {
     Some(kind.is_dir() || (kind.is_symlink() && entry.path().is_dir()))
 }
 
-fn list(root: &Path) -> Result<Vec<WorkspaceEntry>, String> {
+/// Shallowest first, folders before files, then by name: what the menu
+/// shows before anything is typed, and each folder's order in the tree.
+fn sort(entries: &mut [WorkspaceEntry]) {
+    entries.sort_by_cached_key(|entry| {
+        (
+            entry.path.matches('/').count(),
+            !entry.dir,
+            entry.path.to_lowercase(),
+        )
+    });
+}
+
+/// `folder`'s children under `root` that aren't in `known`, as ignored
+/// entries; `.git` never.
+fn ignored_in(root: &Path, folder: &str, known: &HashSet<&str>) -> Vec<WorkspaceEntry> {
+    let Ok(read) = std::fs::read_dir(root.join(folder)) else {
+        return Vec::new();
+    };
+    read.flatten()
+        .filter_map(|child| {
+            let name = child.file_name().to_string_lossy().into_owned();
+            if name == ".git" {
+                return None;
+            }
+            let path = if folder.is_empty() { name } else { format!("{folder}/{name}") };
+            if known.contains(path.as_str()) {
+                return None;
+            }
+            let dir = child.path().is_dir();
+            Some(WorkspaceEntry { path, dir, ignored: true })
+        })
+        .collect()
+}
+
+/// What `.gitignore` doesn't hide under `root`; with `ignored`, also what it
+/// hides right inside each listed folder (not walked into: `list_folder`
+/// lists one once it's opened).
+fn list(root: &Path, ignored: bool) -> Result<Vec<WorkspaceEntry>, String> {
     if !root.is_dir() {
         return Err(format!("{} is not a folder", root.display()));
     }
@@ -53,6 +92,7 @@ fn list(root: &Path) -> Result<Vec<WorkspaceEntry>, String> {
         .build();
 
     let mut entries = Vec::new();
+    let mut truncated = false;
     for entry in walk {
         let Ok(entry) = entry else { continue };
         if entry.depth() == 0 {
@@ -61,29 +101,57 @@ fn list(root: &Path) -> Result<Vec<WorkspaceEntry>, String> {
         let (Some(path), Some(dir)) = (relative(root, entry.path()), is_dir(&entry)) else {
             continue;
         };
-        entries.push(WorkspaceEntry { path, dir });
+        entries.push(WorkspaceEntry { path, dir, ignored: false });
         if entries.len() >= MAX_ENTRIES {
+            truncated = true;
             break;
         }
     }
 
-    // Shallowest first, folders before files, then by name: what the menu
-    // shows before anything is typed.
-    entries.sort_by_cached_key(|entry| {
-        (
-            entry.path.matches('/').count(),
-            !entry.dir,
-            entry.path.to_lowercase(),
-        )
-    });
+    // Past the cap, what wasn't walked would pass for ignored.
+    if ignored && !truncated {
+        let known: HashSet<&str> = entries.iter().map(|e| e.path.as_str()).collect();
+        // A linked folder wasn't walked into, so its children aren't ignored.
+        let folders = std::iter::once("").chain(
+            entries
+                .iter()
+                .filter(|e| e.dir && !root.join(&e.path).is_symlink())
+                .map(|e| e.path.as_str()),
+        );
+        let hidden: Vec<_> = folders.flat_map(|f| ignored_in(root, f, &known)).collect();
+        entries.extend(hidden);
+    }
+
+    sort(&mut entries);
     Ok(entries)
 }
 
 /// Every file and folder under `cwd` that `.gitignore` doesn't hide,
-/// shallowest first.
+/// shallowest first; with `ignored`, the ignored ones right inside them too.
 #[tauri::command]
-pub async fn list_files(cwd: String) -> Result<Vec<WorkspaceEntry>, String> {
-    tauri::async_runtime::spawn_blocking(move || list(Path::new(&cwd)))
+pub async fn list_files(cwd: String, ignored: Option<bool>) -> Result<Vec<WorkspaceEntry>, String> {
+    let ignored = ignored.unwrap_or(false);
+    tauri::async_runtime::spawn_blocking(move || list(Path::new(&cwd), ignored))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+/// `path`'s children under `root`, all ignored (it's an ignored folder the
+/// file panel opened), folders first.
+fn list_one(root: &Path, path: &str) -> Result<Vec<WorkspaceEntry>, String> {
+    if !Path::new(path).components().all(|c| matches!(c, Component::Normal(_))) {
+        return Err(format!("{path} isn't inside the folder"));
+    }
+    let mut entries = ignored_in(root, path, &HashSet::new());
+    sort(&mut entries);
+    Ok(entries)
+}
+
+/// What's right inside `path` (relative to `cwd`), every entry counted as
+/// ignored; for opening an ignored folder in the file panel.
+#[tauri::command]
+pub async fn list_folder(cwd: String, path: String) -> Result<Vec<WorkspaceEntry>, String> {
+    tauri::async_runtime::spawn_blocking(move || list_one(Path::new(&cwd), &path))
         .await
         .map_err(|e| e.to_string())?
 }
@@ -105,14 +173,36 @@ mod tests {
         std::fs::write(root.join("debug.log"), "").unwrap();
         std::fs::write(root.join("src/nested/a.rs"), "").unwrap();
 
-        let paths: Vec<_> = list(root)
-            .unwrap()
-            .into_iter()
-            .map(|e| if e.dir { format!("{}/", e.path) } else { e.path })
-            .collect();
+        let paths = |ignored| -> Vec<_> {
+            list(root, ignored)
+                .unwrap()
+                .into_iter()
+                .map(|e| {
+                    let mark = if e.ignored { "!" } else { "" };
+                    let slash = if e.dir { "/" } else { "" };
+                    format!("{mark}{}{slash}", e.path)
+                })
+                .collect()
+        };
         assert_eq!(
-            paths,
+            paths(false),
             ["src/", ".gitignore", "README.md", "src/nested/", "src/nested/a.rs"]
         );
+        assert_eq!(
+            paths(true),
+            [
+                "src/",
+                "!target/",
+                ".gitignore",
+                "!debug.log",
+                "README.md",
+                "src/nested/",
+                "src/nested/a.rs"
+            ]
+        );
+
+        let inside: Vec<_> = list_one(root, "target").unwrap().into_iter().map(|e| e.path).collect();
+        assert_eq!(inside, ["target/debug"]);
+        assert!(list_one(root, "../x").is_err());
     }
 }
