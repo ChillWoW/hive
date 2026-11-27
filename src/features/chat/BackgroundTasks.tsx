@@ -39,7 +39,7 @@ export function BackgroundTasks({
         <Popover.Root open={open} onOpenChange={setOpen}>
             <Popover.Trigger
                 aria-label={`Background tasks: ${tasks.length} running`}
-                className={cn(chipTriggerClassName, "text-info hover:bg-info/12 hover:text-info data-[popup-open]:bg-info/12 data-[popup-open]:text-info")}
+                className={cn(chipTriggerClassName, "shrink-0 text-info hover:bg-info/12 hover:text-info data-[popup-open]:bg-info/12 data-[popup-open]:text-info")}
             >
                 <DotMatrixSpinner interval={400} label="Running" className="size-2.5" />
                 <span className="tabular-nums">{tasks.length} running</span>

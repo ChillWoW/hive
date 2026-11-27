@@ -48,19 +48,19 @@ export function SlashMenu({
                                 onPick(command);
                             }}
                             className={cn(
-                                "flex min-h-8 cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-sm",
+                                "flex min-h-8 cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs",
                                 index === highlighted ? "bg-hover" : ""
                             )}
                         >
                             <Icon className="size-3.5 shrink-0 text-muted" />
-                            <span className="shrink-0 text-text">
+                            <span className="shrink-0 font-medium text-text">
                                 {command.kind === "skill" ? "$" : "/"}
                                 {command.name}
                             </span>
                             {command.inputHint && (
-                                <span className="shrink-0 text-xs text-muted/70">{command.inputHint}</span>
+                                <span className="shrink-0 text-[11px] text-muted/60">{command.inputHint}</span>
                             )}
-                            <span className="min-w-0 truncate text-xs text-muted">{command.description}</span>
+                            <span className="min-w-0 truncate text-[11px] text-muted/75">{command.description}</span>
                             {command.kind === "skill" && (
                                 <span className="ml-auto shrink-0 rounded-sm bg-raised px-1.5 py-px text-[10px] text-muted">
                                     Skill

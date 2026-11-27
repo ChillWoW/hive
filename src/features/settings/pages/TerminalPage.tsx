@@ -99,7 +99,6 @@ function ShellSection() {
                 description="The open chat's folder (its worktree, if any) or your home folder"
                 keywords="terminal start directory folder cwd working home workspace worktree"
                 setting={startIn}
-                controlClassName="w-44"
                 control={
                     <Select
                         items={START_IN}
@@ -124,7 +123,6 @@ function ShellSection() {
                 description="When the shell exits; a clean exit is code 0, like typing exit"
                 keywords="terminal close exit tab quit shell ended code"
                 setting={closeOnExit}
-                controlClassName="w-44"
                 control={
                     <Select
                         items={CLOSE_ON_EXIT}

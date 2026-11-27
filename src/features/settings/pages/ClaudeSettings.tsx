@@ -148,7 +148,6 @@ function AccessSection() {
                 description="What the agent may do without asking"
                 keywords="access permissions approval supervised auto accept edits full access default"
                 setting={access}
-                controlClassName="w-48"
                 control={
                     <Select
                         items={items}

@@ -308,7 +308,7 @@ function HandoffCard({
                 >
                     <Icon className="size-3.5 shrink-0 text-muted" />
                     <span className="flex min-w-0 flex-col">
-                        <span className="text-sm">{label}</span>
+                        <span className="text-xs">{label}</span>
                         <span className="truncate text-[11px] text-muted/75">{hint}</span>
                     </span>
                 </button>
@@ -562,7 +562,7 @@ function FooterRow({
             onClick={onClick}
             className={cn(
                 footerButtonClassName,
-                "h-8 rounded-md px-2 text-sm text-text hover:bg-raised aria-expanded:bg-hover"
+                "h-8 rounded-md px-2 text-xs text-text hover:bg-raised aria-expanded:bg-hover"
             )}
         >
             <span>{label}</span>
@@ -676,7 +676,7 @@ function SideCard<T extends string>({
                         onClick={() => onSelect(option.id)}
                         className={cn(
                             "grid h-8 w-full grid-cols-[1fr_1rem] items-center gap-x-2 rounded-md px-2.5",
-                            "text-left text-sm text-text outline-none select-none",
+                            "text-left text-xs text-text outline-none select-none",
                             "hover:bg-hover focus-visible:bg-hover"
                         )}
                     >

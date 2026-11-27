@@ -101,7 +101,7 @@ function ShortcutRow({ action }: { action: Action }) {
                     onKeyDown={onKeyDown}
                     onBlur={() => setRecording(false)}
                     className={cn(
-                        "flex h-7 min-w-24 items-center justify-end rounded-md border px-1.5 text-xs transition-colors",
+                        "-mr-[7px] flex h-7 min-w-24 items-center justify-end rounded-md border px-1.5 text-xs transition-colors",
                         recording
                             ? "border-muted/60 bg-hover text-text"
                             : "border-transparent hover:border-border hover:bg-hover"

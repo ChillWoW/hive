@@ -36,8 +36,8 @@ import { BranchList, type BranchDialog } from "./BranchList";
 import { CardSearch, useRows } from "./list";
 import { git, useGitRepo } from "./store";
 
-/** A row under a list, at the size of the rows above it: the chip's, not the composer's. */
-const footerRowClassName = cn(cardFooterButtonClassName, "text-xs");
+/** A row under a list, at the size of the rows above it. */
+const footerRowClassName = cardFooterButtonClassName;
 
 /** The chip whose card is open. */
 type Card = "project" | "branch";

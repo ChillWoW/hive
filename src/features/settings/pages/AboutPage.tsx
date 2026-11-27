@@ -123,7 +123,7 @@ function StatusRow() {
                     )}
                     <Button
                         size="sm"
-                        variant="secondary"
+                        variant="outline"
                         loading={checking}
                         disabled={working}
                         onClick={() => void checkNow()}
@@ -167,7 +167,7 @@ function SettingsFileSection() {
                             <CopyButton text={path} />
                             <Button
                                 size="sm"
-                                variant="secondary"
+                                variant="outline"
                                 onClick={() => void settingsApi.reveal()}
                             >
                                 <FolderOpenIcon />

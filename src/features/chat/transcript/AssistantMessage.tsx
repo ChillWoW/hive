@@ -12,7 +12,7 @@ const formatDuration = (ms: number) => formatElapsed(ms, { round: true });
 function WorkingStatus({ since, waiting }: { since: number; waiting: boolean }) {
     const now = useNow();
     return (
-        <div className="flex items-center gap-2 text-sm">
+        <div className="flex items-center gap-2 text-[13px]">
             <DotMatrixSpinner label={waiting ? "Waiting" : "Working"} className="text-text/80" />
             <span className="shimmer font-[450] text-muted">{waiting ? "Waiting for you" : "Working"}</span>
             <span className="text-muted/85 tabular-nums">{formatDuration(now - since)}</span>

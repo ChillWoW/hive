@@ -195,7 +195,6 @@ function TranscriptSection() {
                 description="Which of a turn's steps the transcript shows"
                 keywords="tool calls visibility hide successful failed final reply only answer thinking transcript"
                 setting={toolCalls}
-                controlClassName="w-44"
                 control={
                     <Select
                         items={TOOL_CALLS}
@@ -322,7 +321,6 @@ function SendingSection() {
                 description="When a prompt sent mid-turn reaches the agent"
                 keywords="busy send queue steer interrupt follow up while working after tool call"
                 setting={busySend}
-                controlClassName="w-44"
                 control={
                     <Select
                         items={BUSY_SEND}

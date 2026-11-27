@@ -22,7 +22,7 @@ export function MentionMenu({ menu }: { menu: MentionMenuState }) {
         >
             <div ref={listRef} className="flex max-h-72 flex-col overflow-y-auto p-1">
                 {matches.length === 0 && (
-                    <div className="px-2.5 py-1.5 text-sm text-muted">
+                    <div className="px-2.5 py-1.5 text-xs text-muted">
                         {menu.loading ? "Listing files…" : "No matching files"}
                     </div>
                 )}
@@ -43,16 +43,16 @@ export function MentionMenu({ menu }: { menu: MentionMenuState }) {
                                 pick(entry);
                             }}
                             className={cn(
-                                "flex min-h-8 min-w-0 cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-sm",
+                                "flex min-h-8 min-w-0 cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs",
                                 index === highlighted ? "bg-hover" : ""
                             )}
                         >
                             <FileIcon name={name} folder={entry.dir} className="size-3.5" />
-                            <span className="max-w-[70%] shrink-0 truncate text-text">
+                            <span className="max-w-[70%] shrink-0 truncate font-medium text-text">
                                 {name}
                                 {entry.dir && "/"}
                             </span>
-                            {parent && <span className="min-w-0 truncate text-xs text-muted">{parent}</span>}
+                            {parent && <span className="min-w-0 truncate text-[11px] text-muted/75">{parent}</span>}
                         </div>
                     );
                 })}

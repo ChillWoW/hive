@@ -15,7 +15,7 @@ export const pickerTriggerClassName = cn(
 
 /** A chip under the composer. */
 export const chipClassName = cn(
-    "inline-flex h-6 min-w-0 max-w-64 items-center gap-1.5 rounded-md px-2",
+    "inline-flex h-6 min-w-0 max-w-64 items-center gap-1.5 rounded-md px-2 whitespace-nowrap",
     "text-xs text-muted outline-none select-none transition-colors duration-150"
 );
 
@@ -68,7 +68,7 @@ export const cardFooterClassName =
 
 export const cardFooterButtonClassName = cn(
     footerButtonClassName,
-    "h-8 rounded-md px-2 text-left text-sm text-text hover:bg-raised",
+    "h-8 rounded-md px-2 text-left text-xs text-text hover:bg-raised",
     "data-[highlighted]:bg-hover data-[popup-open]:bg-hover",
     "data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
 );

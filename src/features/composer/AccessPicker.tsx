@@ -40,7 +40,7 @@ export function AccessPicker({ config, onChange }: { config: ChatConfig; onChang
             <Menu.Trigger
                 ref={triggerRef}
                 aria-label={`Access: ${mode.label}${config.plan ? ", plan mode" : ""}`}
-                className={cn(pickerTriggerClassName, "gap-1.5")}
+                className={cn(pickerTriggerClassName, "shrink-0 gap-1.5")}
             >
                 {config.plan && (
                     <span className="flex shrink-0 items-center gap-1 text-text">
@@ -59,8 +59,8 @@ export function AccessPicker({ config, onChange }: { config: ChatConfig; onChang
                         className={rowClassName}
                     >
                         <span className="flex min-w-0 flex-1 flex-col">
-                            <span className="text-sm text-text">{m.label}</span>
-                            <span className="text-xs text-muted">{m.description}</span>
+                            <span className="text-xs font-medium text-text">{m.label}</span>
+                            <span className="text-[11px] text-muted/75">{m.description}</span>
                         </span>
                         {m.id === mode.id && <CheckIcon className="size-3.5 shrink-0 text-text" weight="bold" />}
                     </Menu.Item>
@@ -72,11 +72,11 @@ export function AccessPicker({ config, onChange }: { config: ChatConfig; onChang
                     className={rowClassName}
                 >
                     <span className="flex min-w-0 flex-1 flex-col">
-                        <span className="text-sm text-text">Plan mode</span>
-                        <span className="text-xs text-muted">Plans before changing anything</span>
+                        <span className="text-xs font-medium text-text">Plan mode</span>
+                        <span className="text-[11px] text-muted/75">Plans before changing anything</span>
                     </span>
                     <Switch
-                        size="md"
+                        size="sm"
                         checked={config.plan}
                         tabIndex={-1}
                         aria-hidden

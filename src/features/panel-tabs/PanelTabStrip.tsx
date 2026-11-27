@@ -73,7 +73,7 @@ function NewTabMenu() {
                 </Tooltip.Trigger>
                 <Tooltip.Content side="bottom">Open a tab</Tooltip.Content>
             </Tooltip>
-            <Menu.Content align="end" sideOffset={6} className="w-52 min-w-0">
+            <Menu.Content sideOffset={6} className="min-w-52 whitespace-nowrap">
                 <Menu.Item onClick={() => openTerminal()}>
                     <TerminalWindowIcon className="size-3.5 text-muted" />
                     New terminal

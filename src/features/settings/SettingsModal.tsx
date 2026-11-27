@@ -62,7 +62,7 @@ export function SettingsModal() {
                         </Modal.Close>
                     </header>
 
-                    <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto px-6 pb-6">
+                    <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto pr-4 pb-6 pl-6 [scrollbar-gutter:stable]">
                         <SettingsQueryContext.Provider value={query.trim().toLowerCase()}>
                             {searching ? (
                                 <SearchResults onOpenPage={go} />

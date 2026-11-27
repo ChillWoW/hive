@@ -40,7 +40,7 @@ function ThemeSection() {
                     isTauri && (
                         <Button
                             size="sm"
-                            variant="secondary"
+                            variant="outline"
                             onClick={() => void themesApi.openDir()}
                         >
                             <FolderOpenIcon />

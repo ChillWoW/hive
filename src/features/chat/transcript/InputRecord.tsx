@@ -49,7 +49,7 @@ export function InputRecord({ part }: { part: InputPart }) {
         const summary = approvalSummary(request, cwd);
         if (pending) {
             return (
-                <RecordLine icon={waiting} state={<span className="shimmer">Waiting for approval</span>}>
+                <RecordLine icon={waiting} state="Needs approval">
                     {summary}
                 </RecordLine>
             );
@@ -77,13 +77,13 @@ export function InputRecord({ part }: { part: InputPart }) {
                 <RecordLine
                     icon={pending ? waiting : <ChatCircleDotsIcon className="size-3.5 shrink-0 text-muted/70" />}
                     state={
-                        pending ? (
-                            <span className="shimmer">Waiting for your answers</span>
-                        ) : unanswered ? (
-                            "Questions not answered"
-                        ) : (
-                            "Answered"
-                        )
+                        pending
+                            ? request.questions.length === 1
+                                ? "Asked a question"
+                                : `Asked ${request.questions.length} questions`
+                            : unanswered
+                              ? "Questions not answered"
+                              : "Answered"
                     }
                 />
                 {!pending && !unanswered && (
@@ -105,7 +105,7 @@ export function InputRecord({ part }: { part: InputPart }) {
 
     // The card above the composer shows the plan while it waits.
     if (pending) {
-        return <RecordLine icon={waiting} state={<span className="shimmer">Plan ready, waiting for approval</span>} />;
+        return <RecordLine icon={waiting} state="Plan ready" />;
     }
     return <PlanRecord plan={request.plan} pending={pending} response={response} />;
 }
