@@ -1,4 +1,5 @@
 import type { ProviderStatus, SignInStarted, UsageWindow } from "@/proto";
+import { devUsage } from "@/features/providers/devUsage";
 import { backend } from "@/lib/backend";
 import type { ProviderApi } from "@/features/providers/makeProvider";
 
@@ -26,5 +27,5 @@ export const codexApi: ProviderApi = {
     update: () => backend<void>("codex_update", {}, () => undefined),
     install: () => backend<void>("codex_install", {}, () => undefined),
     latestVersion: () => backend<string>("codex_latest_version", {}, () => "0.167.1"),
-    usage: () => backend<UsageWindow[] | null>("codex_usage", {}, () => DEV_USAGE)
+    usage: () => backend<UsageWindow[] | null>("codex_usage", {}, () => devUsage(DEV_USAGE))
 };

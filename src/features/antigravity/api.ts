@@ -1,4 +1,5 @@
 import type { ProviderStatus, SignInStarted, UsageWindow } from "@/proto";
+import { devUsage } from "@/features/providers/devUsage";
 import { backend } from "@/lib/backend";
 import type { ProviderApi } from "@/features/providers/makeProvider";
 
@@ -11,9 +12,9 @@ const DEV_STATUS: ProviderStatus = {
 };
 
 const DEV_USAGE: UsageWindow[] = [
-    { label: "Gemini · Week", used: 0.04, resetsAt: new Date(Date.now() + 6 * 86_400_000).toISOString() },
-    { label: "Claude & GPT · Week", used: 0 },
-    { label: "Claude & GPT · 5 hours", used: 0 }
+    { label: "Week · Gemini", used: 0.04, resetsAt: new Date(Date.now() + 6 * 86_400_000).toISOString() },
+    { label: "Week · Claude & GPT", used: 0 },
+    { label: "5 hours · Claude & GPT", used: 0 }
 ];
 
 /** Antigravity as a provider (`src-tauri/src/antigravity.rs`). Sign-in is Google's page, which ends on a code to paste. */
@@ -30,5 +31,5 @@ export const antigravityApi: ProviderApi = {
     update: () => backend<void>("antigravity_update", {}, () => undefined),
     install: () => backend<void>("antigravity_install", {}, () => undefined),
     latestVersion: () => backend<string>("antigravity_latest_version", {}, () => "1.5.18"),
-    usage: () => backend<UsageWindow[] | null>("antigravity_usage", {}, () => DEV_USAGE)
+    usage: () => backend<UsageWindow[] | null>("antigravity_usage", {}, () => devUsage(DEV_USAGE))
 };

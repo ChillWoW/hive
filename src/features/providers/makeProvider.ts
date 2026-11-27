@@ -168,7 +168,8 @@ export function makeProvider(name: string, api: ProviderApi) {
         useEffect(() => {
             if (!enabled) return;
             void refreshUsage({ maxAge: USAGE_FRESH_MS });
-            const timer = window.setInterval(() => void refreshUsage(), POLL_MS);
+            // Several places may poll at once: a read one of them just made does for the rest.
+            const timer = window.setInterval(() => void refreshUsage({ maxAge: USAGE_FRESH_MS }), POLL_MS);
             const off = onWindowFocus(() => void refreshUsage({ maxAge: USAGE_FRESH_MS }));
             return () => {
                 window.clearInterval(timer);

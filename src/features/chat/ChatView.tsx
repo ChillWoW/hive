@@ -3,7 +3,7 @@ import { CaretDownIcon } from "@phosphor-icons/react";
 import type { Attachment, BackgroundTask, Chat, ChatConfig, Handoff, HandoffMode, Message } from "@/proto";
 import { cn } from "@/lib/cn";
 import { chats, useActiveChat, useChatsStore, useSession, workDir } from "@/features/chats/store";
-import { Composer, ContextMeter, useComposerStore } from "@/features/composer";
+import { Composer, ContextMeter, UsageWarning, useComposerStore } from "@/features/composer";
 import { WorkspacePicker } from "@/features/git";
 import { HarnessMark } from "@/features/models";
 import { ChatMenuItems, DeleteChatDialog, UNTITLED } from "@/features/sidebar";
@@ -121,6 +121,7 @@ export function ChatView() {
                     />
                 </ChatCwd>
             )}
+            <UsageWarning config={config} />
             <Composer
                 chatId={chat?.id ?? null}
                 cwd={cwd}

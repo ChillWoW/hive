@@ -1,4 +1,5 @@
 import type { ProviderStatus, SignInStarted, UsageWindow } from "@/proto";
+import { devUsage } from "@/features/providers/devUsage";
 import { backend } from "@/lib/backend";
 
 /** The stand-in for `bun run dev`: installed, signed in, a little used. */
@@ -41,5 +42,5 @@ export const claudeApi = {
     install: () => backend<void>("claude_install", {}, () => undefined),
     latestVersion: () => backend<string>("claude_latest_version", {}, () => "2.1.340"),
     /** The plan's rate-limit windows; null without a subscription login. */
-    usage: () => backend<UsageWindow[] | null>("claude_usage", {}, () => DEV_USAGE)
+    usage: () => backend<UsageWindow[] | null>("claude_usage", {}, () => devUsage(DEV_USAGE))
 };
