@@ -1,7 +1,7 @@
 import { ChatList, SidebarSearch, StatusFilter } from "@/features/sidebar";
 import { SidePanel } from "./SidePanel";
 
-/** The chats panel: New chat and search, what chats are doing, then the chat list by project. */
+/** The chats panel: search and New chat, what chats are doing, then the chat list by project. */
 export function Sidebar() {
     return (
         <SidePanel panel="chats" label="Chats">

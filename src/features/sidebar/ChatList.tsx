@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from "react";
-import { ArchiveIcon, CaretRightIcon, PlusIcon } from "@phosphor-icons/react";
+import { ArchiveIcon, CaretRightIcon, NotePencilIcon, PlusIcon } from "@phosphor-icons/react";
 import { chats, useChatsStore } from "@/features/chats";
 import { ProjectIcon } from "@/features/projects";
 import { cn } from "@/lib/cn";
@@ -18,7 +18,7 @@ import {
     type SidebarGroups,
     type Statuses
 } from "./groups";
-import { ROW_ACTION } from "./rows";
+import { ROW_ACTION, rowClassName } from "./rows";
 import { STATUS, type LiveStatus } from "./status";
 import { StatusMark } from "./StatusMark";
 import { ARCHIVED, isCollapsed, projectKey, useSidebarStore } from "./store";
@@ -89,6 +89,7 @@ export function ChatList() {
                             row={row}
                             forceOpen={narrowed}
                             action={<NewChat path={project.path} />}
+                            draftPath={project.path}
                         />
                     ))}
                     {shown.archived.length > 0 && (
@@ -163,6 +164,18 @@ function NewChat({ path }: { path: string }) {
     );
 }
 
+/** The chat being started in a project, where it will land: the open row until it's sent. */
+function Draft() {
+    return (
+        <div aria-current="page" className={rowClassName(true)}>
+            <span className="flex w-4 shrink-0 justify-center">
+                <NotePencilIcon className="size-3 shrink-0 text-muted" />
+            </span>
+            <span className="min-w-0 truncate text-muted">New chat</span>
+        </div>
+    );
+}
+
 /**
  * A foldable group of chats under an icon and a name (a project, or
  * Archived), with an optional hover `action` on the right. Lists the first
@@ -178,6 +191,7 @@ function Group({
     row,
     quiet = false,
     action,
+    draftPath,
     forceOpen = false
 }: {
     foldKey: string;
@@ -189,6 +203,8 @@ function Group({
     /** A muted name, for a group that isn't a project. */
     quiet?: boolean;
     action?: ReactNode;
+    /** The project's folder: its list leads with the chat being started there. */
+    draftPath?: string;
     /** A narrowed list: unfolded, every chat listed. */
     forceOpen?: boolean;
 }) {
@@ -197,6 +213,9 @@ function Group({
     const collapsed = saved && !forceOpen;
     const [expanded, setExpanded] = useState(false);
     const openId = useChatsStore((s) => s.activeChatId);
+    const draft = useChatsStore(
+        (s) => !forceOpen && draftPath !== undefined && s.activeChatId === null && s.newChatCwd === draftPath
+    );
 
     const all = expanded || forceOpen;
     const visible = all
@@ -243,7 +262,8 @@ function Group({
 
             {!collapsed && (
                 <div className="flex flex-col gap-px">
-                    {list.length === 0 && <p className="py-1 pl-8 text-[11px] text-muted/75">No chats</p>}
+                    {draft && <Draft />}
+                    {list.length === 0 && !draft && <p className="py-1 pl-8 text-[11px] text-muted/75">No chats</p>}
                     {visible.map(row)}
                     {(hidden > 0 || (expanded && list.length > GROUP_LIMIT)) && !forceOpen && (
                         <button
