@@ -58,8 +58,9 @@ pub struct AppearanceSettings {
     /// A theme's name: a built-in one, or a file in `<data dir>/themes/`.
     /// One that no longer exists shows the default.
     pub theme: String,
-    /// The interface font's family name: the bundled default or an installed
-    /// one. One that isn't installed falls back to the system UI font.
+    /// The interface font's family name: the bundled default, `System` (the
+    /// platform UI font) or an installed one. One that isn't installed falls
+    /// back to the system UI font.
     pub font_family: String,
     /// The code font's family name (code blocks, diffs). Empty: the system
     /// monospace font.

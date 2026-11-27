@@ -11,8 +11,8 @@ const fontStyle = (name: string, fallback: string) => ({
 
 /**
  * A default and every installed family, each shown in its own face. Styled
- * like `Select`, with a search on top: there can be hundreds. The default is
- * the bundled font, or with `empty` an empty value shown under that label.
+ * like `Select`, with a search on top: there can be hundreds. The defaults are
+ * the bundled and system fonts, or with `empty` an empty value shown under that label.
  */
 export function FontPicker({
     value,
@@ -37,7 +37,7 @@ export function FontPicker({
         void load();
     }, [load]);
 
-    const choices = fontChoices(installed ?? [], value, empty === undefined ? undefined : "");
+    const choices = fontChoices(installed ?? [], value, empty === undefined ? undefined : [""]);
     const nameOf = (name: string) => name || (empty ?? "");
 
     return (

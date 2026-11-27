@@ -5,15 +5,18 @@ import { backend } from "@/lib/backend";
 /** Bundled (`@fontsource-variable/geist`), so it's there on every system. */
 export const DEFAULT_FONT = DEFAULT_SETTINGS.appearance.fontFamily;
 
-/** Setting names whose CSS family differs: the bundled ones. */
-const BUNDLED: Record<string, string> = {
-    [DEFAULT_FONT]: "Geist Variable"
+/** The platform's UI font (SF Pro on macOS, Segoe UI on Windows), which font listings hide. */
+export const SYSTEM_FONT = "System";
+
+/** Setting names that aren't an installed family, as CSS `font-family` values. */
+const BUILTIN: Record<string, string> = {
+    [DEFAULT_FONT]: '"Geist Variable"',
+    [SYSTEM_FONT]: "system-ui, -apple-system, BlinkMacSystemFont"
 };
 
-/** A setting's family as a quoted CSS `font-family` value. */
+/** A setting's family as a CSS `font-family` value. */
 export function cssFontFamily(name: string): string {
-    const family = BUNDLED[name] ?? name;
-    return `"${family.replace(/["\\]/g, "\\$&")}"`;
+    return BUILTIN[name] ?? `"${name.replace(/["\\]/g, "\\$&")}"`;
 }
 
 type FontsState = {
@@ -32,12 +35,17 @@ export const useFontsStore = create<FontsState>()((set, get) => ({
     }
 }));
 
-/** `first` (the default: the bundled font), then installed ones, plus `current` if it's gone. */
-export function fontChoices(installed: string[], current: string, first: string = DEFAULT_FONT): string[] {
-    const rest = installed.filter((name) => name.toLowerCase() !== first.toLowerCase());
-    if (current !== first && !rest.includes(current)) {
+/** `leading` (by default the bundled and system fonts), then installed ones, plus `current` if it's gone. */
+export function fontChoices(
+    installed: string[],
+    current: string,
+    leading: string[] = [DEFAULT_FONT, SYSTEM_FONT]
+): string[] {
+    const taken = new Set(leading.map((name) => name.toLowerCase()));
+    const rest = installed.filter((name) => !taken.has(name.toLowerCase()));
+    if (!leading.includes(current) && !rest.includes(current)) {
         rest.push(current);
         rest.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
     }
-    return [first, ...rest];
+    return [...leading, ...rest];
 }

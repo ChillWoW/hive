@@ -62,7 +62,7 @@ function FontSection() {
             <SettingRow
                 label="Interface font"
                 description="The typeface for the app's text"
-                keywords="font family typeface typography text ui geist"
+                keywords="font family typeface typography text ui geist system sf pro"
                 setting={fontFamily}
                 controlClassName="w-56"
                 control={<FontPicker value={fontFamily.value} onChange={fontFamily.set} />}

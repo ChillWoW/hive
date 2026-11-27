@@ -7,7 +7,7 @@ import type { AccessMode, ReasoningLevel } from "@/proto";
 export type AppearanceSettings = {
     /** A theme's name; see `src/features/theme/themes.ts`. */
     theme: string;
-    /** A font family: the bundled default or an installed one; see `src/features/fonts/`. */
+    /** A font family: the bundled default, "System" (the platform UI font) or an installed one; see `src/features/fonts/`. */
     fontFamily: string;
     /** The code font (code blocks, diffs): an installed family; empty: the system monospace font. */
     codeFontFamily: string;
