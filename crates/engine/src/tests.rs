@@ -806,3 +806,96 @@ async fn another_model_of_the_same_harness_is_handed_off_in_a_new_session() {
     assert_eq!(back.handoffs.len(), 2);
     assert_eq!(back.session_id, None);
 }
+
+// Agents running agents
+
+fn ask_approval(id: &str) -> Step {
+    Step::Ask {
+        request_id: id.into(),
+        request: outcode_proto::InputRequest::Approval {
+            title: "Run command".into(),
+            call: None,
+            tool_call_id: None,
+            reason: None,
+        },
+    }
+}
+
+#[tokio::test]
+async fn a_child_runs_like_its_parent_and_reports_its_reply() {
+    let (_dir, engine, _) = engine(Duration::from_secs(60));
+    let config = ChatConfig {
+        model: Some("m1".into()),
+        access: outcode_proto::AccessMode::Supervised,
+        plan: true,
+        ..ChatConfig::default()
+    };
+    let parent = engine.create_chat("/a".into(), config).unwrap();
+    let agent = ChildAgent::default();
+    let child = engine.start_child(&parent.id, agent, Some(" Tests ".into()), "fix it".into()).unwrap();
+    assert_eq!(child.parent_chat_id.as_deref(), Some(parent.id.as_str()));
+    assert_eq!((child.cwd.as_str(), child.title.as_deref()), ("/a", Some("Tests")));
+    assert_eq!(child.config.model.as_deref(), Some("m1"), "the parent's model on the same harness");
+    assert_eq!((child.config.access, child.config.plan), (outcode_proto::AccessMode::Supervised, true));
+
+    let status = engine.wait_child(&child, Duration::from_secs(5)).await.unwrap();
+    assert_eq!(status.state, ChildState::Idle);
+    assert_eq!(status.reply.as_deref(), Some("echo: fix it"));
+    assert_eq!(engine.children(&parent.id).unwrap().len(), 1);
+
+    // No chats of chats, and only a parent's own children.
+    assert!(matches!(
+        engine.start_child(&child.id, ChildAgent::default(), None, "more".into()),
+        Err(EngineError::Nested)
+    ));
+    let other = engine.create_chat("/b".into(), ChatConfig::default()).unwrap();
+    assert!(matches!(engine.child(&other.id, &child.id), Err(EngineError::NotAChild(_))));
+    assert!(engine.child(&parent.id, &child.id).is_ok());
+}
+
+#[test]
+fn another_harness_takes_its_own_defaults() {
+    let parent = ChatConfig {
+        model: Some("opus".into()),
+        reasoning: Some(outcode_proto::ReasoningLevel::High),
+        ..ChatConfig::default()
+    };
+    let agent = ChildAgent {
+        harness: HarnessId::Codex,
+        ..ChildAgent::default()
+    };
+    let config = agents::child_config(&parent, agent);
+    assert_eq!((config.harness, config.model, config.reasoning), (HarnessId::Codex, None, None));
+}
+
+#[tokio::test]
+async fn waiting_returns_when_a_child_asks_something_new() {
+    let mock = Mock::new().script(|turn| vec![ask_approval(&format!("r{}", turn.turn)), Step::text(format!("echo: {}", turn.prompt))]);
+    let (_dir, engine, _) = engine_with(mock, Duration::from_secs(60), |_| None);
+    let parent = engine.create_chat("/a".into(), ChatConfig::default()).unwrap();
+    let child = engine.start_child(&parent.id, ChildAgent::default(), None, "go".into()).unwrap();
+
+    let status = engine.wait_child(&child, Duration::from_secs(5)).await.unwrap();
+    assert_eq!(status.state, ChildState::WaitingOnUser);
+    // Still waiting on the same question: that's no news.
+    let status = engine.wait_child(&child, Duration::from_millis(50)).await.unwrap();
+    assert_eq!(status.state, ChildState::WaitingOnUser);
+
+    engine.answer(&child.id, "r1", approve()).unwrap();
+    let status = engine.wait_child(&child, Duration::from_secs(5)).await.unwrap();
+    assert_eq!((status.state, status.reply.as_deref()), (ChildState::Idle, Some("echo: go")));
+}
+
+#[tokio::test]
+async fn stopping_a_parent_stops_its_children() {
+    let (_dir, engine, _) = held_engine();
+    let parent = engine.create_chat("/a".into(), ChatConfig::default()).unwrap();
+    engine.send(&parent.id, "plan".into(), Vec::new()).unwrap();
+    let child = engine.start_child(&parent.id, ChildAgent::default(), None, "work".into()).unwrap();
+    assert_eq!(engine.child_status(&child).unwrap().state, ChildState::Working);
+
+    engine.interrupt(&parent.id);
+    let status = engine.wait_child(&child, Duration::from_secs(5)).await.unwrap();
+    assert_eq!(status.state, ChildState::Idle);
+    assert!(status.stopped);
+}

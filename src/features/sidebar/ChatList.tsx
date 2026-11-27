@@ -8,14 +8,14 @@ import type { Chat } from "@/proto";
 import { Tooltip } from "@/ui";
 import { CARD_DWELL, ChatRow } from "./ChatRow";
 import { DeleteChatDialog } from "./DeleteChatDialog";
-import { useSidebarGroups, type ProjectGroup } from "./groups";
+import { isNested, useSidebarGroups, type ProjectGroup } from "./groups";
 import { ROW_ACTION } from "./rows";
 import { ACTIVE, ARCHIVED, isCollapsed, PINNED, projectKey, useSidebarStore } from "./store";
 
 /** Chats a group lists before "Show more". */
 const GROUP_LIMIT = 6;
 
-type Row = (chat: Chat) => ReactNode;
+type Row = (chat: Chat, index: number, list: Chat[]) => ReactNode;
 
 /** Running chats, pinned ones, then each project's, then Archived; a search filters them. */
 export function ChatList() {
@@ -23,9 +23,13 @@ export function ChatList() {
     const loaded = useChatsStore((s) => s.loaded);
     const [deleting, setDeleting] = useState<Chat | null>(null);
 
-    const row: Row = (chat) => <ChatRow key={chat.id} chat={chat} onDelete={setDeleting} />;
+    const row: Row = (chat, _, list) => (
+        <ChatRow key={chat.id} chat={chat} onDelete={setDeleting} nested={isNested(chat, list)} />
+    );
     // Active mixes projects, so its rows say whose they are.
-    const activeRow: Row = (chat) => <ChatRow key={chat.id} chat={chat} onDelete={setDeleting} showProject />;
+    const activeRow: Row = (chat, _, list) => (
+        <ChatRow key={chat.id} chat={chat} onDelete={setDeleting} showProject nested={isNested(chat, list)} />
+    );
 
     const query = useSidebarStore((s) => s.query);
     const found = useMemo(() => filterGroups(query, groups), [query, groups]);

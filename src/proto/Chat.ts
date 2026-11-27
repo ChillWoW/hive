@@ -49,4 +49,9 @@ worktree?: Worktree,
 /**
  * Where the chat moved to another agent, oldest first ([`Handoff`]).
  */
-handoffs?: Array<Handoff>, };
+handoffs?: Array<Handoff>, 
+/**
+ * The chat whose agent started this one (Outcode's `start_chat` tool);
+ * it may have been deleted since. Such a chat can't start chats itself.
+ */
+parentChatId?: string, };

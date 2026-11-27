@@ -11,6 +11,10 @@
 //!   no access to Outcode).
 //! - `request_secret`: a private card asking the user for a secret; the value
 //!   goes to a file only the user can read, and the agent gets its path.
+//! - `start_chat` and the rest ([`agents`]): other agents, each in a chat of
+//!   its own.
+
+mod agents;
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -48,14 +52,20 @@ pub fn start(app: &AppHandle, data_dir: &Path, engine: &Engine) {
 
 fn tools(app: &AppHandle) -> Tools {
     let (a, b, c, d, e) = (app.clone(), app.clone(), app.clone(), app.clone(), app.clone());
-    Tools::new()
+    let tools = Tools::new()
         .tool(
             "whoami",
             "The Outcode chat you're running in: its id, title, folder and model.",
             json!({ "type": "object", "properties": {} }),
             move |ctx, _| {
                 let result = calling_chat(&a, &ctx).map(|chat| {
-                    json!({ "chatId": chat.id, "title": chat.title, "folder": chat.cwd, "model": chat.config.model })
+                    json!({
+                        "chatId": chat.id,
+                        "title": chat.title,
+                        "folder": chat.cwd,
+                        "model": chat.config.model,
+                        "startedBy": chat.parent_chat_id,
+                    })
                 });
                 async move { result }
             },
@@ -115,7 +125,8 @@ fn tools(app: &AppHandle) -> Tools {
                 "additionalProperties": false
             }),
             move |ctx, args| request_secret(e.clone(), ctx, args),
-        )
+        );
+    agents::tools(tools, app)
 }
 
 fn html_schema(render: bool) -> Value {

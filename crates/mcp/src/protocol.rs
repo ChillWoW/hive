@@ -204,7 +204,7 @@ mod tests {
     /// The tools called directly, as the chat `c1`.
     impl Backend for Tools {
         fn list(&self) -> BoxFuture<'_, Result<Value, String>> {
-            Box::pin(async move { Ok(self.catalog()) })
+            Box::pin(async move { Ok(self.catalog(&Ctx { chat_id: Some("c1".into()) })) })
         }
         fn call(&self, name: String, arguments: Value) -> BoxFuture<'_, Result<Value, String>> {
             let ctx = Ctx {

@@ -46,6 +46,10 @@ pub struct Chat {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     #[ts(as = "Option<Vec<Handoff>>")]
     pub handoffs: Vec<Handoff>,
+    /// The chat whose agent started this one (Outcode's `start_chat` tool);
+    /// it may have been deleted since. Such a chat can't start chats itself.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent_chat_id: Option<String>,
 }
 
 impl Chat {

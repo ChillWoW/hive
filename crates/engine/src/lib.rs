@@ -28,9 +28,12 @@ use outcode_proto::{
 use outcode_store::{Store, StoreError, Turn, new_id, now_ms};
 use tokio::sync::mpsc;
 
+mod agents;
 mod branches;
 mod handoff;
 mod titles;
+
+pub use agents::{ChildAgent, ChildState, ChildStatus, MAX_WORKING_CHILDREN};
 
 pub type WatchId = u64;
 
@@ -51,6 +54,14 @@ pub enum EngineError {
     NothingToHandOff,
     #[error(transparent)]
     Git(#[from] GitError),
+    #[error("Chats started by an agent can't start chats of their own.")]
+    Nested,
+    #[error("Give the chat a prompt.")]
+    EmptyPrompt,
+    #[error("{0} of this chat's chats are already working; wait for one to finish.")]
+    TooManyChildren(usize),
+    #[error("{0} isn't a chat you started.")]
+    NotAChild(String),
 }
 
 pub type Result<T> = std::result::Result<T, EngineError>;
@@ -623,15 +634,19 @@ impl Engine {
     }
 
     /// Stops the chat's running turn; its run stays up for the next prompt.
-    /// The queue waits until a turn the user starts ends.
+    /// The queue waits until a turn the user starts ends. The chats its
+    /// agent started stop with it.
     pub fn interrupt(&self, chat_id: &str) {
-        let mut state = self.state();
-        let Some(live) = state.runs.get_mut(chat_id).filter(|live| live.turn.is_some()) else {
-            return;
-        };
-        live.handle.interrupt();
-        live.stopped = true;
-        state.update_session(chat_id, |s| s.held = !s.queued.is_empty());
+        {
+            let mut state = self.state();
+            let Some(live) = state.runs.get_mut(chat_id).filter(|live| live.turn.is_some()) else {
+                return;
+            };
+            live.handle.interrupt();
+            live.stopped = true;
+            state.update_session(chat_id, |s| s.held = !s.queued.is_empty());
+        }
+        self.interrupt_children(chat_id);
     }
 
     /// Answers what the chat's turn asked. Approving a plan leaves plan mode.

@@ -129,7 +129,7 @@ async fn answer(stream: TcpStream, tools: Arc<Tools>, token: Arc<str>) {
                     chat_id: request.chat_id,
                 };
                 match request.method {
-                    Method::List => Reply::Ok(tools.catalog()),
+                    Method::List => Reply::Ok(tools.catalog(&ctx)),
                     Method::Call => match tools.call(&request.name, ctx, request.arguments).await {
                         Ok(value) => Reply::Ok(value),
                         Err(e) => Reply::Error(e),

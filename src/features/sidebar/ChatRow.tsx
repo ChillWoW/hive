@@ -32,16 +32,19 @@ export const CARD_DWELL = 300;
  * and its provider's mark. The "⋯" button (on hover, over the mark) and a right-click open the same menu:
  * Rename (in place), Pin, Archive, Delete. Resting on it shows its card
  * (`ChatCard`) beside the sidebar; a click or a menu hides it. `showProject`
- * puts its project's icon in place of the provider's mark.
+ * puts its project's icon in place of the provider's mark; `nested` indents
+ * a chat an agent started under its parent's row.
  */
 export function ChatRow({
     chat,
     onDelete,
-    showProject = false
+    showProject = false,
+    nested = false
 }: {
     chat: Chat;
     onDelete: (chat: Chat) => void;
     showProject?: boolean;
+    nested?: boolean;
 }) {
     const active = useChatsStore((s) => s.activeChatId === chat.id);
     const working = useWorking(chat.id);
@@ -85,7 +88,11 @@ export function ChatRow({
                             type="button"
                             onClick={() => chats.select(chat.id)}
                             aria-current={active ? "page" : undefined}
-                            className={cn(rowClassName(active), "group-has-[[data-popup-open]]/chat:bg-raised")}
+                            className={cn(
+                                rowClassName(active),
+                                nested && "pl-6",
+                                "group-has-[[data-popup-open]]/chat:bg-raised"
+                            )}
                         >
                             <StatusMark status={status} />
                             <span className={cn("min-w-0 flex-1 truncate", !chat.title && "text-muted")}>

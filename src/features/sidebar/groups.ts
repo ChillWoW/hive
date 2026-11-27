@@ -78,9 +78,31 @@ export function useSidebarGroups(): SidebarGroups {
 
         const projects = [...known, ...orphans].map((path) => ({
             path,
-            chats: byPath.get(path) ?? [],
+            chats: nest(byPath.get(path) ?? []),
             active: activeIn.get(path) ?? 0
         }));
-        return { active, pinned, projects, archived };
+        return { active: nest(active), pinned: nest(pinned), projects, archived: nest(archived) };
     }, [chats, known, hidden, workingKey, seen]);
+}
+
+/**
+ * `list` with the chats an agent started (`parentChatId`) right after their
+ * parent, when it's in the same list; the rest keep their order.
+ */
+function nest(list: Chat[]): Chat[] {
+    const ids = new Set(list.map((c) => c.id));
+    const nested = (chat: Chat) => chat.parentChatId != null && ids.has(chat.parentChatId);
+    const children = new Map<string, Chat[]>();
+    for (const chat of list) {
+        if (!nested(chat)) continue;
+        const parentId = chat.parentChatId!;
+        children.set(parentId, [...(children.get(parentId) ?? []), chat]);
+    }
+    if (!children.size) return list;
+    return list.flatMap((chat) => (nested(chat) ? [] : [chat, ...(children.get(chat.id) ?? [])]));
+}
+
+/** Whether `chat` shows nested under its parent in `list` (`nest`). */
+export function isNested(chat: Chat, list: Chat[]): boolean {
+    return chat.parentChatId != null && list.some((c) => c.id === chat.parentChatId);
 }

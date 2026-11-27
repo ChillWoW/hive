@@ -28,6 +28,7 @@ pub struct Ctx {
 }
 
 type Handler = Arc<dyn Fn(Ctx, Value) -> BoxFuture<'static, Result<Value, String>> + Send + Sync>;
+type Shown = Arc<dyn Fn(&Ctx, &str) -> bool + Send + Sync>;
 
 /// The tools a [`Host`] offers. A handler's `Ok` is the tool's result (a
 /// string goes to the agent as is, anything else as pretty JSON); its `Err`
@@ -37,6 +38,8 @@ type Handler = Arc<dyn Fn(Ctx, Value) -> BoxFuture<'static, Result<Value, String
 #[derive(Clone, Default)]
 pub struct Tools {
     tools: Vec<(ToolDef, Handler)>,
+    /// Which tools a caller gets; all of them when unset.
+    shown: Option<Shown>,
 }
 
 impl Tools {
@@ -67,9 +70,25 @@ impl Tools {
         self
     }
 
-    /// `tools/list`'s `tools`.
-    pub(crate) fn catalog(&self) -> Value {
-        let defs: Vec<&ToolDef> = self.tools.iter().map(|(d, _)| d).collect();
+    /// Offers a caller only the tools `shown(caller, name)` passes: the rest
+    /// are left out of its list and refused as unknown.
+    pub fn shown_when(mut self, shown: impl Fn(&Ctx, &str) -> bool + Send + Sync + 'static) -> Self {
+        self.shown = Some(Arc::new(shown));
+        self
+    }
+
+    fn offered(&self, ctx: &Ctx, name: &str) -> bool {
+        self.shown.as_ref().is_none_or(|shown| shown(ctx, name))
+    }
+
+    /// `tools/list`'s `tools`, as `ctx` gets them.
+    pub(crate) fn catalog(&self, ctx: &Ctx) -> Value {
+        let defs: Vec<&ToolDef> = self
+            .tools
+            .iter()
+            .map(|(d, _)| d)
+            .filter(|d| self.offered(ctx, &d.name))
+            .collect();
         serde_json::to_value(defs).unwrap_or_default()
     }
 
@@ -77,9 +96,33 @@ impl Tools {
         let handler = self
             .tools
             .iter()
-            .find(|(d, _)| d.name == name)
+            .find(|(d, _)| d.name == name && self.offered(&ctx, name))
             .map(|(_, h)| Arc::clone(h))
             .ok_or_else(|| format!("unknown tool: {name}"))?;
         handler(ctx, arguments).await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::*;
+
+    #[tokio::test]
+    async fn hidden_tools_are_left_out_and_refused() {
+        let tools = Tools::new()
+            .tool("open", "", json!({}), |_, _| async { Ok(json!(1)) })
+            .tool("parents_only", "", json!({}), |_, _| async { Ok(json!(2)) })
+            .shown_when(|ctx, name| name != "parents_only" || ctx.chat_id.as_deref() == Some("parent"));
+        let names = |ctx: &Ctx| -> Vec<String> {
+            tools.catalog(ctx).as_array().unwrap().iter().map(|t| t["name"].as_str().unwrap().to_owned()).collect()
+        };
+        let parent = Ctx { chat_id: Some("parent".into()) };
+        let child = Ctx { chat_id: Some("child".into()) };
+        assert_eq!(names(&parent), ["open", "parents_only"]);
+        assert_eq!(names(&child), ["open"]);
+        assert!(tools.call("parents_only", child, json!({})).await.is_err());
+        assert_eq!(tools.call("parents_only", parent, json!({})).await, Ok(json!(2)));
     }
 }
