@@ -65,3 +65,49 @@ pub enum WriteOutcome {
     /// The file changed (or went) since it was read, so nothing was written.
     Conflict { deleted: bool },
 }
+
+/// What the file panel's text search (`search_text`) looks for.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct TextQuery {
+    pub text: String,
+    pub case_sensitive: bool,
+    pub whole_word: bool,
+    /// `text` is a regular expression, not the literal text.
+    pub regex: bool,
+}
+
+/// One place a file's text matched. Columns and lengths are in UTF-16 units,
+/// as the editor counts them.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct TextMatch {
+    /// 1-based.
+    pub line: u32,
+    /// 1-based.
+    pub column: u32,
+    pub length: u32,
+    /// The line around the match, clipped when long.
+    pub preview: String,
+    /// Where the match starts in `preview`, and how much of it is in there.
+    pub preview_start: u32,
+    pub preview_length: u32,
+}
+
+/// A file's matches, in line order.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct FileMatches {
+    /// Relative to the folder, `/`-separated.
+    pub path: String,
+    pub matches: Vec<TextMatch>,
+}
+
+/// What a text search found, by file, in path order.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct TextSearch {
+    pub files: Vec<FileMatches>,
+    /// There were more matches than are listed.
+    pub truncated: bool,
+}

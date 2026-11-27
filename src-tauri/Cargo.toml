@@ -40,6 +40,10 @@ outcode-terminal.workspace = true
 base64 = "0.22"
 # Walks a chat folder the way git sees it, for the `@` menu.
 ignore = "0.4"
+# The file panel's text search: ripgrep's matcher and searcher over that walk.
+grep-matcher = "0.1"
+grep-regex = "0.1"
+grep-searcher = "0.1"
 # Deleting from the file panel goes to the system's trash.
 trash = "5"
 tokio = { workspace = true }

@@ -1,4 +1,13 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type RefObject } from "react";
+import {
+    Fragment,
+    useEffect,
+    useMemo,
+    useRef,
+    useState,
+    type KeyboardEvent,
+    type ReactNode,
+    type RefObject
+} from "react";
 import {
     ArrowClockwiseIcon,
     AtIcon,
@@ -7,12 +16,14 @@ import {
     CopySimpleIcon,
     EyeIcon,
     EyeSlashIcon,
+    ListMagnifyingGlassIcon,
     MagnifyingGlassIcon,
     PencilSimpleIcon,
+    TextAaIcon,
     TrashIcon,
     XIcon
 } from "@phosphor-icons/react";
-import type { GitFileState, WorkspaceEntry } from "@/proto";
+import type { GitFileState, TextMatch, WorkspaceEntry } from "@/proto";
 import { useActiveChat, useChatsStore, workDir } from "@/features/chats";
 import { gitMarks, refreshGitStatus, useGitStatus, type GitMark, type GitStatus } from "@/features/git/status";
 import { cn } from "@/lib/cn";
@@ -29,7 +40,8 @@ import {
 } from "@/ui";
 import { addToChat, copyPath, renameEntry, trashEntry } from "./actions";
 import { loadFolder, rankEntries, refreshFiles, useOpenedFolders, useWorkspaceFiles } from "./listing";
-import { files, useExpanded, useFilesStore } from "./store";
+import { files, useExpanded, useFilesStore, type SearchOption } from "./store";
+import { searchText, useTextSearch } from "./textSearch";
 import { childrenByFolder, nameOf, parentOf, visibleRows, type TreeRow } from "./tree";
 
 /** Search results shown at most. */
@@ -106,9 +118,11 @@ function useRoot(): string {
 
 /**
  * The file panel's content: a search over the chat folder's files, then its
- * tree (or, while searching, the best matches). Listed while `shown`. A
- * right-click on an entry opens its menu: Add to chat, Copy path, Rename
- * (in place, in the tree), Delete (to the trash, once confirmed).
+ * tree (or, while searching, the best matches). The search goes by the
+ * files' names or, switched to it, through their text, listing each file's
+ * matching lines. Listed while `shown`. A right-click on an entry opens its
+ * menu: Add to chat, Copy path, Rename (in place, in the tree), Delete (to
+ * the trash, once confirmed).
  */
 export function FileExplorer({ shown }: { shown: boolean }) {
     const root = useRoot();
@@ -130,10 +144,27 @@ export function FileExplorer({ shown }: { shown: boolean }) {
     );
     const query = useFilesStore((s) => s.query);
     const searching = query.trim() !== "";
+    const inText = useFilesStore((s) => s.mode) === "text";
+    const caseSensitive = useFilesStore((s) => s.caseSensitive);
+    const wholeWord = useFilesStore((s) => s.wholeWord);
+    const regex = useFilesStore((s) => s.regex);
+    // A text is looked for as typed, spaces and all.
+    const textQuery = { text: inText && searching ? query : "", caseSensitive, wholeWord, regex };
+    const text = useTextSearch(root, textQuery);
     const results = useMemo(
-        () => (searching && entries ? rankEntries(query.trim(), entries, RESULT_LIMIT) : []),
-        [searching, query, entries]
+        () => (searching && !inText && entries ? rankEntries(query.trim(), entries, RESULT_LIMIT) : []),
+        [searching, inText, query, entries]
     );
+    const inputRef = useRef<HTMLInputElement>(null);
+    // The search-in-files shortcut asked for the caret; once the panel is in.
+    const focusSearch = useFilesStore((s) => s.focusSearch);
+    const focusedFor = useRef(focusSearch);
+    useEffect(() => {
+        if (!shown || focusedFor.current === focusSearch) return;
+        focusedFor.current = focusSearch;
+        inputRef.current?.focus();
+        inputRef.current?.select();
+    }, [shown, focusSearch]);
     const [highlighted, setHighlighted] = useState(0);
     const [lastQuery, setLastQuery] = useState(query);
     if (query !== lastQuery) {
@@ -169,21 +200,33 @@ export function FileExplorer({ shown }: { shown: boolean }) {
             event.currentTarget.blur();
             return;
         }
-        if (!searching || results.length === 0) return;
+        // The rows the arrows walk: the matching files, or the matching lines shown.
+        const rows = resultsRef.current?.querySelectorAll<HTMLElement>("[data-index]");
+        if (!searching || !rows || rows.length === 0) return;
         const step = { ArrowDown: 1, ArrowUp: -1 }[event.key];
         if (step) {
             event.preventDefault();
-            const next = (highlighted + step + results.length) % results.length;
+            const next = (Math.min(highlighted, rows.length - 1) + step + rows.length) % rows.length;
             setHighlighted(next);
-            resultsRef.current
-                ?.querySelector(`[data-index="${next}"]`)
-                ?.scrollIntoView({ block: "nearest" });
+            rows[next]?.scrollIntoView({ block: "nearest" });
         } else if (event.key === "Enter") {
             event.preventDefault();
-            const entry = results[highlighted];
-            if (entry) pickResult(entry);
+            rows[highlighted]?.click();
         }
     };
+
+    const option = (key: SearchOption, on: boolean, label: string, glyph: ReactNode) => (
+        <IconButton
+            label={label}
+            aria-pressed={on}
+            // Clicking keeps the caret in the field.
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={() => files.toggleOption(key)}
+            className={cn("size-5 rounded", on && "bg-info/15 text-info hover:bg-info/20 hover:text-info")}
+        >
+            {glyph}
+        </IconButton>
+    );
 
     return (
         <>
@@ -195,6 +238,16 @@ export function FileExplorer({ shown }: { shown: boolean }) {
                     >
                         {root ? baseName(root) : "Files"}
                     </span>
+                    <IconButton
+                        label="Search in files"
+                        shortcut="searchInFiles"
+                        aria-pressed={inText}
+                        disabled={!root}
+                        onClick={() => (inText ? files.setMode("names") : files.searchText())}
+                        className={cn(inText && "bg-hover text-text")}
+                    >
+                        <ListMagnifyingGlassIcon className="size-3.5" />
+                    </IconButton>
                     <IconButton
                         label={showIgnored ? "Hide ignored files" : "Show ignored files"}
                         aria-pressed={showIgnored}
@@ -217,21 +270,28 @@ export function FileExplorer({ shown }: { shown: boolean }) {
                         onClick={() => {
                             void refreshFiles(root, { force: true, ignored: showIgnored });
                             void refreshGitStatus(root);
+                            if (textQuery.text) void searchText(root, textQuery);
                         }}
                     >
                         <ArrowClockwiseIcon className="size-3.5" />
                     </IconButton>
                 </div>
-                <label className="flex h-7 min-w-0 cursor-text items-center gap-1.5 rounded-md bg-raised px-2 transition-colors hover:bg-hover">
+                <label
+                    className={cn(
+                        "flex h-7 min-w-0 cursor-text items-center gap-1.5 rounded-md bg-raised px-2 transition-colors hover:bg-hover",
+                        textQuery.text && regex && text.error && !text.pending && "ring-1 ring-danger/60"
+                    )}
+                >
                     <MagnifyingGlassIcon className="size-3.5 shrink-0 text-muted" />
                     <input
+                        ref={inputRef}
                         type="text"
                         value={query}
                         onChange={(event) => files.setQuery(event.target.value)}
                         onKeyDown={onSearchKey}
                         disabled={!root}
-                        placeholder="Search files"
-                        aria-label="Search files"
+                        placeholder={inText ? "Search in files" : "Search files"}
+                        aria-label={inText ? "Search in files" : "Search files"}
                         spellCheck={false}
                         autoComplete="off"
                         className="min-w-0 flex-1 bg-transparent text-xs text-text outline-none placeholder:text-muted"
@@ -246,11 +306,41 @@ export function FileExplorer({ shown }: { shown: boolean }) {
                             <XIcon className="size-3" />
                         </button>
                     )}
+                    {inText && (
+                        <span className="-mr-1 flex shrink-0 items-center gap-px">
+                            {option("caseSensitive", caseSensitive, "Match case", <TextAaIcon className="size-3.5" />)}
+                            {option(
+                                "wholeWord",
+                                wholeWord,
+                                "Match whole word",
+                                <span className="text-[10px] leading-none font-semibold underline underline-offset-2">
+                                    ab
+                                </span>
+                            )}
+                            {option(
+                                "regex",
+                                regex,
+                                "Use regular expression",
+                                <span className="font-mono text-[10.5px] leading-none font-semibold">.*</span>
+                            )}
+                        </span>
+                    )}
                 </label>
             </div>
 
             {!root ? (
                 <Note>Pick a folder to see its files</Note>
+            ) : textQuery.text ? (
+                <TextResults
+                    listRef={resultsRef}
+                    root={root}
+                    search={text}
+                    git={git}
+                    highlighted={highlighted}
+                    onHighlight={setHighlighted}
+                    onRename={startRename}
+                    onDelete={setDeleting}
+                />
             ) : !entries ? (
                 <Note>Listing files…</Note>
             ) : entries.length === 0 ? (
@@ -698,6 +788,146 @@ function SearchResults({
                 );
             })}
         </div>
+    );
+}
+
+/**
+ * What the text search found: each file, then its matching lines with the
+ * match marked; a click on a line opens the file there, one on a file folds
+ * its lines away.
+ */
+function TextResults({
+    listRef,
+    root,
+    search,
+    git,
+    highlighted,
+    onHighlight,
+    onRename,
+    onDelete
+}: {
+    listRef: RefObject<HTMLDivElement | null>;
+    root: string;
+    search: ReturnType<typeof useTextSearch>;
+    git: GitMarks;
+    /** Among the lines shown, top to bottom. */
+    highlighted: number;
+    onHighlight: (index: number) => void;
+    onRename: (entry: WorkspaceEntry) => void;
+    onDelete: (entry: WorkspaceEntry) => void;
+}) {
+    const { pending, result, error } = search;
+    /** The files whose lines are folded away, by path. */
+    const [folded, setFolded] = useState<ReadonlySet<string>>(new Set());
+    if (error && !pending) return <Note>{error}</Note>;
+    if (!result || (pending && result.files.length === 0)) return <Note>Searching…</Note>;
+    if (result.files.length === 0) return <Note>No results</Note>;
+
+    const toggle = (path: string) =>
+        setFolded((was) => {
+            const next = new Set(was);
+            if (!next.delete(path)) next.add(path);
+            return next;
+        });
+    const count = result.files.reduce((sum, file) => sum + file.matches.length, 0);
+    const plural = (n: number, word: string) => `${n.toLocaleString()} ${word}${n === 1 ? "" : "s"}`;
+    // Each file's first line among the lines shown.
+    const starts: number[] = [];
+    let lines = 0;
+    for (const file of result.files) {
+        starts.push(lines);
+        if (!folded.has(file.path)) lines += file.matches.length;
+    }
+
+    return (
+        <div
+            ref={listRef}
+            role="tree"
+            aria-label="Matches"
+            className={cn(
+                "min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 pb-2 transition-opacity",
+                pending && "opacity-60"
+            )}
+        >
+            <div className="px-2 pt-0.5 pb-1 text-[11px] text-muted">
+                {result.truncated
+                    ? `The first ${plural(count, "result")}; there are more`
+                    : `${plural(count, "result")} in ${plural(result.files.length, "file")}`}
+            </div>
+            {result.files.map((file, at) => {
+                const name = nameOf(file.path);
+                const folder = parentOf(file.path);
+                const mark = git.marks.get(file.path);
+                const open = !folded.has(file.path);
+                return (
+                    <Fragment key={file.path}>
+                        <ContextMenu>
+                            <ContextMenu.Trigger
+                                role="treeitem"
+                                aria-level={1}
+                                aria-expanded={open}
+                                onClick={() => toggle(file.path)}
+                                className={cn(rowClass(false), "pl-1.5")}
+                            >
+                                <CaretRightIcon
+                                    weight="bold"
+                                    className={cn(
+                                        "size-2.5 shrink-0 text-muted transition-transform duration-100",
+                                        open && "rotate-90"
+                                    )}
+                                />
+                                <FileIcon name={name} className="size-3.5" />
+                                <span className={cn("max-w-[70%] shrink-0 truncate", mark && MARK_TEXT[mark])}>
+                                    {name}
+                                </span>
+                                {folder && <span className="min-w-0 truncate text-muted">{folder}</span>}
+                                <span className="ml-auto shrink-0 pl-1 text-[10px] text-muted tabular-nums">
+                                    {file.matches.length}
+                                </span>
+                            </ContextMenu.Trigger>
+                            <EntryMenu
+                                root={root}
+                                entry={{ path: file.path, dir: false, ignored: false }}
+                                onRename={onRename}
+                                onDelete={onDelete}
+                            />
+                        </ContextMenu>
+                        {open &&
+                            file.matches.map((match, i) => {
+                                const index = starts[at]! + i;
+                                return (
+                                    <div
+                                        key={`${match.line}:${match.column}`}
+                                        role="treeitem"
+                                        aria-level={2}
+                                        aria-selected={index === highlighted}
+                                        data-index={index}
+                                        title={`Line ${match.line}`}
+                                        onMouseMove={() => onHighlight(index)}
+                                        onClick={() => files.open(root, file.path, match)}
+                                        className={cn(rowClass(index === highlighted), "pl-7")}
+                                    >
+                                        <MatchLine match={match} />
+                                    </div>
+                                );
+                            })}
+                    </Fragment>
+                );
+            })}
+        </div>
+    );
+}
+
+/** A matching line as far as its preview goes, the match marked. */
+function MatchLine({ match }: { match: TextMatch }) {
+    const { preview, previewStart: from } = match;
+    const to = from + match.previewLength;
+    return (
+        <span className="min-w-0 truncate whitespace-pre">
+            {preview.slice(0, from)}
+            <span className="rounded-xs bg-warning/30 text-text">{preview.slice(from, to)}</span>
+            {preview.slice(to)}
+        </span>
     );
 }
 

@@ -34,6 +34,7 @@ export type KeyboardSettings = {
     toggleSidebar: string;
     toggleRightSidebar: string;
     toggleFilePanel: string;
+    searchInFiles: string;
     maximizeTabsPanel: string;
     goBack: string;
     goForward: string;
@@ -237,6 +238,7 @@ export const DEFAULT_SETTINGS: Settings = {
         toggleSidebar: "Mod+B",
         toggleRightSidebar: "Mod+Alt+B",
         toggleFilePanel: "Mod+Shift+E",
+        searchInFiles: "Mod+Shift+F",
         maximizeTabsPanel: "Mod+Shift+M",
         goBack: "Mod+[",
         goForward: "Mod+]",

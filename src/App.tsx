@@ -2,6 +2,7 @@ import type { ComponentType } from "react";
 import { ChatHeader, ChatView, useChatRuntime } from "@/features/chat";
 import { useChatsRuntime } from "@/features/chats";
 import { useEditorRuntime } from "@/features/editor";
+import { useFilesRuntime } from "@/features/files";
 import { useNotificationsRuntime } from "@/features/notifications";
 import { SettingsModal, useSettingsRuntime } from "@/features/settings";
 import { useSidebarRuntime } from "@/features/sidebar";
@@ -45,6 +46,7 @@ export function App() {
     useSidebarRuntime();
     useTerminalRuntime();
     useEditorRuntime();
+    useFilesRuntime();
     useChangesRuntime();
     useHistoryRuntime();
     const placement = usePlacement();

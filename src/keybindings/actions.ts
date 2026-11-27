@@ -62,6 +62,14 @@ export const ACTIONS: readonly Action[] = [
         scope: "global"
     },
     {
+        id: "searchInFiles",
+        category: "general",
+        label: "Search in files",
+        description: "Searches the folder's files for a text, in the file panel",
+        keywords: "search find text grep files folder project contents",
+        scope: "global"
+    },
+    {
         id: "maximizeTabsPanel",
         category: "general",
         label: "Maximize tabs panel",

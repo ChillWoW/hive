@@ -1,11 +1,23 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
+import type { LinePosition } from "@/features/editor/documents";
 import { openFileTab } from "@/features/editor/open";
+import { getPanelLayout, useLayoutStore } from "@/layout/store";
 import { ancestorsOf, isUnder, movedPath } from "./tree";
 
+/** What a text search may be told, besides the text. */
+export type SearchOption = "caseSensitive" | "wholeWord" | "regex";
+
 type FilesState = {
-    /** The search field's text; lists matching files instead of the tree while not blank. */
+    /** The search field's text; lists what it finds instead of the tree while not blank. */
     query: string;
+    /** What the search looks through: the files' names, or their text. */
+    mode: "names" | "text";
+    caseSensitive: boolean;
+    wholeWord: boolean;
+    regex: boolean;
+    /** Goes up when the search field should take the caret. */
+    focusSearch: number;
     /** Open folders, by the root they're under. */
     expanded: Record<string, string[]>;
     /** The picked entry, by root. */
@@ -16,12 +28,25 @@ type FilesState = {
 
 /** The file panel's search, open folders and pick; open folders and `showIgnored` persist per device. */
 export const useFilesStore = create<FilesState>()(
-    persist((): FilesState => ({ query: "", expanded: {}, selected: {}, showIgnored: false }), {
-        name: "outcode.files",
-        version: 0,
-        storage: createJSONStorage(() => localStorage),
-        partialize: (s) => ({ expanded: s.expanded, showIgnored: s.showIgnored })
-    })
+    persist(
+        (): FilesState => ({
+            query: "",
+            mode: "names",
+            caseSensitive: false,
+            wholeWord: false,
+            regex: false,
+            focusSearch: 0,
+            expanded: {},
+            selected: {},
+            showIgnored: false
+        }),
+        {
+            name: "outcode.files",
+            version: 0,
+            storage: createJSONStorage(() => localStorage),
+            partialize: (s) => ({ expanded: s.expanded, showIgnored: s.showIgnored })
+        }
+    )
 );
 
 const NO_FOLDERS: readonly string[] = [];
@@ -39,6 +64,13 @@ const setExpanded = (root: string, update: (open: Set<string>) => void) =>
 /** File panel actions, outside React too. Paths are relative to `root`, `/`-separated. */
 export const files = {
     setQuery: (query: string) => useFilesStore.setState({ query }),
+    setMode: (mode: FilesState["mode"]) => useFilesStore.setState({ mode }),
+    toggleOption: (option: SearchOption) => useFilesStore.setState((s) => ({ [option]: !s[option] })),
+    /** Shows the file panel, set to search the files' text, with the caret in its search field. */
+    searchText: () => {
+        if (!getPanelLayout().visible.files) useLayoutStore.getState().toggle("files");
+        useFilesStore.setState((s) => ({ mode: "text", focusSearch: s.focusSearch + 1 }));
+    },
     toggleIgnored: () => useFilesStore.setState((s) => ({ showIgnored: !s.showIgnored })),
     toggleFolder: (root: string, path: string) =>
         setExpanded(root, (open) => (open.has(path) ? open.delete(path) : open.add(path))),
@@ -78,9 +110,9 @@ export const files = {
                 selected: pick !== undefined && isUnder(pick, path) ? others : s.selected
             };
         }),
-    /** Picks a file and opens it in an editor tab. */
-    open: (root: string, path: string) => {
+    /** Picks a file and opens it in an editor tab; with `at`, at that line. */
+    open: (root: string, path: string, at?: LinePosition) => {
         files.select(root, path);
-        openFileTab(root, path);
+        openFileTab(root, path, at);
     }
 };

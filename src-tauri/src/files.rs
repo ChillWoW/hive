@@ -28,7 +28,7 @@ pub fn file_open(app: AppHandle, path: String) -> Result<(), String> {
 }
 
 /// `path` relative to `root`, `/`-separated.
-fn relative(root: &Path, path: &Path) -> Option<String> {
+pub(crate) fn relative(root: &Path, path: &Path) -> Option<String> {
     let relative = path.strip_prefix(root).ok()?;
     Some(
         relative

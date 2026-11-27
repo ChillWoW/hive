@@ -12,6 +12,7 @@ mod http;
 mod mcp;
 #[cfg(target_os = "macos")]
 mod menu;
+mod search;
 mod settings;
 mod terminal;
 mod themes;
@@ -154,6 +155,7 @@ pub fn run() {
             files::list_folder,
             files::rename_path,
             files::trash_path,
+            search::search_text,
             settings::settings_get,
             settings::settings_update,
             settings::settings_reset,
