@@ -40,6 +40,9 @@ pub(super) struct Normalizer {
     /// Task id → the tool call that started it (`task_started`, which may
     /// come before or after the task is first listed).
     task_tools: HashMap<String, String>,
+    /// Task id → the file a background shell's output goes to, as its
+    /// `Bash` result names it.
+    task_outputs: HashMap<String, String>,
     /// Tasks that ended since the last turn: what a turn the CLI starts on
     /// its own is about.
     finished: Vec<FinishedTask>,
@@ -131,20 +134,27 @@ impl Normalizer {
             // User frames carry tool results; our own prompts aren't echoed.
             Frame::User(f) => {
                 let parent = f.parent_tool_use_id.as_deref();
-                f.message
-                    .blocks()
-                    .filter(|b| b.kind == "tool_result")
-                    .map(|b| {
-                        attribute(
-                            parent,
-                            AgentEvent::ToolResult {
-                                output: b.result_text(),
-                                is_error: b.is_error.unwrap_or(false),
-                                id: b.tool_use_id,
-                            },
-                        )
-                    })
-                    .collect()
+                let mut out = Vec::new();
+                let mut listed = false;
+                for b in f.message.blocks().filter(|b| b.kind == "tool_result") {
+                    let output = b.result_text();
+                    if let Some((task, file)) = output.as_deref().and_then(background_output) {
+                        listed |= self.task_output(task, file);
+                    }
+                    out.push(attribute(
+                        parent,
+                        AgentEvent::ToolResult {
+                            output,
+                            is_error: b.is_error.unwrap_or(false),
+                            id: b.tool_use_id,
+                        },
+                    ));
+                }
+                // Listed already: report it again with its output file.
+                if listed {
+                    out.push(self.background_event());
+                }
+                out
             }
             Frame::RateLimit(f) if f.rate_limit_info.blocks() => {
                 let window = rate_window_label(f.rate_limit_info.rate_limit_type.as_deref().unwrap_or(""));
@@ -177,6 +187,7 @@ impl Normalizer {
             "task_notification" => {
                 if let Some(task) = &f.task_id {
                     self.task_tools.remove(task);
+                    self.task_outputs.remove(task);
                     if let Some(end) = f.status.as_deref().and_then(task_end) {
                         let description = self
                             .background
@@ -215,6 +226,7 @@ impl Normalizer {
                         description: e.description,
                         tool_call_id: self.task_tools.get(&e.task_id).cloned(),
                         agent_type: e.subagent_type,
+                        output_file: self.task_outputs.get(&e.task_id).cloned(),
                         id: e.task_id,
                     })
                     .collect();
@@ -342,6 +354,17 @@ impl Normalizer {
         !self.background.is_empty()
     }
 
+    /// Notes where background shell `task` writes its output; true when the
+    /// task is listed and hadn't one yet.
+    fn task_output(&mut self, task: &str, file: &str) -> bool {
+        self.task_outputs.insert(task.to_owned(), file.to_owned());
+        let listed = self
+            .background
+            .iter_mut()
+            .find(|t| t.id == task && t.output_file.is_none());
+        listed.map(|t| t.output_file = Some(file.to_owned())).is_some()
+    }
+
     fn background_event(&self) -> AgentEvent {
         AgentEvent::BackgroundTasks {
             tasks: self.background.clone(),
@@ -372,6 +395,16 @@ fn task_end(status: &str) -> Option<TaskEnd> {
         "killed" | "cancelled" | "canceled" | "stopped" | "interrupted" => TaskEnd::Stopped,
         _ => return None,
     })
+}
+
+/// A background shell's task id and output file, from its `Bash` result:
+/// "Command running in background with ID: <id>. Output is being written
+/// to: <dir>/tasks/<id>.output. …".
+fn background_output(result: &str) -> Option<(&str, &str)> {
+    let rest = result.strip_prefix("Command running in background with ID: ")?;
+    let (task, rest) = rest.split_once(". Output is being written to: ")?;
+    let end = rest.rfind(".output")? + ".output".len();
+    Some((task, &rest[..end]))
 }
 
 /// A `background_tasks_changed` entry's `task_type`.
@@ -752,6 +785,21 @@ mod tests {
             [AgentEvent::BackgroundTasks { tasks }] if tasks[0].tool_call_id.as_deref() == Some("toolu_1")
         ));
         assert!(n.has_background());
+        // The shell's result says where its output goes.
+        let (ran, _) = feed(
+            &mut n,
+            &[json!({ "type": "user", "message": { "content": [{
+                "type": "tool_result",
+                "tool_use_id": "toolu_1",
+                "content": "Command running in background with ID: b1. Output is being written to: \
+                            C:\\tmp\\claude\\tasks\\b1.output. You will be notified when it completes.",
+            }] } })],
+        );
+        assert!(matches!(
+            ran.as_slice(),
+            [AgentEvent::ToolResult { .. }, AgentEvent::BackgroundTasks { tasks }]
+                if tasks[0].output_file.as_deref() == Some("C:\\tmp\\claude\\tasks\\b1.output")
+        ));
         feed(
             &mut n,
             &[

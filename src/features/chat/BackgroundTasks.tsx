@@ -4,7 +4,8 @@ import { CaretRightIcon, RobotIcon, TerminalWindowIcon, WaveformIcon, type Icon 
 import type { BackgroundTask, BackgroundTaskKind, Message, ToolCall } from "@/proto";
 import { cn } from "@/lib/cn";
 import { formatElapsed, useNow } from "@/lib/time";
-import { chats, taskStartedAt } from "@/features/chats/store";
+import { chats, taskStartedAt, useChatsStore } from "@/features/chats/store";
+import { openTaskOutput } from "@/features/terminal";
 import { ActiveHarnessMark } from "@/features/models/ActiveHarnessMark";
 import { DotMatrixSpinner } from "@/ui";
 import { chipTriggerClassName, popupClassName } from "@/ui/chip";
@@ -22,7 +23,8 @@ const KINDS: Record<BackgroundTaskKind, { icon: Icon; label: string }> = {
  * Work the agent left running between turns, as a chip in the row under the
  * composer: a dot matrix and how many run. Click opens the list: each task
  * with what it runs (an agent, what it last said), how long it has run, and
- * Stop; an agent's row opens its thread. Hidden while nothing runs.
+ * Stop; an agent's row opens its thread, a shell's its output in a tab.
+ * Hidden while nothing runs.
  */
 export function BackgroundTasks({
     tasks,
@@ -55,6 +57,11 @@ export function BackgroundTasks({
                                 setOpen(false);
                                 chats.openSubagent(id);
                             }}
+                            onOpenShell={(task, command) => {
+                                setOpen(false);
+                                const chatId = useChatsStore.getState().activeChatId;
+                                if (chatId) openTaskOutput(chatId, task, command);
+                            }}
                         />
                     </Popover.Popup>
                 </Popover.Positioner>
@@ -67,12 +74,15 @@ function TaskList({
     tasks,
     messages,
     onStop,
-    onOpenAgent
+    onOpenAgent,
+    onOpenShell
 }: {
     tasks: BackgroundTask[];
     messages: Message[];
     onStop: (taskId: string) => void;
     onOpenAgent: (spawnId: string) => void;
+    /** `command`: what the shell runs, when its call is known. */
+    onOpenShell: (task: BackgroundTask, command?: string) => void;
 }) {
     const now = useNow();
     // Stopped ones leave when the session says so; till then they read "Stopping".
@@ -121,7 +131,13 @@ function TaskList({
                             now={now}
                             stopping={stopping.has(task.id)}
                             onStop={() => stop(task.id)}
-                            onOpen={spawn ? () => onOpenAgent(spawn.id) : undefined}
+                            onOpen={
+                                spawn
+                                    ? () => onOpenAgent(spawn.id)
+                                    : task.outputFile
+                                      ? () => onOpenShell(task, call?.kind === "exec" ? call.command : undefined)
+                                      : undefined
+                            }
                         />
                     );
                 })}
@@ -169,7 +185,7 @@ function TaskRow({
                 stopping && "opacity-60"
             )}
         >
-            {/* The whole row opens an agent; Stop sits above it. */}
+            {/* The whole row opens an agent's thread or a shell's output; Stop sits above it. */}
             {onOpen && (
                 <button
                     type="button"

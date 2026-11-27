@@ -17,4 +17,8 @@ toolCallId?: string,
 /**
  * A subagent's type.
  */
-agentType?: string, };
+agentType?: string, 
+/**
+ * The file a shell's output is written to as it runs, once known.
+ */
+outputFile?: string, };

@@ -548,6 +548,8 @@ async fn background_tasks_outlive_the_turn_and_can_be_stopped() {
     }
     let task = tasks.first().expect("no background task listed after the turn").clone();
     assert_eq!(task.kind, outcode_proto::BackgroundTaskKind::Shell);
+    let output = task.output_file.as_deref().expect("no output file for the shell");
+    assert!(std::path::Path::new(output).is_file(), "{output}");
     run.handle.stop_task(task.id.clone());
     let emptied = tokio::time::timeout(std::time::Duration::from_secs(30), async {
         while let Some(event) = run.events.recv().await {

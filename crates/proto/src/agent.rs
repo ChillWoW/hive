@@ -335,6 +335,9 @@ pub struct BackgroundTask {
     /// A subagent's type.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agent_type: Option<String>,
+    /// The file a shell's output is written to as it runs, once known.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub output_file: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]

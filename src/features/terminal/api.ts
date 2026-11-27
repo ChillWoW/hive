@@ -41,6 +41,26 @@ export function spawnTerminal(
     });
 }
 
+/**
+ * Follows a background task's output file (`src-tauri/src/task_output.rs`):
+ * `onData` gets what's in it, then more as it's written (UTF-8 may split
+ * across calls). Returns what stops it.
+ */
+export function watchTaskOutput(path: string, onData: (bytes: Uint8Array) => void): () => void {
+    if (!isTauri) return () => {};
+    let live = true;
+    const data = new Channel<ArrayBuffer>();
+    data.onmessage = (buffer) => {
+        if (live) onData(new Uint8Array(buffer));
+    };
+    const watch = backend<number>("task_output_watch", { path, onData: data });
+    watch.catch(() => {});
+    return () => {
+        live = false;
+        void watch.then((id) => backend("task_output_unwatch", { id })).catch(() => {});
+    };
+}
+
 /** Types `bytes` into terminal `id`; resolves once the backend has them. */
 export function writeTerminal(id: number, bytes: Uint8Array): Promise<void> {
     return backend<void>("terminal_write", bytes, undefined, {

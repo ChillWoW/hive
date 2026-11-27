@@ -1,8 +1,8 @@
 import { create } from "zustand";
 
-export type PanelTabKind = "file" | "diff" | "terminal" | "history" | "commit";
+export type PanelTabKind = "file" | "diff" | "terminal" | "output" | "history" | "commit";
 
-/** A tab in the tabs panel: a file, a diff, a terminal, a folder's history or one commit. */
+/** A tab in the tabs panel: a file, a diff, a terminal, a background shell's output, a folder's history or one commit. */
 export type PanelTab = {
     id: string;
     kind: PanelTabKind;
@@ -15,6 +15,8 @@ export type PanelTab = {
     file?: { cwd: string; path: string };
     /** A diff tab's folder: its checkout's uncommitted changes. */
     diff?: { cwd: string };
+    /** An output tab's background shell: chat `chatId`'s task, the file its output goes to, what it runs. */
+    output?: { chatId: string; taskId: string; path: string; command?: string };
     /** A history tab's folder: its checkout's commits. */
     history?: { cwd: string };
     /** A commit tab's commit, in `cwd`'s checkout. */

@@ -3,7 +3,7 @@ import { ClockCounterClockwiseIcon, GitDiffIcon, TerminalWindowIcon } from "@pho
 import { ChangesTab, openChangesTab, useCurrentFolder } from "@/features/changes";
 import { FileTab, focusWhenShown } from "@/features/editor";
 import { CommitTab, HistoryTab, openHistoryTab } from "@/features/history";
-import { openTerminal, TerminalView } from "@/features/terminal";
+import { openTerminal, TaskOutputView, TerminalView } from "@/features/terminal";
 import { ShortcutKeys, useBinding } from "@/keybindings";
 import { Button } from "@/ui";
 import { usePanelTabsStore, type PanelTab } from "./store";
@@ -22,6 +22,7 @@ export function PanelTabView() {
 
 function Content({ tab }: { tab: PanelTab }) {
     if (tab.kind === "terminal") return <TerminalView key={tab.id} id={tab.id} />;
+    if (tab.kind === "output" && tab.output) return <TaskOutputView key={tab.id} id={tab.id} {...tab.output} />;
     if (tab.kind === "file" && tab.file) {
         return <FileTab key={tab.id} id={tab.id} cwd={tab.file.cwd} path={tab.file.path} />;
     }
@@ -66,8 +67,8 @@ function useFocusHandover(tab: PanelTab | undefined) {
         const focused = document.activeElement;
         if (focused && focused !== document.body) return;
         if (kind === "file") focusWhenShown(id);
-        // A terminal focuses itself as it's shown.
-        else if (kind !== "terminal") {
+        // A terminal (a shell's output too) focuses itself as it's shown.
+        else if (kind !== "terminal" && kind !== "output") {
             (panel.current?.firstElementChild as HTMLElement | null)?.focus({ preventScroll: true });
         }
     }, [shown, id, kind]);

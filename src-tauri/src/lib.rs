@@ -14,6 +14,7 @@ mod mcp;
 mod menu;
 mod search;
 mod settings;
+mod task_output;
 mod terminal;
 mod themes;
 mod updater;
@@ -56,6 +57,9 @@ pub fn run() {
                 if let Some(terminals) = app.try_state::<outcode_terminal::Terminals>() {
                     terminals.kill_owned_by(webview.label());
                 }
+                if let Some(outputs) = app.try_state::<task_output::TaskOutputs>() {
+                    outputs.stop_owned_by(webview.label());
+                }
             }
         })
         .setup(|app| {
@@ -79,6 +83,7 @@ pub fn run() {
             app.manage(chat::Watches::default());
             app.manage(chat::DataDir(data_dir.clone()));
             app.manage(outcode_terminal::Terminals::default());
+            app.manage(task_output::TaskOutputs::default());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -168,6 +173,8 @@ pub fn run() {
             terminal::terminal_resize,
             terminal::terminal_foreground,
             terminal::terminal_kill,
+            task_output::task_output_watch,
+            task_output::task_output_unwatch,
             fonts::fonts_list,
             themes::themes_list,
             themes::themes_open_dir,

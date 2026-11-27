@@ -6,6 +6,7 @@ import {
     GitCommitIcon,
     GitDiffIcon,
     PlusIcon,
+    TerminalIcon,
     TerminalWindowIcon,
     XIcon
 } from "@phosphor-icons/react";
@@ -115,6 +116,7 @@ function MaximizeButton() {
 const GLYPHS = {
     diff: GitDiffIcon,
     terminal: TerminalWindowIcon,
+    output: TerminalIcon,
     history: ClockCounterClockwiseIcon,
     commit: GitCommitIcon
 } as const;
