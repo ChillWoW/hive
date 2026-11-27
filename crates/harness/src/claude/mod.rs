@@ -234,6 +234,10 @@ fn launch_args(request: &RunRequest) -> Vec<String> {
         "stdio".into(),
         "--permission-mode".into(),
         permission_mode(request.config.access, request.config.plan).into(),
+        // Headless runs omit thinking text otherwise: the blocks stream
+        // empty, with only a signature.
+        "--thinking-display".into(),
+        "summarized".into(),
     ];
     if let Some(session) = request.resume.as_deref().filter(|s| !s.is_empty()) {
         args.extend(["--resume".into(), session.into()]);
@@ -903,7 +907,7 @@ mod tests {
             ..RunRequest::default()
         };
         let args = launch_args(&request).join(" ");
-        assert!(args.starts_with("--permission-prompt-tool stdio --permission-mode default --resume s1"));
+        assert!(args.starts_with("--permission-prompt-tool stdio --permission-mode default --thinking-display summarized --resume s1"));
         request.config.access = AccessMode::AutoAcceptEdits;
         assert!(launch_args(&request).join(" ").contains("--permission-mode acceptEdits"));
         request.config.plan = true;
