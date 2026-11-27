@@ -11,8 +11,6 @@ import { git, useFolderBusy, useGitAction } from "./store";
 
 export type BranchDialog = { kind: "new"; from: string } | { kind: "delete"; branch: GitBranch };
 
-const BUSY_NOTE = "An agent is working in this folder. Branches can change once it's done.";
-
 /** The list's first row while the search names a branch that isn't there. */
 const CREATE = "\u0000create";
 
@@ -109,8 +107,6 @@ export function BranchList({
                 controls={rows.listId}
                 activeId={rows.activeId}
             />
-
-            {busy && !base && <p className="-mx-1 mb-1 border-b border-border px-3.5 pb-2 text-xs text-warning">{BUSY_NOTE}</p>}
 
             {!keys.length && (
                 <p className="px-2.5 py-3 text-center text-xs text-muted/75">
