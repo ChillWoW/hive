@@ -14,14 +14,11 @@ export function UpdateDialog({ open, onClose }: { open: boolean; onClose: () => 
             open={open}
             onClose={onClose}
             title={version ? `Update to Outcode ${version}?` : "Update Outcode?"}
-            confirmLabel="Update and restart"
+            confirmLabel="Update"
             variant="default"
             onConfirm={async () => void install()}
         >
-            <p className="text-sm text-muted">
-                Outcode downloads the update, installs it and restarts. Any agents that are
-                running will be stopped and lose their in-progress work.
-            </p>
+            <p className="text-sm text-muted">Outcode will restart. Running agents are stopped.</p>
         </ConfirmDialog>
     );
 }
