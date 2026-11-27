@@ -164,7 +164,7 @@ export function ModelPicker({
                     <Popover.Popup
                         aria-label="Choose a model"
                         initialFocus={() => document.getElementById(SEARCH_ID)}
-                        className={cn(popupClassName, "w-72 min-w-0 rounded-xl p-1")}
+                        className={cn(popupClassName, "w-72 min-w-0 rounded-md p-1")}
                     >
                         <ModelCard
                             listed={listed}
@@ -284,7 +284,7 @@ function HandoffCard({
             aria-label={`Continue in ${HARNESS_LABELS[harness]}`}
             className={cn(
                 "pointer-events-auto absolute top-0 right-full mr-2 w-56",
-                "rounded-xl border border-border bg-surface p-1 shadow-lg shadow-shadow/40",
+                "rounded-md border border-border bg-surface p-1 shadow-lg shadow-shadow/40",
                 "transition-opacity duration-150 ease-out starting:opacity-0"
             )}
         >
@@ -302,7 +302,7 @@ function HandoffCard({
                     autoFocus={i === 0}
                     onClick={() => onSelect(mode)}
                     className={cn(
-                        "flex w-full items-center gap-2 rounded-[7px] px-2.5 py-1.5 text-left outline-none select-none",
+                        "flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left outline-none select-none",
                         "text-text hover:bg-hover focus-visible:bg-hover disabled:pointer-events-none disabled:opacity-50"
                     )}
                 >
@@ -449,7 +449,7 @@ function ModelCard({
                                             setActive(group.start);
                                         }}
                                         className={cn(
-                                            "inline-flex size-8 shrink-0 items-center justify-center rounded-[7px] outline-none",
+                                            "inline-flex size-8 shrink-0 items-center justify-center rounded-md outline-none",
                                             "transition-[background-color,opacity] duration-150",
                                             viewed === group.id
                                                 ? "bg-hover"
@@ -562,7 +562,7 @@ function FooterRow({
             onClick={onClick}
             className={cn(
                 footerButtonClassName,
-                "h-8 rounded-[7px] px-2 text-sm text-text hover:bg-raised aria-expanded:bg-hover"
+                "h-8 rounded-md px-2 text-sm text-text hover:bg-raised aria-expanded:bg-hover"
             )}
         >
             <span>{label}</span>
@@ -599,7 +599,7 @@ function ModelRow({
             onMouseMove={active ? undefined : onHover}
             onClick={onPick}
             className={cn(
-                "group/row flex h-8 shrink-0 cursor-pointer items-center gap-2 rounded-[7px] pr-1 pl-2 select-none",
+                "group/row flex h-8 shrink-0 cursor-pointer items-center gap-2 rounded-md pr-1 pl-2 select-none",
                 "text-text transition-colors duration-100",
                 selected ? "bg-hover" : active && "bg-raised"
             )}
@@ -661,7 +661,7 @@ function SideCard<T extends string>({
             style={lift ? { bottom: ROW_PITCH } : undefined}
             className={cn(
                 "pointer-events-auto absolute right-full bottom-0 mr-2 w-44",
-                "rounded-xl border border-border bg-surface p-1 shadow-lg shadow-shadow/40",
+                "rounded-md border border-border bg-surface p-1 shadow-lg shadow-shadow/40",
                 "transition-opacity duration-150 ease-out starting:opacity-0"
             )}
         >
@@ -675,7 +675,7 @@ function SideCard<T extends string>({
                         aria-checked={checked}
                         onClick={() => onSelect(option.id)}
                         className={cn(
-                            "grid h-8 w-full grid-cols-[1fr_1rem] items-center gap-x-2 rounded-[7px] px-2.5",
+                            "grid h-8 w-full grid-cols-[1fr_1rem] items-center gap-x-2 rounded-md px-2.5",
                             "text-left text-sm text-text outline-none select-none",
                             "hover:bg-hover focus-visible:bg-hover"
                         )}

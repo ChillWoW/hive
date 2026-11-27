@@ -46,7 +46,7 @@ export function BackgroundTasks({
             </Popover.Trigger>
             <Popover.Portal>
                 <Popover.Positioner side="top" align="end" sideOffset={8} collisionPadding={12}>
-                    <Popover.Popup aria-label="Background tasks" className={cn(popupClassName, "w-80 rounded-xl")}>
+                    <Popover.Popup aria-label="Background tasks" className={cn(popupClassName, "w-80")}>
                         <TaskList
                             tasks={tasks}
                             messages={messages}
@@ -164,7 +164,7 @@ function TaskRow({
     return (
         <div
             className={cn(
-                "group/task relative flex items-center gap-2.5 rounded-lg py-1.5 pr-1 pl-2 transition-colors",
+                "group/task relative flex items-center gap-2.5 rounded-md py-1.5 pr-1 pl-2 transition-colors",
                 onOpen && "hover:bg-hover/60 has-[>button:focus-visible]:bg-hover/60",
                 stopping && "opacity-60"
             )}
@@ -175,7 +175,7 @@ function TaskRow({
                     type="button"
                     aria-label={`Open ${title}`}
                     onClick={onOpen}
-                    className="absolute inset-0 cursor-pointer rounded-lg outline-none"
+                    className="absolute inset-0 cursor-pointer rounded-md outline-none"
                 />
             )}
             <span className="pointer-events-none relative inline-flex size-6 shrink-0 items-center justify-center rounded-full border border-border bg-bg">

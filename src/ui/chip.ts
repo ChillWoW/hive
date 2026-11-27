@@ -53,7 +53,7 @@ export const cardListClassName =
     "hide-scrollbar flex max-h-[17rem] flex-col gap-0.5 overflow-y-auto overscroll-contain empty:hidden";
 
 export const cardRowClassName = cn(
-    "group/row flex h-8 shrink-0 cursor-pointer items-center gap-2 rounded-[7px] pr-1 pl-2 outline-none select-none",
+    "group/row flex h-8 shrink-0 cursor-pointer items-center gap-2 rounded-md pr-1 pl-2 outline-none select-none",
     "text-xs text-text transition-colors duration-100 data-[highlighted]:bg-hover",
     "data-[disabled]:cursor-default data-[disabled]:opacity-50"
 );
@@ -68,15 +68,15 @@ export const cardFooterClassName =
 
 export const cardFooterButtonClassName = cn(
     footerButtonClassName,
-    "h-8 rounded-[7px] px-2 text-left text-sm text-text hover:bg-raised",
+    "h-8 rounded-md px-2 text-left text-sm text-text hover:bg-raised",
     "data-[highlighted]:bg-hover data-[popup-open]:bg-hover",
     "data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
 );
 
-/** A row's "⋯" menu (or a footer row's choices), beside it. */
+/** A row's "⋯" menu, beside it. */
 export const sideMenuClassName = "w-48 min-w-0";
 
-export const sideMenuItemClassName = "whitespace-nowrap [&_svg]:shrink-0";
+export const sideMenuItemClassName = "whitespace-nowrap rounded-md [&_svg]:shrink-0";
 
 /**
  * A row's "⋯" button: in place of the row's meta (time, check) while the
