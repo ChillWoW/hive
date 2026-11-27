@@ -84,6 +84,8 @@ const saved = new Map<string, Text>();
 const pendingReveal = new Map<string, LinePosition>();
 /** Docs whose cursor should be scrolled into view when their editor is next shown. */
 const scrollOnAttach = new Set<string>();
+/** Tabs to focus once their content is on screen (`focusWhenShown`). */
+const focusPending = new Set<string>();
 
 /**
  * A 1-based line and, optionally, column (UTF-16 units); `length` selects
@@ -220,6 +222,7 @@ export function dropDoc(id: string) {
     saved.delete(id);
     pendingReveal.delete(id);
     scrollOnAttach.delete(id);
+    focusPending.delete(id);
     useDocsStore.setState((s) => {
         const { [id]: _, ...docs } = s.docs;
         return { docs };
@@ -241,6 +244,28 @@ export function attachView(id: string, parent: HTMLElement) {
         });
     }
     return view;
+}
+
+/** Focuses the tab `id` once its content is on screen (now, if it is): its editor, else the tab. */
+export function focusWhenShown(id: string) {
+    focusPending.add(id);
+    // After the click that opened it, and once its tab is drawn.
+    requestAnimationFrame(() => claimFocus(id));
+}
+
+/** Takes the tab `id`'s pending focus if it has its content on screen; `FileTab` calls it as that changes. */
+export function claimFocus(id: string) {
+    if (!focusPending.has(id)) return;
+    const doc = getDoc(id);
+    const tab = document.querySelector<HTMLElement>(`[data-file-tab="${CSS.escape(id)}"]`);
+    if (!tab || !doc || doc.phase === "loading") return;
+    focusPending.delete(id);
+    // Next frame: StrictMode replaces a just-attached editor straight away.
+    requestAnimationFrame(() => {
+        const view = views.get(id);
+        if (view) view.focus();
+        else if (tab.isConnected) tab.focus({ preventScroll: true });
+    });
 }
 
 export function detachView(id: string, view: EditorView) {

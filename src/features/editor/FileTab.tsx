@@ -22,6 +22,7 @@ import { Button, DotMatrixSpinner, FileIcon, FolderTreeIcon, IconButton, Tooltip
 import { fileObjectUrl } from "./api";
 import { CodeEditor } from "./CodeEditor";
 import {
+    claimFocus,
     currentState,
     isMarkdown,
     overwrite,
@@ -70,9 +71,14 @@ function revealInTree(cwd: string, path: string) {
 export function FileTab({ id, cwd, path }: { id: string; cwd: string; path: string }) {
     const doc = useDocsStore((s) => s.docs[id]);
     const image = imageType(path);
+    const phase = doc?.phase;
+
+    // Opened just now: focus moves in once the content shows.
+    useEffect(() => claimFocus(id), [id, phase]);
 
     return (
         <div
+            data-file-tab={id}
             // Focusable, so a click on a preview (not focusable itself) puts
             // focus in here; then the close-tab shortcut closes this tab (as a
             // terminal's does), not the chat's.

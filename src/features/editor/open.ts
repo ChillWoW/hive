@@ -1,12 +1,12 @@
 import { panelTabs, usePanelTabsStore } from "@/features/panel-tabs/store";
 import { getPanelLayout, useLayoutStore } from "@/layout/store";
 import { baseName } from "@/lib/paths";
-import { openDoc, revealLine, type LinePosition } from "./documents";
+import { focusWhenShown, openDoc, revealLine, type LinePosition } from "./documents";
 
 /**
  * Opens `path` (relative to `cwd`) in a file tab, the one it's already in if
- * any, bringing the tabs panel up if it's away; with `at`, the cursor goes
- * to that line. The tab's id.
+ * any, bringing the tabs panel up if it's away, and moves focus into it;
+ * with `at`, the cursor goes to that line. The tab's id.
  */
 export function openFileTab(cwd: string, path: string, at?: LinePosition): string {
     const open = usePanelTabsStore
@@ -22,5 +22,6 @@ export function openFileTab(cwd: string, path: string, at?: LinePosition): strin
     }
     if (!getPanelLayout().visible.tabs) useLayoutStore.getState().toggle("tabs");
     if (at) revealLine(id, at);
+    focusWhenShown(id);
     return id;
 }
