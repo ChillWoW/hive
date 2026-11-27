@@ -189,3 +189,41 @@ async fn interrupt_stops_the_turn_and_the_session_goes_on() {
     assert!(!text.trim().is_empty());
     run.handle.close();
 }
+
+#[tokio::test]
+#[ignore = "spends a little quota on the real agy CLI"]
+async fn a_subagents_calls_nest_under_its_launch() {
+    let dir = scratch("subagent");
+    std::fs::write(dir.join("a.py"), "print('hi')\n").unwrap();
+    let mut run = agy()
+        .run(request(
+            "Use invoke_subagent to launch one subagent that lists the files in this folder and reports their names. \
+             Wait for it, then reply with one line.",
+            &dir,
+            AccessMode::FullAccess,
+        ))
+        .unwrap();
+    let (_, status, _, events) = turn(&mut run).await;
+    assert_eq!(status, DoneStatus::Completed);
+    let launch = events
+        .iter()
+        .find_map(|e| match e {
+            AgentEvent::ToolCall { id, call: ToolCall::Subagent { .. } } => Some(id.clone()),
+            _ => None,
+        })
+        .expect("a subagent launched");
+    assert!(
+        events.iter().any(|e| matches!(e, AgentEvent::Subagent { parent_tool_id, .. } if *parent_tool_id == launch)),
+        "its calls nest under it"
+    );
+    let ended = events
+        .iter()
+        .position(|e| matches!(e, AgentEvent::ToolResult { id, .. } if *id == launch))
+        .expect("the launch ends");
+    let last_child = events
+        .iter()
+        .rposition(|e| matches!(e, AgentEvent::Subagent { .. }))
+        .unwrap();
+    assert!(ended > last_child, "it ends after its last call");
+    run.handle.close();
+}

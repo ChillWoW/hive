@@ -452,6 +452,9 @@ impl Session {
             })
             .await?;
         }
+        for ended in self.normalizer.end_turn(status != DoneStatus::Completed) {
+            self.emit(ended).await?;
+        }
         if let Some(usage) = usage {
             self.emit(usage).await?;
         }
@@ -536,7 +539,11 @@ impl Session {
         // The call as it stands, in the transcript first.
         if self.turn.is_some() {
             for event in self.normalizer.update(tool) {
-                if matches!(event, AgentEvent::ToolCall { .. }) {
+                let call = match &event {
+                    AgentEvent::Subagent { event, .. } => event.as_ref(),
+                    event => event,
+                };
+                if matches!(call, AgentEvent::ToolCall { .. }) {
                     self.emit(event).await?;
                 }
             }

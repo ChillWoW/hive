@@ -3,7 +3,7 @@
 //! input fields, `plan` as a todo list, `usage_update` as context occupancy,
 //! `available_commands_update` as the session's commands.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 
 use outcode_proto::{AgentEvent, CommandKind, SlashCommand, TodoItem, TodoStatus, ToolCall};
 use serde_json::Value;
@@ -15,6 +15,13 @@ const OUTPUT_LIMIT: usize = 16 * 1024;
 const BUILTIN_COMMANDS: &[&str] = &["goal", "compact", "schedule", "browser", "plan"];
 
 /// Follows one session's updates across turns.
+///
+/// A subagent's calls arrive in the parent's stream, their ids prefixed by
+/// its own conversation's (`<child>:call_…`), with nothing tying them to the
+/// `invoke_subagent` that launched it: a child seen for the first time is
+/// taken to be the oldest launch still without one. `invoke_subagent`
+/// reports done as soon as it launches; the subagent runs on until the turn
+/// ends, which agy holds open for it, so its result waits for that.
 #[derive(Default)]
 pub(super) struct Normalizer {
     /// Each tool call's last decoded form, by id.
@@ -24,11 +31,44 @@ pub(super) struct Normalizer {
     /// Counts plans, so each turn's todo list is its own call.
     plans: u64,
     plan_open: bool,
+    /// Launches no child has been matched to yet, oldest first.
+    unmatched: VecDeque<String>,
+    /// Each child conversation's launching call.
+    children: HashMap<String, String>,
+    /// Launches whose result waits for the turn's end.
+    running: Vec<String>,
 }
 
 impl Normalizer {
     pub(super) fn start_turn(&mut self) {
         self.plan_open = false;
+    }
+
+    /// The turn ended: so did the subagents it launched.
+    pub(super) fn end_turn(&mut self, interrupted: bool) -> Vec<AgentEvent> {
+        self.unmatched.clear();
+        self.running
+            .drain(..)
+            .map(|id| AgentEvent::ToolResult {
+                id,
+                is_error: interrupted,
+                output: None,
+            })
+            .collect()
+    }
+
+    /// The launching call of the child whose call `id` is, if it's one.
+    fn parent_of(&mut self, id: &str) -> Option<String> {
+        let (child, _) = id.split_once(':')?;
+        if child.len() != 36 || child.matches('-').count() != 4 {
+            return None;
+        }
+        if let Some(parent) = self.children.get(child) {
+            return Some(parent.clone());
+        }
+        let parent = self.unmatched.pop_front().or_else(|| self.running.last().cloned())?;
+        self.children.insert(child.to_owned(), parent.clone());
+        Some(parent)
     }
 
     /// The call `id` as last decoded.
@@ -64,21 +104,50 @@ impl Normalizer {
         let Some(id) = update["toolCallId"].as_str().filter(|i| !i.is_empty()) else {
             return Vec::new();
         };
-        let mut events = Vec::new();
+        let parent = self.parent_of(id);
         let call = decode(update, self.calls.get(id));
+        let status = update["status"].as_str().unwrap_or_default();
+
+        // The main agent's step list is the turn's todo list.
+        if parent.is_none()
+            && let ToolCall::Todo { items } = &call
+        {
+            self.finished.insert(id.to_owned());
+            return self.todo(items.clone());
+        }
+
+        let mut events = Vec::new();
         if self.calls.get(id) != Some(&call) && !self.finished.contains(id) {
+            if matches!(call, ToolCall::Subagent { .. }) && !self.calls.contains_key(id) && parent.is_none() {
+                self.unmatched.push_back(id.to_owned());
+                self.running.push(id.to_owned());
+            }
             self.calls.insert(id.to_owned(), call.clone());
             events.push(AgentEvent::ToolCall { id: id.to_owned(), call });
         }
-        let status = update["status"].as_str().unwrap_or_default();
-        if matches!(status, "completed" | "failed") && self.finished.insert(id.to_owned()) {
+        let launched = self.running.iter().any(|r| r == id);
+        if matches!(status, "completed" | "failed")
+            && !(launched && status == "completed")
+            && self.finished.insert(id.to_owned())
+        {
+            self.running.retain(|r| r != id);
+            self.unmatched.retain(|r| r != id);
             events.push(AgentEvent::ToolResult {
                 id: id.to_owned(),
                 is_error: status == "failed",
                 output: output(update),
             });
         }
-        events
+        match parent {
+            Some(parent) => events
+                .into_iter()
+                .map(|event| AgentEvent::Subagent {
+                    parent_tool_id: parent.clone(),
+                    event: Box::new(event),
+                })
+                .collect(),
+            None => events,
+        }
     }
 
     fn plan(&mut self, update: &Value) -> Vec<AgentEvent> {
@@ -92,6 +161,11 @@ impl Normalizer {
                 })
             })
             .collect();
+        self.todo(items)
+    }
+
+    /// The turn's todo list, as it stands now.
+    fn todo(&mut self, items: Vec<TodoItem>) -> Vec<AgentEvent> {
         if !self.plan_open {
             self.plans += 1;
             self.plan_open = true;
@@ -224,12 +298,24 @@ fn decode(update: &Value, earlier: Option<&ToolCall>) -> ToolCall {
             },
         },
         (_, "invoke_subagent") => ToolCall::Subagent {
-            description: field(input, &["TaskName", "Description", "Name", "description"])
-                .or_else(|| update["title"].as_str().map(str::to_owned))
+            description: field(input, &["Role", "TaskName", "Description", "Name", "description"])
                 .unwrap_or_else(|| "Subagent".into()),
             model: None,
             prompt: field(input, &["Prompt", "Task", "Instructions", "prompt"]),
-            agent: field(input, &["Agent", "AgentName", "agent"]),
+            // `self`: a copy of the agent itself.
+            agent: field(input, &["TypeName", "Agent", "AgentName", "agent"]).filter(|a| a != "self"),
+        },
+        (_, "update_steps") => ToolCall::Todo {
+            items: list(&input["steps"])
+                .iter()
+                .filter_map(|step| {
+                    let text = step["title"].as_str().or_else(|| step["content"].as_str())?.trim();
+                    (!text.is_empty()).then(|| TodoItem {
+                        text: text.to_owned(),
+                        status: TodoStatus::parse(step["status"].as_str().unwrap_or_default()),
+                    })
+                })
+                .collect(),
         },
         _ => {
             if let (Some(server), Some(tool)) = (field(input, &["ServerName"]), field(input, &["ToolName"])) {
@@ -397,6 +483,70 @@ mod tests {
         n.start_turn();
         let AgentEvent::ToolCall { id, .. } = &n.update(&plan)[0] else { panic!() };
         assert_eq!(id, "agy-plan-2");
+    }
+
+    /// As agy 1.5.18 streams a subagent: the launch ends at once, then the
+    /// child's calls follow under its conversation's id.
+    #[test]
+    fn a_subagents_calls_go_under_its_launch_until_the_turn_ends() {
+        let mut n = Normalizer::default();
+        let launch = json!({ "sessionUpdate": "tool_call", "toolCallId": "call_1", "name": "invoke_subagent",
+            "status": "in_progress", "kind": "other", "title": "Run invoke_subagent",
+            "rawInput": { "Prompt": "List the files.", "Role": "Directory File Lister", "TypeName": "self" } });
+        assert_eq!(
+            n.update(&launch),
+            [AgentEvent::ToolCall {
+                id: "call_1".into(),
+                call: ToolCall::Subagent {
+                    description: "Directory File Lister".into(),
+                    model: None,
+                    prompt: Some("List the files.".into()),
+                    agent: None,
+                }
+            }]
+        );
+        let mut launched = launch.clone();
+        launched["sessionUpdate"] = json!("tool_call_update");
+        launched["status"] = json!("completed");
+        assert!(n.update(&launched).is_empty(), "still running");
+
+        let child = "661701a4-3ae9-412a-8d5f-ad29664b368b:call_9";
+        let exec = json!({ "sessionUpdate": "tool_call", "toolCallId": child, "name": "run_command",
+            "status": "pending", "kind": "execute", "rawInput": { "CommandLine": "Get-ChildItem" } });
+        assert_eq!(
+            n.update(&exec),
+            [AgentEvent::Subagent {
+                parent_tool_id: "call_1".into(),
+                event: Box::new(AgentEvent::ToolCall { id: child.into(), call: ToolCall::Exec { command: "Get-ChildItem".into() } }),
+            }]
+        );
+        let done = json!({ "sessionUpdate": "tool_call_update", "toolCallId": child, "status": "completed",
+            "rawOutput": { "output": "a.py" } });
+        assert_eq!(
+            n.update(&done),
+            [AgentEvent::Subagent {
+                parent_tool_id: "call_1".into(),
+                event: Box::new(AgentEvent::ToolResult { id: child.into(), is_error: false, output: Some("a.py".into()) }),
+            }]
+        );
+        assert_eq!(
+            n.end_turn(false),
+            [AgentEvent::ToolResult { id: "call_1".into(), is_error: false, output: None }]
+        );
+        assert!(n.end_turn(false).is_empty());
+    }
+
+    #[test]
+    fn update_steps_is_the_turns_todo_list() {
+        let mut n = Normalizer::default();
+        let steps = json!({ "sessionUpdate": "tool_call", "toolCallId": "s1", "name": "update_steps", "kind": "other",
+            "status": "completed", "rawInput": { "steps": [
+                { "status": "done", "title": "Inspect" }, { "status": "in_progress", "title": "Summarize" } ] } });
+        let AgentEvent::ToolCall { id, call: ToolCall::Todo { items } } = &n.update(&steps)[0] else { panic!() };
+        assert_eq!(id, "agy-plan-1");
+        assert_eq!(items[0].status, TodoStatus::Completed);
+        assert_eq!(items[1].status, TodoStatus::InProgress);
+        assert_eq!(n.update(&steps).len(), 1, "no result of its own");
     }
 
     #[test]
