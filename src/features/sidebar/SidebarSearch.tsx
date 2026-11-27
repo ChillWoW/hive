@@ -20,7 +20,7 @@ export function SidebarSearch() {
     };
 
     return (
-        <div className="flex shrink-0 flex-col gap-1 px-2 pb-1">
+        <div className="flex shrink-0 flex-col gap-1 px-2 pt-2 pb-1">
             <button
                 type="button"
                 onClick={() => chats.startNew()}

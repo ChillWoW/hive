@@ -9,9 +9,7 @@ import { useShortcut } from "@/keybindings";
 import { cn } from "@/lib/cn";
 import { ContextMenu, DotMatrixSpinner, IconButton, iconButtonClassName, Menu, Tooltip } from "@/ui";
 import { isLoneNewTab, tabs, useTabsStore, type Tab } from "./store";
-
-/** How far the pointer moves before a press on a tab becomes a drag, in px. */
-const DRAG_SLOP = 4;
+import { useRevealActive, useSidewaysWheel, useTabDrag } from "./strip";
 
 /**
  * The open chats as tabs across the top bar, browser-like: a press shows one,
@@ -46,35 +44,10 @@ export function TabStrip() {
     useShortcut("goToTab8", () => tabs.show(7));
     useShortcut("goToLastTab", () => tabs.show(-1));
 
-    // The shown tab scrolls into view, and stays there as the strip narrows.
-    useEffect(() => {
-        const root = scroller.current;
-        if (!root) return;
-        const reveal = () =>
-            root
-                .querySelector<HTMLElement>("[data-tab-active]")
-                ?.scrollIntoView({ block: "nearest", inline: "nearest" });
-        reveal();
-        const observer = new ResizeObserver(reveal);
-        // The tabs too: they can shrink while the strip keeps its width.
-        for (const el of [root, ...Array.from(root.children)]) observer.observe(el);
-        return () => observer.disconnect();
-    }, [active, list.length, overflowing]);
+    useRevealActive(scroller, `${active}:${list.length}:${overflowing}`);
+    useSidewaysWheel(scroller);
 
-    // The wheel scrolls the strip sideways; non-passive so the page doesn't scroll too.
-    useEffect(() => {
-        const el = scroller.current;
-        if (!el) return;
-        const onWheel = (event: WheelEvent) => {
-            if (el.scrollWidth <= el.clientWidth || event.deltaX !== 0) return;
-            event.preventDefault();
-            el.scrollLeft += event.deltaY;
-        };
-        el.addEventListener("wheel", onWheel, { passive: false });
-        return () => el.removeEventListener("wheel", onWheel);
-    }, []);
-
-    const drag = useTabDrag(scroller);
+    const drag = useTabDrag(scroller, tabs.move);
 
     return (
         <div data-tauri-drag-region className="flex h-full min-w-0 flex-1 items-center gap-1">
@@ -185,46 +158,6 @@ function TabIcon({ tab, harness, working }: { tab: Tab; harness: HarnessId | und
             )}
         </span>
     );
-}
-
-/**
- * Press-and-drag reordering: past `DRAG_SLOP` the pressed tab moves to
- * whichever slot the pointer is over, live. Pointer events, since the
- * webview's HTML drag and drop is the window's file drop on Windows.
- */
-function useTabDrag(scroller: RefObject<HTMLDivElement | null>) {
-    return (event: ReactPointerEvent<HTMLElement>, index: number) => {
-        if (event.button !== 0) return;
-        const target = event.currentTarget;
-        const startX = event.clientX;
-        let from = index;
-        let dragging = false;
-
-        const onMove = (move: PointerEvent) => {
-            if (!dragging && Math.abs(move.clientX - startX) < DRAG_SLOP) return;
-            if (!dragging) {
-                dragging = true;
-                target.setPointerCapture(move.pointerId);
-            }
-            const slots = Array.from(scroller.current?.querySelectorAll<HTMLElement>("[role=tab]") ?? []);
-            const to = slots.findIndex((slot) => {
-                const rect = slot.getBoundingClientRect();
-                return move.clientX >= rect.left && move.clientX < rect.right;
-            });
-            if (to >= 0 && to !== from) {
-                tabs.move(from, to);
-                from = to;
-            }
-        };
-        const onUp = () => {
-            window.removeEventListener("pointermove", onMove);
-            window.removeEventListener("pointerup", onUp);
-            window.removeEventListener("pointercancel", onUp);
-        };
-        window.addEventListener("pointermove", onMove);
-        window.addEventListener("pointerup", onUp);
-        window.addEventListener("pointercancel", onUp);
-    };
 }
 
 function TabItem({

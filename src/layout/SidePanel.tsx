@@ -51,7 +51,7 @@ export function SidePanel({
             <div
                 style={{ width: contentWidth }}
                 className={cn(
-                    "flex h-full shrink-0 flex-col border-border pt-2",
+                    "flex h-full shrink-0 flex-col border-border",
                     side === "left" ? "border-r" : "border-l"
                 )}
             >
