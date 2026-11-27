@@ -25,7 +25,7 @@ const INDENT = 12;
 
 const rowClass = (selected: boolean) =>
     cn(
-        "flex h-6 w-full cursor-default select-none items-center gap-1.5 rounded-md pr-2 text-xs outline-none",
+        "flex h-6 w-full cursor-pointer select-none items-center gap-1.5 rounded-md pr-2 text-xs outline-none",
         "transition-colors duration-75 focus-visible:ring-1 focus-visible:ring-muted/50",
         selected ? "bg-hover text-text" : "text-text/85 hover:bg-raised hover:text-text"
     );
