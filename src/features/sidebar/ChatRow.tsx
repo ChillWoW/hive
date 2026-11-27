@@ -149,7 +149,8 @@ export function ChatRow({
     );
 }
 
-function ChatMenuItems({
+/** A chat's menu: Rename, Pin, Archive, Delete. The sidebar's rows and the chat's header share it. */
+export function ChatMenuItems({
     chat,
     onRename,
     onDelete

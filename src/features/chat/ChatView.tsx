@@ -1,12 +1,13 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type Ref } from "react";
-import type { Attachment, BackgroundTask, Message } from "@/proto";
+import { CaretDownIcon } from "@phosphor-icons/react";
+import type { Attachment, BackgroundTask, Chat, Message } from "@/proto";
 import { cn } from "@/lib/cn";
 import { chats, useActiveChat, useChatsStore, useSession, workDir } from "@/features/chats/store";
 import { Composer, ContextMeter, useComposerStore } from "@/features/composer";
 import { WorkspacePicker } from "@/features/git";
 import { HarnessMark } from "@/features/models";
-import { UNTITLED } from "@/features/sidebar/ChatRow";
-import { toast } from "@/ui";
+import { ChatMenuItems, DeleteChatDialog, UNTITLED } from "@/features/sidebar";
+import { Menu, toast, useInlineRename } from "@/ui";
 import { useChatConfig } from "./config";
 import { AssistantMessage } from "./transcript/AssistantMessage";
 import { ChatCwd, KnownFiles, LiveTasks } from "./transcript/context";
@@ -232,7 +233,8 @@ export function ChatView() {
 /**
  * The main column's head while a chat is open: its title after its agent's
  * mark, then the subagent threads open in it, `title / a / b`. Each crumb
- * but the last steps back out to it.
+ * but the last steps back out to it. With no subagent open, the title opens
+ * the chat's menu (the sidebar row's "⋯"); Rename edits it in place.
  */
 export function ChatHeader() {
     const chat = useActiveChat();
@@ -248,7 +250,8 @@ export function ChatHeader() {
     ];
     return (
         <header className="flex h-9 min-w-0 shrink-0 items-center gap-1.5 px-3">
-            <HarnessMark harness={chat.config.harness} className="size-3.5 shrink-0" />
+            {/* With no subagent open, the title's menu carries the mark. */}
+            {path.length > 0 && <HarnessMark harness={chat.config.harness} className="size-3.5 shrink-0" />}
             {crumbs.map((name, depth) => {
                 const last = depth === crumbs.length - 1;
                 return (
@@ -257,7 +260,9 @@ export function ChatHeader() {
                         className={cn("flex min-w-0 items-center gap-1.5 text-[13px]", !last && "max-w-[40%] shrink")}
                     >
                         {depth > 0 && <span className="shrink-0 text-muted/60">/</span>}
-                        {last ? (
+                        {last && depth === 0 ? (
+                            <TitleMenu chat={chat} title={name} />
+                        ) : last ? (
                             <h1 className="truncate text-text">{name}</h1>
                         ) : (
                             <button
@@ -272,6 +277,85 @@ export function ChatHeader() {
                 );
             })}
         </header>
+    );
+}
+
+/** The header's title as the chat's menu: Rename (in place), Pin, Archive, Delete. */
+function TitleMenu({ chat, title }: { chat: Chat; title: string }) {
+    const [renaming, setRenaming] = useState(false);
+    const [deleting, setDeleting] = useState<Chat | null>(null);
+    // Rename puts the caret in the field; the closing menu mustn't take it back.
+    const keepFocus = useRef(false);
+    const finalFocus = () => {
+        const keep = keepFocus.current;
+        keepFocus.current = false;
+        return !keep;
+    };
+
+    return (
+        <>
+            {renaming ? (
+                <span className="-mx-1.5 flex h-6 min-w-0 items-center gap-1.5 rounded-md bg-raised px-1.5 ring-1 ring-border">
+                    <HarnessMark harness={chat.config.harness} className="size-3.5 shrink-0" />
+                    <TitleField key={chat.id} chat={chat} onDone={() => setRenaming(false)} />
+                </span>
+            ) : (
+                <Menu>
+                    <Menu.Trigger
+                        aria-label={`Options for ${title}`}
+                        className={cn(
+                            "-mx-1.5 flex h-6 min-w-0 cursor-pointer items-center gap-1.5 rounded-md px-1.5 text-text outline-none",
+                            "transition-colors hover:bg-hover focus-visible:bg-hover data-[popup-open]:bg-hover"
+                        )}
+                    >
+                        <HarnessMark harness={chat.config.harness} className="size-3.5 shrink-0" />
+                        <h1 className="truncate">{title}</h1>
+                        <CaretDownIcon className="-ml-0.5 size-3 shrink-0 text-muted" weight="bold" />
+                    </Menu.Trigger>
+                    <Menu.Content finalFocus={finalFocus} className="w-40 min-w-0">
+                        <ChatMenuItems
+                            chat={chat}
+                            onRename={() => {
+                                keepFocus.current = true;
+                                setRenaming(true);
+                            }}
+                            onDelete={() => setDeleting(chat)}
+                        />
+                    </Menu.Content>
+                </Menu>
+            )}
+            <DeleteChatDialog chat={deleting} onClose={() => setDeleting(null)} />
+        </>
+    );
+}
+
+/** The header's title, editable: Enter or leaving saves, Escape cancels. */
+function TitleField({ chat, onDone }: { chat: Chat; onDone: () => void }) {
+    const { finish, value, inputProps } = useInlineRename({
+        onEnter: () => end(true),
+        onEscape: () => end(false),
+        onBlur: () => end(true)
+    });
+
+    const end = (save: boolean) =>
+        finish(() => {
+            const next = value();
+            // Blank keeps the current title.
+            if (save && next && next !== chat.title) {
+                chats.rename(chat.id, next).catch((error) => console.warn("[chat]", error));
+            }
+            onDone();
+        });
+
+    return (
+        <input
+            {...inputProps}
+            defaultValue={chat.title ?? ""}
+            placeholder={UNTITLED}
+            aria-label="Chat title"
+            spellCheck={false}
+            className="w-72 min-w-0 bg-transparent text-[13px] text-text outline-none placeholder:text-muted/75"
+        />
     );
 }
 
