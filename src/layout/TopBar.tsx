@@ -13,11 +13,12 @@ import { FakeTrafficLights } from "./FakeTrafficLights";
 import { WindowControls } from "./WindowControls";
 
 /**
- * How far macOS's traffic lights reach into the bar: three 12pt buttons from
- * x=14 (`tauri.macos.conf.json`), so the last ends near 67. The window is
+ * How far macOS's traffic lights reach into the bar: three buttons from x=14
+ * (`tauri.macos.conf.json`), 14pt and ~23pt apart since macOS 26, so the last
+ * ends near 75; this leaves the first toggle a ~9pt gap. The window is
  * frameless, but macOS draws them over the webview anyway.
  */
-const MAC_TRAFFIC_LIGHTS = "w-[64px]";
+const MAC_TRAFFIC_LIGHTS = "w-[76px]";
 
 /** A top bar button's inset that centres it over the dock below. */
 const OVER_DOCK = (DOCK_WIDTH - 24) / 2;
