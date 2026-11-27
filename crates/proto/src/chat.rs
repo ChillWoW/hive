@@ -216,6 +216,9 @@ pub struct Session {
     /// The user stopped the last turn: the queue waits until a turn they
     /// start ends (or one is sent now).
     pub held: bool,
+    /// The running turn waits on the user: an approval, a question or a plan.
+    #[serde(default)]
+    pub asking: bool,
     /// Work the agent left running in the background.
     pub tasks: Vec<BackgroundTask>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -242,6 +245,7 @@ impl Session {
     /// Nothing worth keeping: no turn, queue, tasks or reports.
     pub fn is_blank(&self) -> bool {
         !self.working
+            && !self.asking
             && self.queued.is_empty()
             && self.tasks.is_empty()
             && self.context.is_none()

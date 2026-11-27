@@ -117,6 +117,13 @@ export const useSession = (chatId: string | null | undefined) =>
 export const useWorking = (chatId: string | null | undefined) =>
     useChatsStore((s) => !!chatId && !!s.sessions[chatId]?.working);
 
+/** Whether the chat's turn waits on the user: an approval, a question, a plan or a secret. */
+export const useAsking = (chatId: string | null | undefined) =>
+    useChatsStore((s) => {
+        const session = chatId ? s.sessions[chatId] : undefined;
+        return !!session && (session.asking || session.secrets.length > 0);
+    });
+
 /** Chat actions, outside React too. Changes come back through the watcher. */
 export const chats = {
     select: (chatId: string | null) => useChatsStore.getState().select(chatId),

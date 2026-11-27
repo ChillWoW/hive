@@ -23,7 +23,8 @@ export type SidebarGroups = {
 
 /**
  * The sidebar's sections. A chat is in at most one: Archived if archived,
- * else Active while its turn runs or it's unread (`isUnread`), else Pinned if
+ * else Active while its turn runs or it's unread (`isUnread`), or another chat
+ * of its thread (its parent, a chat its agent started) is, else Pinned if
  * pinned, else its folder's project (none while that project is deleted).
  * Chats keep the store's order (most recently active first).
  *
@@ -54,9 +55,20 @@ export function useSidebarGroups(): SidebarGroups {
         // Folders only chats remember (not a deleted project's), at the bottom.
         const orphans: string[] = [];
 
+        // A thread: a chat and the chats its agent started. One of them
+        // active brings the whole thread to Active.
+        const ids = new Set(chats.map((c) => c.id));
+        const threadOf = (chat: Chat) =>
+            chat.parentChatId != null && ids.has(chat.parentChatId) ? chat.parentChatId : chat.id;
+        const activeThreads = new Set(
+            chats
+                .filter((c) => !c.archived && (working.has(c.id) || isUnread(c, seen)))
+                .map(threadOf)
+        );
+
         for (const chat of chats) {
             if (chat.archived) archived.push(chat);
-            else if (working.has(chat.id) || isUnread(chat, seen)) {
+            else if (activeThreads.has(threadOf(chat))) {
                 active.push(chat);
                 activeIn.set(chat.cwd, (activeIn.get(chat.cwd) ?? 0) + 1);
             } else if (chat.pinnedAt != null) pinned.push(chat);

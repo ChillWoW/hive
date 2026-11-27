@@ -21,9 +21,19 @@ import { StatusMark } from "./StatusMark";
  * What a sidebar row has no room for, shown in its hover card: the whole
  * title and its age, then the folder it works in (and its worktree's
  * branch), its model, the chat whose agent started it, and whether it's
- * working.
+ * working or waiting on the user.
  */
-export function ChatCard({ chat, title, working }: { chat: Chat; title: string; working: boolean }) {
+export function ChatCard({
+    chat,
+    title,
+    working,
+    asking
+}: {
+    chat: Chat;
+    title: string;
+    working: boolean;
+    asking: boolean;
+}) {
     const now = useMinuteClock();
     const catalog = useCatalog(harnessOf(chat.config));
     const model = resolveModel(catalog, chat.config);
@@ -63,7 +73,11 @@ export function ChatCard({ chat, title, working }: { chat: Chat; title: string; 
                         <span className="text-text/85">{parent ? parent.title?.trim() || "New chat" : "a deleted chat"}</span>
                     </Meta>
                 )}
-                {working && (
+                {asking ? (
+                    <Meta icon={<StatusMark status="asking" />}>
+                        <span className="text-text/85">{STATUS.asking.label}</span>
+                    </Meta>
+                ) : working && (
                     <Meta icon={<StatusMark status="working" />}>
                         <span className="text-text/85">{STATUS.working.label}</span>
                     </Meta>

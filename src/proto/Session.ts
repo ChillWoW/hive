@@ -24,6 +24,10 @@ queued: Array<QueuedPrompt>,
  */
 held: boolean, 
 /**
+ * The running turn waits on the user: an approval, a question or a plan.
+ */
+asking: boolean, 
+/**
  * Work the agent left running in the background.
  */
 tasks: Array<BackgroundTask>, context?: ContextWindow, 

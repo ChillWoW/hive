@@ -796,6 +796,7 @@ impl Engine {
         }
         state.update_session(&chat_id, |s| {
             s.working = false;
+            s.asking = false;
             s.tasks.clear();
         });
         if let Err(error) = self.next_queued(&mut state, &chat_id) {
@@ -867,7 +868,16 @@ impl Engine {
             return;
         };
         let tool_done = matches!(event, AgentEvent::ToolResult { .. });
+        let input = matches!(event, AgentEvent::InputRequested { .. } | AgentEvent::InputResolved { .. });
         if !self.record(watchers, turn, event) {
+            if input {
+                let asking = turn
+                    .assistant
+                    .parts
+                    .iter()
+                    .any(|p| matches!(p, MessagePart::Input { resolved: false, .. }));
+                state.update_session(chat_id, |s| s.asking = asking);
+            }
             if tool_done {
                 self.after_tool(&mut state, chat_id);
             }
@@ -892,6 +902,7 @@ impl Engine {
         }
         state.update_session(chat_id, |s| {
             s.working = false;
+            s.asking = false;
             // A hold lasts until a turn the user starts ends.
             s.held &= stopped;
         });

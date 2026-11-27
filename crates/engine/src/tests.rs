@@ -877,6 +877,7 @@ async fn waiting_returns_when_a_child_asks_something_new() {
 
     let status = engine.wait_child(&child, Duration::from_secs(5)).await.unwrap();
     assert_eq!(status.state, ChildState::WaitingOnUser);
+    assert!(engine.state().sessions[&child.id].asking, "the sidebar hears it asks");
     // Still waiting on the same question: that's no news.
     let status = engine.wait_child(&child, Duration::from_millis(50)).await.unwrap();
     assert_eq!(status.state, ChildState::WaitingOnUser);
@@ -884,6 +885,7 @@ async fn waiting_returns_when_a_child_asks_something_new() {
     engine.answer(&child.id, "r1", approve()).unwrap();
     let status = engine.wait_child(&child, Duration::from_secs(5)).await.unwrap();
     assert_eq!((status.state, status.reply.as_deref()), (ChildState::Idle, Some("echo: go")));
+    assert!(engine.state().sessions.get(&child.id).is_none_or(|s| !s.asking));
 }
 
 #[tokio::test]

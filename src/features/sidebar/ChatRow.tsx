@@ -9,7 +9,7 @@ import {
     PushPinSlashIcon,
     TrashIcon
 } from "@phosphor-icons/react";
-import { activity, chats, useChatsStore, useWorking } from "@/features/chats";
+import { activity, chats, useAsking, useChatsStore, useWorking } from "@/features/chats";
 import { handOff, handoffBlocked } from "@/features/chat/handoff";
 import { HarnessMark } from "@/features/models";
 import { ProjectIcon } from "@/features/projects";
@@ -48,6 +48,7 @@ export function ChatRow({
 }) {
     const active = useChatsStore((s) => s.activeChatId === chat.id);
     const working = useWorking(chat.id);
+    const asking = useAsking(chat.id);
     const renaming = useSidebarStore((s) => s.renaming === chat.id);
     const setRenaming = useSidebarStore((s) => s.setRenaming);
     const now = useMinuteClock();
@@ -58,7 +59,7 @@ export function ChatRow({
 
     // The open chat is being read, so it shows no unread dot.
     const unread = useSidebarStore((s) => !active && isUnread(chat, s.seen));
-    const status = working ? "working" : unread ? "unread" : "idle";
+    const status = asking ? "asking" : working ? "working" : unread ? "unread" : "idle";
     const title = chat.title?.trim() || UNTITLED;
 
     const startRename = () => {
@@ -152,7 +153,7 @@ export function ChatRow({
                 collisionPadding={12}
                 className="w-[284px] max-w-none p-3 font-normal"
             >
-                <ChatCard chat={chat} title={title} working={working} />
+                <ChatCard chat={chat} title={title} working={working} asking={asking} />
             </Tooltip.Content>
         </Tooltip>
     );

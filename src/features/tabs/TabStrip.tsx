@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type RefObject } from "react";
 import { CaretDownIcon, NotePencilIcon, PlusIcon, XIcon } from "@phosphor-icons/react";
-import { useChatsStore, useWorking } from "@/features/chats";
+import { useAsking, useChatsStore, useWorking } from "@/features/chats";
 import type { HarnessId } from "@/proto";
 import { HarnessMark } from "@/features/models";
 import { ChatCard } from "@/features/sidebar/ChatCard";
@@ -145,11 +145,14 @@ function OverflowItem({ tab }: { tab: Tab }) {
     );
 }
 
-/** A tab's mark: working dots, the new-chat pencil, or the provider's mark. */
+/** A tab's mark: a pulsing dot while it waits on the user, working dots, the new-chat pencil, or the provider's mark. */
 function TabIcon({ tab, harness, working }: { tab: Tab; harness: HarnessId | undefined; working: boolean }) {
+    const asking = useAsking(tab);
     return (
         <span className="flex w-3.5 shrink-0 justify-center">
-            {working ? (
+            {asking ? (
+                <span role="img" aria-label="Needs your answer" className="size-1.5 animate-pulse rounded-full bg-warning" />
+            ) : working ? (
                 <DotMatrixSpinner label="Working" className="size-2.5 text-text/85" />
             ) : tab === null ? (
                 <NotePencilIcon className="size-3.5" />
@@ -173,6 +176,7 @@ function TabItem({
 }) {
     const chat = useChatsStore((s) => (tab ? s.chats.find((c) => c.id === tab) : undefined));
     const working = useWorking(tab);
+    const asking = useAsking(tab);
     const [menuOpen, setMenuOpen] = useState(false);
     const title = tab === null ? UNTITLED : chat?.title?.trim() || UNTITLED;
 
@@ -240,7 +244,7 @@ function TabItem({
                     collisionPadding={12}
                     className="w-[284px] max-w-none p-3 font-normal"
                 >
-                    <ChatCard chat={chat} title={title} working={working} />
+                    <ChatCard chat={chat} title={title} working={working} asking={asking} />
                 </Tooltip.Content>
             )}
         </Tooltip>

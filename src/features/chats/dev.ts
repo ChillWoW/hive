@@ -88,7 +88,7 @@ function save(chat: Chat): Chat {
 }
 
 function sessionOf(chatId: string): Session {
-    return sessions.get(chatId) ?? { chatId, working: false, queued: [], held: false, tasks: [], commands: [], secrets: [] };
+    return sessions.get(chatId) ?? { chatId, working: false, asking: false, queued: [], held: false, tasks: [], commands: [], secrets: [] };
 }
 
 function setSession(chatId: string, patch: Partial<Session>) {
