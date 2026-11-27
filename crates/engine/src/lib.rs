@@ -29,6 +29,7 @@ use outcode_store::{Store, StoreError, Turn, new_id, now_ms};
 use tokio::sync::mpsc;
 
 mod branches;
+mod handoff;
 mod titles;
 
 pub type WatchId = u64;
@@ -44,6 +45,10 @@ pub enum EngineError {
     NotFound(String),
     #[error("the chat's agent isn't running")]
     NotRunning,
+    #[error("Wait for the agent to finish first.")]
+    Busy,
+    #[error("Send a prompt first.")]
+    NothingToHandOff,
     #[error(transparent)]
     Git(#[from] GitError),
 }
@@ -81,6 +86,8 @@ pub enum TextUse {
     Title,
     /// A worktree's semantic branch name, from the chat's first prompt.
     Branch,
+    /// A summary of a chat handed to another agent.
+    Handoff,
 }
 
 /// How chats' worktrees are made and cleaned up.
@@ -145,6 +152,9 @@ struct State {
     next_run: u64,
     /// Chats whose title is being written.
     titling: HashSet<String>,
+    /// Chats whose handoff summary is being written, and that handoff's id:
+    /// their prompts wait in the queue.
+    summarizing: HashMap<String, String>,
 }
 
 struct Live {
@@ -221,14 +231,16 @@ impl State {
 
 impl Engine {
     pub fn new(store: Store, hooks: Hooks) -> Self {
-        Self {
+        let engine = Self {
             shared: Arc::new(Shared {
                 store,
                 hooks,
                 state: Mutex::default(),
                 mcp: Mutex::default(),
             }),
-        }
+        };
+        engine.recover_handoffs();
+        engine
     }
 
     /// Launches `server` (Outcode's MCP server) beside each run started from now on.
@@ -411,9 +423,18 @@ impl Engine {
             live.handle.close();
         }
         state.sessions.remove(chat_id);
+        state.summarizing.remove(chat_id);
         self.store().delete_chat(chat_id)?;
         state.watchers.chats(ChatsUpdate::Removed { id: chat_id.into() });
-        if let Some((cwd, worktree)) = chat.and_then(|c| Some((c.cwd, c.worktree?))) {
+        // A handoff shares its worktree: it stays while another chat works in it.
+        let shared = |root: &str| {
+            self.store()
+                .chats()
+                .is_ok_and(|chats| chats.iter().any(|c| c.worktree.as_ref().is_some_and(|w| w.root == root)))
+        };
+        if let Some((cwd, worktree)) = chat.and_then(|c| Some((c.cwd, c.worktree?)))
+            && !shared(&worktree.root)
+        {
             let delete_branch = (self.shared.hooks.worktrees)().delete_branch;
             tokio::spawn(async move {
                 let cwd = Path::new(&cwd);
@@ -447,7 +468,8 @@ impl Engine {
             return Err(EngineError::NotFound(chat_id.into()));
         }
         let mut state = self.state();
-        if state.working(chat_id) {
+        // A handoff's summary being written holds prompts back too.
+        if state.working(chat_id) || state.summarizing.contains_key(chat_id) {
             let queued = QueuedPrompt {
                 id: new_id(),
                 prompt,
@@ -494,7 +516,7 @@ impl Engine {
             self.maybe_title(titling, chat_id, prompt);
         }
 
-        let Some(prompt) = prompt else {
+        let Some(mut prompt) = prompt else {
             // The agent's own turn: its run is live.
             if let Some(live) = runs.get_mut(chat_id) {
                 live.turn = Some(turn);
@@ -504,12 +526,31 @@ impl Engine {
             return Ok(());
         };
 
+        // A handoff not yet delivered goes first, to the agent only.
+        let handoff = self.with_pending_handoff(&chat, &prompt);
+        if let Some(with_context) = &handoff {
+            prompt = with_context.clone();
+        }
+        let delivered = |engine: &Self, watchers: &mut Watchers| {
+            if handoff.is_none() {
+                return;
+            }
+            match engine.store().update_chat(chat_id, |chat| {
+                if let Some(h) = chat.handoffs.last_mut() {
+                    h.delivered = true;
+                }
+            }) {
+                Ok(chat) => watchers.chats(ChatsUpdate::Upsert { chat }),
+                Err(error) => eprintln!("[engine] saving {chat_id}'s handoff: {error}"),
+            }
+        };
+
         if let Some(live) = runs.get_mut(chat_id)
             && live.handle.send(prompt.clone(), paths.clone())
         {
-
             live.turn = Some(turn);
             live.stopped = false;
+            delivered(self, watchers);
             state.update_session(chat_id, |s| s.working = true);
             return Ok(());
         }
@@ -562,6 +603,7 @@ impl Engine {
                     },
                 );
                 tokio::spawn(self.clone().pump(chat_id.into(), id, run.events));
+                delivered(self, watchers);
                 state.update_session(chat_id, |s| s.working = true);
             }
             Err(error) => {
@@ -669,13 +711,17 @@ impl Engine {
                 live.after_tool.clear();
                 Ok(())
             }
-            None => self.next_queued(state, chat_id),
+            // Waiting on a handoff's summary: it goes without.
+            None => {
+                self.skip_summary(state, chat_id);
+                self.next_queued(state, chat_id)
+            }
         }
     }
 
     /// Starts the queue's first prompt, unless it's held or a turn runs.
     fn next_queued(&self, state: &mut State, chat_id: &str) -> Result<()> {
-        if state.working(chat_id) {
+        if state.working(chat_id) || state.summarizing.contains_key(chat_id) {
             return Ok(());
         }
         let Some(session) = state.sessions.get(chat_id).filter(|s| !s.held && !s.queued.is_empty()) else {

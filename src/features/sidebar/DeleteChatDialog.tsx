@@ -1,4 +1,4 @@
-import { chats, useWorking } from "@/features/chats";
+import { chats, useChatsStore, useWorking } from "@/features/chats";
 import { useGitRepo } from "@/features/git";
 import { useSettingsStore } from "@/features/settings";
 import type { Chat } from "@/proto";
@@ -13,7 +13,11 @@ import { UNTITLED } from "./ChatRow";
 export function DeleteChatDialog({ chat, onClose }: { chat: Chat | null; onClose: () => void }) {
     const shown = useLastNonNull(chat);
     const working = useWorking(shown?.id);
-    const worktree = shown?.worktree;
+    // A handoff shares the worktree: it stays while another chat works in it.
+    const shared = useChatsStore((s) =>
+        s.chats.some((c) => c.id !== shown?.id && !!c.worktree && c.worktree.root === shown?.worktree?.root)
+    );
+    const worktree = shared ? undefined : shown?.worktree;
     const changes = useGitRepo(chat ? worktree?.path : null)?.changes ?? 0;
     const deleteBranch = useSettingsStore((s) => s.settings.worktrees.deleteBranch);
 

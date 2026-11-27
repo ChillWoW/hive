@@ -4,8 +4,9 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use crate::agent::{AgentEvent, BackgroundTask, SlashCommand};
+use crate::git::GitFileState;
 use crate::message::{Attachment, Message};
-use crate::model::ChatConfig;
+use crate::model::{ChatConfig, HarnessId};
 
 /// A conversation with an agent in one folder.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
@@ -41,6 +42,10 @@ pub struct Chat {
     /// missing for a chat in `cwd`'s own checkout.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub worktree: Option<Worktree>,
+    /// Where the chat moved to another agent, oldest first ([`Handoff`]).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[ts(as = "Option<Vec<Handoff>>")]
+    pub handoffs: Vec<Handoff>,
 }
 
 impl Chat {
@@ -66,6 +71,83 @@ pub struct Worktree {
     pub branch: String,
     /// What the branch was made from: a branch name or a commit.
     pub base: String,
+}
+
+/// A chat handed to another agent: the next prompt carries what came before
+/// (a summary by the text generation model, the files changed) to an agent
+/// that hasn't seen it. Either the chat itself moved on (`from_chat_id`
+/// missing), or a new chat continues another, in its folder and worktree.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(optional_fields)]
+pub struct Handoff {
+    pub id: String,
+    /// The chat this one continues; it may have been deleted since.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub from_chat_id: Option<String>,
+    /// Its title then, for when it's gone.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub from_title: Option<String>,
+    pub from_harness: HarnessId,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub from_model: Option<String>,
+    /// The old agent's session, restored if the chat moves back to it before
+    /// its next prompt.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub from_session_id: Option<String>,
+    pub to_harness: HarnessId,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub to_model: Option<String>,
+    /// The chat's last message as it was handed off, which the transcript
+    /// shows it under; missing for a new chat's, shown at its top.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub after_message_id: Option<String>,
+    pub status: HandoffStatus,
+    /// Markdown; none while it's written or when that failed (the latest
+    /// messages go instead).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub summary: Option<String>,
+    /// Files the old agent edited, then the checkout's other uncommitted
+    /// changes; paths relative to the checkout's top folder.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[ts(as = "Option<Vec<HandoffFile>>")]
+    pub files: Vec<HandoffFile>,
+    /// The context went out with a prompt.
+    #[serde(default)]
+    pub delivered: bool,
+    /// Epoch millis.
+    pub created_at: i64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub enum HandoffStatus {
+    /// A text run is writing the summary; prompts wait for it.
+    Summarizing,
+    Ready,
+    /// No summary: the latest messages go instead.
+    Failed,
+}
+
+/// A file a handoff names.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(optional_fields)]
+pub struct HandoffFile {
+    pub path: String,
+    /// Its uncommitted change; none for a file edited and committed since.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub state: Option<GitFileState>,
+}
+
+/// Where `chat_handoff` continues a chat.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub enum HandoffMode {
+    /// The chat itself moves to the new agent.
+    SameChat,
+    /// A new chat continues it, in the same folder and worktree.
+    NewChat,
 }
 
 /// Asks `chat_create` for a worktree.

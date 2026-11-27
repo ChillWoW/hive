@@ -4,6 +4,7 @@ import type {
     Chat,
     ChatConfig,
     ChatsUpdate,
+    HandoffMode,
     HarnessId,
     InputResponse,
     MessagesUpdate,
@@ -64,6 +65,14 @@ export const chatsApi = {
     /** What the chat runs on; its live run picks it up from the next prompt. */
     setConfig: (chatId: string, config: ChatConfig) =>
         backend<Chat>("chat_set_config", { chatId, config }, () => dev.update(chatId, { config })),
+
+    /**
+     * Hands the chat to the agent `config` runs on, in the chat itself or a
+     * new one; resolves to the chat that continues. Its next prompt carries
+     * a summary of what came before (prompts sent meanwhile wait for it).
+     */
+    handoff: (chatId: string, config: ChatConfig, mode: HandoffMode) =>
+        backend<Chat>("chat_handoff", { chatId, config, mode }, () => dev.handoff(chatId, config, mode)),
 
     /** The reply streams to the chat's message watchers; while a turn runs it's queued. */
     send: (chatId: string, prompt: string, attachments: Attachment[] = []) =>

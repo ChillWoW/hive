@@ -3,7 +3,7 @@ import type { EditorView } from "@codemirror/view";
 import { ArrowUpIcon, PaperclipIcon, StopIcon } from "@phosphor-icons/react";
 import type { Attachment, ChatConfig, SlashCommand } from "@/proto";
 import { AttachmentChip, attachFile, isImage, useImageViewer } from "@/features/chats";
-import { harnessOf, ModelPicker } from "@/features/models";
+import { harnessOf, ModelPicker, type PickerHandoff } from "@/features/models";
 import { useSettingsStore, type BusySend } from "@/features/settings";
 import { cn } from "@/lib/cn";
 import { useResizeObserver } from "@/lib/useResizeObserver";
@@ -91,6 +91,7 @@ export function Composer({
     cwd = "",
     config,
     onConfigChange,
+    handoff,
     busy = false,
     onSend,
     onStop,
@@ -103,6 +104,8 @@ export function Composer({
     cwd?: string;
     config: ChatConfig;
     onConfigChange: (config: ChatConfig) => void;
+    /** The chat can go to another model's agent: the model picker asks where. */
+    handoff?: PickerHandoff;
     /** The agent is working on a turn: a prompt sent now is queued. */
     busy?: boolean;
     /** False keeps the draft: the prompt couldn't be sent. */
@@ -613,7 +616,7 @@ export function Composer({
                         >
                             <AccessPicker config={config} onChange={onConfigChange} />
                             <span className="hidden flex-1 group-data-tall/deck:block" />
-                            <ModelPicker config={config} onChange={onConfigChange} />
+                            <ModelPicker config={config} onChange={onConfigChange} handoff={handoff} />
                             {busy && onStop && mode === "send" && (
                                 <Tooltip>
                                     <Tooltip.Trigger

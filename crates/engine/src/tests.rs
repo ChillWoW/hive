@@ -4,7 +4,8 @@ use std::time::Duration;
 use outcode_harness::mock::{Mock, Seen, Step, echo};
 use outcode_harness::{HarnessError, RunCommand};
 use outcode_proto::{
-    AgentEvent, ChatConfig, ChatsUpdate, DoneStatus, HarnessId, InputResponse, MessagePart, MessageStatus, MessagesUpdate,
+    AgentEvent, ChatConfig, ChatsUpdate, DoneStatus, HandoffMode, HandoffStatus, HarnessId, InputResponse, MessagePart,
+    MessageStatus, MessagesUpdate,
 };
 use outcode_store::Store;
 
@@ -624,4 +625,184 @@ async fn a_harness_thats_missing_ends_the_turn_with_an_error() {
     engine.send(&chat.id, "hi".into(), Vec::new()).unwrap();
     let messages = engine.store().messages(&chat.id).unwrap();
     assert!(matches!(&messages[1].parts[0], MessagePart::Error { message, .. } if message.contains("codex")));
+}
+
+/// An engine over a Claude and a Codex mock; text runs (handoff summaries
+/// only) on Claude answer `summary`, or are off without one.
+fn two_harnesses(summary: Option<&str>) -> (tempfile::TempDir, Engine, Arc<Seen>, Arc<Seen>) {
+    let claude = match summary {
+        Some(text) => Mock::new().text(text),
+        None => Mock::new(),
+    };
+    let codex = Mock::new().harness(HarnessId::Codex);
+    let (on_claude, on_codex) = (claude.seen(), codex.seen());
+    let dir = tempfile::tempdir().unwrap();
+    let summaries = summary.is_some();
+    let hooks = Hooks {
+        harnesses: vec![Arc::new(claude), Arc::new(codex)],
+        text_model: Box::new(move |kind| (summaries && kind == TextUse::Handoff).then(claude_text)),
+        idle: Box::new(|| Duration::from_secs(60)),
+        worktrees: Box::new(WorktreeOptions::default),
+    };
+    let engine = Engine::new(Store::open(dir.path()).unwrap(), hooks);
+    (dir, engine, on_claude, on_codex)
+}
+
+fn codex() -> ChatConfig {
+    ChatConfig {
+        harness: HarnessId::Codex,
+        ..ChatConfig::default()
+    }
+}
+
+#[tokio::test]
+async fn a_handoff_in_the_chat_sends_the_summary_with_the_next_prompt() {
+    let summary = "**Goal** Fix the login bug.\n\n**Next** Add a test.";
+    let (_dir, engine, _, on_codex) = two_harnesses(Some(summary));
+    let chat = engine.create_chat("/a".into(), ChatConfig::default()).unwrap();
+    engine.send(&chat.id, "fix the login bug".into(), Vec::new()).unwrap();
+    settle(&engine, &chat.id).await;
+    let reply_id = engine.store().messages(&chat.id).unwrap()[1].id.clone();
+
+    let moved = engine.handoff(&chat.id, codex(), HandoffMode::SameChat).await.unwrap();
+    assert_eq!(moved.id, chat.id);
+    assert_eq!(moved.config.harness, HarnessId::Codex);
+    assert_eq!(moved.session_id, None);
+    let handoff = &moved.handoffs[0];
+    assert_eq!(handoff.after_message_id.as_deref(), Some(reply_id.as_str()));
+    assert_eq!(handoff.from_session_id.as_deref(), Some("s1"));
+    assert_eq!(handoff.status, HandoffStatus::Summarizing);
+
+    // It waits for the summary, then goes with it.
+    engine.send(&chat.id, "carry on".into(), Vec::new()).unwrap();
+    until(|| !on_codex.runs().is_empty()).await;
+    settle(&engine, &chat.id).await;
+    let run = &on_codex.runs()[0];
+    assert!(run.prompt.starts_with("<handoff>"), "{}", run.prompt);
+    assert!(run.prompt.contains("(Claude Code)"));
+    assert!(run.prompt.contains(summary));
+    assert!(run.prompt.ends_with("</handoff>\n\nUser message:\ncarry on"));
+    assert_eq!(run.resume, None);
+
+    let messages = engine.store().messages(&chat.id).unwrap();
+    assert!(matches!(&messages[2].parts[0], MessagePart::Text { text, .. } if text == "carry on"));
+    let handoff = &engine.store().chat(&chat.id).unwrap().unwrap().handoffs[0];
+    assert_eq!(handoff.status, HandoffStatus::Ready);
+    assert!(handoff.delivered);
+
+    // Only once.
+    engine.send(&chat.id, "and then".into(), Vec::new()).unwrap();
+    settle(&engine, &chat.id).await;
+    let commands = on_codex.commands();
+    assert!(commands.iter().all(|c| !format!("{c:?}").contains("<handoff>")));
+}
+
+#[tokio::test]
+async fn a_handoff_to_a_new_chat_carries_the_latest_messages_without_a_summary() {
+    let (_dir, engine, on_claude, on_codex) = two_harnesses(None);
+    let chat = engine.create_chat("/a".into(), ChatConfig::default()).unwrap();
+    engine.rename(&chat.id, Some("Login Bug".into())).unwrap();
+    engine.send(&chat.id, "fix the login bug".into(), Vec::new()).unwrap();
+    settle(&engine, &chat.id).await;
+
+    let next = engine.handoff(&chat.id, codex(), HandoffMode::NewChat).await.unwrap();
+    assert_ne!(next.id, chat.id);
+    assert_eq!(next.title.as_deref(), Some("Login Bug"));
+    assert_eq!(next.handoffs[0].from_chat_id.as_deref(), Some(chat.id.as_str()));
+    assert_eq!(next.handoffs[0].after_message_id, None);
+    // The old chat is as it was.
+    let old = engine.store().chat(&chat.id).unwrap().unwrap();
+    assert_eq!(old.config.harness, HarnessId::Claude);
+    assert!(old.handoffs.is_empty());
+
+    engine.send(&next.id, "carry on".into(), Vec::new()).unwrap();
+    until(|| !on_codex.runs().is_empty()).await;
+    settle(&engine, &next.id).await;
+    let prompt = &on_codex.runs()[0].prompt;
+    assert!(prompt.contains("## Its latest messages"), "{prompt}");
+    assert!(prompt.contains("User:\nfix the login bug"));
+    assert!(prompt.contains("Assistant:\necho: fix the login bug"));
+    assert!(!prompt.contains("User:\ncarry on"));
+    assert_eq!(on_claude.runs().len(), 1);
+    let handoff = &engine.store().chat(&next.id).unwrap().unwrap().handoffs[0];
+    assert_eq!(handoff.status, HandoffStatus::Failed);
+    assert!(handoff.delivered);
+}
+
+#[tokio::test]
+async fn moving_back_before_a_prompt_takes_the_old_session_back() {
+    let (_dir, engine, on_claude, _) = two_harnesses(None);
+    let chat = engine.create_chat("/a".into(), ChatConfig::default()).unwrap();
+    engine.send(&chat.id, "one".into(), Vec::new()).unwrap();
+    settle(&engine, &chat.id).await;
+
+    engine.handoff(&chat.id, codex(), HandoffMode::SameChat).await.unwrap();
+    let back = engine
+        .handoff(&chat.id, ChatConfig::default(), HandoffMode::SameChat)
+        .await
+        .unwrap();
+    assert!(back.handoffs.is_empty());
+    assert_eq!(back.session_id.as_deref(), Some("s1"));
+
+    engine.send(&chat.id, "two".into(), Vec::new()).unwrap();
+    until(|| on_claude.runs().len() == 2).await;
+    settle(&engine, &chat.id).await;
+    let run = &on_claude.runs()[1];
+    assert_eq!(run.resume.as_deref(), Some("s1"));
+    assert_eq!(run.prompt, "two");
+}
+
+#[tokio::test]
+async fn a_handoff_waits_for_the_turn_and_a_prompt() {
+    let (_dir, engine, _, _) = two_harnesses(None);
+    let chat = engine.create_chat("/a".into(), ChatConfig::default()).unwrap();
+    assert!(matches!(
+        engine.handoff(&chat.id, codex(), HandoffMode::NewChat).await,
+        Err(EngineError::NothingToHandOff)
+    ));
+    engine.send(&chat.id, "one".into(), Vec::new()).unwrap();
+    assert!(matches!(
+        engine.handoff(&chat.id, codex(), HandoffMode::SameChat).await,
+        Err(EngineError::Busy)
+    ));
+}
+
+#[tokio::test]
+async fn another_model_of_the_same_harness_is_handed_off_in_a_new_session() {
+    let (_dir, engine, on_claude, _) = two_harnesses(None);
+    let opus = ChatConfig {
+        model: Some("opus".into()),
+        ..ChatConfig::default()
+    };
+    let sonnet = ChatConfig {
+        model: Some("sonnet".into()),
+        ..ChatConfig::default()
+    };
+    let chat = engine.create_chat("/a".into(), opus.clone()).unwrap();
+    engine.send(&chat.id, "one".into(), Vec::new()).unwrap();
+    settle(&engine, &chat.id).await;
+
+    // Same model: nothing to hand off.
+    let same = engine.handoff(&chat.id, opus.clone(), HandoffMode::SameChat).await.unwrap();
+    assert!(same.handoffs.is_empty());
+    assert_eq!(same.session_id.as_deref(), Some("s1"));
+
+    let moved = engine.handoff(&chat.id, sonnet, HandoffMode::SameChat).await.unwrap();
+    assert_eq!(moved.session_id, None);
+    assert_eq!(moved.handoffs[0].from_model.as_deref(), Some("opus"));
+    assert_eq!(moved.handoffs[0].to_model.as_deref(), Some("sonnet"));
+
+    engine.send(&chat.id, "two".into(), Vec::new()).unwrap();
+    until(|| on_claude.runs().len() == 2).await;
+    settle(&engine, &chat.id).await;
+    let run = &on_claude.runs()[1];
+    assert_eq!(run.resume, None);
+    assert_eq!(run.config.model.as_deref(), Some("sonnet"));
+    assert!(run.prompt.contains("model opus"), "{}", run.prompt);
+    assert!(run.prompt.contains("User:\none"));
+
+    // Back to Opus before a prompt would restore its session; after one, it's a new handoff.
+    let back = engine.handoff(&chat.id, opus, HandoffMode::SameChat).await.unwrap();
+    assert_eq!(back.handoffs.len(), 2);
+    assert_eq!(back.session_id, None);
 }

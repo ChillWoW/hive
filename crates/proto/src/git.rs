@@ -40,6 +40,18 @@ pub struct GitBranch {
     pub worktree: Option<String>,
 }
 
+/// A file's uncommitted change, as `git status` reports it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub enum GitFileState {
+    Added,
+    Modified,
+    Deleted,
+    Renamed,
+    Untracked,
+    Conflict,
+}
+
 /// A checkout's uncommitted changes, as the changes tab shows them.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]

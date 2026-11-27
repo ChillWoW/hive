@@ -12,7 +12,7 @@ use outcode_harness::Harness;
 use outcode_harness::codex::{Codex, Options as CodexOptions};
 use outcode_harness::claude::{Claude, Options as ClaudeOptions};
 use outcode_proto::{
-    Attachment, Catalog, Chat, ChatConfig, ChatsUpdate, HarnessId, InputResponse, MessagesUpdate, NewWorktree, SlashCommand,
+    Attachment, Catalog, Chat, ChatConfig, ChatsUpdate, HandoffMode, HarnessId, InputResponse, MessagesUpdate, NewWorktree, SlashCommand,
     WorktreeStep,
 };
 use outcode_store::Store;
@@ -169,6 +169,19 @@ pub fn chat_set_config(
     config: ChatConfig,
 ) -> Result<Chat, String> {
     engine.set_config(&chat_id, config).map_err(err)
+}
+
+/// Hands the chat to the agent `config` runs on, in the chat itself or a
+/// new one; returns the chat that continues. Its next prompt carries a
+/// summary of what came before.
+#[tauri::command]
+pub async fn chat_handoff(
+    engine: State<'_, Engine>,
+    chat_id: String,
+    config: ChatConfig,
+    mode: HandoffMode,
+) -> Result<Chat, String> {
+    engine.handoff(&chat_id, config, mode).await.map_err(err)
 }
 
 /// `harness`'s models, and whether its CLI is installed.

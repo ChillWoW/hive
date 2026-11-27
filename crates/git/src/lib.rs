@@ -13,7 +13,7 @@ use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::time::Duration;
 
-use outcode_proto::{GitBranch, GitChanges, GitRepo, Worktree};
+use outcode_proto::{GitBranch, GitChanges, GitFileState, GitRepo, Worktree};
 use tokio::process::Command;
 
 #[derive(Debug, thiserror::Error)]
@@ -345,6 +345,48 @@ pub async fn changes(cwd: &Path) -> Result<Option<GitChanges>, GitError> {
     Ok(Some(GitChanges { root, patch, skipped }))
 }
 
+/// The checkout `cwd` is in: its top folder and each uncommitted file
+/// (untracked ones included), paths relative to that folder; `None` outside
+/// a checkout.
+pub async fn status(cwd: &Path) -> Result<Option<(String, Vec<(String, GitFileState)>)>, GitError> {
+    let Some(root) = toplevel(cwd).await? else {
+        return Ok(None);
+    };
+    let out = git(
+        Path::new(&root),
+        &["-c", "core.quotePath=false", "status", "--porcelain=v1", "-z", "--untracked-files=all"],
+    )
+    .await?
+    .checked()?;
+    Ok(Some((root, parse_status(&out))))
+}
+
+/// `git status --porcelain=v1 -z`: `XY path`, a rename's or copy's old path
+/// after it as an entry of its own.
+fn parse_status(out: &str) -> Vec<(String, GitFileState)> {
+    let mut files = Vec::new();
+    let mut entries = out.split('\0').filter(|e| !e.is_empty());
+    while let Some(entry) = entries.next() {
+        let (Some(code), Some(path)) = (entry.get(..2), entry.get(3..)) else {
+            continue;
+        };
+        let (x, y) = (code.as_bytes()[0], code.as_bytes()[1]);
+        let state = match (x, y) {
+            (b'?', b'?') => GitFileState::Untracked,
+            (b'U', _) | (_, b'U') | (b'A', b'A') | (b'D', b'D') => GitFileState::Conflict,
+            (b'R' | b'C', _) | (_, b'R' | b'C') => {
+                entries.next();
+                GitFileState::Renamed
+            }
+            (b'A', _) => GitFileState::Added,
+            (b'D', _) | (_, b'D') => GitFileState::Deleted,
+            _ => GitFileState::Modified,
+        };
+        files.push((path.to_owned(), state));
+    }
+    files
+}
+
 // Worktrees
 
 /// A branch name from free text: its first few words, lowercased, as
@@ -562,6 +604,22 @@ pub async fn remove_worktree(cwd: &Path, worktree: &Worktree) -> Result<(), GitE
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn status_lines_are_parsed() {
+        let out = " M src/a.rs\0?? new.txt\0R  b.rs\0old b.rs\0A  c.rs\0 D d.rs\0UU e.rs\0";
+        assert_eq!(
+            parse_status(out),
+            [
+                ("src/a.rs".into(), GitFileState::Modified),
+                ("new.txt".into(), GitFileState::Untracked),
+                ("b.rs".into(), GitFileState::Renamed),
+                ("c.rs".into(), GitFileState::Added),
+                ("d.rs".into(), GitFileState::Deleted),
+                ("e.rs".into(), GitFileState::Conflict),
+            ]
+        );
+    }
 
     /// A repository with one commit on `main`; `None` when git isn't installed.
     async fn fixture() -> Option<tempfile::TempDir> {

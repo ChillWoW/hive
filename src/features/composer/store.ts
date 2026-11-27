@@ -103,9 +103,20 @@ export const useDraft = (chatId: string | null) =>
 
 /** Same actions outside React. */
 export const composer = {
+    draft: (chatId: string | null) => useComposerStore.getState().drafts[keyOf(chatId)] ?? "",
     setDraft: (chatId: string | null, text: string) =>
         useComposerStore.getState().setDraft(chatId, text),
-    focus: () => useComposerStore.getState().focus()
+    focus: () => useComposerStore.getState().focus(),
+    /** Moves a chat's unsent text and files to another, as a handoff to a new chat does. */
+    moveDraft: (from: string, to: string) => {
+        const state = useComposerStore.getState();
+        const text = state.drafts[keyOf(from)] ?? "";
+        const files = state.attachments[keyOf(from)] ?? [];
+        state.setDraft(to, text);
+        state.setAttachments(to, files);
+        state.setDraft(from, "");
+        state.setAttachments(from, []);
+    }
 };
 
 const NO_ATTACHMENTS: Attachment[] = [];

@@ -1,12 +1,15 @@
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
+    ArrowsLeftRightIcon,
     CaretRightIcon,
+    ChatsIcon,
+    ClockCounterClockwiseIcon,
     CheckIcon,
     LightningIcon,
     MagnifyingGlassIcon,
     StarIcon
 } from "@phosphor-icons/react";
-import type { Catalog, ChatConfig, HarnessId, Model, ReasoningLevel } from "@/proto";
+import type { Catalog, ChatConfig, HandoffMode, HarnessId, Model, ReasoningLevel } from "@/proto";
 import { cn } from "@/lib/cn";
 import { Popover } from "@base-ui/react/popover";
 import { Tooltip } from "@/ui";
@@ -63,6 +66,12 @@ function matches(row: Row, query: string) {
  * first level). Picking a model keeps the card open so its effort can be
  * set next.
  *
+ * Given `handoff` (a chat with a conversation to carry on), picking another
+ * model asks where to continue first: in this chat or a new one, either way
+ * in a new session with a summary of it, since another model would get the
+ * whole history again uncached. Another model of the same harness can also
+ * keep the session.
+ *
  * Elsewhere (Settings › Chats), `placement` and `triggerClassName` fit it
  * to a form; `modelOnly` drops effort and fast mode, for runs that take
  * neither (text generation); `harnesses` limits what it lists.
@@ -73,7 +82,8 @@ export function ModelPicker({
     placement = "top",
     triggerClassName,
     modelOnly = false,
-    harnesses = HARNESSES
+    harnesses = HARNESSES,
+    handoff
 }: {
     config: ChatConfig;
     onChange: (config: ChatConfig) => void;
@@ -81,6 +91,7 @@ export function ModelPicker({
     triggerClassName?: string;
     modelOnly?: boolean;
     harnesses?: HarnessId[];
+    handoff?: PickerHandoff;
 }) {
     const catalogs = useCatalogs();
     const harness = harnessOf(config);
@@ -97,6 +108,12 @@ export function ModelPicker({
     const showEffort = !modelOnly && !!model?.reasoningLevels.length;
     const [open, setOpen] = useState(false);
     const [side, setSide] = useState<Side | null>(null);
+    // Another model, waiting on where to continue.
+    const [pending, setPending] = useState<{ config: ChatConfig; model: Model } | null>(null);
+    const toggleSide = (next: Side) => {
+        setPending(null);
+        setSide((s) => (s === next ? null : next));
+    };
 
     if (!catalog || !model) {
         return (
@@ -112,7 +129,10 @@ export function ModelPicker({
             onOpenChange={(next) => {
                 setOpen(next);
                 if (next) void refreshCatalog();
-                else setSide(null);
+                else {
+                    setSide(null);
+                    setPending(null);
+                }
             }}
         >
             <Popover.Trigger
@@ -155,13 +175,37 @@ export function ModelPicker({
                             showFast={showFast}
                             showEffort={showEffort}
                             onPick={(row) => {
-                                const next = { ...config, harness: row.harness, model: row.model.id };
-                                onChange(fitConfig(catalogs[row.harness] ?? catalog, next));
+                                const next = fitConfig(catalogs[row.harness] ?? catalog, {
+                                    ...config,
+                                    harness: row.harness,
+                                    model: row.model.id
+                                });
+                                if (handoff) {
+                                    setSide(null);
+                                    setPending({ config: next, model: row.model });
+                                    return;
+                                }
+                                setPending(null);
+                                onChange(next);
                             }}
                             side={side}
-                            onToggleSide={(next) => setSide((s) => (s === next ? null : next))}
+                            onToggleSide={toggleSide}
                         />
                     </Popover.Popup>
+                    {pending && handoff && (
+                        <HandoffCard
+                            harness={harnessOf(pending.config)}
+                            model={pending.model}
+                            canKeep={harnessOf(pending.config) === harness}
+                            blocked={handoff.blocked}
+                            onSelect={(mode) => {
+                                if (mode === "keep") onChange(pending.config);
+                                else handoff.onHandoff(pending.config, mode);
+                                setPending(null);
+                                setOpen(false);
+                            }}
+                        />
+                    )}
                     {/* Siblings of the popup, which clips its overflow; the
                         positioner is what they're placed against. */}
                     {side === "fast" && showFast && (
@@ -198,6 +242,81 @@ export function ModelPicker({
 }
 
 const SEARCH_ID = "model-picker-search";
+
+/** A chat the picker can hand to another model's agent. */
+export type PickerHandoff = {
+    /** Why it can't be now (a turn running), else null. */
+    blocked: string | null;
+    onHandoff: (config: ChatConfig, mode: HandoffMode) => void;
+};
+
+/** A handoff, or (same harness) resuming the session on the new model. */
+type HandoffChoice = HandoffMode | "keep";
+
+const HANDOFF_CHOICES: { mode: HandoffChoice; label: string; hint: string; icon: typeof ChatsIcon }[] = [
+    { mode: "sameChat", label: "In this chat", hint: "New session, with a summary", icon: ArrowsLeftRightIcon },
+    { mode: "newChat", label: "In a new chat", hint: "This one stays as it is", icon: ChatsIcon },
+    { mode: "keep", label: "Keep the session", hint: "Full history, sent again uncached", icon: ClockCounterClockwiseIcon }
+];
+
+/**
+ * Where to continue on another model, beside the card's top: in this chat
+ * or a new one, its agent given a summary of the conversation; with
+ * `canKeep` (the same harness), also by resuming the session as it is.
+ */
+function HandoffCard({
+    harness,
+    model,
+    canKeep,
+    blocked,
+    onSelect
+}: {
+    harness: HarnessId;
+    model: Model;
+    canKeep: boolean;
+    blocked: string | null;
+    onSelect: (mode: HandoffChoice) => void;
+}) {
+    const choices = HANDOFF_CHOICES.filter((c) => canKeep || c.mode !== "keep");
+    return (
+        <div
+            role="group"
+            aria-label={`Continue in ${HARNESS_LABELS[harness]}`}
+            className={cn(
+                "pointer-events-auto absolute top-0 right-full mr-2 w-56",
+                "rounded-xl border border-border bg-surface p-1 shadow-lg shadow-shadow/40",
+                "transition-opacity duration-150 ease-out starting:opacity-0"
+            )}
+        >
+            <div className="flex items-center gap-1.5 px-2.5 pt-1.5 pb-1 text-xs text-muted/85">
+                <HarnessMark harness={harness} className="size-3.5 shrink-0" />
+                <span className="min-w-0 truncate">Continue with {model.label}</span>
+            </div>
+            {choices.map(({ mode, label, hint, icon: Icon }, i) => (
+                <button
+                    key={mode}
+                    type="button"
+                    // Resuming waits for a running turn on its own.
+                    disabled={!!blocked && mode !== "keep"}
+                    // Keyboard picks land here next.
+                    autoFocus={i === 0}
+                    onClick={() => onSelect(mode)}
+                    className={cn(
+                        "flex w-full items-center gap-2 rounded-[7px] px-2.5 py-1.5 text-left outline-none select-none",
+                        "text-text hover:bg-hover focus-visible:bg-hover disabled:pointer-events-none disabled:opacity-50"
+                    )}
+                >
+                    <Icon className="size-3.5 shrink-0 text-muted" />
+                    <span className="flex min-w-0 flex-col">
+                        <span className="text-sm">{label}</span>
+                        <span className="truncate text-[11px] text-muted/75">{hint}</span>
+                    </span>
+                </button>
+            ))}
+            {blocked && <p className="px-2.5 pt-1 pb-1.5 text-[11px] text-warning">{blocked}</p>}
+        </div>
+    );
+}
 
 /** The footer row whose card is open beside the picker. */
 type Side = "fast" | "effort";

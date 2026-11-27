@@ -4,6 +4,8 @@ import type {
     Chat,
     ChatConfig,
     ChatsUpdate,
+    Handoff,
+    HandoffMode,
     InputRequest,
     InputResponse,
     Message,
@@ -330,6 +332,29 @@ export const dev = {
         const root = `~/.outcode/worktrees/a1b2c3d4/${baseName(cwd) || "repo"}`;
         const chat = this.create(cwd, config);
         return save({ ...chat, worktree: { root, path: root, branch, base: worktree.base ?? "main" } });
+    },
+
+    /** A handoff without a summary: it's marked failed at once, so prompts go with the latest messages. */
+    handoff(chatId: string, config: ChatConfig, mode: HandoffMode): Chat {
+        const source = chatOf(chatId);
+        const handoff: Handoff = {
+            id: crypto.randomUUID(),
+            fromChatId: mode === "newChat" ? source.id : undefined,
+            fromTitle: source.title,
+            fromHarness: source.config.harness ?? "claude",
+            fromModel: source.config.model,
+            toHarness: config.harness ?? "claude",
+            toModel: config.model,
+            afterMessageId: mode === "sameChat" ? messages.get(chatId)?.at(-1)?.id : undefined,
+            status: "failed",
+            delivered: false,
+            createdAt: Date.now()
+        };
+        if (mode === "sameChat") {
+            return save({ ...source, config, handoffs: [...(source.handoffs ?? []), handoff] });
+        }
+        const chat = this.create(source.cwd, config);
+        return save({ ...chat, title: source.title, worktree: source.worktree, handoffs: [handoff] });
     },
 
     update(chatId: string, patch: Partial<Chat>): Chat {

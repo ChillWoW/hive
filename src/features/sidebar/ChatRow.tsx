@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import {
     ArchiveIcon,
     ArrowCounterClockwiseIcon,
+    ChatsIcon,
     DotsThreeIcon,
     PencilSimpleIcon,
     PushPinIcon,
@@ -9,7 +10,8 @@ import {
     TrashIcon
 } from "@phosphor-icons/react";
 import { activity, chats, useChatsStore, useWorking } from "@/features/chats";
-import { HarnessMark } from "@/features/models";
+import { handOff, handoffBlocked } from "@/features/chat/handoff";
+import { fitConfig, HARNESS_LABELS, HARNESSES, HarnessMark, useCatalogs } from "@/features/models";
 import { ProjectIcon } from "@/features/projects";
 import { cn } from "@/lib/cn";
 import { timeAgo, useMinuteClock } from "@/lib/time";
@@ -126,14 +128,14 @@ export function ChatRow({
                                 align="start"
                                 sideOffset={8}
                                 finalFocus={finalFocus}
-                                className="w-40 min-w-0"
+                                className="w-48 min-w-0"
                             >
                                 {items}
                             </Menu.Content>
                         </Menu>
                     )}
                 </ContextMenu.Trigger>
-                <ContextMenu.Content finalFocus={finalFocus} className="w-40 min-w-0">
+                <ContextMenu.Content finalFocus={finalFocus} className="w-48 min-w-0">
                     {items}
                 </ContextMenu.Content>
             </ContextMenu>
@@ -160,12 +162,33 @@ export function ChatMenuItems({
     onDelete: () => void;
 }) {
     const pinned = chat.pinnedAt != null;
+    // A new chat carries this one on: on its agent, or another installed one.
+    const working = useWorking(chat.id);
+    const catalogs = useCatalogs();
+    const blocked = handoffBlocked(working, chat.lastMessageAt != null);
+    const others = HARNESSES.filter((id) => id !== chat.config.harness && catalogs[id]?.installed);
     return (
         <>
             <Menu.Item onClick={onRename}>
                 <PencilSimpleIcon />
                 Rename
             </Menu.Item>
+            <Menu.Item disabled={!!blocked} onClick={() => void handOff(chat, chat.config, "newChat")}>
+                <ChatsIcon />
+                Continue in new chat
+            </Menu.Item>
+            {others.map((id) => (
+                <Menu.Item
+                    key={id}
+                    disabled={!!blocked}
+                    onClick={() =>
+                        void handOff(chat, fitConfig(catalogs[id]!, { ...chat.config, harness: id, model: undefined }), "newChat")
+                    }
+                >
+                    <HarnessMark harness={id} />
+                    Continue in {HARNESS_LABELS[id]}
+                </Menu.Item>
+            ))}
             {!chat.archived && (
                 <Menu.Item onClick={() => chats.setPinned(chat.id, !pinned).catch(warn)}>
                     {pinned ? <PushPinSlashIcon /> : <PushPinIcon />}

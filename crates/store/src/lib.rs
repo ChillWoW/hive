@@ -115,6 +115,7 @@ impl Store {
             created_at: now_ms(),
             last_message_at: None,
             worktree: None,
+            handoffs: Vec::new(),
         };
         self.save_chat(&chat)?;
         Ok(chat)

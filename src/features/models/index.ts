@@ -15,4 +15,4 @@ export {
 } from "./catalog";
 export { ClaudeMark } from "./ClaudeMark";
 export { HarnessMark } from "./HarnessMark";
-export { ModelPicker } from "./ModelPicker";
+export { ModelPicker, type PickerHandoff } from "./ModelPicker";

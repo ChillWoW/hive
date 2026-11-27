@@ -1,6 +1,6 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type Ref } from "react";
 import { CaretDownIcon } from "@phosphor-icons/react";
-import type { Attachment, BackgroundTask, Chat, Message } from "@/proto";
+import type { Attachment, BackgroundTask, Chat, ChatConfig, Handoff, HandoffMode, Message } from "@/proto";
 import { cn } from "@/lib/cn";
 import { chats, useActiveChat, useChatsStore, useSession, workDir } from "@/features/chats/store";
 import { Composer, ContextMeter, useComposerStore } from "@/features/composer";
@@ -19,6 +19,8 @@ import { UserMessage } from "./transcript/UserMessage";
 import { answer, queue, send, stop, useChatBusy, useChatStore } from "./store";
 import { setups, useChatSetup, useDraftSetup, type WorktreeSetup } from "./setup";
 import { WorktreeDivider } from "./transcript/WorktreeDivider";
+import { ContinuedDividers, HandoffDivider } from "./transcript/HandoffDivider";
+import { handOff, handoffBlocked } from "./handoff";
 import { pendingInput } from "./fold";
 import { InputCard } from "./InputCard";
 import { SecretCard } from "./SecretCard";
@@ -35,6 +37,7 @@ import { findSpawnIn, subagentName } from "./transcript/subagents";
 export const laneClassName = "mx-auto w-full max-w-3xl";
 
 const NO_TASKS: readonly BackgroundTask[] = [];
+const NO_HANDOFFS: readonly Handoff[] = [];
 
 /** How long the composer takes to move between the new-chat view's centre and a thread's foot. */
 const MORPH_MS = 320;
@@ -70,6 +73,18 @@ export function ChatView() {
     const waiting = lastReply?.status === "streaming" ? pendingInput(lastReply.parts) : undefined;
     // The subagent thread shown in place of the chat's, if any.
     const openSpawn = useChatsStore((s) => s.subagent.at(-1));
+
+    // A conversation to carry on: another model hands it off.
+    const hasPrompt = messages.some((m) => m.role === "user");
+    const handoff =
+        chat && hasPrompt
+            ? {
+                  blocked: handoffBlocked(busy, hasPrompt),
+                  onHandoff: (next: ChatConfig, mode: HandoffMode) => void handOff(chat, next, mode)
+              }
+            : undefined;
+    const handoffs = chat?.handoffs ?? NO_HANDOFFS;
+    const topHandoff = handoffs.find((h) => !h.afterMessageId);
 
     const onSend = (prompt: string, attachments: Attachment[]) => {
         // The draft stays until there's somewhere to send it.
@@ -110,6 +125,7 @@ export function ChatView() {
                 cwd={cwd}
                 config={config}
                 onConfigChange={setConfig}
+                handoff={handoff}
                 onSend={onSend}
                 onStop={stop}
                 busy={busy}
@@ -177,9 +193,16 @@ export function ChatView() {
     if (centred) {
         top = (
             <div className="flex min-h-0 flex-1 flex-col justify-end">
-                <h1 className="mb-8 text-center text-2xl font-medium tracking-tight text-text">
-                    What should we build?
-                </h1>
+                {topHandoff ? (
+                    // A new chat continuing another: where it came from.
+                    <div className={cn(laneClassName, "mb-6 px-6")}>
+                        <HandoffDivider handoff={topHandoff} />
+                    </div>
+                ) : (
+                    <h1 className="mb-8 text-center text-2xl font-medium tracking-tight text-text">
+                        What should we build?
+                    </h1>
+                )}
             </div>
         );
     } else if (pendingSetup) {
@@ -197,7 +220,9 @@ export function ChatView() {
                         {openSpawn ? (
                             <SubagentView id={openSpawn} messages={messages} />
                         ) : (
-                            <TranscriptScroller key={chat?.id} follow={messages} minimap={messages}>
+                            <TranscriptScroller key={chat?.id} follow={[messages, handoffs]} minimap={messages}>
+                                {/* A new chat's, continuing another, on top. */}
+                                {topHandoff && <HandoffDivider handoff={topHandoff} />}
                                 {messages.map((message, at) => (
                                     <Fragment key={message.id}>
                                         <MessageView message={message} />
@@ -205,8 +230,14 @@ export function ChatView() {
                                         {at === 0 && chat?.worktree && (
                                             <WorktreeDivider setup={chatSetup} worktree={chat.worktree} />
                                         )}
+                                        {handoffs
+                                            .filter((h) => h.afterMessageId === message.id)
+                                            .map((h) => (
+                                                <HandoffDivider key={h.id} handoff={h} />
+                                            ))}
                                     </Fragment>
                                 ))}
+                                {chat && <ContinuedDividers chatId={chat.id} />}
                             </TranscriptScroller>
                         )}
                     </LiveTasks>
@@ -312,7 +343,7 @@ function TitleMenu({ chat, title }: { chat: Chat; title: string }) {
                         <h1 className="truncate">{title}</h1>
                         <CaretDownIcon className="-ml-0.5 size-3 shrink-0 text-muted" weight="bold" />
                     </Menu.Trigger>
-                    <Menu.Content finalFocus={finalFocus} className="w-40 min-w-0">
+                    <Menu.Content finalFocus={finalFocus} className="w-48 min-w-0">
                         <ChatMenuItems
                             chat={chat}
                             onRename={() => {
