@@ -34,7 +34,7 @@ Branch `rework/app` is a from-scratch rebuild: app shell, settings, themes, font
 - `src/ui/` — shared UI kit (from the `vite-template` repo); reuse these before writing new primitives. Compound components: sub-parts hang off the root (`Modal.Content`, `Menu.Item`, `Input.Group`); sizes share one scale (`xs`–`xl`, 28–44px). Hooks live in their own `use*.ts`. The app is wrapped in `Tooltip.Provider` and `ModalStack` (`useModalStack()`) in `main.tsx`.
 - `src/keybindings/` — action registry (`actions.ts`) + runtime; bindings live in settings.
 - `src/lib/backend.ts` — use `backend(command, args, devFallback?)` instead of raw `invoke`.
-- `src-tauri/src/` — Tauri commands, registered in `lib.rs`: `chat.rs` (engine commands, watchers), `folders.rs`, `git.rs`, `files.rs`, `terminal.rs`, `settings/`, `themes.rs`, `fonts.rs`, `updater.rs`, `http.rs`.
+- `src-tauri/src/` — Tauri commands, registered in `lib.rs`: `chat.rs` (engine commands, watchers), `folders.rs`, `git.rs`, `files.rs`, `editor.rs` (file tabs: read, save with conflict checks), `terminal.rs`, `settings/`, `themes.rs`, `fonts.rs`, `updater.rs`, `http.rs`.
 - `crates/proto` — wire types; `cargo test -p outcode-proto` regenerates `src/proto/` (never edit by hand).
 - `crates/harness` — spawns agent CLIs, normalizes output to `AgentEvent`s; each CLI is a `Harness` (`claude::Claude`, `codex::Codex`; `mock::Mock` behind feature `mock` for engine tests), picked per chat by `ChatConfig.harness`. Live tests: `cargo test -p outcode-harness -- --ignored`.
 - `crates/git` — a folder's branches over the user's `git` CLI (list, switch, create, delete), and chats' worktrees (add, restore, remove).

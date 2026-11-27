@@ -1,6 +1,7 @@
 mod chat;
 mod claude;
 mod codex;
+mod editor;
 mod files;
 mod folders;
 mod fonts;
@@ -122,6 +123,9 @@ pub fn run() {
             git::git_switch_branch,
             git::git_create_branch,
             git::git_delete_branch,
+            editor::read_file,
+            editor::read_file_bytes,
+            editor::write_file,
             files::file_open,
             files::list_files,
             files::list_folder,

@@ -11,7 +11,15 @@ export type PanelTab = {
     detail?: string;
     /** Unsaved changes: a dot stands in for its × until hovered. */
     dirty?: boolean;
+    /** A file tab's file: `path` relative to `cwd`, `/`-separated. */
+    file?: { cwd: string; path: string };
 };
+
+/**
+ * Asked before a tab closes; true holds it open (it closes itself later,
+ * e.g. once its unsaved changes are saved). Set by the editor.
+ */
+let closeGuard: ((tab: PanelTab) => boolean) | null = null;
 
 type PanelTabsState = {
     /** In strip order. */
@@ -32,8 +40,16 @@ function setTabs(tabs: PanelTab[], activeId = state().activeId, fallback?: strin
     });
 }
 
+/** `tabs` less the ones closing; any the guard holds open stay. */
+function closing(tabs: PanelTab[], close: (tab: PanelTab, index: number) => boolean): PanelTab[] {
+    return tabs.filter((tab, i) => !close(tab, i) || !!closeGuard?.(tab));
+}
+
 /** Panel tab actions, outside React too. */
 export const panelTabs = {
+    setCloseGuard: (guard: typeof closeGuard) => {
+        closeGuard = guard;
+    },
     /** Opens a tab just after the shown one and shows it; returns its id. */
     open: (tab: Omit<PanelTab, "id">): string => {
         const { tabs, activeId } = state();
@@ -44,7 +60,7 @@ export const panelTabs = {
         setTabs(next, id);
         return id;
     },
-    /** Changes a tab's title, detail or dirty mark. */
+    /** Changes a tab's title, detail, dirty mark or file. */
     update: (id: string, patch: Partial<Omit<PanelTab, "id" | "kind">>) => {
         const { tabs } = state();
         const at = tabs.findIndex((t) => t.id === id);
@@ -55,25 +71,25 @@ export const panelTabs = {
         usePanelTabsStore.setState({ tabs: next });
     },
     select: (id: string) => usePanelTabsStore.setState({ activeId: id }),
-    /** Closing the shown tab shows its right neighbour, else its left. */
-    close: (id: string) => {
+    /**
+     * Closing the shown tab shows its right neighbour, else its left.
+     * `force` skips the guard (unsaved changes are thrown away).
+     */
+    close: (id: string, force = false) => {
         const { tabs } = state();
         const at = tabs.findIndex((t) => t.id === id);
-        if (at < 0) return;
+        const tab = tabs[at];
+        if (!tab || (!force && closeGuard?.(tab))) return;
         const rest = tabs.filter((t) => t.id !== id);
         setTabs(rest, undefined, rest[Math.min(at, rest.length - 1)]?.id);
     },
-    closeOthers: (id: string) => {
-        setTabs(
-            state().tabs.filter((t) => t.id === id),
-            id
-        );
-    },
+    closeOthers: (id: string) => setTabs(closing(state().tabs, (t) => t.id !== id), id),
     closeToRight: (id: string) => {
         const { tabs } = state();
-        setTabs(tabs.slice(0, tabs.findIndex((t) => t.id === id) + 1), undefined, id);
+        const at = tabs.findIndex((t) => t.id === id);
+        setTabs(closing(tabs, (_, i) => i > at), undefined, id);
     },
-    closeAll: () => setTabs([]),
+    closeAll: () => setTabs(closing(state().tabs, () => true)),
     /** Moves the tab at `from` to index `to`. */
     move: (from: number, to: number) => {
         const next = [...state().tabs];

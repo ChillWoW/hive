@@ -80,6 +80,18 @@
     }
 }
 
+/* Behind an image preview, so its transparent parts show as such. */
+@utility checkerboard {
+    background-color: var(--color-bg);
+    background-image: conic-gradient(
+        color-mix(in srgb, var(--color-text) 7%, transparent) 25%,
+        transparent 0 50%,
+        color-mix(in srgb, var(--color-text) 7%, transparent) 0 75%,
+        transparent 0
+    );
+    background-size: 16px 16px;
+}
+
 @utility shimmer {
     background-image: linear-gradient(
         90deg,

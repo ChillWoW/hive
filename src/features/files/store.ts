@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
+import { openFileTab } from "@/features/editor/open";
 import { ancestorsOf } from "./tree";
 
 type FilesState = {
@@ -53,6 +54,9 @@ export const files = {
         setExpanded(root, (open) => ancestorsOf(path).forEach((folder) => open.add(folder)));
         files.select(root, path);
     },
-    /** Picks a file. Opening it in an editor tab is still to come. */
-    open: (root: string, path: string) => files.select(root, path)
+    /** Picks a file and opens it in an editor tab. */
+    open: (root: string, path: string) => {
+        files.select(root, path);
+        openFileTab(root, path);
+    }
 };
