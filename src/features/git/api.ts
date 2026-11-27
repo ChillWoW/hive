@@ -79,6 +79,9 @@ export const gitApi = {
             "src/features/composer/Composer.tsx": "untracked",
             "package.json": "conflict"
         })),
+    /** The committed text of `path` (from `cwd`), `\n`-separated; null when it has none. */
+    headText: (cwd: string, path: string) =>
+        backend<string | null>("git_head_text", { cwd, path }, () => `// ${path}\n`),
     /** Null outside a checkout. */
     repo: (cwd: string) => backend<GitRepo | null>("git_repo", { cwd }, () => fakeRepo(cwd)),
     switchBranch: (cwd: string, name: string) =>

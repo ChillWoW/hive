@@ -16,10 +16,12 @@ import {
 } from "@codemirror/view";
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
+import { gitApi } from "@/features/git/api";
 import { refreshGitStatus } from "@/features/git/status";
 import { errorMessage } from "@/lib/errors";
 import type { FileText } from "@/proto";
 import { readFile, writeFile } from "./api";
+import { gitGutter, setGitBase } from "./gitGutter";
 import { languageOf } from "./language";
 import { searchExtension } from "./search";
 import { editorTheme } from "./theme";
@@ -87,6 +89,10 @@ const pendingReveal = new Map<string, LinePosition>();
 const scrollOnAttach = new Set<string>();
 /** Tabs to focus once their content is on screen (`focusWhenShown`). */
 const focusPending = new Set<string>();
+/** Each doc's latest read of its committed text: an older one that lands later is dropped. */
+const baseReads = new Map<string, number>();
+/** Past this a text isn't compared with its committed one. */
+const MAX_MARKED_LENGTH = 1024 * 1024;
 
 /**
  * A 1-based line and, optionally, column (UTF-16 units); `length` selects
@@ -133,6 +139,7 @@ const editableExtension = (editable: boolean) => [EditorState.readOnly.of(!edita
 function extensions(id: string, file: FileText): Extension[] {
     return [
         lineNumbers(),
+        gitGutter,
         highlightActiveLineGutter(),
         highlightSpecialChars(),
         history(),
@@ -176,11 +183,34 @@ function startEditor(id: string, file: FileText, text: string, path: string) {
     states.set(id, state);
     saved.set(id, state.doc);
     void loadLanguage(id, path);
+    void loadGitBase(id);
 }
 
 async function loadLanguage(id: string, path: string) {
     const support = await languageOf(path);
     dispatchTo(id, { effects: language.reconfigure(support ?? []) });
+}
+
+/**
+ * Reads the tab `id`'s committed text for its change marks: as it opens, and
+ * whenever that may be another now (a save, a look at the disk, a rename).
+ */
+async function loadGitBase(id: string) {
+    const doc = getDoc(id);
+    const state = currentState(id);
+    if (!doc || !state || state.doc.length > MAX_MARKED_LENGTH) return;
+    const read = (baseReads.get(id) ?? 0) + 1;
+    baseReads.set(id, read);
+    let text: string | null;
+    try {
+        text = await gitApi.headText(doc.cwd, doc.path);
+    } catch (error) {
+        // A failed read keeps the marks there were.
+        console.warn("[editor] committed text failed", error);
+        return;
+    }
+    if (baseReads.get(id) !== read || !currentState(id)) return;
+    dispatchTo(id, { effects: setGitBase.of(text === null ? null : Text.of(text.split("\n"))) });
 }
 
 /** Reads `path` for the tab `id`, once. */
@@ -222,6 +252,7 @@ export function moveDocs(cwd: string, from: string, to: string) {
         const path = to + doc.path.slice(from.length);
         setDoc(id, { path });
         void loadLanguage(id, path);
+        void loadGitBase(id);
     }
 }
 
@@ -234,6 +265,7 @@ export function dropDoc(id: string) {
     pendingReveal.delete(id);
     scrollOnAttach.delete(id);
     focusPending.delete(id);
+    baseReads.delete(id);
     useDocsStore.setState((s) => {
         const { [id]: _, ...docs } = s.docs;
         return { docs };
@@ -350,6 +382,7 @@ export async function save(id: string): Promise<boolean> {
             saved.set(id, text);
             // The file tree's mark for it may be another now.
             void refreshGitStatus(doc.cwd);
+            void loadGitBase(id);
             const now = currentState(id);
             setDoc(id, (d) => ({
                 saving: false,
@@ -428,6 +461,8 @@ export async function overwrite(id: string) {
 export async function checkDisk(id: string) {
     const doc = getDoc(id);
     if (!doc?.file || doc.phase !== "ready" || doc.saving) return;
+    // A commit changes what the marks compare with, not the file.
+    void loadGitBase(id);
     let file: FileText;
     try {
         file = await readFile(doc.cwd, doc.path);

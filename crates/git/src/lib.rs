@@ -345,6 +345,29 @@ pub async fn changes(cwd: &Path) -> Result<Option<GitChanges>, GitError> {
     Ok(Some(GitChanges { root, patch, skipped }))
 }
 
+/// Past this a committed file isn't compared with.
+const MAX_HEAD_TEXT_BYTES: usize = 2 * 1024 * 1024;
+
+/// The committed (`HEAD`) text of `path` (relative to `cwd`, `/`-separated),
+/// with `\n` line endings and no byte order mark; `None` when it has none:
+/// outside a checkout, not committed yet, binary or too large.
+pub async fn head_text(cwd: &Path, path: &str) -> Result<Option<String>, GitError> {
+    if !cwd.is_dir() {
+        return Ok(None);
+    }
+    let mut cmd = Command::from(command(cwd, &["cat-file", "blob", &format!("HEAD:./{path}")]));
+    cmd.kill_on_drop(true);
+    let out = cmd.output().await.map_err(spawn_error)?;
+    if !out.status.success() || out.stdout.len() > MAX_HEAD_TEXT_BYTES || out.stdout.contains(&0) {
+        return Ok(None);
+    }
+    let Ok(text) = String::from_utf8(out.stdout) else {
+        return Ok(None);
+    };
+    let text = text.strip_prefix('\u{feff}').unwrap_or(&text);
+    Ok(Some(text.replace("\r\n", "\n")))
+}
+
 /// The checkout `cwd` is in: its top folder and each uncommitted file
 /// (untracked ones included), paths relative to that folder; `None` outside
 /// a checkout.
@@ -659,6 +682,26 @@ mod tests {
             }
         }
         Some(dir)
+    }
+
+    #[tokio::test]
+    async fn head_text_is_the_committed_file() {
+        let Some(dir) = fixture().await else { return };
+        let path = dir.path();
+        std::fs::create_dir(path.join("src")).unwrap();
+        std::fs::write(path.join("src/a.txt"), "one\r\ntwo\r\n").unwrap();
+        for args in [&["add", "."][..], &["-c", "core.autocrlf=false", "commit", "-q", "-m", "a"]] {
+            assert!(git(path, args).await.unwrap().ok());
+        }
+        std::fs::write(path.join("src/a.txt"), "changed\n").unwrap();
+        std::fs::write(path.join("new.txt"), "new\n").unwrap();
+
+        assert_eq!(head_text(path, "src/a.txt").await.unwrap().as_deref(), Some("one\ntwo\n"));
+        // From a folder inside the checkout, by the path from there.
+        assert_eq!(head_text(&path.join("src"), "a.txt").await.unwrap().as_deref(), Some("one\ntwo\n"));
+        assert_eq!(head_text(path, "new.txt").await.unwrap(), None);
+        let plain = tempfile::tempdir().unwrap();
+        assert_eq!(head_text(plain.path(), "a.txt").await.unwrap(), None);
     }
 
     #[tokio::test]

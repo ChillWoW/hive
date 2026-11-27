@@ -142,6 +142,7 @@ pub fn run() {
             git::git_delete_branch,
             git::git_changes,
             git::git_status,
+            git::git_head_text,
             git::git_history,
             git::git_search_history,
             git::git_fetch_all,

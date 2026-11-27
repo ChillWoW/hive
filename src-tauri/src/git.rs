@@ -46,6 +46,14 @@ pub async fn git_status(cwd: String) -> Result<Option<HashMap<String, GitFileSta
     Ok(files.map(|files| files.into_iter().collect()))
 }
 
+/// The committed (`HEAD`) text of `path` (relative to `cwd`), for the editor's
+/// change marks; null when it has none.
+#[tauri::command]
+pub async fn git_head_text(cwd: String, path: String) -> Result<Option<String>, String> {
+    crate::editor::resolve(&cwd, &path)?;
+    outcode_git::head_text(Path::new(&cwd), &path).await.map_err(err)
+}
+
 /// `limit` commits of the checkout's history from `cursor` on (every branch,
 /// remote branch and tag, children first); null outside a checkout.
 #[tauri::command]
