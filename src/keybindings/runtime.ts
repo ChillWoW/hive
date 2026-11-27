@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef } from "react";
 import { useSettingsStore } from "@/features/settings/store";
+import { isMac } from "@/lib/platform";
 import { ACTIONS, type ActionId } from "./actions";
 import { canonical, shortcutFromEvent, stringifyShortcut } from "./shortcut";
 
@@ -61,7 +62,7 @@ function inScope(target: EventTarget | null, scope: "global" | "composer") {
  * The one keydown listener behind every shortcut. It listens on `window` in
  * the bubble phase, so a component that handles a key itself
  * (`preventDefault`) wins. With the settings window open, only its own
- * toggle runs. Mount once, at the root.
+ * toggle and `always` actions run. Mount once, at the root.
  */
 export function useKeybindingsRuntime() {
     useEffect(() => {
@@ -73,7 +74,7 @@ export function useKeybindingsRuntime() {
 
             for (const action of ACTIONS) {
                 if (canonical(settings.keyboard[action.id]) !== combo) continue;
-                if (isOpen && action.id !== "openSettings") continue;
+                if (isOpen && action.id !== "openSettings" && !action.always) continue;
                 if (!inScope(event.target, action.scope)) continue;
                 const run = handlers.get(action.id)?.at(-1);
                 if (!run) continue;
@@ -100,6 +101,7 @@ export function isAppShortcut(event: KeyboardEvent) {
     return ACTIONS.some(
         (action) =>
             action.scope === "global" &&
+            (isMac || !action.shellKeeps) &&
             canonical(keyboard[action.id]) === combo &&
             canRunAction(action.id)
     );

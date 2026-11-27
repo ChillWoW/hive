@@ -209,6 +209,7 @@ pub struct KeyboardSettings {
     pub new_terminal: String,
     pub show_changes: String,
     pub show_history: String,
+    pub refresh: String,
 }
 
 impl Default for KeyboardSettings {
@@ -237,6 +238,7 @@ impl Default for KeyboardSettings {
             new_terminal: "Mod+J".into(),
             show_changes: "Mod+Shift+G".into(),
             show_history: "Mod+Shift+H".into(),
+            refresh: "Mod+R".into(),
         }
     }
 }

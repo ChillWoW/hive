@@ -21,6 +21,10 @@ export type Action = {
     scope: "global" | "composer";
     /** Runs again while the keys are held. */
     repeats?: boolean;
+    /** Runs with the settings window open too. */
+    always?: boolean;
+    /** Off macOS a focused terminal keeps the keys: Ctrl+R searches the shell's history. */
+    shellKeeps?: boolean;
 };
 
 /** Order within a category on the settings page. A new one: a field in `KeyboardSettings`, then a row here. */
@@ -104,6 +108,16 @@ export const ACTIONS: readonly Action[] = [
         description: "Shows the chat you went back from",
         keywords: "forward next history navigate chat",
         scope: "global"
+    },
+    {
+        id: "refresh",
+        category: "general",
+        label: "Refresh",
+        description: "Reloads the window",
+        keywords: "refresh reload restart window page",
+        scope: "global",
+        always: true,
+        shellKeeps: true
     },
     {
         id: "newTab",
