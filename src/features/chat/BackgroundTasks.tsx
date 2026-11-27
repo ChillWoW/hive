@@ -7,7 +7,6 @@ import { formatElapsed, useNow } from "@/lib/time";
 import { chats, taskStartedAt, useChatsStore } from "@/features/chats/store";
 import { openTaskOutput } from "@/features/terminal";
 import { ActiveHarnessMark } from "@/features/models/ActiveHarnessMark";
-import { DotMatrixSpinner } from "@/ui";
 import { chipTriggerClassName, popupClassName } from "@/ui/chip";
 import { findSpawnIn, progressLine } from "./transcript/subagents";
 import type { ToolPart } from "./transcript/tools";
@@ -21,7 +20,7 @@ const KINDS: Record<BackgroundTaskKind, { icon: Icon; label: string }> = {
 
 /**
  * Work the agent left running between turns, as a chip in the row under the
- * composer: a dot matrix and how many run. Click opens the list: each task
+ * composer: how many run. Click opens the list: each task
  * with what it runs (an agent, what it last said), how long it has run, and
  * Stop; an agent's row opens its thread, a shell's its output in a tab.
  * Hidden while nothing runs.
@@ -41,10 +40,9 @@ export function BackgroundTasks({
         <Popover.Root open={open} onOpenChange={setOpen}>
             <Popover.Trigger
                 aria-label={`Background tasks: ${tasks.length} running`}
-                className={cn(chipTriggerClassName, "shrink-0 text-info hover:bg-info/12 hover:text-info data-[popup-open]:bg-info/12 data-[popup-open]:text-info")}
+                className={cn(chipTriggerClassName, "shrink-0 px-1.5 tabular-nums")}
             >
-                <DotMatrixSpinner interval={400} label="Running" className="size-2.5" />
-                <span className="tabular-nums">{tasks.length} running</span>
+                {tasks.length} running
             </Popover.Trigger>
             <Popover.Portal>
                 <Popover.Positioner side="top" align="end" sideOffset={8} collisionPadding={12}>
@@ -194,15 +192,12 @@ function TaskRow({
                     className="absolute inset-0 cursor-pointer rounded-md outline-none"
                 />
             )}
-            <span className="pointer-events-none relative inline-flex size-6 shrink-0 items-center justify-center rounded-full border border-border bg-bg">
+            <span className="pointer-events-none relative grid size-4 shrink-0 place-items-center">
                 {task.kind === "agent" ? (
                     <ActiveHarnessMark className="size-3.5" />
                 ) : (
-                    <Glyph className="size-3.5 text-muted" />
+                    <Glyph className="size-4 text-muted" />
                 )}
-                <span className="absolute -right-1 -bottom-1 grid size-3 place-items-center rounded-full bg-surface text-info">
-                    <DotMatrixSpinner interval={400} label="Running" className="size-[7px] gap-[0.5px]" />
-                </span>
             </span>
             <span className="pointer-events-none flex min-w-0 flex-1 flex-col">
                 <span className="truncate text-xs font-medium text-text">{title}</span>
