@@ -21,7 +21,7 @@ use std::time::Duration;
 use outcode_git::GitError;
 use outcode_harness::{Harness, HarnessError, Run, RunHandle};
 use outcode_proto::{
-    AgentEvent, Attachment, Chat, ChatConfig, ChatsUpdate, ContextWindow, DoneStatus, HarnessId, InputResponse, MessagesUpdate,
+    AgentEvent, Attachment, BackgroundTask, BackgroundTaskKind, Chat, ChatConfig, ChatsUpdate, ContextWindow, DoneStatus, HarnessId, InputResponse, MessagesUpdate,
     McpServer, MessagePart, NewWorktree, SecretRequest, WorktreeStep, has_running_spawn, has_spawn,
     QueuedPrompt, RunRequest, Session,
 };
@@ -39,6 +39,30 @@ pub type WatchId = u64;
 
 /// Ended turns kept for their background subagents to report into.
 const MAX_ENDED: usize = 8;
+
+/// What a background task goes by, to its agent.
+fn task_label(task: &BackgroundTask) -> String {
+    let kind = match task.kind {
+        BackgroundTaskKind::Agent => "agent",
+        BackgroundTaskKind::Shell => "command",
+        BackgroundTaskKind::Monitor => "monitor",
+        BackgroundTaskKind::Other => "task",
+    };
+    match task.description.trim() {
+        "" => format!("{kind} {}", task.id),
+        description => format!("{kind} {} ({description})", task.id),
+    }
+}
+
+/// Tells the agent its background work went down with the session: it was
+/// promised word of it, and none will come.
+fn lost_work_note(lost: &[String]) -> String {
+    format!(
+        "[Note from Outcode, not the user: the session restarted. This background work was still running and \
+         ended with it, unfinished; no completion notice will arrive for it: {}. Restart what you still need.]",
+        lost.join("; ")
+    )
+}
 
 #[derive(Debug, thiserror::Error)]
 pub enum EngineError {
@@ -166,6 +190,10 @@ struct State {
     /// Chats whose handoff summary is being written, and that handoff's id:
     /// their prompts wait in the queue.
     summarizing: HashMap<String, String>,
+    /// Background work a chat's run took down with it when it exited on its
+    /// own: its agent, still expecting to hear of it, is told with the next
+    /// prompt.
+    lost: HashMap<String, Vec<String>>,
 }
 
 struct Live {
@@ -184,8 +212,10 @@ struct Live {
     after_tool: Vec<String>,
     /// Turns finished, so an idle timer can tell whether another came since.
     finished: u64,
-    /// The chat's config changed mid-turn: the run closes once the turn ends,
-    /// and the next prompt resumes the session with the new one.
+    /// The chat's config changed while the run had a turn or background work
+    /// going: it closes once both are over, and the next prompt resumes the
+    /// session with the new one. A prompt sent while the work still runs is
+    /// refused, since restarting would end the work.
     stale: bool,
 }
 
@@ -416,8 +446,9 @@ impl Engine {
             }
             return Ok(chat);
         }
+        let busy = state.sessions.get(chat_id).is_some_and(|s| !s.tasks.is_empty());
         match state.runs.get_mut(chat_id) {
-            Some(live) if live.turn.is_some() => live.stale = true,
+            Some(live) if live.turn.is_some() || busy => live.stale = true,
             Some(_) => {
                 if let Some(live) = state.runs.remove(chat_id) {
                     live.handle.close();
@@ -441,6 +472,7 @@ impl Engine {
         }
         state.sessions.remove(chat_id);
         state.summarizing.remove(chat_id);
+        state.lost.remove(chat_id);
         self.store().delete_chat(chat_id)?;
         state.watchers.chats(ChatsUpdate::Removed { id: chat_id.into() });
         // A handoff shares its worktree: it stays while another chat works in it.
@@ -517,9 +549,11 @@ impl Engine {
         state.update_session(chat_id, |s| s.suggestion = None);
         let State {
             runs,
+            sessions,
             watchers,
             next_run,
             titling,
+            lost,
             ..
         } = &mut *state;
         for message in turn.user.iter().chain([&turn.assistant]) {
@@ -562,6 +596,29 @@ impl Engine {
             }
         };
 
+        // A run older than the chat's config makes way for a new one, unless
+        // that would end background work.
+        if runs.get(chat_id).is_some_and(|live| live.stale) {
+            if sessions.get(chat_id).is_some_and(|s| !s.tasks.is_empty()) {
+                for event in [
+                    AgentEvent::Error {
+                        message: "Background work is still running, and the chat's new model or settings would end it. \
+                                  Wait for it to finish, or stop it, then send this again."
+                            .into(),
+                    },
+                    AgentEvent::Done {
+                        status: DoneStatus::Errored,
+                    },
+                ] {
+                    self.record(watchers, &mut turn, event);
+                }
+                return Ok(());
+            }
+            if let Some(live) = runs.remove(chat_id) {
+                live.handle.close();
+            }
+        }
+
         if let Some(live) = runs.get_mut(chat_id)
             && live.handle.send(prompt.clone(), paths.clone())
         {
@@ -587,6 +644,9 @@ impl Engine {
                 self.record(watchers, &mut turn, event);
             }
             return Ok(());
+        }
+        if let Some(lost) = lost.remove(chat_id) {
+            prompt = format!("{}\n\n{prompt}", lost_work_note(&lost));
         }
         let request = RunRequest {
             cwd: chat.work_dir().to_owned(),
@@ -804,6 +864,15 @@ impl Engine {
         for mut last in live.ended {
             let _ = self.store().flush(&mut last);
         }
+        // It exited on its own, taking its background work along.
+        let lost: Vec<String> = state
+            .sessions
+            .get(&chat_id)
+            .map(|s| s.tasks.iter().map(task_label).collect())
+            .unwrap_or_default();
+        if !lost.is_empty() {
+            state.lost.insert(chat_id.clone(), lost);
+        }
         state.update_session(&chat_id, |s| {
             s.working = false;
             s.asking = false;
@@ -877,7 +946,12 @@ impl Engine {
                 return;
             }
         }
-        let State { runs, watchers, .. } = &mut *state;
+        let State {
+            runs,
+            sessions,
+            watchers,
+            ..
+        } = &mut *state;
         let live = runs.get_mut(chat_id).expect("checked above");
         let Some(turn) = live.turn.as_mut() else {
             return;
@@ -909,7 +983,8 @@ impl Engine {
             }
         }
         let stopped = std::mem::take(&mut live.stopped);
-        let stale = live.stale;
+        // Background work keeps a stale run up until it's over.
+        let stale = live.stale && !sessions.get(chat_id).is_some_and(|s| !s.tasks.is_empty());
         live.finished += 1;
         let finished = live.finished;
         if stale && let Some(live) = runs.remove(chat_id) {

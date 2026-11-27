@@ -94,8 +94,9 @@ export function foldEvent(parts: MessagePart[], event: AgentEvent): MessagePart[
             ];
         }
 
+        // Leads the reply: one learned of late already has its parts.
         case "backgroundTurn":
-            return [...parts, { kind: "wake", id: `w${parts.length}`, finished: event.finished }];
+            return [{ kind: "wake", id: `w${parts.length}`, finished: event.finished }, ...parts];
 
         case "subagent":
             return foldIntoSpawn(parts, event.parentToolId, event.event) ?? parts;

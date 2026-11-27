@@ -15,6 +15,11 @@ use super::wire::{Frame, ResultFrame};
 pub(super) struct TurnEnd {
     /// Why it failed, when it did.
     pub error: Option<String>,
+    /// Background work's end started the turn, not a prompt.
+    pub woke: bool,
+    /// It ran no model request and said nothing: the CLI settling a task,
+    /// not a turn of the agent's.
+    pub empty: bool,
 }
 
 /// A session's normalization state. Turn-scoped fields reset in
@@ -35,6 +40,9 @@ pub(super) struct Normalizer {
     /// background shells through the same subtype, so only these settle as
     /// subagents.
     spawns: HashSet<String>,
+    /// Ids of `Monitor` calls: the CLI lists a monitor as a `local_bash`
+    /// task, so only its launching call tells it from a shell.
+    monitors: HashSet<String>,
     /// The live background tasks, as last reported.
     background: Vec<BackgroundTask>,
     /// Task id → the tool call that started it (`task_started`, which may
@@ -43,8 +51,11 @@ pub(super) struct Normalizer {
     /// Task id → the file a background shell's output goes to, as its
     /// `Bash` result names it.
     task_outputs: HashMap<String, String>,
-    /// Tasks that ended since the last turn: what a turn the CLI starts on
-    /// its own is about.
+    /// Task id → what it is. Kept apart from `background`: a task leaves
+    /// that list before its `task_notification` arrives.
+    task_names: HashMap<String, String>,
+    /// Tasks that ended and no turn has been woken for yet. One that ends
+    /// mid-turn still wakes the agent once that turn is over.
     finished: Vec<FinishedTask>,
 }
 
@@ -105,6 +116,8 @@ impl Normalizer {
                         "tool_use" => {
                             if is_spawn(&block.name) {
                                 self.spawns.insert(block.id.clone());
+                            } else if block.name == "Monitor" {
+                                self.monitors.insert(block.id.clone());
                             }
                             out.push(attribute(
                                 parent,
@@ -196,14 +209,13 @@ impl Normalizer {
             // stops, then this arrives untagged.
             "task_notification" => {
                 if let Some(task) = &f.task_id {
-                    self.task_tools.remove(task);
+                    if let Some(tool) = self.task_tools.remove(task) {
+                        self.monitors.remove(&tool);
+                    }
                     self.task_outputs.remove(task);
+                    let name = self.task_names.remove(task);
                     if let Some(end) = f.status.as_deref().and_then(task_end) {
-                        let description = self
-                            .background
-                            .iter()
-                            .find(|t| &t.id == task)
-                            .map(|t| t.description.clone())
+                        let description = name
                             .filter(|d| !d.is_empty())
                             .or_else(|| f.summary.clone())
                             .unwrap_or_default();
@@ -228,30 +240,46 @@ impl Normalizer {
                 let Some(entries) = f.tasks else {
                     return Vec::new();
                 };
-                self.background = entries
-                    .into_iter()
-                    .filter(|e| !e.task_id.is_empty())
-                    .map(|e| BackgroundTask {
-                        kind: task_kind(&e.task_type),
+                let mut listed = Vec::new();
+                for e in entries.into_iter().filter(|e| !e.task_id.is_empty()) {
+                    if !e.description.is_empty() {
+                        self.task_names.insert(e.task_id.clone(), e.description.clone());
+                    }
+                    let tool = self.task_tools.get(&e.task_id);
+                    listed.push(BackgroundTask {
+                        kind: self.task_kind(&e.task_type, tool),
                         description: e.description,
-                        tool_call_id: self.task_tools.get(&e.task_id).cloned(),
+                        tool_call_id: tool.cloned(),
                         agent_type: e.subagent_type,
                         output_file: self.task_outputs.get(&e.task_id).cloned(),
                         id: e.task_id,
-                    })
-                    .collect();
+                    });
+                }
+                self.background = listed;
                 vec![self.background_event()]
             }
             "task_started" => {
                 let (Some(task), Some(tool)) = (f.task_id, f.tool_use_id) else {
                     return Vec::new();
                 };
-                // Listed already: report it again with its tool call.
+                if let Some(description) = f.description.filter(|d| !d.is_empty()) {
+                    self.task_names.entry(task.clone()).or_insert(description);
+                }
+                // Listed already: report it again with its tool call, which
+                // is what tells a monitor from a shell.
+                let monitor = self.monitors.contains(&tool);
                 let listed = self
                     .background
                     .iter_mut()
                     .find(|t| t.id == task && t.tool_call_id.is_none());
-                let changed = listed.map(|t| t.tool_call_id = Some(tool.clone())).is_some();
+                let changed = listed
+                    .map(|t| {
+                        t.tool_call_id = Some(tool.clone());
+                        if monitor {
+                            t.kind = BackgroundTaskKind::Monitor;
+                        }
+                    })
+                    .is_some();
                 self.task_tools.insert(task, tool);
                 if changed {
                     vec![self.background_event()]
@@ -330,7 +358,9 @@ impl Normalizer {
             output_tokens: f.usage.output_tokens,
         });
         let error = failed.then(|| result_error(f));
-        (out, Some(TurnEnd { error }))
+        let woke = f.origin.as_ref().is_some_and(|o| o.kind == "task-notification");
+        let empty = !failed && reply.is_none() && f.num_turns == Some(0);
+        (out, Some(TurnEnd { error, woke, empty }))
     }
 
     /// The context window of the model the turn ran on, from the result's
@@ -344,22 +374,31 @@ impl Normalizer {
         entry.get("contextWindow").and_then(Value::as_u64).filter(|n| *n > 0)
     }
 
-    /// A turn the CLI started on its own: what ended since the last turn,
-    /// for the turn they woke. Its `result` isn't shown as a reply.
+    /// A turn the CLI started on its own: what ended and woke it. Its
+    /// `result` isn't shown as a reply.
     pub fn start_background_turn(&mut self) -> Vec<FinishedTask> {
         self.quiet = true;
         std::mem::take(&mut self.finished)
     }
 
-    /// The turn ended: what ended during it was its to deal with.
+    /// The turn that just ended turned out to be one the CLI started on its
+    /// own, ahead of the prompt in flight: what woke it. The prompt's turn
+    /// comes next, into the same reply, as a new paragraph.
+    pub fn woke_before_prompt(&mut self) -> Vec<FinishedTask> {
+        self.spoke = false;
+        std::mem::take(&mut self.finished)
+    }
+
+    /// The turn ended. What ended during it stays: the CLI wakes the agent
+    /// for it next.
     pub fn end_turn(&mut self) {
         self.after_text = false;
         self.spoke = false;
         self.quiet = false;
-        self.finished.clear();
     }
 
     /// Whether background tasks are live.
+    #[cfg(test)]
     pub fn has_background(&self) -> bool {
         !self.background.is_empty()
     }
@@ -373,6 +412,19 @@ impl Normalizer {
             .iter_mut()
             .find(|t| t.id == task && t.output_file.is_none());
         listed.map(|t| t.output_file = Some(file.to_owned())).is_some()
+    }
+
+    /// A task's kind, from its `task_type` and the call that started it.
+    fn task_kind(&self, task_type: &str, tool: Option<&String>) -> BackgroundTaskKind {
+        if tool.is_some_and(|tool| self.monitors.contains(tool)) {
+            return BackgroundTaskKind::Monitor;
+        }
+        match task_type {
+            "local_agent" | "remote_agent" | "in_process_teammate" => BackgroundTaskKind::Agent,
+            "local_bash" => BackgroundTaskKind::Shell,
+            "monitor" | "monitor_mcp" => BackgroundTaskKind::Monitor,
+            _ => BackgroundTaskKind::Other,
+        }
     }
 
     fn background_event(&self) -> AgentEvent {
@@ -417,15 +469,6 @@ fn background_output(result: &str) -> Option<(&str, &str)> {
     Some((task, &rest[..end]))
 }
 
-/// A `background_tasks_changed` entry's `task_type`.
-fn task_kind(task_type: &str) -> BackgroundTaskKind {
-    match task_type {
-        "local_agent" | "remote_agent" | "in_process_teammate" => BackgroundTaskKind::Agent,
-        "local_bash" => BackgroundTaskKind::Shell,
-        "monitor" | "monitor_mcp" => BackgroundTaskKind::Monitor,
-        _ => BackgroundTaskKind::Other,
-    }
-}
 
 /// Subagent traffic arrives on the same stdout, tagged with the spawn call's
 /// id; it folds into the spawn, not the parent transcript.
@@ -647,7 +690,7 @@ mod tests {
             json!({ "type": "assistant", "message": { "content": [{ "type": "text", "text": "Hello" }] } }),
             success("Hello"),
         ]);
-        assert_eq!(end, Some(TurnEnd { error: None }));
+        assert_eq!(end, Some(TurnEnd { error: None, woke: false, empty: false }));
         assert_eq!(content(events), vec![text("Hel"), text("lo")]);
     }
 
@@ -810,14 +853,18 @@ mod tests {
             [AgentEvent::ToolResult { .. }, AgentEvent::BackgroundTasks { tasks }]
                 if tasks[0].output_file.as_deref() == Some("C:\\tmp\\claude\\tasks\\b1.output")
         ));
+        // The task leaves the list before it's reported ended, mid-turn; the
+        // turn's end doesn't spend it.
         feed(
             &mut n,
             &[
-                json!({ "type": "system", "subtype": "task_notification", "task_id": "b1", "status": "failed" }),
                 json!({ "type": "system", "subtype": "background_tasks_changed", "tasks": [] }),
+                json!({ "type": "system", "subtype": "task_notification", "task_id": "b1", "status": "failed",
+                        "summary": "Background command failed" }),
             ],
         );
         assert!(!n.has_background());
+        n.end_turn();
         assert_eq!(
             n.start_background_turn(),
             vec![FinishedTask {
@@ -828,6 +875,39 @@ mod tests {
         // The woken turn's result isn't a reply.
         let (events, _) = feed(&mut n, &[success("Checked the server.")]);
         assert_eq!(content(events), vec![]);
+    }
+
+    #[test]
+    fn a_monitor_is_told_from_a_shell_by_its_call() {
+        let mut n = Normalizer::default();
+        let (events, _) = feed(
+            &mut n,
+            &[
+                json!({ "type": "assistant", "message": { "content": [
+                    { "type": "tool_use", "id": "toolu_m", "name": "Monitor", "input": { "command": "tail -f log" } }
+                ] } }),
+                json!({ "type": "system", "subtype": "background_tasks_changed", "tasks": [
+                    { "task_id": "m1", "task_type": "local_bash", "description": "Watch the log" }
+                ] }),
+                json!({ "type": "system", "subtype": "task_started", "task_id": "m1", "tool_use_id": "toolu_m" }),
+            ],
+        );
+        let Some(AgentEvent::BackgroundTasks { tasks }) = events.last() else {
+            panic!("{events:?}");
+        };
+        assert_eq!(tasks[0].kind, BackgroundTaskKind::Monitor);
+    }
+
+    #[test]
+    fn a_result_says_when_background_work_started_its_turn() {
+        let woke = json!({ "type": "result", "subtype": "success", "result": "Done.", "num_turns": 1,
+                           "origin": { "kind": "task-notification" } });
+        let (_, end) = run(&[woke]);
+        assert_eq!(end, Some(TurnEnd { error: None, woke: true, empty: false }));
+        let settled = json!({ "type": "result", "subtype": "success", "result": "", "num_turns": 0,
+                              "origin": { "kind": "task-notification" } });
+        let (_, end) = run(&[settled]);
+        assert_eq!(end, Some(TurnEnd { error: None, woke: true, empty: true }));
     }
 
     #[test]
@@ -871,11 +951,11 @@ mod tests {
             "type": "result", "subtype": "success", "is_error": true,
             "result": "Invalid API key · Please run /login",
         })]);
-        assert_eq!(end, Some(TurnEnd { error: Some("Invalid API key · Please run /login".into()) }));
+        assert_eq!(end.and_then(|e| e.error).as_deref(), Some("Invalid API key · Please run /login"));
         let (_, end) = run(&[json!({
             "type": "result", "subtype": "error_during_execution", "errors": ["[ede_diagnostic] x", "boom"],
         })]);
-        assert_eq!(end, Some(TurnEnd { error: Some("boom".into()) }));
+        assert_eq!(end.and_then(|e| e.error).as_deref(), Some("boom"));
     }
 
     #[test]

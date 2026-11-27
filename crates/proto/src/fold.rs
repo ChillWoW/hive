@@ -143,12 +143,17 @@ pub fn fold_event(parts: &mut Vec<MessagePart>, event: &AgentEvent) {
             }
         }
 
+        // Leads the reply: one learned of late (the CLI ran it ahead of the
+        // prompt's turn) already has its parts.
         AgentEvent::BackgroundTurn { finished } => {
             let id = format!("w{}", parts.len());
-            parts.push(MessagePart::Wake {
-                id,
-                finished: finished.clone(),
-            });
+            parts.insert(
+                0,
+                MessagePart::Wake {
+                    id,
+                    finished: finished.clone(),
+                },
+            );
         }
 
         AgentEvent::Subagent { parent_tool_id, event } => {

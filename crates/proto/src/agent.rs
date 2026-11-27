@@ -423,7 +423,9 @@ pub enum AgentEvent {
     /// Session state, not transcript.
     BackgroundTasks { tasks: Vec<BackgroundTask> },
     /// The agent started a turn on its own, between the user's: background
-    /// work it waited on ended. Opens a reply with no prompt.
+    /// work it waited on ended. Opens a reply with no prompt. When the user
+    /// sent one just as it started, it comes late, into that prompt's reply:
+    /// what the reply holds so far was this turn, and the prompt's follows.
     BackgroundTurn { finished: Vec<FinishedTask> },
     /// A guess at the user's next prompt, after a completed turn (between
     /// turns). Session state, not transcript.

@@ -20,9 +20,14 @@
 //!   report within [`INTERRUPT_SETTLE`] is ended by the run itself.
 //!   Background agents and shells survive it (`perTaskStopAffordance`) and
 //!   are stopped one by one (`stop_task`).
-//! - When background work ends between turns the CLI starts a turn on its
-//!   own (a `system:init` with no prompt in flight): that's
-//!   [`AgentEvent::BackgroundTurn`].
+//! - When background work ends the CLI starts a turn on its own, once none
+//!   runs (a `system:init` with no prompt in flight): that's
+//!   [`AgentEvent::BackgroundTurn`]. One owed when a prompt is written runs
+//!   ahead of the prompt's turn and looks like it until its `result` says
+//!   what started it (`origin`): the event comes then, and the prompt's
+//!   turn goes on into the same reply.
+//! - A run that ends with background work live never reports it done; the
+//!   list is left as it was for the engine to tell the agent what it lost.
 //! - Prompt suggestions (`--prompt-suggestions`, and asked for in
 //!   `initialize`): the CLI's guess at the next prompt, a frame after a
 //!   completed turn's `result`, is [`AgentEvent::PromptSuggestion`].
@@ -317,6 +322,7 @@ fn start(request: RunRequest, binary: Option<&Path>, text: bool) -> Result<Run, 
         normalizer: Normalizer::default(),
         stderr,
         turns: 1,
+        woken: false,
         interrupts_sent: 0,
         controls_sent: 0,
         interrupt_deadline: None,
@@ -435,6 +441,8 @@ struct Session {
     stderr: StderrTail,
     /// Prompts written (or held) whose turn hasn't ended yet.
     turns: usize,
+    /// The turn running is one the CLI started on its own.
+    woken: bool,
     interrupts_sent: u64,
     /// Our own control requests, for unique ids.
     controls_sent: u64,
@@ -557,6 +565,7 @@ impl Session {
                     // turns and the CLI woke the model on its own.
                     if self.turns == 0 && self.stdin.is_some() {
                         self.turns = 1;
+                        self.woken = true;
                         let finished = self.normalizer.start_background_turn();
                         self.emit(AgentEvent::BackgroundTurn { finished }).await?;
                     }
@@ -574,6 +583,15 @@ impl Session {
                 let Some(end) = end else {
                     return Ok(());
                 };
+                // A turn background work woke, taken for the prompt's: the
+                // CLI ran it first. The prompt's own turn is still to come.
+                if end.woke && !self.woken && end.error.is_none() && self.interrupt_deadline.is_none() {
+                    if !end.empty {
+                        let finished = self.normalizer.woke_before_prompt();
+                        self.emit(AgentEvent::BackgroundTurn { finished }).await?;
+                    }
+                    return Ok(());
+                }
                 let status = match end.error {
                     // Stopping fails the turn; that's no error.
                     Some(_) if self.interrupt_deadline.is_some() => DoneStatus::Interrupted,
@@ -768,6 +786,7 @@ impl Session {
 
     async fn end_turn(&mut self, status: DoneStatus) -> Result<(), Gone> {
         self.turns = self.turns.saturating_sub(1);
+        self.woken = false;
         self.completed = status == DoneStatus::Completed && self.turns == 0;
         self.interrupt_deadline = None;
         self.normalizer.end_turn();
@@ -795,9 +814,6 @@ impl Session {
     async fn finish(mut self) {
         self.stdin = None;
         let status = wait_or_kill(&mut self.child).await;
-        if self.normalizer.has_background() {
-            let _ = self.events.send(AgentEvent::BackgroundTasks { tasks: Vec::new() }).await;
-        }
         if self.turns == 0 {
             return;
         }

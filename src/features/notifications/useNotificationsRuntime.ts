@@ -42,6 +42,8 @@ export function useNotificationsRuntime() {
                     if (status === "errored") return notify("error", chatId);
                     // Its queue goes on: not done yet.
                     if (sessions.get(chatId)?.queued.length) return;
+                    // Its agents work on in the background, and wake it when they end.
+                    if (sessions.get(chatId)?.tasks.some((t) => t.kind === "agent")) return;
                     // A chat an agent started reports to that agent, still at work.
                     const parent = useChatsStore.getState().chats.find((c) => c.id === chatId)?.parentChatId;
                     if (parent && sessions.get(parent)?.working) return;

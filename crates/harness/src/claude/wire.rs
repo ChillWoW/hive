@@ -51,6 +51,9 @@ pub(crate) struct SystemFrame {
     /// `task_started`: the task's id, as `background_tasks_changed` lists it.
     #[serde(default)]
     pub task_id: Option<String>,
+    /// `task_started`: what the task is, as its launching call put it.
+    #[serde(default)]
+    pub description: Option<String>,
     /// `background_tasks_changed`: every live background task, replacing the
     /// last set.
     #[serde(default)]
@@ -252,6 +255,19 @@ pub(crate) struct ResultFrame {
     /// The local command the turn ran (`compact`, …), if any.
     #[serde(default)]
     pub local_command: Option<String>,
+    /// What started the turn, when it wasn't a prompt: `kind` is
+    /// `task-notification` for one background work's end woke.
+    #[serde(default)]
+    pub origin: Option<ResultOrigin>,
+    /// Model requests the turn made.
+    #[serde(default)]
+    pub num_turns: Option<u64>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+pub(crate) struct ResultOrigin {
+    #[serde(default)]
+    pub kind: String,
 }
 
 #[derive(Debug, Default, Deserialize)]

@@ -18,6 +18,9 @@ const KINDS: Record<BackgroundTaskKind, { icon: Icon; label: string }> = {
     other: { icon: TerminalWindowIcon, label: "Task" }
 };
 
+/** How long a stop is given to show before the task can be stopped again. */
+const STOP_TIMEOUT_MS = 8000;
+
 /**
  * Work the agent left running between turns, as a chip in the row under the
  * composer: how many run. Click opens the list: each task
@@ -83,11 +86,19 @@ function TaskList({
     onOpenShell: (task: BackgroundTask, command?: string) => void;
 }) {
     const now = useNow();
-    // Stopped ones leave when the session says so; till then they read "Stopping".
+    // Stopped ones leave when the session says so; till then they read
+    // "Stopping". One still here after a while wasn't stopped: it can be again.
     const [stopping, setStopping] = useState<ReadonlySet<string>>(new Set());
     const stop = (id: string) => {
         setStopping((s) => new Set(s).add(id));
         onStop(id);
+        window.setTimeout(() => {
+            setStopping((s) => {
+                const next = new Set(s);
+                next.delete(id);
+                return next;
+            });
+        }, STOP_TIMEOUT_MS);
     };
     // Tool calls by id: a shell's command, an agent's spawn.
     const calls = useMemo(() => {

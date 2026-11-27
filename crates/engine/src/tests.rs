@@ -448,6 +448,41 @@ async fn a_config_changed_mid_turn_applies_from_the_next_prompt() {
 }
 
 #[tokio::test]
+async fn a_new_config_waits_for_background_work_and_a_prompt_is_refused_meanwhile() {
+    let mock = Mock::new().script(|turn| {
+        vec![
+            Step::Emit(AgentEvent::BackgroundTasks {
+                tasks: vec![outcode_proto::BackgroundTask {
+                    id: "b1".into(),
+                    kind: outcode_proto::BackgroundTaskKind::Shell,
+                    description: "dev server".into(),
+                    tool_call_id: None,
+                    agent_type: None,
+                    output_file: None,
+                }],
+            }),
+            Step::text(format!("echo: {}", turn.prompt)),
+        ]
+    });
+    let (_dir, engine, seen) = engine_with(mock, Duration::from_secs(60), |_| None);
+    let chat = engine.create_chat("/a".into(), ChatConfig::default()).unwrap();
+    engine.send(&chat.id, "one".into(), Vec::new()).unwrap();
+    settle(&engine, &chat.id).await;
+
+    engine.set_config(&chat.id, haiku()).unwrap();
+    assert!(engine.any_live(), "closing it would end the work");
+    engine.send(&chat.id, "two".into(), Vec::new()).unwrap();
+    settle(&engine, &chat.id).await;
+    assert!(engine.any_live());
+    assert_eq!(seen.runs().len(), 1, "no new run while the work goes on");
+    let messages = engine.store().messages(&chat.id).unwrap();
+    assert!(
+        matches!(&messages.last().unwrap().parts[..], [MessagePart::Error { message, .. }] if message.contains("Background work")),
+        "the prompt was refused"
+    );
+}
+
+#[tokio::test]
 async fn a_background_subagent_reports_into_the_reply_that_spawned_it() {
     // The first turn launches a subagent in the background; it reports
     // during the second.
