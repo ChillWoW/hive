@@ -57,6 +57,9 @@ export type KeyboardSettings = {
     refresh: string;
 };
 
+/** When a big Claude chat (over 200k tokens) left idle gets compacted. */
+export type IdleCompaction = "on-return" | "before-cache-expires" | "off";
+
 export type ClaudeSettings = {
     /** The `claude` executable; empty finds it on PATH or in its install folders. */
     binaryPath: string;
@@ -64,6 +67,8 @@ export type ClaudeSettings = {
     defaultAccess: AccessMode;
     /** The context size (tokens) Claude compacts at; 0 keeps its default. Applies to new runs. */
     autoCompactWindow: number;
+    /** What happens to a big chat left idle past its prompt cache. */
+    idleCompaction: IdleCompaction;
     /** Extra arguments for every chat's `claude`, split like a shell would. */
     launchArgs: string;
     /** Extra environment variables for every `claude`, as `KEY=value` lines. */
@@ -264,6 +269,7 @@ export const DEFAULT_SETTINGS: Settings = {
         binaryPath: "",
         defaultAccess: "full-access",
         autoCompactWindow: 0,
+        idleCompaction: "on-return",
         launchArgs: "",
         env: "",
         configDir: "",

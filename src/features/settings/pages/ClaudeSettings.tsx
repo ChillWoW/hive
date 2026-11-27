@@ -11,6 +11,7 @@ import { SettingRow, SettingsSection } from "../SettingsSection";
 import { claude } from "@/features/claude/store";
 import { AccountSection, LocationRow, UsageSection } from "./ProviderSections";
 import { useSetting } from "../store";
+import type { IdleCompaction } from "../types";
 
 /**
  * Claude Code's settings under its header in Settings › Providers: its
@@ -24,6 +25,7 @@ export function ClaudeSettings() {
             <UsageSection provider={claude} signedOutHint="Shown for a Claude subscription login" dock="claude" />
             <AccessSection />
             <SessionsSection />
+            <ContextSection />
             <BinarySection />
             <AdvancedSection />
         </>
@@ -32,7 +34,6 @@ export function ClaudeSettings() {
 
 function SessionsSection() {
     const idle = useSetting("chat", "idleTimeoutMinutes");
-    const compactWindow = useSetting("claude", "autoCompactWindow");
 
     return (
         <SettingsSection title="General">
@@ -54,6 +55,29 @@ function SessionsSection() {
                     />
                 }
             />
+        </SettingsSection>
+    );
+}
+
+const IDLE_COMPACTION: { value: IdleCompaction; label: string }[] = [
+    { value: "on-return", label: "When I return" },
+    { value: "before-cache-expires", label: "Before the cache expires" },
+    { value: "off", label: "Never" }
+];
+
+const IDLE_COMPACTION_HINT: Record<IdleCompaction, string> = {
+    "on-return": "Over 200k tokens and idle past the prompt cache: the next prompt compacts first",
+    "before-cache-expires": "Over 200k tokens: compacted just before the prompt cache expires, while Outcode is open",
+    off: "Coming back to a big idle chat re-reads all of it uncached"
+};
+
+/** When Claude summarizes a conversation: by itself as it fills up, and after sitting idle. */
+function ContextSection() {
+    const compactWindow = useSetting("claude", "autoCompactWindow");
+    const idle = useSetting("claude", "idleCompaction");
+
+    return (
+        <SettingsSection title="Context">
             <SettingRow
                 label="Compact the conversation at"
                 description="Context size in tokens to summarize at; 0 keeps the default"
@@ -69,6 +93,30 @@ function SessionsSection() {
                         step={10000}
                         onValueChange={(value) => value != null && compactWindow.set(value)}
                     />
+                }
+            />
+            <SettingRow
+                label="Compact idle chats"
+                description={IDLE_COMPACTION_HINT[idle.value]}
+                keywords="compact compaction idle stale prompt cache expired expires return resume tokens cost"
+                setting={idle}
+                control={
+                    <Select
+                        items={IDLE_COMPACTION}
+                        value={idle.value}
+                        onValueChange={(next: IdleCompaction | null) => next && idle.set(next)}
+                    >
+                        <Select.Trigger aria-label="Compact idle chats">
+                            <Select.Value />
+                        </Select.Trigger>
+                        <Select.Content>
+                            {IDLE_COMPACTION.map((option) => (
+                                <Select.Item key={option.value} value={option.value}>
+                                    {option.label}
+                                </Select.Item>
+                            ))}
+                        </Select.Content>
+                    </Select>
                 }
             />
         </SettingsSection>

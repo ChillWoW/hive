@@ -2,16 +2,10 @@ import type { ReactNode } from "react";
 import { ArrowsInLineVerticalIcon, BellRingingIcon } from "@phosphor-icons/react";
 import type { MessagePart } from "@/proto";
 import { cn } from "@/lib/cn";
+import { formatTokens } from "@/lib/format";
 
 type CompactionPart = Extract<MessagePart, { kind: "compaction" }>;
 type WakePart = Extract<MessagePart, { kind: "wake" }>;
-
-/** `84,000` as `84k`. */
-function formatTokens(n: number): string {
-    if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(n >= 10_000_000 ? 0 : 1)}M`;
-    if (n >= 1000) return `${Math.round(n / 1000)}k`;
-    return String(n);
-}
 
 /** A line across the transcript with a label in the middle. */
 export function Divider({ icon, children, className }: { icon: ReactNode; children: ReactNode; className?: string }) {

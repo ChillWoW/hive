@@ -2,10 +2,11 @@ import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, use
 import { CaretDownIcon } from "@phosphor-icons/react";
 import type { Attachment, BackgroundTask, Chat, ChatConfig, Handoff, HandoffMode, Message } from "@/proto";
 import { cn } from "@/lib/cn";
+import { useMinuteClock } from "@/lib/time";
 import { chats, useActiveChat, useChatsStore, useSession, workDir } from "@/features/chats/store";
-import { Composer, ContextMeter, UsageWarning, useComposerStore } from "@/features/composer";
+import { Composer, ContextMeter, UsageWarning, useCommands, useComposerStore, type CompactAction } from "@/features/composer";
 import { WorkspacePicker } from "@/features/git";
-import { HarnessMark } from "@/features/models";
+import { harnessOf, HarnessMark } from "@/features/models";
 import { ChatMenuItems, DeleteChatDialog, UNTITLED } from "@/features/sidebar";
 import { Menu, toast, useInlineRename } from "@/ui";
 import { useSettingsStore, type TranscriptWidth } from "@/features/settings";
@@ -27,6 +28,8 @@ import { pendingInput } from "./fold";
 import { InputCard } from "./InputCard";
 import { SecretCard } from "./SecretCard";
 import { BackgroundTasks } from "./BackgroundTasks";
+import { autoCompactAt, isStaleForCompact, useCompactionSettings } from "./compaction";
+import { IdleCompactNotice } from "./IdleCompactNotice";
 import { QueuedTray } from "./SessionTrays";
 import { SubagentView } from "./SubagentView";
 import { findSpawnIn, subagentName } from "./transcript/subagents";
@@ -96,11 +99,38 @@ export function ChatView() {
     const handoffs = chat?.handoffs ?? NO_HANDOFFS;
     const topHandoff = handoffs.find((h) => !h.afterMessageId);
 
+    // The context meter's Compact: a started chat whose agent has `/compact`.
+    const commands = useCommands(chat?.id ?? null, harnessOf(config), cwd);
+    const compactAction: CompactAction | undefined =
+        chat && commands.some((c) => c.kind === "command" && c.name === "compact")
+            ? {
+                  run: () => void send("/compact"),
+                  // Nothing to compact yet, or the agent is mid-turn.
+                  disabled: !lastReply || busy
+              }
+            : undefined;
+    const compaction = useCompactionSettings();
+
+    // Back in a big Claude chat whose prompt cache expired: the next prompt
+    // compacts first, unless the notice is switched to the full history.
+    // Keyed by the chat's last message, so each idle spell starts out on.
+    const now = useMinuteClock();
+    const stale =
+        compaction.idle === "on-return" && !!compactAction && !compactAction.disabled && isStaleForCompact(chat, now);
+    const staleKey = `${chat?.id}:${chat?.lastMessageAt}`;
+    const [keepFull, setKeepFull] = useState<string | null>(null);
+    const compactFirst = stale && keepFull !== staleKey;
+
     const onSend = (prompt: string, attachments: Attachment[]) => {
         // The draft stays until there's somewhere to send it.
         if (!chat && !newChatCwd) {
             toast.error({ title: "Choose a folder first", description: "Pick where the agent should work." });
             return false;
+        }
+        if (compactFirst && !prompt.trimStart().startsWith("/")) {
+            // The prompt waits in the queue until the compaction's turn ends.
+            void send("/compact").then(() => send(prompt, attachments));
+            return;
         }
         void send(prompt, attachments);
     };
@@ -131,6 +161,15 @@ export function ChatView() {
                 </ChatCwd>
             )}
             <UsageWarning config={config} />
+            {stale && chat?.lastMessageAt != null && (
+                <IdleCompactNotice
+                    tokens={chat.context?.tokens ?? 0}
+                    idleSince={chat.lastMessageAt}
+                    now={now}
+                    compactFirst={compactFirst}
+                    onChange={(on) => setKeepFull(on ? null : staleKey)}
+                />
+            )}
             <Composer
                 chatId={chat?.id ?? null}
                 cwd={cwd}
@@ -161,7 +200,11 @@ export function ChatView() {
                     {session && (
                         <BackgroundTasks tasks={session.tasks} messages={messages} onStop={queue.stopTask} />
                     )}
-                    <ContextMeter context={chat?.context} />
+                    <ContextMeter
+                        context={chat?.context}
+                        compact={compactAction}
+                        autoCompactAt={autoCompactAt(chat?.config.harness, compaction.window, chat?.context?.window)}
+                    />
                 </span>
             </div>
         </>

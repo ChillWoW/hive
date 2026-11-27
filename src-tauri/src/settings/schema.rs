@@ -260,6 +260,8 @@ pub struct ClaudeSettings {
     /// The context size, in tokens, Claude compacts the conversation at; 0
     /// keeps its own default. Applies to runs started after a change.
     pub auto_compact_window: u32,
+    /// What happens to a big chat left idle past its prompt cache.
+    pub idle_compaction: IdleCompaction,
     /// Extra arguments for every chat's `claude`, split like a shell would.
     pub launch_args: String,
     /// Extra environment variables for every `claude`, as `KEY=value` lines.
@@ -269,6 +271,22 @@ pub struct ClaudeSettings {
     pub config_dir: String,
     /// The plan's usage as a ring in the dock (`src/layout/DockUsage.tsx`).
     pub show_usage_in_dock: bool,
+}
+
+/// When a big Claude chat (over 200k tokens) left idle gets compacted, so
+/// coming back to it isn't a full-price re-read
+/// (`src/features/chat/compaction.ts`).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum IdleCompaction {
+    /// Back in it after its prompt cache expired, the next prompt compacts
+    /// first unless the user keeps the full history.
+    #[default]
+    OnReturn,
+    /// Just before its prompt cache expires Outcode sends `/compact` itself,
+    /// while the app is open.
+    BeforeCacheExpires,
+    Off,
 }
 
 /// Codex, read by the frontend.

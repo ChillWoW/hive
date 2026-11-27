@@ -15,14 +15,17 @@ import type {
     SlashCommand,
     WorktreeStep
 } from "@/proto";
+import { COMPACT_BEFORE_EXPIRY_MS, PROMPT_CACHE_TTL_MS } from "@/features/chat/compaction";
 import { foldEvent, stampEvent } from "@/features/chat/fold";
 import { baseName } from "@/lib/paths";
+import { DEV_COMPACT_SOON_MS, devCompact, type DevCompact } from "./devCompaction";
 
 /**
  * `bun run dev`'s stand-in for the engine: chats and messages in memory
  * (seeded with a few, so the sidebar has something to show), turns
  * scripted. A prompt asking for a plan, a question or (outside full access)
- * a command waits on the matching card.
+ * a command waits on the matching card. `?compact=<state>` adds a chat in
+ * that state of compaction (`devCompaction.ts`).
  */
 
 type Sink<T> = (update: T) => void;
@@ -32,7 +35,7 @@ const messages = new Map<string, Message[]>();
 const sessions = new Map<string, Session>();
 const timers = new Map<string, number>();
 /** What each running turn still has to play, and what it waits on. */
-const scripts = new Map<string, { reply: string; events: AgentEvent[]; waiting?: string }>();
+const scripts = new Map<string, { reply: string; events: AgentEvent[]; waiting?: string; hold?: number }>();
 const chatSinks = new Set<Sink<ChatsUpdate>>();
 const messageSinks = new Map<string, Set<Sink<MessagesUpdate>>>();
 const urls = new Map<string, string>();
@@ -102,6 +105,8 @@ function seed() {
     chat(website, "Old experiment", 20 * DAY, { archived: true });
     chat(website, "Blog engine spike", 70 * DAY, { archived: true, ...harness("codex") });
 
+    if (devCompact) seedCompaction(devCompact, outcode);
+
     // api-server: nothing going on.
     chat(api, "Rate limiter", 4 * DAY, harness("codex"));
     chat(api, "Move to SQLite", 400 * DAY);
@@ -122,6 +127,79 @@ function seed() {
         start(orchestrator, "Split the schema and hand the parts out.", []);
     }, 0);
 }
+/** Ticks a compaction takes; `?compact=running`'s never ends. */
+const COMPACTION_TICKS = devCompact === "running" ? Infinity : 45;
+
+/**
+ * `?compact=`'s chat, pinned to the top: a big Claude chat with a short
+ * transcript, as full and as long idle as the state asks.
+ */
+function seedCompaction(state: DevCompact, cwd: string) {
+    const MINUTE = 60_000;
+    const now = Date.now();
+    const busy = 4 * MINUTE;
+    const idle: Record<DevCompact, number> = {
+        // Past the prompt cache.
+        stale: 2.4 * HOUR,
+        // About to reach where the idle runtime compacts.
+        soon: PROMPT_CACHE_TTL_MS - COMPACT_BEFORE_EXPIRY_MS - DEV_COMPACT_SOON_MS,
+        auto: busy,
+        full: busy,
+        running: busy,
+        failed: busy
+    };
+    const tokens: Record<DevCompact, number> = {
+        stale: 412_000,
+        soon: 356_000,
+        // The flag's auto-compact window is 300k: it compacts near 267k.
+        auto: 241_000,
+        full: 947_000,
+        running: 388_000,
+        failed: 388_000
+    };
+    const id = "dev-compaction";
+    const at = now - idle[state];
+    chats.push({
+        id,
+        cwd,
+        title: `Compaction · ${state}`,
+        config: { harness: "claude", modelOptions: {}, access: "full-access", plan: false },
+        archived: false,
+        pinnedAt: now,
+        createdAt: at - 3 * HOUR,
+        lastMessageAt: at,
+        sessionId: "dev-session",
+        context: { tokens: tokens[state], window: 1_000_000 }
+    });
+    messages.set(id, [
+        {
+            id: `${id}-prompt`,
+            role: "user",
+            parts: [{ kind: "text", id: "t0", text: "Port the idle compaction feature over from main." }],
+            createdAt: at - 12 * MINUTE
+        },
+        {
+            id: `${id}-reply`,
+            role: "assistant",
+            parts: [
+                { kind: "text", id: "t0", text: "Reading how main does it first." },
+                { kind: "compaction", id: "c0", status: "completed", auto: true, beforeTokens: 268_000, afterTokens: 31_000 },
+                {
+                    kind: "text",
+                    id: "t1",
+                    text: "Ported: the setting, the notice over the composer and the context card. This chat is posing as one of the states of `?compact=`."
+                }
+            ],
+            createdAt: at - 12 * MINUTE,
+            status: "complete",
+            durationMs: 12 * MINUTE
+        }
+    ]);
+    sessions.set(id, { ...sessionOf(id), commands: DEV_COMMANDS });
+    // These two show a compaction under way as soon as the chat is opened.
+    if (state === "running" || state === "failed") window.setTimeout(() => start(id, "/compact", []), 0);
+}
+
 seed();
 
 const emitChats = (update: ChatsUpdate) => chatSinks.forEach((sink) => sink(update));
@@ -164,13 +242,20 @@ const ask = (requestId: string, request: InputRequest): AgentEvent => ({ type: "
  * a subagent, then a reply with links and the prompt echoed. Asking for a
  * plan, a question or (outside full access) a command adds its card.
  */
-function script(prompt: string, config: ChatConfig): AgentEvent[] {
+function script(prompt: string, chat: Chat): AgentEvent[] {
+    const { config, context } = chat;
     const lower = prompt.toLowerCase();
     if (lower.startsWith("/compact")) {
+        const running: AgentEvent = { type: "compaction", status: "running", auto: false };
+        if (devCompact === "failed") {
+            return [running, { type: "compaction", status: "failed", auto: false, error: "the summary didn't fit the context window" }];
+        }
+        const before = context?.tokens ?? 84_000;
+        const after = Math.max(Math.round((before * 0.08) / 1000) * 1000, 12_000);
         return [
-            { type: "compaction", status: "running", auto: false },
-            { type: "compaction", status: "completed", auto: false, beforeTokens: 84_000, afterTokens: 12_000 },
-            { type: "contextUsage", tokens: 12_000 }
+            running,
+            { type: "compaction", status: "completed", auto: false, beforeTokens: before, afterTokens: after },
+            { type: "contextUsage", tokens: after }
         ];
     }
     if (config.plan) {
@@ -187,7 +272,7 @@ function script(prompt: string, config: ChatConfig): AgentEvent[] {
     }
     const events: AgentEvent[] = [
         ...words("reasoningDelta", "**Looking around**\n\nNo backend under `bun run dev`, so this turn is scripted. "),
-        { type: "contextUsage", tokens: 48_000, window: 200_000 },
+        { type: "contextUsage", tokens: (context?.tokens ?? 44_000) + 4_000, window: context?.window ?? 200_000 },
         call("r1", { kind: "readFile", path: "src/main.tsx" }),
         result("r1", '     1→import { createRoot } from "react-dom/client";\n     2→import { App } from "./App";\n')
     ];
@@ -296,9 +381,12 @@ function play(chatId: string) {
     timers.set(
         chatId,
         window.setInterval(() => {
+            // A compaction takes a moment.
+            if (turn.hold) return void turn.hold--;
             const event = turn.events.shift();
             if (!event) return finish(chatId, "completed");
             feed(chatId, turn.reply, event);
+            if (event.type === "compaction" && event.status === "running") turn.hold = COMPACTION_TICKS;
             if (event.type === "inputRequested") {
                 turn.waiting = event.requestId;
                 setSession(chatId, { asking: true });
@@ -357,7 +445,7 @@ function start(chatId: string, prompt: string, attachments: Attachment[]) {
             save({ ...chat, title });
         }, 700);
     }
-    scripts.set(chatId, { reply: reply.id, events: script(prompt, chat.config) });
+    scripts.set(chatId, { reply: reply.id, events: script(prompt, chat) });
     play(chatId);
 }
 
