@@ -187,7 +187,14 @@ function startEditor(id: string, file: FileText, text: string, path: string) {
 }
 
 async function loadLanguage(id: string, path: string) {
-    const support = await languageOf(path);
+    let support: Awaited<ReturnType<typeof languageOf>>;
+    try {
+        support = await languageOf(path);
+    } catch (error) {
+        // The language's chunk didn't load: the text stays plain.
+        console.warn("[editor] language failed to load", path, error);
+        return;
+    }
     dispatchTo(id, { effects: language.reconfigure(support ?? []) });
 }
 
