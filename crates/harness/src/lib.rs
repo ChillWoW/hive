@@ -7,7 +7,8 @@
 //! the handle is closed or dropped, and the event stream ends when the
 //! process exits.
 //!
-//! Each CLI is a [`Harness`] ([`claude::Claude`], [`codex::Codex`]), and
+//! Each CLI is a [`Harness`] ([`claude::Claude`], [`codex::Codex`],
+//! [`antigravity::Antigravity`]), and
 //! `mock::Mock` (feature `mock`) scripts turns for tests.
 
 use std::future::Future;
@@ -16,6 +17,7 @@ use std::pin::Pin;
 use outcode_proto::{AccessMode, AgentEvent, Catalog, HarnessId, InputResponse, RunRequest, SlashCommand};
 use tokio::sync::mpsc;
 
+pub mod antigravity;
 pub mod attachments;
 pub mod claude;
 pub mod codex;

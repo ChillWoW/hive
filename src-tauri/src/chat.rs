@@ -9,6 +9,7 @@ use std::time::Duration;
 
 use outcode_engine::{Engine, Hooks, SendMode, TextModel, TextUse, WatchId, WorktreeOptions};
 use outcode_harness::Harness;
+use outcode_harness::antigravity::{Antigravity, Options as AntigravityOptions};
 use outcode_harness::codex::{Codex, Options as CodexOptions};
 use outcode_harness::claude::{Claude, Options as ClaudeOptions};
 use outcode_proto::{
@@ -23,7 +24,7 @@ use crate::settings::{BranchNaming, BusySend, SettingsFile};
 
 /// Opens the store under `data_dir`, closes turns a crash left open, and
 /// starts the engine: Claude runs from `claude.binaryPath` (else found),
-/// Codex from wherever it's found; runs close after
+/// Codex and Antigravity from wherever they're found; runs close after
 /// `chat.idleTimeoutMinutes` between prompts; chats are titled by Claude's
 /// `chat.textGenerationModel` while `chat.autoTitle` is on.
 pub fn engine(app: &AppHandle, data_dir: &Path) -> Result<Engine, Box<dyn std::error::Error>> {
@@ -48,10 +49,11 @@ pub fn engine(app: &AppHandle, data_dir: &Path) -> Result<Engine, Box<dyn std::e
         prompt_suggestions: codex.state::<SettingsFile>().get().chat.prompt_suggestions,
         ..CodexOptions::default()
     });
+    let antigravity = Antigravity::new(AntigravityOptions::default);
     Ok(Engine::new(
         store,
         Hooks {
-            harnesses: vec![Arc::new(claude), Arc::new(codex)],
+            harnesses: vec![Arc::new(claude), Arc::new(codex), Arc::new(antigravity)],
             text_model: Box::new(move |purpose| {
                 let chat = text.state::<SettingsFile>().get().chat;
                 (purpose != TextUse::Title || chat.auto_title).then_some(TextModel {

@@ -1,3 +1,4 @@
+mod antigravity;
 mod avatars;
 mod chat;
 mod claude;
@@ -65,6 +66,8 @@ pub fn run() {
             app.manage(claude::SignInResult::default());
             app.manage(codex::SignIns::default());
             app.manage(codex::SignInResult::default());
+            app.manage(antigravity::SignIns::default());
+            app.manage(antigravity::SignInResult::default());
             app.manage(themes::ThemesDir::open(data_dir.join("themes"))?);
             app.manage(updater::Updates::default());
             app.manage(avatars::Avatars::default());
@@ -115,6 +118,15 @@ pub fn run() {
             codex::codex_install,
             codex::codex_latest_version,
             codex::codex_usage,
+            antigravity::antigravity_status,
+            antigravity::antigravity_sign_in_start,
+            antigravity::antigravity_sign_in_wait,
+            antigravity::antigravity_sign_in_cancel,
+            antigravity::antigravity_sign_out,
+            antigravity::antigravity_update,
+            antigravity::antigravity_install,
+            antigravity::antigravity_latest_version,
+            antigravity::antigravity_usage,
             chat::chat_set_pinned,
             chat::chat_set_archived,
             chat::chat_delete,

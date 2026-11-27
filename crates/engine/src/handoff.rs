@@ -239,6 +239,7 @@ impl Engine {
         let agent = match handoff.from_harness {
             HarnessId::Claude => "Claude Code",
             HarnessId::Codex => "Codex",
+            HarnessId::Antigravity => "Antigravity",
         };
         let context = handoff_context(handoff, agent, excerpt.as_deref());
         Some(format!("{context}\n\nUser message:\n{prompt}"))

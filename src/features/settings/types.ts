@@ -77,6 +77,11 @@ export type CodexSettings = {
     showUsageInDock: boolean;
 };
 
+export type AntigravitySettings = {
+    /** The account's model quota as a ring in the dock; see `src/layout/DockUsage.tsx`. */
+    showUsageInDock: boolean;
+};
+
 export type BusySend = "queue" | "after-tool" | "interrupt";
 
 export type ChatSettings = {
@@ -174,6 +179,7 @@ export type Settings = {
     keyboard: KeyboardSettings;
     claude: ClaudeSettings;
     codex: CodexSettings;
+    antigravity: AntigravitySettings;
     chat: ChatSettings;
     worktrees: WorktreesSettings;
     diffs: DiffsSettings;
@@ -227,6 +233,9 @@ export const DEFAULT_SETTINGS: Settings = {
         showUsageInDock: false
     },
     codex: {
+        showUsageInDock: false
+    },
+    antigravity: {
         showUsageInDock: false
     },
     chat: {

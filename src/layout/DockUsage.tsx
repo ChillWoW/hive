@@ -1,5 +1,6 @@
 import { PreviewCard } from "@base-ui/react/preview-card";
 import type { HarnessId } from "@/proto";
+import { antigravity } from "@/features/antigravity/store";
 import { claude } from "@/features/claude/store";
 import { UsageCard } from "@/features/claude/UsageCard";
 import { tightestWindow, TONE_TEXT, USAGE_FRESH_MS, usageTone } from "@/features/claude/usage";
@@ -19,8 +20,10 @@ import { popupClassName } from "@/ui/chip";
 export function DockUsage({ side }: { side: "left" | "right" }) {
     const showClaude = useSettingsStore((s) => s.settings.claude.showUsageInDock);
     const showCodex = useSettingsStore((s) => s.settings.codex.showUsageInDock);
+    const showAntigravity = useSettingsStore((s) => s.settings.antigravity.showUsageInDock);
     claude.useUsagePolling(showClaude);
     codex.useUsagePolling(showCodex);
+    antigravity.useUsagePolling(showAntigravity);
     return (
         <>
             {showClaude && (
@@ -33,6 +36,14 @@ export function DockUsage({ side }: { side: "left" | "right" }) {
             )}
             {showCodex && (
                 <UsageButton side={side} harness="codex" provider={codex} signedOutHint="Shown for a ChatGPT login" />
+            )}
+            {showAntigravity && (
+                <UsageButton
+                    side={side}
+                    harness="antigravity"
+                    provider={antigravity}
+                    signedOutHint="Shown for a Google account login"
+                />
             )}
         </>
     );

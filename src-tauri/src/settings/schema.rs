@@ -26,6 +26,7 @@ pub struct Settings {
     pub keyboard: KeyboardSettings,
     pub claude: ClaudeSettings,
     pub codex: CodexSettings,
+    pub antigravity: AntigravitySettings,
     pub chat: ChatSettings,
     pub worktrees: WorktreesSettings,
     pub diffs: DiffsSettings,
@@ -41,6 +42,7 @@ impl Default for Settings {
             keyboard: KeyboardSettings::default(),
             claude: ClaudeSettings::default(),
             codex: CodexSettings::default(),
+            antigravity: AntigravitySettings::default(),
             chat: ChatSettings::default(),
             worktrees: WorktreesSettings::default(),
             diffs: DiffsSettings::default(),
@@ -268,6 +270,14 @@ pub struct ClaudeSettings {
 #[serde(rename_all = "camelCase", default)]
 pub struct CodexSettings {
     /// The plan's usage as a ring in the dock (`src/layout/DockUsage.tsx`).
+    pub show_usage_in_dock: bool,
+}
+
+/// Antigravity, read by the frontend.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct AntigravitySettings {
+    /// The plan's quota as a ring in the dock (`src/layout/DockUsage.tsx`).
     pub show_usage_in_dock: bool,
 }
 

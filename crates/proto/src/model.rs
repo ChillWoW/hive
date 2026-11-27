@@ -73,16 +73,19 @@ pub enum HarnessId {
     #[default]
     Claude,
     Codex,
+    /// Google's Antigravity CLI (`agy`).
+    Antigravity,
 }
 
 impl HarnessId {
-    pub const ALL: [HarnessId; 2] = [HarnessId::Claude, HarnessId::Codex];
+    pub const ALL: [HarnessId; 3] = [HarnessId::Claude, HarnessId::Codex, HarnessId::Antigravity];
 
     /// The CLI's name, as its binary is called.
     pub fn as_str(self) -> &'static str {
         match self {
             HarnessId::Claude => "claude",
             HarnessId::Codex => "codex",
+            HarnessId::Antigravity => "agy",
         }
     }
 }

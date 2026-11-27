@@ -57,7 +57,7 @@ function matches(row: Row, query: string) {
  * none).
  *
  * The card lists every installed harness's models under tabs (starred
- * models first, then Claude's, then Codex's); picking another harness's
+ * models first, then Claude's, Codex's and Antigravity's); picking another harness's
  * model moves the chat there, in a new session. A search sits
  * above and a Reasoning row below, which opens the picked model's levels in
  * a card beside it; models with fast mode (Opus) get a Fast mode row above

@@ -139,7 +139,7 @@ export function UsageSection({
 }: {
     provider: Provider;
     signedOutHint: string;
-    dock: "claude" | "codex";
+    dock: "claude" | "codex" | "antigravity";
 }) {
     const usage = provider.useUsage((s) => s.windows);
     const error = provider.useUsage((s) => s.error);
@@ -208,7 +208,7 @@ export function UsageSection({
     );
 }
 
-function DockRow({ section }: { section: "claude" | "codex" }) {
+function DockRow({ section }: { section: "claude" | "codex" | "antigravity" }) {
     const inDock = useSetting(section, "showUsageInDock");
     return (
         <SwitchRow

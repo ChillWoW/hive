@@ -3,4 +3,4 @@
 /**
  * A coding-agent CLI a chat runs on.
  */
-export type HarnessId = "claude" | "codex";
+export type HarnessId = "claude" | "codex" | "antigravity";

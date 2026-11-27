@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { ArrowClockwiseIcon, CircleNotchIcon, WarningCircleIcon } from "@phosphor-icons/react";
 import type { HarnessId } from "@/proto";
+import { antigravity } from "@/features/antigravity/store";
 import { claude } from "@/features/claude/store";
 import { PLAN_LABELS } from "@/features/claude/usage";
 import { codex } from "@/features/codex/store";
@@ -8,6 +9,7 @@ import { HarnessMark } from "@/features/models";
 import { availableUpdate, type Provider } from "@/features/providers/makeProvider";
 import { cn } from "@/lib/cn";
 import { Button, IconButton, Skeleton, Tooltip } from "@/ui";
+import { AntigravitySettings } from "./AntigravitySettings";
 import { ClaudeSettings } from "./ClaudeSettings";
 import { CodexSettings } from "./CodexSettings";
 
@@ -49,6 +51,14 @@ const AGENTS: Agent[] = [
         notInstalled: "Install the codex CLI to start chats with Codex",
         signedOut: "Sign in with ChatGPT to start chats with Codex",
         Settings: CodexSettings
+    },
+    {
+        id: "antigravity",
+        provider: antigravity,
+        cli: "agy",
+        notInstalled: "Install the Antigravity CLI (agy) to start chats with Antigravity",
+        signedOut: "Sign in with Google to start chats with Antigravity",
+        Settings: AntigravitySettings
     }
 ];
 

@@ -10,11 +10,12 @@ import { backend } from "@/lib/backend";
  */
 
 /** The harnesses the app drives, in the order the picker lists them. */
-export const HARNESSES: HarnessId[] = ["claude", "codex"];
+export const HARNESSES: HarnessId[] = ["claude", "codex", "antigravity"];
 
 export const HARNESS_LABELS: Record<HarnessId, string> = {
     claude: "Claude",
-    codex: "Codex"
+    codex: "Codex",
+    antigravity: "Antigravity"
 };
 
 export type Catalogs = Partial<Record<HarnessId, Catalog>>;
@@ -72,7 +73,17 @@ const DEV_CODEX: Catalog = {
     defaultModel: "gpt-5-codex"
 };
 
-const DEV_CATALOGS: Record<HarnessId, Catalog> = { claude: DEV_CLAUDE, codex: DEV_CODEX };
+const DEV_ANTIGRAVITY: Catalog = {
+    installed: true,
+    models: [
+        { id: "gemini-4-hydrogen", label: "Gemini 4 Hydrogen", reasoningLevels: ["low", "medium", "high", "xhigh"], options: [] },
+        { id: "gemini-3.8-flash", label: "Gemini 3.8 Flash", reasoningLevels: ["low", "medium", "high"], options: [] },
+        { id: "claude-sonnet-4-6", label: "Claude Sonnet 4.6 (Thinking)", reasoningLevels: [], options: [] }
+    ],
+    defaultModel: "gemini-4-hydrogen"
+};
+
+const DEV_CATALOGS: Record<HarnessId, Catalog> = { claude: DEV_CLAUDE, codex: DEV_CODEX, antigravity: DEV_ANTIGRAVITY };
 
 export const useCatalogStore = create<{ catalogs: Catalogs }>()(() => ({ catalogs: {} }));
 
