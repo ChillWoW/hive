@@ -1,4 +1,4 @@
-import { Fragment, use, useState, type ReactNode } from "react";
+import { Fragment, use, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { Collapsible } from "@base-ui/react/collapsible";
 import { parseDiffFromFile } from "@pierre/diffs";
 import {
@@ -161,6 +161,36 @@ function fileCounts(parts: ToolPart[]) {
     });
 }
 
+/** How near its end an open thought must be scrolled to keep following as it streams. */
+const LIVE_EDGE = 24;
+
+/**
+ * An open thought: its text under the line, unboxed, scrolling past a
+ * screenful. While live it follows the newest words unless scrolled up.
+ */
+function ThoughtBody({ text, live }: { text: string; live: boolean }) {
+    const ref = useRef<HTMLDivElement>(null);
+    const atEdge = useRef(true);
+    useLayoutEffect(() => {
+        const el = ref.current;
+        if (live && atEdge.current && el) el.scrollTop = el.scrollHeight;
+    });
+    return (
+        <div
+            ref={ref}
+            onScroll={(e) => {
+                const el = e.currentTarget;
+                atEdge.current = el.scrollHeight - el.scrollTop - el.clientHeight <= LIVE_EDGE;
+            }}
+            className="max-h-96 overflow-auto py-1"
+        >
+            <Markdown className="markdown-small" streaming={live}>
+                {text}
+            </Markdown>
+        </div>
+    );
+}
+
 function Item({ item, streaming }: { item: GroupItem; streaming: boolean }) {
     const cwd = use(ChatCwd);
     // Everything starts folded (a live thought's preview is on its line)
@@ -182,7 +212,8 @@ function Item({ item, streaming }: { item: GroupItem; streaming: boolean }) {
     if (item.kind === "thought") {
         label = item.live ? "Thinking" : "Thought";
         const preview = thoughtPreview(item.part.text, item.live);
-        if (preview) target = <span className={targetClassName}>{preview}</span>;
+        // Open, the thought itself is under the line.
+        if (preview && !open) target = <span className={targetClassName}>{preview}</span>;
     } else if (item.kind === "edits") {
         // A run of only writes says so, as a lone write's line does.
         const writes = item.parts.every((p) => p.call.kind === "writeFile");
@@ -216,13 +247,7 @@ function Item({ item, streaming }: { item: GroupItem; streaming: boolean }) {
 
     const body =
         item.kind === "thought" ? (
-            item.part.text.trim() && (
-                <div className={blockClassName}>
-                    <Markdown className="markdown-muted markdown-small" streaming={item.live}>
-                        {item.part.text}
-                    </Markdown>
-                </div>
-            )
+            item.part.text.trim() && <ThoughtBody text={item.part.text} live={item.live} />
         ) : item.kind === "edits" ? (
             // Every change on its own line.
             <div className="flex flex-col pb-1">
