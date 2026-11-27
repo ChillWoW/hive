@@ -4,6 +4,7 @@ mod chat;
 mod claude;
 mod codex;
 mod editor;
+mod file_watch;
 mod files;
 mod folders;
 mod fonts;
@@ -60,6 +61,9 @@ pub fn run() {
                 if let Some(outputs) = app.try_state::<task_output::TaskOutputs>() {
                     outputs.stop_owned_by(webview.label());
                 }
+                if let Some(watches) = app.try_state::<file_watch::FileWatches>() {
+                    watches.stop_owned_by(webview.label());
+                }
             }
         })
         .setup(|app| {
@@ -84,6 +88,7 @@ pub fn run() {
             app.manage(chat::DataDir(data_dir.clone()));
             app.manage(outcode_terminal::Terminals::default());
             app.manage(task_output::TaskOutputs::default());
+            app.manage(file_watch::FileWatches::default());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -161,6 +166,8 @@ pub fn run() {
             files::list_folder,
             files::rename_path,
             files::trash_path,
+            file_watch::files_watch,
+            file_watch::files_unwatch,
             search::search_text,
             settings::settings_get,
             settings::settings_update,

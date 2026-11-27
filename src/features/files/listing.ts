@@ -5,6 +5,7 @@ import { backend } from "@/lib/backend";
 import { fuzzyScore, rankBy } from "@/lib/fuzzy";
 import { baseName } from "@/lib/paths";
 import { onWindowFocus } from "@/lib/windowFocus";
+import { watchFiles } from "./watch";
 
 /** How long a folder's listing is fresh. */
 const FRESH_MS = 15_000;
@@ -52,6 +53,32 @@ const useListingsStore = create<ListingsState>()(() => ({ listings: {}, folders:
 const listingKey = (cwd: string, ignored: boolean) => (ignored ? `${cwd}\0ignored` : cwd);
 
 const pending = new Map<string, Promise<void>>();
+/** Listings whose running walk may predate a change: listed once more after it. */
+const stale = new Set<string>();
+
+/** Lists `cwd` again, one listing at a time per folder; a change during one lists once more. */
+function relist(cwd: string, ignored: boolean): Promise<void> {
+    const key = listingKey(cwd, ignored);
+    const running = pending.get(key);
+    if (running) {
+        stale.add(key);
+        return running;
+    }
+    const listing = listFiles(cwd, ignored)
+        .then(
+            (entries) =>
+                useListingsStore.setState((s) => ({
+                    listings: { ...s.listings, [key]: { at: Date.now(), entries } }
+                })),
+            (error: unknown) => console.warn("[files] listing failed", error)
+        )
+        .finally(() => {
+            pending.delete(key);
+            if (stale.delete(key)) void relist(cwd, ignored);
+        });
+    pending.set(key, listing);
+    return listing;
+}
 
 /**
  * Re-lists `cwd` unless its last listing is fresh (or `force`, which also
@@ -61,28 +88,19 @@ export function refreshFiles(cwd: string, { force = false, ignored = false } = {
     const key = listingKey(cwd, ignored);
     const last = useListingsStore.getState().listings[key];
     if (!force && last && Date.now() - last.at < FRESH_MS) return Promise.resolve();
-    if (force) useListingsStore.setState((s) => ({ folders: { ...s.folders, [cwd]: {} } }));
-    let listing = pending.get(key);
-    if (!listing) {
-        listing = listFiles(cwd, ignored)
-            .then(
-                (entries) =>
-                    useListingsStore.setState((s) => ({
-                        listings: { ...s.listings, [key]: { at: Date.now(), entries } }
-                    })),
-                (error: unknown) => console.warn("[files] listing failed", error)
-            )
-            .finally(() => pending.delete(key));
-        pending.set(key, listing);
+    if (force) {
+        useListingsStore.setState((s) => ({ folders: { ...s.folders, [cwd]: {} } }));
+        return relist(cwd, ignored);
     }
-    return listing;
+    return pending.get(key) ?? relist(cwd, ignored);
 }
 
 /**
- * `cwd`'s files and folders (with `ignored`, the ignored ones too),
- * re-listed while `active` whenever the last listing went stale and on
- * window focus; undefined until the first listing arrives. The last listing
- * stays shown while a new one loads.
+ * `cwd`'s files and folders (with `ignored`, the ignored ones too), kept
+ * current while `active`: re-listed when something under it changes on disk
+ * (`watchFiles`), and, should the watch fail, whenever the last listing went
+ * stale and on window focus. Undefined until the first listing arrives; the
+ * last listing stays shown while a new one loads.
  */
 export function useWorkspaceFiles(cwd: string, active: boolean, ignored = false): WorkspaceEntry[] | undefined {
     const entries = useListingsStore((s) => (cwd ? s.listings[listingKey(cwd, ignored)]?.entries : undefined));
@@ -90,7 +108,14 @@ export function useWorkspaceFiles(cwd: string, active: boolean, ignored = false)
         if (!cwd || !active) return;
         const refresh = () => void refreshFiles(cwd, { ignored });
         refresh();
-        return onWindowFocus(refresh);
+        const unfocus = onWindowFocus(refresh);
+        const unwatch = watchFiles(cwd, (listing) => {
+            if (listing) void relist(cwd, ignored);
+        });
+        return () => {
+            unfocus();
+            unwatch();
+        };
     }, [cwd, active, ignored]);
     return entries;
 }

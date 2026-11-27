@@ -2,13 +2,15 @@ import { useEffect, useRef } from "react";
 import { create } from "zustand";
 import { onWindowFocus } from "@/lib/windowFocus";
 import type { GitFileState } from "@/proto";
+import { watchFiles } from "@/features/files/watch";
 import { gitApi } from "./api";
 import { useFolderBusy } from "./store";
 
 /**
  * Each folder's uncommitted files (`git status`), for the file tree's marks.
- * Read while something shows them and again when they may have changed: the
- * window regaining focus, every few seconds while an agent works in the
+ * Read while something shows them and again when they may have changed: a
+ * file under the folder changing on disk (`watchFiles`), the window
+ * regaining focus, every few seconds while an agent works in the
  * folder and once its turn ends, or a `refreshGitStatus` after a save, a
  * rename or a delete.
  */
@@ -72,7 +74,12 @@ export function useGitStatus(cwd: string, active: boolean): GitStatus | null | u
     useEffect(() => {
         if (!cwd || !active) return;
         void refreshGitStatus(cwd);
-        return onWindowFocus(() => void refreshGitStatus(cwd));
+        const unfocus = onWindowFocus(() => void refreshGitStatus(cwd));
+        const unwatch = watchFiles(cwd, () => void refreshGitStatus(cwd));
+        return () => {
+            unfocus();
+            unwatch();
+        };
     }, [cwd, active]);
 
     const wasBusy = useRef(busy);
