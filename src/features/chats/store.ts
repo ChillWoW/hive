@@ -92,6 +92,9 @@ export const useChatsStore = create<ChatsState>()(
                         }
                         case "session":
                             return { sessions: { ...s.sessions, [update.session.chatId]: update.session } };
+                        // An event, not state: the notifications hear it from the watcher.
+                        case "turnEnded":
+                            return s;
                     }
                 });
             }

@@ -160,6 +160,7 @@ impl Engine {
         let watch = self.watch_chats(move |update| {
             let ours = match &update {
                 ChatsUpdate::Session { session } => session.chat_id == id,
+                ChatsUpdate::TurnEnded { chat_id, .. } => *chat_id == id,
                 ChatsUpdate::Upsert { chat } => chat.id == id,
                 ChatsUpdate::Removed { id: removed } => *removed == id,
                 ChatsUpdate::Snapshot { .. } => false,

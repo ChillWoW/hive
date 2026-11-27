@@ -12,6 +12,7 @@ export type SettingsPageId =
     | "appearance"
     | "keyboard"
     | "terminal"
+    | "notifications"
     | "chats"
     | "worktrees"
     | "providers"

@@ -173,6 +173,27 @@ export type TerminalSettings = {
     gpuAcceleration: boolean;
 };
 
+/** What plays when a chat wants attention; made by `src/features/notifications/sounds.ts`. */
+export type NotificationSound = "none" | "chime" | "ping" | "pop" | "knock" | "buzz";
+
+/** Telling the user about chats they aren't watching; see `src/features/notifications/`. */
+export type NotificationsSettings = {
+    /** A system notification for each. */
+    desktop: boolean;
+    /** A turn finished. */
+    doneSound: NotificationSound;
+    /** A turn waits on the user: an approval, a question, a plan or a secret. */
+    inputSound: NotificationSound;
+    /** A turn failed. */
+    errorSound: NotificationSound;
+    /** In percent (0–100). */
+    volume: number;
+    /** The number of chats waiting, on the taskbar or dock icon, until the window is next focused. */
+    badge: boolean;
+    /** Stay quiet while the window is focused. */
+    onlyInBackground: boolean;
+};
+
 export type Settings = {
     version: number;
     appearance: AppearanceSettings;
@@ -185,6 +206,7 @@ export type Settings = {
     worktrees: WorktreesSettings;
     diffs: DiffsSettings;
     terminal: TerminalSettings;
+    notifications: NotificationsSettings;
 };
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -278,5 +300,14 @@ export const DEFAULT_SETTINGS: Settings = {
         optionAsMeta: false,
         closeOnExit: "clean",
         gpuAcceleration: true
+    },
+    notifications: {
+        desktop: true,
+        doneSound: "chime",
+        inputSound: "ping",
+        errorSound: "buzz",
+        volume: 60,
+        badge: true,
+        onlyInBackground: true
     }
 };

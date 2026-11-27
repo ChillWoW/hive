@@ -2,6 +2,7 @@ import type { ComponentType } from "react";
 import { ChatHeader, ChatView, useChatRuntime } from "@/features/chat";
 import { useChatsRuntime } from "@/features/chats";
 import { useEditorRuntime } from "@/features/editor";
+import { useNotificationsRuntime } from "@/features/notifications";
 import { SettingsModal, useSettingsRuntime } from "@/features/settings";
 import { useSidebarRuntime } from "@/features/sidebar";
 import { useTerminalRuntime } from "@/features/terminal";
@@ -40,6 +41,7 @@ export function App() {
     useUpdaterRuntime();
     useChatsRuntime();
     useChatRuntime();
+    useNotificationsRuntime();
     useSidebarRuntime();
     useTerminalRuntime();
     useEditorRuntime();

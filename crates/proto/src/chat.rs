@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::agent::{AgentEvent, BackgroundTask, SlashCommand};
+use crate::agent::{AgentEvent, BackgroundTask, DoneStatus, SlashCommand};
 use crate::git::GitFileState;
 use crate::message::{Attachment, Message};
 use crate::model::{ChatConfig, HarnessId};
@@ -281,6 +281,9 @@ pub enum ChatsUpdate {
     Removed { id: String },
     /// A chat's live state changed.
     Session { session: Session },
+    /// A chat's turn ended, just before its session says so: what the
+    /// frontend's notifications go by (`src/features/notifications/`).
+    TurnEnded { chat_id: String, status: DoneStatus },
 }
 
 

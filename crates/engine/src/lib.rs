@@ -758,14 +758,18 @@ impl Engine {
             // The UI still shows it; only the saved copy misses it.
             Err(error) => eprintln!("[engine] recording {chat_id}: {error}"),
         }
-        let done = matches!(event, AgentEvent::Done { .. });
+        let done = match &event {
+            AgentEvent::Done { status } => Some(*status),
+            _ => None,
+        };
         let message_id = turn.assistant.id.clone();
         watchers.messages(&chat_id, MessagesUpdate::Event { message_id, event });
-        if done {
+        if let Some(status) = done {
             let message = turn.assistant.clone();
             watchers.messages(&chat_id, MessagesUpdate::Upsert { message });
+            watchers.chats(ChatsUpdate::TurnEnded { chat_id, status });
         }
-        done
+        done.is_some()
     }
 
     /// Feeds run `id`'s events into its chat's turns until the process exits.

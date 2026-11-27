@@ -1,5 +1,6 @@
 import type { ComponentType } from "react";
 import {
+    BellIcon,
     ChatsCircleIcon,
     GitForkIcon,
     InfoIcon,
@@ -15,6 +16,7 @@ import { AppearancePage } from "./AppearancePage";
 import { ChatsPage } from "./ChatsPage";
 import { ProvidersPage } from "./ProvidersPage";
 import { KeyboardPage } from "./KeyboardPage";
+import { NotificationsPage } from "./NotificationsPage";
 import { TerminalPage } from "./TerminalPage";
 import { WorktreesPage } from "./WorktreesPage";
 
@@ -41,7 +43,8 @@ export const SETTINGS_CATEGORIES: readonly SettingsCategory[] = [
         pages: [
             { id: "appearance", label: "Appearance", icon: PaletteIcon, Component: AppearancePage },
             { id: "keyboard", label: "Keyboard", icon: KeyboardIcon, Component: KeyboardPage },
-            { id: "terminal", label: "Terminal", icon: TerminalWindowIcon, Component: TerminalPage }
+            { id: "terminal", label: "Terminal", icon: TerminalWindowIcon, Component: TerminalPage },
+            { id: "notifications", label: "Notifications", icon: BellIcon, Component: NotificationsPage }
         ]
     },
     {

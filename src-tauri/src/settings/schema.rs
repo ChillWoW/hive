@@ -31,6 +31,7 @@ pub struct Settings {
     pub worktrees: WorktreesSettings,
     pub diffs: DiffsSettings,
     pub terminal: TerminalSettings,
+    pub notifications: NotificationsSettings,
 }
 
 impl Default for Settings {
@@ -47,6 +48,7 @@ impl Default for Settings {
             worktrees: WorktreesSettings::default(),
             diffs: DiffsSettings::default(),
             terminal: TerminalSettings::default(),
+            notifications: NotificationsSettings::default(),
         }
     }
 }
@@ -514,6 +516,54 @@ impl Default for TerminalSettings {
     }
 }
 
+/// What plays when a chat wants attention; the sounds themselves are made by
+/// `src/features/notifications/sounds.ts`.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum NotificationSound {
+    #[default]
+    None,
+    Chime,
+    Ping,
+    Pop,
+    Knock,
+    Buzz,
+}
+
+/// Telling the user about chats they aren't watching, read by the frontend
+/// (`src/features/notifications/`): a turn that finished, one waiting on
+/// them (an approval, a question, a plan, a secret), one that failed.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct NotificationsSettings {
+    /// A system notification for each.
+    pub desktop: bool,
+    pub done_sound: NotificationSound,
+    pub input_sound: NotificationSound,
+    pub error_sound: NotificationSound,
+    /// In percent.
+    pub volume: u32,
+    /// The number of chats waiting, on the app's taskbar or dock icon, until
+    /// the window is next focused.
+    pub badge: bool,
+    /// Stay quiet while the window is focused.
+    pub only_in_background: bool,
+}
+
+impl Default for NotificationsSettings {
+    fn default() -> Self {
+        Self {
+            desktop: true,
+            done_sound: NotificationSound::Chime,
+            input_sound: NotificationSound::Ping,
+            error_sound: NotificationSound::Buzz,
+            volume: 60,
+            badge: true,
+            only_in_background: true,
+        }
+    }
+}
+
 impl Settings {
     /// Arbitrary JSON in, a valid document out; never fails.
     pub fn sanitize(base: &Settings, input: &Value) -> Settings {
@@ -551,6 +601,7 @@ impl Settings {
             TerminalSettings::default().line_height
         };
         terminal.scrollback = terminal.scrollback.min(100_000);
+        settings.notifications.volume = settings.notifications.volume.min(100);
         settings
     }
 }
