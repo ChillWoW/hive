@@ -48,7 +48,7 @@ fn failed(message: impl Into<String>) -> HarnessError {
 
 /// A command of the CLI's own in the home folder, its output captured.
 fn command(exe: &Path) -> Command {
-    let mut cmd = cli::command(exe);
+    let mut cmd = super::command(exe);
     cmd.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
     if let Some(home) = cli::home_dir() {
         cmd.current_dir(home);
@@ -403,7 +403,7 @@ fn sign_in_link(text: &str) -> Option<String> {
 /// [`SignInControl::submit`] the code, then [`SignIn::finish`].
 pub async fn start_sign_in(binary: Option<&Path>) -> Result<SignIn, HarnessError> {
     let exe = checked(binary).await?;
-    let mut cmd = cli::command(&exe);
+    let mut cmd = super::command(&exe);
     cmd.args(["acp", "--login"])
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())

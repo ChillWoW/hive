@@ -34,13 +34,34 @@ pub mod provider;
 mod session;
 
 use std::path::{Path, PathBuf};
+use std::time::SystemTime;
 
 use outcode_proto::{Catalog, ChatConfig, CommandKind, HarnessId, RunRequest, SlashCommand};
+use tokio::process::Command;
 
 use crate::{BoxFuture, Harness, HarnessError, Run, cli};
 use session::CommandCache;
 
 const NAME: &str = "agy";
+
+/// An `agy` command without a console window, with agy's own updater held
+/// off: once its last check is 15 minutes old, agy starts a detached
+/// `agy --bg-updater`, whose `agy --version` opens a console that flashes on
+/// screen. Outcode checks for releases and runs `agy update` itself, so the
+/// check is marked done before each launch.
+fn command(exe: &Path) -> Command {
+    if let Some(home) = cli::home_dir() {
+        let dir = home.join(".gemini").join("antigravity-cli");
+        if dir.is_dir() {
+            let _ = std::fs::File::options()
+                .create(true)
+                .append(true)
+                .open(dir.join("last_check.timestamp"))
+                .and_then(|f| f.set_modified(SystemTime::now()));
+        }
+    }
+    cli::command(exe)
+}
 
 /// agy's built-in commands, offered before a session lists its own.
 const BUILTINS: &[(&str, &str)] = &[

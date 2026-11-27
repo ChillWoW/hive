@@ -87,7 +87,7 @@ pub(super) struct Server {
 impl Server {
     /// Starts `agy acp` in `cwd` and completes the `initialize` handshake.
     pub(super) async fn start(exe: &Path, cwd: Option<&Path>) -> Result<Self, HarnessError> {
-        let mut cmd = cli::command(exe);
+        let mut cmd = super::command(exe);
         cmd.arg("acp")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
