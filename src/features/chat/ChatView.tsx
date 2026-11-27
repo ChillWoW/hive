@@ -35,7 +35,7 @@ export const laneClassName = "mx-auto w-full max-w-3xl";
 
 const NO_TASKS: readonly BackgroundTask[] = [];
 
-/** How long the composer takes to drop from the new-chat view into a thread. */
+/** How long the composer takes to move between the new-chat view's centre and a thread's foot. */
 const MORPH_MS = 320;
 
 /** How close to the end counts as following it, in px. */
@@ -156,8 +156,7 @@ export function ChatView() {
     // measured where it was; that commit is never painted.
     useLayoutEffect(() => {
         if (!settled || centred === wantCentred) return;
-        // Only the way down morphs: a new chat becoming a thread.
-        fromRef.current = centred ? (bottomRef.current?.getBoundingClientRect().top ?? null) : null;
+        fromRef.current = bottomRef.current?.getBoundingClientRect().top ?? null;
         setCentred(wantCentred);
     }, [settled, centred, wantCentred]);
     useLayoutEffect(() => {
