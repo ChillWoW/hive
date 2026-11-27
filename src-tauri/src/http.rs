@@ -1,4 +1,4 @@
-//! The app's HTTP client, for GitHub lookups (`updater.rs`).
+//! The app's HTTP client, for GitHub lookups (`updater.rs`, `avatars.rs`).
 
 use std::sync::OnceLock;
 use std::time::Duration;

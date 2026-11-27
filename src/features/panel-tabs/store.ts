@@ -1,8 +1,8 @@
 import { create } from "zustand";
 
-export type PanelTabKind = "file" | "diff" | "terminal";
+export type PanelTabKind = "file" | "diff" | "terminal" | "history" | "commit";
 
-/** A tab in the tabs panel: a file, a diff or a terminal. */
+/** A tab in the tabs panel: a file, a diff, a terminal, a folder's history or one commit. */
 export type PanelTab = {
     id: string;
     kind: PanelTabKind;
@@ -15,6 +15,10 @@ export type PanelTab = {
     file?: { cwd: string; path: string };
     /** A diff tab's folder: its checkout's uncommitted changes. */
     diff?: { cwd: string };
+    /** A history tab's folder: its checkout's commits. */
+    history?: { cwd: string };
+    /** A commit tab's commit, in `cwd`'s checkout. */
+    commit?: { cwd: string; sha: string };
 };
 
 /**
@@ -62,7 +66,7 @@ export const panelTabs = {
         setTabs(next, id);
         return id;
     },
-    /** Changes a tab's title, detail, dirty mark or file. */
+    /** Changes a tab's title, detail, dirty mark, file or commit. */
     update: (id: string, patch: Partial<Omit<PanelTab, "id" | "kind">>) => {
         const { tabs } = state();
         const at = tabs.findIndex((t) => t.id === id);

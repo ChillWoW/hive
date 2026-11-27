@@ -206,6 +206,7 @@ pub struct KeyboardSettings {
     pub go_to_last_tab: String,
     pub new_terminal: String,
     pub show_changes: String,
+    pub show_history: String,
 }
 
 impl Default for KeyboardSettings {
@@ -233,6 +234,7 @@ impl Default for KeyboardSettings {
             go_to_last_tab: "Mod+9".into(),
             new_terminal: "Mod+J".into(),
             show_changes: "Mod+Shift+G".into(),
+            show_history: "Mod+Shift+H".into(),
         }
     }
 }

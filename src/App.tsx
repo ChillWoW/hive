@@ -9,6 +9,7 @@ import { useFontRuntime } from "@/features/fonts/useFontRuntime";
 import { useThemeRuntime } from "@/features/theme/useThemeRuntime";
 import { useUpdaterRuntime } from "@/features/updater";
 import { useChangesRuntime } from "@/features/changes";
+import { useHistoryRuntime } from "@/features/history";
 import { useKeybindingsRuntime } from "@/keybindings";
 import {
     BOX_INSET,
@@ -43,6 +44,7 @@ export function App() {
     useTerminalRuntime();
     useEditorRuntime();
     useChangesRuntime();
+    useHistoryRuntime();
     const placement = usePlacement();
     const dockLeft = placement.dock === "left";
 

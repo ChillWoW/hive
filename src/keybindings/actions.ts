@@ -82,6 +82,14 @@ export const ACTIONS: readonly Action[] = [
         scope: "global"
     },
     {
+        id: "showHistory",
+        category: "general",
+        label: "Show history",
+        description: "Shows the folder's commits and branches in the tabs panel",
+        keywords: "history log commits git graph branches tags blame",
+        scope: "global"
+    },
+    {
         id: "goBack",
         category: "general",
         label: "Go back",

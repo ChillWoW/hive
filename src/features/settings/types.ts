@@ -52,6 +52,7 @@ export type KeyboardSettings = {
     goToLastTab: string;
     newTerminal: string;
     showChanges: string;
+    showHistory: string;
 };
 
 export type ClaudeSettings = {
@@ -213,7 +214,8 @@ export const DEFAULT_SETTINGS: Settings = {
         goToTab8: "Mod+8",
         goToLastTab: "Mod+9",
         newTerminal: "Mod+J",
-        showChanges: "Mod+Shift+G"
+        showChanges: "Mod+Shift+G",
+        showHistory: "Mod+Shift+H"
     },
     claude: {
         binaryPath: "",

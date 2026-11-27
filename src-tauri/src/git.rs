@@ -1,8 +1,9 @@
-//! The branch picker's git commands, over `outcode_git`, for a chat's folder.
+//! The branch picker's, changes tab's and history tab's git commands, over
+//! `outcode_git`, for a chat's folder.
 
 use std::path::Path;
 
-use outcode_proto::{GitChanges, GitRepo};
+use outcode_proto::{GitChanges, GitCommitDetail, GitHistoryPage, GitRepo};
 
 fn err(error: impl std::fmt::Display) -> String {
     error.to_string()
@@ -34,4 +35,57 @@ pub async fn git_delete_branch(cwd: String, name: String) -> Result<(), String> 
 #[tauri::command]
 pub async fn git_changes(cwd: String) -> Result<Option<GitChanges>, String> {
     outcode_git::changes(Path::new(&cwd)).await.map_err(err)
+}
+
+/// `limit` commits of the checkout's history from `cursor` on (every branch,
+/// remote branch and tag, children first); null outside a checkout.
+#[tauri::command]
+pub async fn git_history(
+    cwd: String,
+    cursor: Option<usize>,
+    limit: Option<usize>,
+) -> Result<Option<GitHistoryPage>, String> {
+    outcode_git::history(
+        Path::new(&cwd),
+        cursor.unwrap_or(0),
+        limit.unwrap_or(outcode_git::HISTORY_DEFAULT_LIMIT),
+    )
+    .await
+    .map_err(err)
+}
+
+/// The commits matching `query` through the whole history, a page at a time.
+#[tauri::command]
+pub async fn git_search_history(
+    cwd: String,
+    query: String,
+    cursor: Option<usize>,
+    limit: Option<usize>,
+) -> Result<Option<GitHistoryPage>, String> {
+    outcode_git::search_history(
+        Path::new(&cwd),
+        &query,
+        cursor.unwrap_or(0),
+        limit.unwrap_or(outcode_git::HISTORY_DEFAULT_LIMIT),
+    )
+    .await
+    .map_err(err)
+}
+
+/// `git fetch --all`: remote branches only, never HEAD or the files.
+#[tauri::command]
+pub async fn git_fetch_all(cwd: String) -> Result<(), String> {
+    outcode_git::fetch_all(Path::new(&cwd)).await.map_err(err)
+}
+
+/// One commit's message and what it changed against its first parent; null
+/// outside a checkout.
+#[tauri::command]
+pub async fn git_commit_detail(
+    cwd: String,
+    sha: String,
+) -> Result<Option<GitCommitDetail>, String> {
+    outcode_git::commit_detail(Path::new(&cwd), &sha)
+        .await
+        .map_err(err)
 }

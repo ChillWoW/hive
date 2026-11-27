@@ -2,12 +2,15 @@ import { useRef, useState, type PointerEvent as ReactPointerEvent } from "react"
 import {
     ArrowsInLineHorizontalIcon,
     ArrowsOutLineHorizontalIcon,
+    ClockCounterClockwiseIcon,
+    GitCommitIcon,
     GitDiffIcon,
     PlusIcon,
     TerminalWindowIcon,
     XIcon
 } from "@phosphor-icons/react";
 import { openChangesTab, useCurrentFolder } from "@/features/changes";
+import { openHistoryTab } from "@/features/history";
 import { useRevealActive, useSidewaysWheel, useTabDrag } from "@/features/tabs";
 import { openTerminal } from "@/features/terminal";
 import { ShortcutKeys, useBinding } from "@/keybindings";
@@ -18,7 +21,7 @@ import { panelTabs, usePanelTabsStore, type PanelTab } from "./store";
 
 /**
  * The tabs panel's head: its tabs, editor-like, then + for what can be opened
- * (a terminal, the folder's changes) and the toggle that maximizes the panel
+ * (a terminal, the folder's changes or history) and the toggle that maximizes the panel
  * over the chat.
  * A press shows one, dragging reorders, middle-click or × closes, right-click
  * for more; past its room the strip scrolls (the wheel scrolls it sideways).
@@ -59,6 +62,7 @@ function NewTabMenu() {
     const folder = useCurrentFolder();
     const terminal = useBinding("newTerminal");
     const changes = useBinding("showChanges");
+    const history = useBinding("showHistory");
     return (
         <Menu>
             <Tooltip>
@@ -79,6 +83,11 @@ function NewTabMenu() {
                     <GitDiffIcon className="size-3.5 text-muted" />
                     Show changes
                     <ShortcutKeys shortcut={changes} variant="plain" className="ml-auto pl-4" />
+                </Menu.Item>
+                <Menu.Item disabled={!folder} onClick={() => openHistoryTab(folder)}>
+                    <ClockCounterClockwiseIcon className="size-3.5 text-muted" />
+                    Show history
+                    <ShortcutKeys shortcut={history} variant="plain" className="ml-auto pl-4" />
                 </Menu.Item>
             </Menu.Content>
         </Menu>
@@ -103,10 +112,17 @@ function MaximizeButton() {
     );
 }
 
+const GLYPHS = {
+    diff: GitDiffIcon,
+    terminal: TerminalWindowIcon,
+    history: ClockCounterClockwiseIcon,
+    commit: GitCommitIcon
+} as const;
+
 /** A tab kind's glyph; a file's is its file-type icon. */
 export function PanelTabIcon({ tab, className }: { tab: Pick<PanelTab, "kind" | "title">; className?: string }) {
     if (tab.kind === "file") return <FileIcon name={tab.title} className={cn("size-3.5", className)} />;
-    const Glyph = tab.kind === "diff" ? GitDiffIcon : TerminalWindowIcon;
+    const Glyph = GLYPHS[tab.kind];
     return <Glyph className={cn("size-3.5 shrink-0 text-muted", className)} />;
 }
 

@@ -1,3 +1,4 @@
+mod avatars;
 mod chat;
 mod claude;
 mod codex;
@@ -66,6 +67,7 @@ pub fn run() {
             app.manage(codex::SignInResult::default());
             app.manage(themes::ThemesDir::open(data_dir.join("themes"))?);
             app.manage(updater::Updates::default());
+            app.manage(avatars::Avatars::default());
             let engine = chat::engine(app.handle(), &data_dir)?;
             app.manage(mcp::SecretRequests::default());
             mcp::start(app.handle(), &data_dir, &engine);
@@ -124,6 +126,11 @@ pub fn run() {
             git::git_create_branch,
             git::git_delete_branch,
             git::git_changes,
+            git::git_history,
+            git::git_search_history,
+            git::git_fetch_all,
+            git::git_commit_detail,
+            avatars::git_avatars,
             editor::read_file,
             editor::read_file_bytes,
             editor::write_file,
