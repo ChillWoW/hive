@@ -137,6 +137,12 @@
 }
 
 @layer base {
+    /* No macOS rubber-band bounce: trackpad overscroll would drag the whole window's content. */
+    html,
+    body {
+        overscroll-behavior: none;
+    }
+
     body {
         background-color: var(--color-bg);
         color: var(--color-text);
