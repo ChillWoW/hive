@@ -269,10 +269,9 @@ function script(prompt: string, config: ChatConfig): AgentEvent[] {
 /** Applies `event` to the chat's streaming reply and passes it on. */
 function feed(chatId: string, replyId: string, event: AgentEvent) {
     if (event.type === "contextUsage") {
-        const context = sessionOf(chatId).context ?? {};
-        setSession(chatId, {
-            context: { tokens: event.tokens ?? context.tokens, window: event.window ?? context.window }
-        });
+        const chat = chatOf(chatId);
+        const context = chat.context ?? {};
+        save({ ...chat, context: { tokens: event.tokens ?? context.tokens, window: event.window ?? context.window } });
         return;
     }
     if (event.type === "backgroundTasks") {

@@ -273,6 +273,8 @@ impl Engine {
 /// yet is updated rather than stacked; moving back to where it came from
 /// drops it, and takes that agent's session back.
 fn move_on(chat: &mut Chat, mut handoff: Handoff, config: ChatConfig) {
+    // The next agent's context is its own.
+    chat.context = None;
     let last = chat.handoffs.last().filter(|h| !h.delivered && h.from_chat_id.is_none());
     if let Some(last) = last {
         if last.from_harness == config.harness && last.from_model == config.model {

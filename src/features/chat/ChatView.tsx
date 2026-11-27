@@ -161,7 +161,7 @@ export function ChatView() {
                     {session && (
                         <BackgroundTasks tasks={session.tasks} messages={messages} onStop={queue.stopTask} />
                     )}
-                    <ContextMeter context={session?.context} />
+                    <ContextMeter context={chat?.context} />
                 </span>
             </div>
         </>

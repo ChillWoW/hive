@@ -117,6 +117,7 @@ impl Store {
             worktree: None,
             handoffs: Vec::new(),
             parent_chat_id: None,
+            context: None,
         };
         self.save_chat(&chat)?;
         Ok(chat)

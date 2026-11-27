@@ -397,6 +397,12 @@ impl Engine {
         let chat = self.update_locked(&mut state, chat_id, |chat| {
             if chat.config.harness != config.harness {
                 chat.session_id = None;
+                chat.context = None;
+            } else if chat.config.model != config.model
+                && let Some(context) = &mut chat.context
+            {
+                // Another model, another window: its run reports it.
+                context.window = None;
             }
             chat.config = config;
         })?;
@@ -822,11 +828,16 @@ impl Engine {
                 return state.update_session(chat_id, |s| s.commands = commands);
             }
             AgentEvent::ContextUsage { tokens, window } => {
-                return state.update_session(chat_id, |s| {
-                    let context = s.context.get_or_insert_with(ContextWindow::default);
+                // Saved with the chat, so it's still there after a restart.
+                let saved = self.update_locked(&mut state, chat_id, |chat| {
+                    let context = chat.context.get_or_insert_with(ContextWindow::default);
                     context.tokens = tokens.or(context.tokens);
                     context.window = window.or(context.window);
                 });
+                if let Err(error) = saved {
+                    eprintln!("[engine] context of {chat_id}: {error}");
+                }
+                return;
             }
             AgentEvent::PromptSuggestion { text } => {
                 // Only for the turn that just ended, not one started since.

@@ -50,6 +50,9 @@ pub struct Chat {
     /// it may have been deleted since. Such a chat can't start chats itself.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub parent_chat_id: Option<String>,
+    /// How full its agent's context window is, as last reported.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context: Option<ContextWindow>,
 }
 
 impl Chat {
@@ -221,8 +224,6 @@ pub struct Session {
     pub asking: bool,
     /// Work the agent left running in the background.
     pub tasks: Vec<BackgroundTask>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub context: Option<ContextWindow>,
     /// Secrets the agent asked for (`request_secret`), waiting on the user.
     #[serde(default)]
     pub secrets: Vec<SecretRequest>,
@@ -248,7 +249,6 @@ impl Session {
             && !self.asking
             && self.queued.is_empty()
             && self.tasks.is_empty()
-            && self.context.is_none()
             && self.commands.is_empty()
             && self.secrets.is_empty()
             && self.suggestion.is_none()
