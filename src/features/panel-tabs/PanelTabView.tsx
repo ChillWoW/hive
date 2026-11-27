@@ -61,26 +61,29 @@ function Empty() {
     const history = useBinding("showHistory");
     const folder = useCurrentFolder();
     return (
-        <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => openTerminal()} className="w-44 gap-2">
-                <TerminalWindowIcon className="size-3.5" />
-                New terminal
-                <ShortcutKeys shortcut={terminal} variant="plain" className="ml-auto" />
-            </Button>
-            {folder && (
-                <Button variant="outline" size="sm" onClick={() => openChangesTab(folder)} className="w-44 gap-2">
-                    <GitDiffIcon className="size-3.5" />
-                    Show changes
-                    <ShortcutKeys shortcut={changes} variant="plain" className="ml-auto" />
+        <div className="flex min-h-0 flex-1 items-center justify-center">
+            {/* Grid sizes every button to the widest one, so labels and keys never overflow. */}
+            <div className="grid gap-2">
+                <Button variant="outline" size="sm" onClick={() => openTerminal()} className="justify-start gap-2">
+                    <TerminalWindowIcon className="size-3.5" />
+                    New terminal
+                    <ShortcutKeys shortcut={terminal} variant="plain" className="ml-auto pl-4" />
                 </Button>
-            )}
-            {folder && (
-                <Button variant="outline" size="sm" onClick={() => openHistoryTab(folder)} className="w-44 gap-2">
-                    <ClockCounterClockwiseIcon className="size-3.5" />
-                    Show history
-                    <ShortcutKeys shortcut={history} variant="plain" className="ml-auto" />
-                </Button>
-            )}
+                {folder && (
+                    <Button variant="outline" size="sm" onClick={() => openChangesTab(folder)} className="justify-start gap-2">
+                        <GitDiffIcon className="size-3.5" />
+                        Show changes
+                        <ShortcutKeys shortcut={changes} variant="plain" className="ml-auto pl-4" />
+                    </Button>
+                )}
+                {folder && (
+                    <Button variant="outline" size="sm" onClick={() => openHistoryTab(folder)} className="justify-start gap-2">
+                        <ClockCounterClockwiseIcon className="size-3.5" />
+                        Show history
+                        <ShortcutKeys shortcut={history} variant="plain" className="ml-auto pl-4" />
+                    </Button>
+                )}
+            </div>
         </div>
     );
 }
