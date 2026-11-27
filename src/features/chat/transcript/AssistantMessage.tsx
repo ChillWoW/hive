@@ -62,7 +62,7 @@ export function AssistantMessage({ message }: { message: Message }) {
         .join("\n\n");
 
     return (
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-3 compact:gap-2">
             <TurnParts parts={parts} streaming={streaming} />
             {streaming && <WorkingStatus since={message.createdAt} waiting={!!pendingInput(parts)} />}
             {!streaming && (

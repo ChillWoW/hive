@@ -73,7 +73,7 @@ export function UserMessage({ message }: { message: Message }) {
             )}
             {viewer.viewer}
             {text.trim() && (
-                <div className="rounded-2xl rounded-br-md bg-raised px-3 py-1.5 text-sm leading-6 break-words whitespace-pre-wrap text-text">
+                <div className="rounded-2xl rounded-br-md bg-raised px-3 py-1.5 text-sm leading-6 break-words compact:py-1 compact:leading-5 whitespace-pre-wrap text-text">
                     <Collapsible>
                         {tagPieces(text, findTags(text)).map((piece, i) =>
                             "tag" in piece ? <TagChip key={i} tag={piece.tag} /> : piece.text

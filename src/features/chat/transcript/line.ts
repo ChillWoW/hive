@@ -7,7 +7,7 @@ export const panelTransition =
     "h-(--collapsible-panel-height) overflow-hidden transition-[height] duration-200 ease-out data-ending-style:h-0 data-starting-style:h-0";
 
 /** A line in a group: its icon, then words. */
-export const lineClassName = "group/item flex h-[26px] w-full min-w-0 items-center gap-2 text-left text-[13px]";
+export const lineClassName = "group/item flex h-[26px] w-full compact:h-[22px] min-w-0 items-center gap-2 text-left text-[13px]";
 
 /** What a line opens onto, under its words (past the 14px icon and its gap). */
 export const lineBodyClassName = "pl-[22px]";

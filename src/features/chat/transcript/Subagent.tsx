@@ -71,7 +71,7 @@ function SubagentRow({ part, streaming }: { part: ToolPart; streaming: boolean }
             type="button"
             aria-label={`Open ${title}`}
             onClick={() => chats.openSubagent(part.id)}
-            className="group/subagent flex w-full min-w-0 cursor-pointer items-center gap-2.5 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-hover/60 focus-visible:ring-2 focus-visible:ring-accent/60 focus-visible:outline-none focus-visible:ring-inset"
+            className="group/subagent flex w-full min-w-0 cursor-pointer items-center gap-2.5 rounded-md px-2 py-1.5 text-left compact:py-1 transition-colors hover:bg-hover/60 focus-visible:ring-2 focus-visible:ring-accent/60 focus-visible:outline-none focus-visible:ring-inset"
         >
             <SubagentAvatar state={state} />
             <span className="min-w-0 flex-1">

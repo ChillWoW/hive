@@ -85,6 +85,12 @@ export type AntigravitySettings = {
 
 export type BusySend = "queue" | "after-tool" | "interrupt";
 
+/** Which of a turn's tool calls the transcript shows: all, only those running or failed, or none (just the turn's last reply). */
+export type ToolCalls = "all" | "hide-successful" | "final-only";
+
+/** The widest the transcript's column grows; `full` is the whole main column. */
+export type TranscriptWidth = "narrow" | "default" | "wide" | "full";
+
 export type ChatSettings = {
     /** The model a new chat starts on (a catalog id). */
     defaultModel: string;
@@ -102,6 +108,11 @@ export type ChatSettings = {
     reasoningExpanded: boolean;
     /** Tool rows start expanded, showing their output. */
     toolOutputExpanded: boolean;
+    toolCalls: ToolCalls;
+    /** The transcript drawn tighter: less space between and inside turns. */
+    compactTranscript: boolean;
+    /** How wide the transcript and the composer under it may grow. */
+    transcriptWidth: TranscriptWidth;
     /** What sending does while a turn runs: queue it, stop the turn after its running tool call and send, or stop it and send now. */
     busySend: BusySend;
     /** After each completed turn the agent guesses the next prompt, shown in the empty composer for Tab to take. */
@@ -271,6 +282,9 @@ export const DEFAULT_SETTINGS: Settings = {
         textGenerationModel: "haiku",
         reasoningExpanded: false,
         toolOutputExpanded: false,
+        toolCalls: "all",
+        compactTranscript: false,
+        transcriptWidth: "default",
         busySend: "queue",
         promptSuggestions: true
     },

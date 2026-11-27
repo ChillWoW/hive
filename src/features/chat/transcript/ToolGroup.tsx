@@ -49,7 +49,7 @@ const MAX_LINES = 24;
 /** A group's header: what the group did, then a chevron that turns as it opens. */
 function FoldHeader({ children }: { children: ReactNode }) {
     return (
-        <Collapsible.Trigger className="group/header flex h-6 max-w-full items-center gap-1.5 text-left text-[13px] text-muted/85 transition-colors hover:text-text/80">
+        <Collapsible.Trigger className="group/header flex h-6 max-w-full compact:h-5 items-center gap-1.5 text-left text-[13px] text-muted/85 transition-colors hover:text-text/80">
             {children}
             <CaretRightIcon
                 weight="bold"

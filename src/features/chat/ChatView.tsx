@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type Ref } from "react";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode, type Ref } from "react";
 import { CaretDownIcon } from "@phosphor-icons/react";
 import type { Attachment, BackgroundTask, Chat, ChatConfig, Handoff, HandoffMode, Message } from "@/proto";
 import { cn } from "@/lib/cn";
@@ -8,6 +8,7 @@ import { WorkspacePicker } from "@/features/git";
 import { HarnessMark } from "@/features/models";
 import { ChatMenuItems, DeleteChatDialog, UNTITLED } from "@/features/sidebar";
 import { Menu, toast, useInlineRename } from "@/ui";
+import { useSettingsStore, type TranscriptWidth } from "@/features/settings";
 import { useChatConfig } from "./config";
 import { AgentUpdates } from "./AgentUpdates";
 import { AssistantMessage } from "./transcript/AssistantMessage";
@@ -32,10 +33,18 @@ import { findSpawnIn, subagentName } from "./transcript/subagents";
 
 /**
  * The column the transcript and the composer share: centred, at most
- * `max-w-3xl`, inside the pane's `px-6`. Beside open panels it narrows with
+ * `--lane-width` (Settings › Chats › Width, set on `ChatView`'s root; 48rem
+ * without), inside the pane's `px-6`. Beside open panels it narrows with
  * the main column, which the layout keeps at least `MAIN_MIN_WIDTH` wide.
  */
-export const laneClassName = "mx-auto w-full max-w-3xl";
+export const laneClassName = "mx-auto w-full max-w-[var(--lane-width,48rem)]";
+
+const LANE_WIDTHS: Record<TranscriptWidth, string> = {
+    narrow: "40rem",
+    default: "48rem",
+    wide: "64rem",
+    full: "none"
+};
 
 const NO_TASKS: readonly BackgroundTask[] = [];
 const NO_HANDOFFS: readonly Handoff[] = [];
@@ -168,6 +177,8 @@ export function ChatView() {
     const wantCentred = !pendingSetup && messages.length === 0;
     const settled = !!pendingSetup || !chat || loaded;
     const [centred, setCentred] = useState(wantCentred);
+    const compact = useSettingsStore((s) => s.settings.chat.compactTranscript);
+    const width = useSettingsStore((s) => s.settings.chat.transcriptWidth);
     const bottomRef = useRef<HTMLDivElement>(null);
     const rootRef = useRef<HTMLDivElement>(null);
     // Where the composer was when the layout last flipped, for its morph.
@@ -265,7 +276,13 @@ export function ChatView() {
         // A chat brings its header (h-9) in above this view: the extra foot
         // keeps the centred composer where it is without one, so it doesn't
         // jump as the header comes in ahead of the morph.
-        <div ref={rootRef} className={cn("relative flex h-full w-full flex-col", centred && (chat ? "pb-25" : "pb-16"))}>
+        <div
+            ref={rootRef}
+            // The `compact:` variant's switch (`src/index.css`).
+            data-compact={compact || undefined}
+            style={{ "--lane-width": LANE_WIDTHS[width] } as CSSProperties}
+            className={cn("relative flex h-full w-full flex-col", centred && (chat ? "pb-25" : "pb-16"))}
+        >
             {top}
             {(centred || pendingSetup || !openSpawn) && (
                 <Bottom key="composer" ref={bottomRef}>
@@ -523,7 +540,7 @@ export function TranscriptScroller({
                 }}
                 className="min-h-0 flex-1 overflow-y-auto px-6 [scrollbar-gutter:stable_both-edges]"
             >
-                <div ref={contentRef} className={cn(laneClassName, "flex flex-col gap-5 py-6")}>
+                <div ref={contentRef} className={cn(laneClassName, "flex flex-col gap-5 py-6 compact:gap-3 compact:py-4")}>
                     {children}
                 </div>
             </div>

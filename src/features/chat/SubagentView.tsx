@@ -4,7 +4,7 @@ import { cn } from "@/lib/cn";
 import { formatElapsed } from "@/lib/time";
 import { chats } from "@/features/chats/store";
 import { Button } from "@/ui";
-import { TranscriptScroller } from "./ChatView";
+import { laneClassName, TranscriptScroller } from "./ChatView";
 import { AssistantMessage } from "./transcript/AssistantMessage";
 import { SubagentAvatar } from "./transcript/Subagent";
 import { findSpawnIn, spawnResult, SUBAGENT_STATE, subagentName, useSubagent } from "./transcript/subagents";
@@ -32,7 +32,7 @@ export function SubagentView({
         <div className="flex min-h-0 w-full flex-1 flex-col">
             <ThreadTranscript key={id} spawn={spawn} message={message} />
             <div className="shrink-0 px-6 pb-3">
-                <div className="mx-auto w-full max-w-3xl">
+                <div className={laneClassName}>
                     <SubagentBar spawn={spawn} streaming={message.status === "streaming"} />
                 </div>
             </div>

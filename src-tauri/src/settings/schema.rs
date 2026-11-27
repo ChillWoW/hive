@@ -309,6 +309,12 @@ pub struct ChatSettings {
     pub reasoning_expanded: bool,
     /// Tool rows start expanded, showing their output.
     pub tool_output_expanded: bool,
+    /// Which of a turn's tool calls the transcript shows.
+    pub tool_calls: ToolCalls,
+    /// The transcript drawn tighter: less space between and inside turns.
+    pub compact_transcript: bool,
+    /// How wide the transcript and the composer under it may grow.
+    pub transcript_width: TranscriptWidth,
     /// What sending does while a turn runs: wait for it, stop it after the
     /// running tool call, or stop it now.
     pub busy_send: BusySend,
@@ -330,6 +336,31 @@ pub enum BusySend {
     Interrupt,
 }
 
+/// Which of a turn's tool calls the transcript shows.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ToolCalls {
+    /// Every call.
+    #[default]
+    All,
+    /// Calls still running and calls that failed; one that worked goes.
+    HideSuccessful,
+    /// None, nor thoughts and text along the way: only the turn's last reply.
+    FinalOnly,
+}
+
+/// The widest the transcript's column grows.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum TranscriptWidth {
+    Narrow,
+    #[default]
+    Default,
+    Wide,
+    /// The whole main column.
+    Full,
+}
+
 impl Default for ChatSettings {
     fn default() -> Self {
         Self {
@@ -341,6 +372,9 @@ impl Default for ChatSettings {
             text_generation_model: "haiku".into(),
             reasoning_expanded: false,
             tool_output_expanded: false,
+            tool_calls: ToolCalls::All,
+            compact_transcript: false,
+            transcript_width: TranscriptWidth::Default,
             busy_send: BusySend::Queue,
             prompt_suggestions: true,
         }

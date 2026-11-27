@@ -4,7 +4,15 @@ import { defaultConfig, ModelPicker, useCatalog } from "@/features/models";
 import { SegmentedControl, Select } from "@/ui";
 import { SettingRow, SettingsSection, SwitchRow } from "../SettingsSection";
 import { useSetting, useSettingsStore } from "../store";
-import { DEFAULT_SETTINGS, type BusySend, type DiffIndicators, type DiffStyle, type InlineChanges } from "../types";
+import {
+    DEFAULT_SETTINGS,
+    type BusySend,
+    type DiffIndicators,
+    type DiffStyle,
+    type InlineChanges,
+    type ToolCalls,
+    type TranscriptWidth
+} from "../types";
 
 export function ChatsPage() {
     return (
@@ -141,12 +149,72 @@ function TextGenerationSection() {
     );
 }
 
+const TOOL_CALLS: { value: ToolCalls; label: string }[] = [
+    { value: "all", label: "Show all" },
+    { value: "hide-successful", label: "Hide successful" },
+    { value: "final-only", label: "Final reply only" }
+];
+
 function TranscriptSection() {
     const reasoning = useSetting("chat", "reasoningExpanded");
     const toolOutput = useSetting("chat", "toolOutputExpanded");
+    const toolCalls = useSetting("chat", "toolCalls");
+    const compact = useSetting("chat", "compactTranscript");
+    const width = useSetting("chat", "transcriptWidth");
 
     return (
         <SettingsSection title="Transcript">
+            <SettingRow
+                label="Width"
+                description="How wide the transcript and composer may grow"
+                keywords="transcript width narrow wide full column lane max"
+                setting={width}
+                controlClassName="w-auto"
+                control={
+                    <SegmentedControl
+                        size="xs"
+                        value={width.value}
+                        onValueChange={(value) => width.set(value as TranscriptWidth)}
+                        aria-label="Transcript width"
+                    >
+                        <SegmentedControl.Item value="narrow">Narrow</SegmentedControl.Item>
+                        <SegmentedControl.Item value="default">Default</SegmentedControl.Item>
+                        <SegmentedControl.Item value="wide">Wide</SegmentedControl.Item>
+                        <SegmentedControl.Item value="full">Full</SegmentedControl.Item>
+                    </SegmentedControl>
+                }
+            />
+            <SwitchRow
+                label="Compact"
+                description="Less space between and inside turns"
+                keywords="compact dense density spacing tight transcript"
+                setting={compact}
+            />
+            <SettingRow
+                label="Tool calls"
+                description="Which of a turn's steps the transcript shows"
+                keywords="tool calls visibility hide successful failed final reply only answer thinking transcript"
+                setting={toolCalls}
+                controlClassName="w-44"
+                control={
+                    <Select
+                        items={TOOL_CALLS}
+                        value={toolCalls.value}
+                        onValueChange={(next: ToolCalls | null) => next && toolCalls.set(next)}
+                    >
+                        <Select.Trigger aria-label="Tool calls">
+                            <Select.Value />
+                        </Select.Trigger>
+                        <Select.Content>
+                            {TOOL_CALLS.map((option) => (
+                                <Select.Item key={option.value} value={option.value}>
+                                    {option.label}
+                                </Select.Item>
+                            ))}
+                        </Select.Content>
+                    </Select>
+                }
+            />
             <SwitchRow
                 label="Expand thinking"
                 description="Show the agent's thoughts in full rather than a one-line preview"
