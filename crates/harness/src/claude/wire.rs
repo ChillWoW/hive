@@ -115,6 +115,9 @@ pub(crate) struct StreamEventBody {
     /// `content_block_start`: the block that starts.
     #[serde(default)]
     pub content_block: Value,
+    /// `message_start`: the message that starts, with the prompt's usage.
+    #[serde(default)]
+    pub message: MessageBody,
 }
 
 #[derive(Debug, Default, Deserialize)]

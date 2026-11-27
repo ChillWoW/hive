@@ -58,6 +58,16 @@ impl Normalizer {
                 let event = &f.event;
                 let mut out = Vec::new();
                 match event.kind.as_str() {
+                    // The prompt's size is known as the reply starts; the
+                    // `assistant` frame repeats it only once a block is whole.
+                    "message_start" if parent.is_none() => {
+                        if let Some(tokens) = event.message.usage.as_ref().and_then(context_tokens) {
+                            out.push(AgentEvent::ContextUsage {
+                                tokens: Some(tokens),
+                                window: None,
+                            });
+                        }
+                    }
                     "content_block_start"
                         if parent.is_none()
                             && event.content_block["type"] == "text"
@@ -837,6 +847,16 @@ mod tests {
                 AgentEvent::Usage { input_tokens: 10, output_tokens: 5 },
             ]
         );
+    }
+
+    #[test]
+    fn context_usage_as_a_message_starts() {
+        let (events, _) = feed(
+            &mut Normalizer::default(),
+            &[json!({ "type": "stream_event", "event": { "type": "message_start", "message": {
+                "usage": { "input_tokens": 10, "cache_read_input_tokens": 90, "cache_creation_input_tokens": 20 } } } })],
+        );
+        assert_eq!(events, vec![AgentEvent::ContextUsage { tokens: Some(120), window: None }]);
     }
 
     #[test]
