@@ -186,6 +186,13 @@ pub async fn chat_handoff(
     engine.handoff(&chat_id, config, mode).await.map_err(err)
 }
 
+/// Forks the chat at `message_id` into a new one: the transcript up to that
+/// message, on the same agent, folder and worktree. Returns the new chat.
+#[tauri::command]
+pub async fn chat_fork(engine: State<'_, Engine>, chat_id: String, message_id: String) -> Result<Chat, String> {
+    engine.fork(&chat_id, &message_id).await.map_err(err)
+}
+
 /// `harness`'s models, and whether its CLI is installed.
 #[tauri::command]
 pub async fn harness_catalog(engine: State<'_, Engine>, harness: HarnessId) -> Result<Catalog, String> {

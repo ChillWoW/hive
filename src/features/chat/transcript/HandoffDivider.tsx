@@ -1,11 +1,12 @@
 import type { ReactNode } from "react";
-import { ArrowRightIcon, ArrowsLeftRightIcon } from "@phosphor-icons/react";
+import { ArrowRightIcon, ArrowsLeftRightIcon, ArrowsSplitIcon } from "@phosphor-icons/react";
 import type { Chat, Handoff, HarnessId } from "@/proto";
 import { chats, useChatsStore } from "@/features/chats";
 import { HARNESS_LABELS, HarnessMark, useCatalog } from "@/features/models";
 import { Divider } from "./Dividers";
 
 const icon = <ArrowsLeftRightIcon className="size-3.5 shrink-0" />;
+const forkIcon = <ArrowsSplitIcon className="size-3.5 shrink-0" />;
 
 /** A harness's mark and the model's name (the harness's when there's none). */
 function Endpoint({ harness, model }: { harness: HarnessId; model?: string }) {
@@ -42,6 +43,26 @@ export function HandoffDivider({ handoff }: { handoff: Handoff }) {
         handoff.fromChatId ? s.chats.find((c) => c.id === handoff.fromChatId) : undefined
     );
     const pending = handoff.status === "summarizing" && !handoff.delivered;
+    const open = source ? () => chats.select(source.id) : undefined;
+    // A fork: the other chat's messages are copied in above it.
+    if (handoff.fromChatId && handoff.afterMessageId) {
+        return (
+            <Link onClick={open}>
+                <Divider icon={forkIcon}>
+                    {pending ? (
+                        <span className="shimmer">Forked · summarizing for the agent</span>
+                    ) : (
+                        <>
+                            Forked from{" "}
+                            <span className="text-text/85">
+                                {source?.title?.trim() || handoff.fromTitle?.trim() || "another chat"}
+                            </span>
+                        </>
+                    )}
+                </Divider>
+            </Link>
+        );
+    }
     const route = (
         <>
             <Endpoint harness={handoff.fromHarness} model={handoff.fromModel} />
@@ -50,7 +71,7 @@ export function HandoffDivider({ handoff }: { handoff: Handoff }) {
         </>
     );
     return (
-        <Link onClick={source ? () => chats.select(source.id) : undefined}>
+        <Link onClick={open}>
             <Divider icon={icon}>
                 {/* Narrow columns keep the route: the icon says what it is. */}
                 {pending ? (
@@ -68,12 +89,15 @@ export function HandoffDivider({ handoff }: { handoff: Handoff }) {
 export function ContinuedDividers({ chatId }: { chatId: string }) {
     const all = useChatsStore((s) => s.chats);
     const next: Chat[] = all.filter((c) => c.handoffs?.[0]?.fromChatId === chatId);
-    return next.map((chat) => (
-        <Link key={chat.id} onClick={() => chats.select(chat.id)}>
-            <Divider icon={icon}>
-                Continued in a new chat ·{" "}
-                <Endpoint harness={chat.config.harness} model={chat.config.model} />
-            </Divider>
-        </Link>
-    ));
+    return next.map((chat) => {
+        const forked = !!chat.handoffs?.[0]?.afterMessageId;
+        return (
+            <Link key={chat.id} onClick={() => chats.select(chat.id)}>
+                <Divider icon={forked ? forkIcon : icon}>
+                    {forked ? "Forked into a new chat" : "Continued in a new chat"} ·{" "}
+                    <Endpoint harness={chat.config.harness} model={chat.config.model} />
+                </Divider>
+            </Link>
+        );
+    });
 }

@@ -23,7 +23,7 @@ import { answer, queue, send, stop, useChatBusy, useChatStore } from "./store";
 import { setups, useChatSetup, useDraftSetup, type WorktreeSetup } from "./setup";
 import { WorktreeDivider } from "./transcript/WorktreeDivider";
 import { ContinuedDividers, HandoffDivider } from "./transcript/HandoffDivider";
-import { handOff, handoffBlocked } from "./handoff";
+import { forkChat, handOff, handoffBlocked } from "./handoff";
 import { pendingInput } from "./fold";
 import { InputCard } from "./InputCard";
 import { SecretCard } from "./SecretCard";
@@ -292,7 +292,10 @@ export function ChatView() {
                                 {topHandoff && <HandoffDivider handoff={topHandoff} />}
                                 {messages.map((message, at) => (
                                     <Fragment key={message.id}>
-                                        <MessageView message={message} />
+                                        <MessageView
+                                            message={message}
+                                            onFork={chat ? () => forkChat(chat, message.id) : undefined}
+                                        />
                                         {/* The chat's worktree, under its first prompt. */}
                                         {at === 0 && chat?.worktree && (
                                             <WorktreeDivider setup={chatSetup} worktree={chat.worktree} />
@@ -614,13 +617,13 @@ function knownFiles(messages: Message[], cwd: string): Set<string> {
     return known;
 }
 
-function MessageView({ message }: { message: Message }) {
+function MessageView({ message, onFork }: { message: Message; onFork?: () => unknown }) {
     return message.role === "user" ? (
         // A turn starts here, for the minimap.
         <div data-turn={message.id} className="flex flex-col">
             <UserMessage message={message} />
         </div>
     ) : (
-        <AssistantMessage message={message} />
+        <AssistantMessage message={message} onFork={onFork} />
     );
 }

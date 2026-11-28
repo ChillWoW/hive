@@ -765,6 +765,43 @@ async fn a_handoff_to_a_new_chat_carries_the_latest_messages_without_a_summary()
 }
 
 #[tokio::test]
+async fn a_fork_copies_the_transcript_up_to_the_message_and_carries_it() {
+    let (_dir, engine, on_claude, _) = two_harnesses(None);
+    let chat = engine.create_chat("/a".into(), ChatConfig::default()).unwrap();
+    engine.rename(&chat.id, Some("Login Bug".into())).unwrap();
+    engine.send(&chat.id, "fix the login bug".into(), Vec::new()).unwrap();
+    settle(&engine, &chat.id).await;
+    engine.send(&chat.id, "now the signup".into(), Vec::new()).unwrap();
+    settle(&engine, &chat.id).await;
+    let source = engine.store().messages(&chat.id).unwrap();
+    assert_eq!(source.len(), 4);
+
+    let fork = engine.fork(&chat.id, &source[1].id).await.unwrap();
+    assert_ne!(fork.id, chat.id);
+    assert_eq!(fork.title.as_deref(), Some("Login Bug"));
+    assert_eq!(fork.session_id, None);
+    let copied = engine.store().messages(&fork.id).unwrap();
+    assert_eq!(copied.len(), 2);
+    assert_ne!(copied[1].id, source[1].id);
+    assert_eq!(copied[1].parts, source[1].parts);
+    assert_eq!(fork.handoffs[0].from_chat_id.as_deref(), Some(chat.id.as_str()));
+    assert_eq!(fork.handoffs[0].after_message_id.as_deref(), Some(copied[1].id.as_str()));
+    // The chat forked from is as it was.
+    assert_eq!(engine.store().messages(&chat.id).unwrap(), source);
+
+    engine.send(&fork.id, "try another way".into(), Vec::new()).unwrap();
+    until(|| on_claude.runs().len() == 2).await;
+    settle(&engine, &fork.id).await;
+    let run = &on_claude.runs()[1];
+    assert_eq!(run.resume, None);
+    assert!(run.prompt.contains("User:\nfix the login bug"), "{}", run.prompt);
+    assert!(!run.prompt.contains("now the signup"));
+    assert!(run.prompt.ends_with("User message:\ntry another way"));
+    assert_eq!(engine.store().messages(&fork.id).unwrap().len(), 4);
+    assert!(engine.store().chat(&fork.id).unwrap().unwrap().handoffs[0].delivered);
+}
+
+#[tokio::test]
 async fn moving_back_before_a_prompt_takes_the_old_session_back() {
     let (_dir, engine, on_claude, _) = two_harnesses(None);
     let chat = engine.create_chat("/a".into(), ChatConfig::default()).unwrap();

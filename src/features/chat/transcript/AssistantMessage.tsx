@@ -1,6 +1,6 @@
 import { use, useState, type ReactNode } from "react";
 import { Collapsible } from "@base-ui/react/collapsible";
-import { CaretRightIcon, CheckIcon, CopyIcon } from "@phosphor-icons/react";
+import { ArrowsSplitIcon, CaretRightIcon, CheckIcon, CopyIcon } from "@phosphor-icons/react";
 import type { Message, MessagePart } from "@/proto";
 import { useCopy } from "@/lib/clipboard";
 import { cn } from "@/lib/cn";
@@ -70,6 +70,40 @@ function tailIsLive(parts: MessagePart[]): boolean {
     }
 }
 
+const footerButtonClassName =
+    "inline-flex size-6 items-center justify-center rounded-sm text-muted/85 transition-colors hover:bg-hover hover:text-text disabled:pointer-events-none disabled:opacity-50";
+
+/** Forks the chat from this reply into a new one. */
+function ForkButton({ onFork }: { onFork: () => unknown }) {
+    const [forking, setForking] = useState(false);
+    const fork = async () => {
+        setForking(true);
+        try {
+            await onFork();
+        } finally {
+            setForking(false);
+        }
+    };
+    return (
+        <Tooltip>
+            <Tooltip.Trigger
+                render={
+                    <button
+                        type="button"
+                        aria-label="Fork from here"
+                        disabled={forking}
+                        onClick={() => void fork()}
+                        className={footerButtonClassName}
+                    >
+                        <ArrowsSplitIcon className="size-3.5" />
+                    </button>
+                }
+            />
+            <Tooltip.Content side="bottom">Fork from here</Tooltip.Content>
+        </Tooltip>
+    );
+}
+
 function CopyButton({ text }: { text: string }) {
     const [copied, copy] = useCopy();
     return (
@@ -80,7 +114,7 @@ function CopyButton({ text }: { text: string }) {
                         type="button"
                         aria-label="Copy"
                         onClick={() => copy(text)}
-                        className="inline-flex size-6 items-center justify-center rounded-sm text-muted/85 transition-colors hover:bg-hover hover:text-text"
+                        className={footerButtonClassName}
                     >
                         {copied ? (
                             <CheckIcon className="size-3.5" weight="bold" />
@@ -131,8 +165,18 @@ function toSections(parts: MessagePart[]): Section[] {
  * it whenever nothing else there is live. Once done, its work folds behind
  * "Worked for 1m 5s" in that row's place, leaving the answer (and what the
  * agent asked or showed on the way); `fold={false}` keeps the work open.
+ * Given `onFork`, a finished turn offers "Fork from here" under it.
  */
-export function AssistantMessage({ message, fold = true }: { message: Message; fold?: boolean }) {
+export function AssistantMessage({
+    message,
+    fold = true,
+    onFork
+}: {
+    message: Message;
+    fold?: boolean;
+    /** Forks the chat from this reply; may resolve once the fork is open. */
+    onFork?: () => unknown;
+}) {
     const streaming = message.status === "streaming";
     const parts = message.parts;
     // What copy takes: the text after the last bit of work, i.e. the answer.
@@ -188,9 +232,10 @@ export function AssistantMessage({ message, fold = true }: { message: Message; f
     );
     const open = userOpen ?? (expanded || running);
 
-    const footer = answer && (
-        <div className="-mt-1 flex h-6 items-center">
-            <CopyButton text={answer} />
+    const footer = (answer || onFork) && (
+        <div className="-mt-1 flex h-6 items-center gap-0.5">
+            {answer && <CopyButton text={answer} />}
+            {onFork && <ForkButton onFork={onFork} />}
         </div>
     );
 

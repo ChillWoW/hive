@@ -26,6 +26,20 @@ export async function handOff(chat: Chat, config: ChatConfig, mode: HandoffMode)
     }
 }
 
+/**
+ * Forks `chat` at `messageId` into a new chat and opens it: the transcript up
+ * to that message, on the same agent, to take another way from there.
+ */
+export async function forkChat(chat: Chat, messageId: string): Promise<void> {
+    try {
+        const next = await chatsApi.fork(chat.id, messageId);
+        chats.select(next.id);
+        composer.focus();
+    } catch (error) {
+        toast.error({ title: "Couldn't fork the chat", description: String(error) });
+    }
+}
+
 /** Why `chat` can't be handed off now, else null. */
 export function handoffBlocked(busy: boolean, hasPrompt: boolean): string | null {
     if (busy) return "Wait for the agent to finish first.";

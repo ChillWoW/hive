@@ -96,6 +96,7 @@ pub fn run() {
             chat::worktrees_default_dir,
             chat::chat_set_config,
             chat::chat_handoff,
+            chat::chat_fork,
             chat::harness_catalog,
             chat::chat_send,
             chat::chat_interrupt,

@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import {
     ArchiveIcon,
     ArrowCounterClockwiseIcon,
+    ArrowsSplitIcon,
     ChatsIcon,
     DotsThreeIcon,
     PencilSimpleIcon,
@@ -23,12 +24,15 @@ import { useSidebarStore } from "./store";
 
 export const UNTITLED = "New chat";
 
+/** A chat forked from another's reply: that chat's messages are copied in (`Handoff`). */
+const isFork =(chat: Chat) => !!chat.handoffs?.[0]?.fromChatId && !!chat.handoffs[0].afterMessageId;
+
 /** How long the pointer rests on a row before its card shows. */
 export const CARD_DWELL = 300;
 
 /**
- * One chat in the sidebar: its provider's mark, its title (a pin after it
- * when pinned), then "Needs you" while it waits on the user, else the time
+ * One chat in the sidebar: its provider's mark, its title (a split after it
+ * for a fork, a pin when pinned), then "Needs you" while it waits on the user, else the time
  * since its last activity, with a dot while it has unread replies. The title
  * shimmers while it works. Idle chats are dimmed, so the others stand out.
  * The "⋯" button (on hover, over the status) and a right-click open the
@@ -107,6 +111,13 @@ export function ChatRow({
                                 >
                                     {title}
                                 </span>
+                                {isFork(chat) && (
+                                    <ArrowsSplitIcon
+                                        role="img"
+                                        aria-label="Fork"
+                                        className="size-3 shrink-0 text-muted/75"
+                                    />
+                                )}
                                 {chat.pinnedAt != null && (
                                     <PushPinIcon
                                         weight="fill"

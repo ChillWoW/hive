@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { GitForkIcon, RobotIcon } from "@phosphor-icons/react";
+import { ArrowsSplitIcon, GitForkIcon, RobotIcon } from "@phosphor-icons/react";
 import { activity, useChatsStore } from "@/features/chats";
 import {
     harnessOf,
@@ -20,7 +20,8 @@ import { StatusMark } from "./StatusMark";
 /**
  * What a sidebar row has no room for, shown in its hover card: the whole
  * title and its age, then the folder it works in (and its worktree's
- * branch), its model, the chat whose agent started it, and whether it's
+ * branch), its model, the chat whose agent started it or that it was
+ * forked from, and whether it's
  * working or waiting on the user.
  */
 export function ChatCard({
@@ -42,6 +43,10 @@ export function ChatCard({
     const parent = useChatsStore((s) =>
         chat.parentChatId ? s.chats.find((c) => c.id === chat.parentChatId) : undefined
     );
+    // A fork's first handoff names the chat it was forked from, its messages copied in.
+    const first = chat.handoffs?.[0];
+    const fork = first?.fromChatId && first.afterMessageId ? first : undefined;
+    const forkedFrom = useChatsStore((s) => (fork ? s.chats.find((c) => c.id === fork.fromChatId) : undefined));
     return (
         <div className="flex flex-col gap-2.5">
             <div className="flex flex-col gap-0.5">
@@ -71,6 +76,14 @@ export function ChatCard({
                     <Meta icon={<RobotIcon className="size-3.5 text-muted" />}>
                         <span className="text-muted/75">Started by </span>
                         <span className="text-text/85">{parent ? parent.title?.trim() || "New chat" : "a deleted chat"}</span>
+                    </Meta>
+                )}
+                {fork && (
+                    <Meta icon={<ArrowsSplitIcon className="size-3.5 text-muted" />}>
+                        <span className="text-muted/75">Forked from </span>
+                        <span className="text-text/85">
+                            {forkedFrom?.title?.trim() || fork.fromTitle?.trim() || (forkedFrom ? "New chat" : "a deleted chat")}
+                        </span>
                     </Meta>
                 )}
                 {asking ? (

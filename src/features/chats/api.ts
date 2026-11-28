@@ -74,6 +74,14 @@ export const chatsApi = {
     handoff: (chatId: string, config: ChatConfig, mode: HandoffMode) =>
         backend<Chat>("chat_handoff", { chatId, config, mode }, () => dev.handoff(chatId, config, mode)),
 
+    /**
+     * Forks the chat at `messageId`: a new chat on the same agent, folder
+     * and worktree, with the transcript up to that message copied in. Its
+     * first prompt carries a summary of it, as a handoff's does.
+     */
+    fork: (chatId: string, messageId: string) =>
+        backend<Chat>("chat_fork", { chatId, messageId }, () => dev.fork(chatId, messageId)),
+
     /** The reply streams to the chat's message watchers; while a turn runs it's queued. */
     send: (chatId: string, prompt: string, attachments: Attachment[] = []) =>
         backend<void>("chat_send", { chatId, prompt, attachments }, () =>

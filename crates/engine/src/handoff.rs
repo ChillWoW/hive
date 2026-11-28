@@ -16,7 +16,7 @@ use std::time::Duration;
 
 use outcode_proto::{
     Chat, ChatConfig, ChatsUpdate, GitFileState, Handoff, HandoffFile, HandoffMode, HandoffStatus, HarnessId, Message,
-    MessagePart, MessageRole, TodoStatus, ToolCall,
+    MessagePart, MessageRole, MessageStatus, TodoStatus, ToolCall,
 };
 use outcode_store::{new_id, now_ms};
 
@@ -119,20 +119,84 @@ impl Engine {
             .filter(|h| state.summarizing.get(&chat.id) != Some(&h.id))
             .map(|h| h.id.clone());
         if let Some(handoff_id) = summarizing {
-            state.summarizing.insert(chat.id.clone(), handoff_id.clone());
-            let transcript = render_history(&messages, SUMMARY_INPUT_CHARS);
-            let engine = self.clone();
-            let id = chat.id.clone();
-            tokio::spawn(async move {
-                let summary = engine.summarize(transcript).await;
-                engine.summarized(&id, &handoff_id, summary);
-            });
+            self.start_summary(&mut state, &chat.id, handoff_id, &messages);
         } else if chat.handoffs.last().is_none_or(|h| h.delivered) {
             // Moved back before the summary landed: nothing to wait on.
             state.summarizing.remove(&chat.id);
             self.next_queued(&mut state, &chat.id)?;
         }
         Ok(chat)
+    }
+
+    /// Forks `chat_id` at `message_id`: a new chat on the same agent, in the
+    /// same folder and worktree, with the transcript up to that message
+    /// copied in. Its agent starts a session of its own, so its first prompt
+    /// carries what came before, like a handoff's. The chat forked from is
+    /// left as it was, and may be mid-turn past that message.
+    pub async fn fork(&self, chat_id: &str, message_id: &str) -> Result<Chat> {
+        let source = self
+            .store()
+            .chat(chat_id)?
+            .ok_or_else(|| EngineError::NotFound(chat_id.into()))?;
+        let mut messages = self.store().messages(chat_id)?;
+        let at = messages
+            .iter()
+            .position(|m| m.id == message_id)
+            .ok_or_else(|| EngineError::NotFound(message_id.into()))?;
+        if messages[at].status == Some(MessageStatus::Streaming) {
+            return Err(EngineError::Busy);
+        }
+        messages.truncate(at + 1);
+        let files = changed_files(&source, &messages).await;
+
+        let mut chat = self.store().create_chat(source.cwd.clone(), source.config.clone())?;
+        let copies = match self.store().copy_messages(&chat.id, &messages) {
+            Ok(copies) => copies,
+            Err(error) => {
+                let _ = self.store().delete_chat(&chat.id);
+                return Err(error.into());
+            }
+        };
+        let handoff = Handoff {
+            id: new_id(),
+            from_chat_id: Some(source.id.clone()),
+            from_title: source.title.clone(),
+            from_harness: source.config.harness,
+            from_model: source.config.model.clone(),
+            from_session_id: None,
+            to_harness: source.config.harness,
+            to_model: source.config.model.clone(),
+            after_message_id: copies.last().map(|m| m.id.clone()),
+            status: HandoffStatus::Summarizing,
+            summary: None,
+            files,
+            delivered: false,
+            created_at: now_ms(),
+        };
+        let handoff_id = handoff.id.clone();
+        chat.title = source.title.clone();
+        chat.worktree = source.worktree.clone();
+        chat.last_message_at = Some(now_ms());
+        chat.handoffs.push(handoff);
+        self.store().save_chat(&chat)?;
+
+        let mut state = self.state();
+        state.watchers.chats(ChatsUpdate::Upsert { chat: chat.clone() });
+        self.start_summary(&mut state, &chat.id, handoff_id, &messages);
+        Ok(chat)
+    }
+
+    /// Has the summary of `messages` written for the chat's handoff; its
+    /// prompts wait on it.
+    fn start_summary(&self, state: &mut State, chat_id: &str, handoff_id: String, messages: &[Message]) {
+        state.summarizing.insert(chat_id.to_owned(), handoff_id.clone());
+        let transcript = render_history(messages, SUMMARY_INPUT_CHARS);
+        let engine = self.clone();
+        let id = chat_id.to_owned();
+        tokio::spawn(async move {
+            let summary = engine.summarize(transcript).await;
+            engine.summarized(&id, &handoff_id, summary);
+        });
     }
 
     /// The text generation model's summary of `transcript`; none while text
@@ -245,10 +309,11 @@ impl Engine {
         Some(format!("{context}\n\nUser message:\n{prompt}"))
     }
 
-    /// The handed-off conversation's latest messages: the chat it came from,
-    /// or this one's up to the handoff.
+    /// The handed-off conversation's latest messages: this chat's up to the
+    /// handoff (a fork has them copied in), or the chat it came from.
     fn excerpt(&self, chat: &Chat, handoff: &Handoff) -> Option<String> {
-        let from = handoff.from_chat_id.as_deref().unwrap_or(&chat.id);
+        let own = handoff.after_message_id.is_some() || handoff.from_chat_id.is_none();
+        let from = handoff.from_chat_id.as_deref().filter(|_| !own).unwrap_or(&chat.id);
         let mut messages = match self.store().messages(from) {
             Ok(messages) => messages,
             Err(error) => {
@@ -256,7 +321,7 @@ impl Engine {
                 return None;
             }
         };
-        if handoff.from_chat_id.is_none() {
+        if own {
             let end = handoff
                 .after_message_id
                 .as_ref()

@@ -84,6 +84,8 @@ pub struct Worktree {
 /// (a summary by the text generation model, the files changed) to an agent
 /// that hasn't seen it. Either the chat itself moved on (`from_chat_id`
 /// missing), or a new chat continues another, in its folder and worktree.
+/// A fork is such a chat with the other's messages copied in: it has both
+/// `from_chat_id` and `after_message_id` (the last one copied).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(optional_fields)]

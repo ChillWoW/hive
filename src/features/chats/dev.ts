@@ -499,6 +499,37 @@ export const dev = {
         return save({ ...chat, title: source.title, worktree: source.worktree, handoffs: [handoff] });
     },
 
+    /** A fork without a summary, like `handoff`'s. */
+    fork(chatId: string, messageId: string): Chat {
+        const source = chatOf(chatId);
+        const all = messages.get(chatId) ?? [];
+        const at = all.findIndex((m) => m.id === messageId);
+        if (at < 0) throw new Error(`no message ${messageId}`);
+        const copies = all.slice(0, at + 1).map((m) => ({ ...m, id: crypto.randomUUID() }));
+        const chat = this.create(source.cwd, source.config);
+        messages.set(chat.id, copies);
+        const handoff: Handoff = {
+            id: crypto.randomUUID(),
+            fromChatId: source.id,
+            fromTitle: source.title,
+            fromHarness: source.config.harness ?? "claude",
+            fromModel: source.config.model,
+            toHarness: source.config.harness ?? "claude",
+            toModel: source.config.model,
+            afterMessageId: copies.at(-1)?.id,
+            status: "failed",
+            delivered: false,
+            createdAt: Date.now()
+        };
+        return save({
+            ...chat,
+            title: source.title,
+            worktree: source.worktree,
+            lastMessageAt: Date.now(),
+            handoffs: [handoff]
+        });
+    },
+
     update(chatId: string, patch: Partial<Chat>): Chat {
         return save({ ...chatOf(chatId), ...patch });
     },

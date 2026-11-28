@@ -179,6 +179,26 @@ impl Store {
         query_one(&self.db(), "SELECT data FROM messages WHERE id = ?1", id)
     }
 
+    /// Copies `messages` to the end of `chat_id`'s, in order, under new ids;
+    /// all of them or none. Returns the copies.
+    pub fn copy_messages(&self, chat_id: &str, messages: &[Message]) -> Result<Vec<Message>> {
+        let copies: Vec<Message> = messages
+            .iter()
+            .map(|m| Message { id: new_id(), ..m.clone() })
+            .collect();
+        let mut db = self.db();
+        let tx = db.transaction()?;
+        for message in &copies {
+            let status = message.status.map(status_text).transpose()?;
+            tx.execute(
+                "INSERT INTO messages (id, chat_id, status, data) VALUES (?1, ?2, ?3, ?4)",
+                params![message.id, chat_id, status, serde_json::to_string(message)?],
+            )?;
+        }
+        tx.commit()?;
+        Ok(copies)
+    }
+
     fn save_message(&self, chat_id: &str, message: &Message) -> Result<()> {
         let status = message.status.map(status_text).transpose()?;
         self.db().execute(
