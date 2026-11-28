@@ -1,5 +1,6 @@
 import "@xterm/xterm/css/xterm.css";
 import { useEffect, useRef } from "react";
+import { reviveTerminal } from "./open";
 import { attachSession } from "./sessions";
 
 /**
@@ -12,6 +13,8 @@ export function TerminalView({ id }: { id: string }) {
     useEffect(() => {
         const el = host.current;
         if (!el) return;
+        // A tab from before a restart has no terminal yet.
+        reviveTerminal(id);
         return attachSession(id, el);
     }, [id]);
 

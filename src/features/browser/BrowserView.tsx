@@ -15,12 +15,14 @@ import {
 } from "@phosphor-icons/react";
 import { panelTabs } from "@/features/panel-tabs/store";
 import { isShortcutOf } from "@/keybindings";
+import { usePanelShown } from "@/layout/store";
 import { cn } from "@/lib/cn";
 import { IconButton, iconButtonClassName, Menu, Tooltip } from "@/ui";
 import { attachScreenshot, navigate, pickElement } from "./actions";
 import { browserApi, type BrowserTab, type Viewport } from "./api";
 import { openExternally } from "./open";
 import { trackFrame, type Still } from "./placement";
+import { reviveBrowser } from "./restore";
 import { isBlank, useBrowserStore, useBrowserTab } from "./store";
 
 /** The page sizes on offer; "fit" is the panel's own. */
@@ -54,6 +56,13 @@ export function BrowserView({ id }: { id: string }) {
     // A blank tab has no page to show: the frame says so itself, and the webview stays away.
     const blank = !tab || isBlank(tab.url);
 
+    // A tab from before a restart loads its page once it's first on screen.
+    const shown = usePanelShown("tabs");
+    const dormant = !tab;
+    useEffect(() => {
+        if (dormant && shown) reviveBrowser(id);
+    }, [id, dormant, shown]);
+
     useEffect(() => {
         if (!frame.current || blank) return;
         return trackFrame(id, frame.current, () => latestViewport.current, setStill);
@@ -82,7 +91,7 @@ export function BrowserView({ id }: { id: string }) {
                         driven && "animate-agent-glow motion-reduce:animate-none motion-reduce:ring-2 motion-reduce:ring-info"
                     )}
                 >
-                    {blank && (
+                    {blank && tab && (
                         <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-6 text-center">
                             <GlobeIcon className="size-7 text-muted/60" />
                             <div className="text-[13px] font-medium text-text/80">New tab</div>

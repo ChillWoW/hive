@@ -7,9 +7,8 @@ import { canonical, keydownOf } from "@/keybindings/shortcut";
 import { getPanelLayout, useLayoutStore } from "@/layout/store";
 import { browserApi, type BrowserTab } from "./api";
 import { openBrowser } from "./open";
+import { putTab as put, settled, sortSaved } from "./restore";
 import { tabTitle, useBrowserStore } from "./store";
-
-const put = (tab: BrowserTab) => useBrowserStore.setState((s) => ({ tabs: { ...s.tabs, [tab.id]: tab } }));
 
 const drop = (id: string) =>
     useBrowserStore.setState((s) => {
@@ -43,35 +42,54 @@ export function useBrowserRuntime() {
         const adopt = (tab: BrowserTab, front: boolean) => {
             put(tab);
             if (usePanelTabsStore.getState().tabs.some((t) => t.id === tab.id)) return;
-            panelTabs.open({ kind: "browser", title: tabTitle(tab), detail: tab.url }, { id: tab.id, background: !front });
+            panelTabs.open(
+                { kind: "browser", title: tabTitle(tab), detail: tab.url, browser: { url: tab.url } },
+                { id: tab.id, background: !front }
+            );
             if (front && !getPanelLayout().visible.tabs) useLayoutStore.getState().toggle("tabs");
         };
+        // The backend's news waits, in order, until panel tab ids are settled:
+        // a tab saved from before a restart takes its new browser tab's id
+        // (`restore.ts`), which is announced as opened like any other.
+        let news: Promise<void> = Promise.resolve();
+        let stopped = false;
+        const inOrder = (act: () => void) => {
+            news = news
+                .then(settled)
+                .then(() => {
+                    if (!stopped) act();
+                })
+                .catch(() => {});
+        };
         const stopWatching = browserApi.watch({
-            onOpened: (tab, chatId) => adopt(tab, chatId === null || chatId === useChatsStore.getState().activeChatId),
-            onChanged: (tab) => {
-                if (!useBrowserStore.getState().tabs[tab.id]) return;
-                put(tab);
-                const panelTab = usePanelTabsStore.getState().tabs.find((t) => t.id === tab.id);
-                const title = tabTitle(tab);
-                if (panelTab && (panelTab.title !== title || panelTab.detail !== tab.url)) {
-                    panelTabs.update(tab.id, { title, detail: tab.url });
-                }
-            },
-            onClosed: (id) => {
-                drop(id);
-                panelTabs.close(id, true);
-            },
+            onOpened: (tab, chatId) =>
+                inOrder(() => adopt(tab, chatId === null || chatId === useChatsStore.getState().activeChatId)),
+            onChanged: (tab) =>
+                inOrder(() => {
+                    if (!useBrowserStore.getState().tabs[tab.id]) return;
+                    put(tab);
+                    const panelTab = usePanelTabsStore.getState().tabs.find((t) => t.id === tab.id);
+                    const title = tabTitle(tab);
+                    if (panelTab && (panelTab.title !== title || panelTab.detail !== tab.url)) {
+                        panelTabs.update(tab.id, { title, detail: tab.url, browser: { url: tab.url } });
+                    }
+                }),
+            onClosed: (id) =>
+                inOrder(() => {
+                    drop(id);
+                    panelTabs.close(id, true);
+                }),
             // Pressed as if on the tab's own view: its close-tab closes this tab, the rest go on to the app.
             onKey: (id, key) => {
                 const view = document.querySelector(`[data-browser-view="${CSS.escape(id)}"]`) ?? document.body;
                 view.dispatchEvent(keydownOf({ ...key, ctrl: false }));
             }
         });
-        // Tabs an agent opened before this page was listening.
-        void browserApi
-            .list()
-            .then((tabs) => tabs.forEach((tab) => adopt(tab, false)))
-            .catch(() => {});
+        // Tabs an agent opened before this page was listening; the saved
+        // panel tabs that aren't among them wait to be shown (`restore.ts`).
+        const live = browserApi.list().catch((): BrowserTab[] => []);
+        void sortSaved(live);
+        void live.then((tabs) => inOrder(() => tabs.forEach((tab) => adopt(tab, false))));
         // A panel tab that's gone takes its browser tab with it.
         const stopClosing = usePanelTabsStore.subscribe((state) => {
             const open = new Set(state.tabs.map((t) => t.id));
@@ -82,6 +100,7 @@ export function useBrowserRuntime() {
             }
         });
         return () => {
+            stopped = true;
             stopWatching();
             stopClosing();
         };

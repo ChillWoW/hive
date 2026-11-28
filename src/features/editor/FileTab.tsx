@@ -25,6 +25,7 @@ import {
     claimFocus,
     currentState,
     isMarkdown,
+    openDoc,
     overwrite,
     reloadFromDisk,
     save,
@@ -72,6 +73,11 @@ export function FileTab({ id, cwd, path }: { id: string; cwd: string; path: stri
     const doc = useDocsStore((s) => s.docs[id]);
     const image = imageType(path);
     const phase = doc?.phase;
+
+    // A tab from before a restart reads its file once it's first shown.
+    useEffect(() => {
+        void openDoc(id, cwd, path);
+    }, [id, cwd, path]);
 
     // Opened just now: focus moves in once the content shows.
     useEffect(() => claimFocus(id), [id, phase]);

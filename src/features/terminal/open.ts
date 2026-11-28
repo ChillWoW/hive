@@ -22,14 +22,24 @@ export function openTerminal(cwd: string | null = startDir()) {
     const id = panelTabs.open({
         kind: "terminal",
         title: "Terminal",
-        detail: cwd ? tildify(cwd, home) : "~"
+        detail: cwd ? tildify(cwd, home) : "~",
+        terminal: { cwd }
     });
+    makeSession(id, cwd);
+    if (!getPanelLayout().visible.tabs) useLayoutStore.getState().toggle("tabs");
+    return id;
+}
+
+const makeSession = (id: string, cwd: string | null) =>
     createSession(id, cwd, {
         onTitle: (title) => panelTabs.update(id, { title }),
         onClose: () => panelTabs.close(id)
     });
-    if (!getPanelLayout().visible.tabs) useLayoutStore.getState().toggle("tabs");
-    return id;
+
+/** Makes the terminal of a tab that came back after a restart, in the folder it had; a no-op for one that has its own. */
+export function reviveTerminal(id: string) {
+    const tab = usePanelTabsStore.getState().tabs.find((t) => t.id === id);
+    if (tab?.kind === "terminal") makeSession(id, tab.terminal?.cwd ?? null);
 }
 
 /**

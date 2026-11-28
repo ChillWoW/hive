@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { createJSONStorage, persist } from "zustand/middleware";
 
 export type PanelTabKind = "file" | "diff" | "terminal" | "output" | "history" | "commit" | "browser";
 
@@ -25,6 +26,10 @@ export type PanelTab = {
     history?: { cwd: string };
     /** A commit tab's commit, in `cwd`'s checkout. */
     commit?: { cwd: string; sha: string };
+    /** A terminal tab's folder (null: home), to start its shell in again after a restart. */
+    terminal?: { cwd: string | null };
+    /** A browser tab's page, to load again after a restart. */
+    browser?: { url: string };
 };
 
 /**
@@ -39,7 +44,35 @@ type PanelTabsState = {
     activeId: string | null;
 };
 
-export const usePanelTabsStore = create<PanelTabsState>()(() => ({ tabs: [], activeId: null }));
+/**
+ * Whether a tab comes back after a restart. Not a background shell's output
+ * or a chat's last turn: what they show is gone by then.
+ */
+const kept = (tab: PanelTab) => tab.kind !== "output" && !tab.diff?.chatId;
+
+/**
+ * The tabs are saved on this device and come back after a restart, each
+ * loading again when it's first shown: a file is read, a terminal starts a
+ * new shell in its folder, a browser tab loads its page.
+ */
+export const usePanelTabsStore = create<PanelTabsState>()(
+    persist((): PanelTabsState => ({ tabs: [], activeId: null }), {
+        name: "outcode.panelTabs",
+        version: 0,
+        storage: createJSONStorage(() => localStorage),
+        partialize: (s): PanelTabsState => ({
+            // Unsaved text isn't kept, so neither is its mark.
+            tabs: s.tabs.filter(kept).map((tab) => ({ ...tab, dirty: undefined })),
+            activeId: s.activeId
+        }),
+        merge: (saved, current) => {
+            const s = (saved ?? {}) as Partial<PanelTabsState>;
+            const tabs = Array.isArray(s.tabs) ? s.tabs.filter((t) => t && typeof t.id === "string" && kept(t)) : [];
+            const shown = tabs.some((t) => t.id === s.activeId);
+            return { ...current, tabs, activeId: shown ? s.activeId! : (tabs[0]?.id ?? null) };
+        }
+    })
+);
 
 const state = () => usePanelTabsStore.getState();
 
@@ -76,7 +109,7 @@ export const panelTabs = {
         setTabs(next, options.background ? activeId : id);
         return id;
     },
-    /** Changes a tab's title, detail, dirty mark, file or commit. */
+    /** Changes a tab's title, detail, dirty mark, or what it shows. */
     update: (id: string, patch: Partial<Omit<PanelTab, "id" | "kind">>) => {
         const { tabs } = state();
         const at = tabs.findIndex((t) => t.id === id);
@@ -85,6 +118,16 @@ export const panelTabs = {
         const next = [...tabs];
         next[at] = { ...tab, ...patch };
         usePanelTabsStore.setState({ tabs: next });
+    },
+    /** Gives tab `id` the id `to`, where it is; false when it's gone. */
+    rename: (id: string, to: string): boolean => {
+        const { tabs, activeId } = state();
+        if (!tabs.some((t) => t.id === id)) return false;
+        usePanelTabsStore.setState({
+            tabs: tabs.map((t) => (t.id === id ? { ...t, id: to } : t)),
+            activeId: activeId === id ? to : activeId
+        });
+        return true;
     },
     select: (id: string) => usePanelTabsStore.setState({ activeId: id }),
     /**
