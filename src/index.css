@@ -61,6 +61,27 @@
     }
 }
 
+/* `animate-agent-glow`: a browser tab's frame while an agent acts on its
+   page (src/features/browser/BrowserView.tsx). Drawn around the frame, in
+   its gutter: nothing can be drawn over the page itself. */
+@theme {
+    --animate-agent-glow: agent-glow 2s ease-in-out infinite;
+
+    @keyframes agent-glow {
+        0%,
+        100% {
+            box-shadow:
+                0 0 0 2px var(--info),
+                0 0 12px 1px color-mix(in srgb, var(--info) 55%, transparent);
+        }
+        50% {
+            box-shadow:
+                0 0 0 2px color-mix(in srgb, var(--info) 55%, transparent),
+                0 0 4px 0 color-mix(in srgb, var(--info) 20%, transparent);
+        }
+    }
+}
+
 /* Skeleton (src/ui/Skeleton.tsx). The shimmer's gradient tile is 200vw wide
    with the highlight at its center: it sweeps across the viewport, then
    rests offscreen. */

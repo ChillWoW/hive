@@ -1,4 +1,5 @@
 import type { ComponentType } from "react";
+import { useBrowserRuntime } from "@/features/browser";
 import { ChatHeader, ChatView, useChatRuntime, useIdleCompactionRuntime } from "@/features/chat";
 import { useChatsRuntime } from "@/features/chats";
 import { useEditorRuntime } from "@/features/editor";
@@ -46,6 +47,7 @@ export function App() {
     useNotificationsRuntime();
     useSidebarRuntime();
     useTerminalRuntime();
+    useBrowserRuntime();
     useEditorRuntime();
     useFilesRuntime();
     useChangesRuntime();

@@ -1,10 +1,9 @@
 import { use, type ComponentProps, type MouseEvent } from "react";
-import { openUrl } from "@tauri-apps/plugin-opener";
 import type { Element as HastElement, Root, RootContent } from "hast";
 import { defaultRehypePlugins, Streamdown, type ExtraProps } from "streamdown";
 import type { Pluggable, Plugin } from "unified";
 import { cn } from "@/lib/cn";
-import { isTauri } from "@/lib/platform";
+import { openLink } from "@/features/browser/open";
 import { ChatCwd, KnownFiles } from "./context";
 import { FileLink } from "./FileLink";
 import { codeFileTarget, parseFileRef, resolveFileRef } from "./filePaths";
@@ -63,14 +62,16 @@ const REHYPE_FILE_LINKS: Pluggable[] = [
 const fileHref = (href: string | null) =>
     href?.startsWith(FILE_HREF) ? decodeURIComponent(href.slice(FILE_HREF.length)) : null;
 
-/** A link would navigate the webview itself away; the system browser opens it instead. */
+/**
+ * A link would navigate the webview itself away: a local one (a dev server)
+ * opens in a browser tab instead, the rest in the system browser.
+ */
 function openLinksExternally(event: MouseEvent) {
     const anchor = (event.target as Element).closest("a[href]");
     if (!anchor) return;
     event.preventDefault();
     const href = (anchor as HTMLAnchorElement).href;
-    if (isTauri) void openUrl(href);
-    else window.open(href, "_blank", "noreferrer");
+    openLink(href);
 }
 
 /** Props without the hast `node` Streamdown passes, which the DOM mustn't get. */

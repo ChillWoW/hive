@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
-import { ClockCounterClockwiseIcon, GitDiffIcon, TerminalWindowIcon } from "@phosphor-icons/react";
+import { ClockCounterClockwiseIcon, GitDiffIcon, GlobeIcon, TerminalWindowIcon } from "@phosphor-icons/react";
+import { BrowserView, openBrowser } from "@/features/browser";
 import { ChangesTab, openChangesTab, useCurrentFolder } from "@/features/changes";
 import { FileTab, focusWhenShown } from "@/features/editor";
 import { CommitTab, HistoryTab, openHistoryTab } from "@/features/history";
@@ -22,6 +23,7 @@ export function PanelTabView() {
 
 function Content({ tab }: { tab: PanelTab }) {
     if (tab.kind === "terminal") return <TerminalView key={tab.id} id={tab.id} />;
+    if (tab.kind === "browser") return <BrowserView key={tab.id} id={tab.id} />;
     if (tab.kind === "output" && tab.output) return <TaskOutputView key={tab.id} id={tab.id} {...tab.output} />;
     if (tab.kind === "file" && tab.file) {
         return <FileTab key={tab.id} id={tab.id} cwd={tab.file.cwd} path={tab.file.path} />;
@@ -80,6 +82,7 @@ function useFocusHandover(tab: PanelTab | undefined) {
 
 function Empty() {
     const terminal = useBinding("newTerminal");
+    const browser = useBinding("newBrowserTab");
     const changes = useBinding("showChanges");
     const history = useBinding("showHistory");
     const folder = useCurrentFolder();
@@ -91,6 +94,11 @@ function Empty() {
                     <TerminalWindowIcon className="size-3.5" />
                     New terminal
                     <ShortcutKeys shortcut={terminal} variant="plain" className="ml-auto pl-4" />
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => openBrowser()} className="justify-start gap-2">
+                    <GlobeIcon className="size-3.5" />
+                    New browser tab
+                    <ShortcutKeys shortcut={browser} variant="plain" className="ml-auto pl-4" />
                 </Button>
                 {folder && (
                     <Button variant="outline" size="sm" onClick={() => openChangesTab(folder)} className="justify-start gap-2">

@@ -99,6 +99,8 @@ dependencies = [
  "tempfile",
  "tokio",
  "trash",
+ "webview2-com",
+ "windows-core",
 ]
 
 [[package]]

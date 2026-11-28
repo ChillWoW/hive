@@ -5,11 +5,13 @@ import {
     ClockCounterClockwiseIcon,
     GitCommitIcon,
     GitDiffIcon,
+    GlobeIcon,
     PlusIcon,
     TerminalIcon,
     TerminalWindowIcon,
     XIcon
 } from "@phosphor-icons/react";
+import { BrowserTabIcon, openBrowser } from "@/features/browser";
 import { openChangesTab, useCurrentFolder } from "@/features/changes";
 import { openHistoryTab } from "@/features/history";
 import { useRevealActive, useSidewaysWheel, useTabDrag } from "@/features/tabs";
@@ -22,7 +24,7 @@ import { panelTabs, usePanelTabsStore, type PanelTab } from "./store";
 
 /**
  * The tabs panel's head: its tabs, editor-like, then + for what can be opened
- * (a terminal, the folder's changes or history) and the toggle that maximizes the panel
+ * (a terminal, a browser tab, the folder's changes or history) and the toggle that maximizes the panel
  * over the chat.
  * A press shows one, dragging reorders, middle-click or × closes, right-click
  * for more; past its room the strip scrolls (the wheel scrolls it sideways).
@@ -62,6 +64,7 @@ export function PanelTabStrip() {
 function NewTabMenu() {
     const folder = useCurrentFolder();
     const terminal = useBinding("newTerminal");
+    const browser = useBinding("newBrowserTab");
     const changes = useBinding("showChanges");
     const history = useBinding("showHistory");
     return (
@@ -79,6 +82,11 @@ function NewTabMenu() {
                     <TerminalWindowIcon className="size-3.5 text-muted" />
                     New terminal
                     <ShortcutKeys shortcut={terminal} variant="plain" className="ml-auto pl-4" />
+                </Menu.Item>
+                <Menu.Item onClick={() => openBrowser()}>
+                    <GlobeIcon className="size-3.5 text-muted" />
+                    New browser tab
+                    <ShortcutKeys shortcut={browser} variant="plain" className="ml-auto pl-4" />
                 </Menu.Item>
                 <Menu.Item disabled={!folder} onClick={() => openChangesTab(folder)}>
                     <GitDiffIcon className="size-3.5 text-muted" />
@@ -114,6 +122,7 @@ function MaximizeButton() {
 }
 
 const GLYPHS = {
+    browser: GlobeIcon,
     diff: GitDiffIcon,
     terminal: TerminalWindowIcon,
     output: TerminalIcon,
@@ -121,9 +130,10 @@ const GLYPHS = {
     commit: GitCommitIcon
 } as const;
 
-/** A tab kind's glyph; a file's is its file-type icon. */
-export function PanelTabIcon({ tab, className }: { tab: Pick<PanelTab, "kind" | "title">; className?: string }) {
+/** A tab kind's glyph; a file's is its file-type icon, a browser tab's its site's. */
+export function PanelTabIcon({ tab, className }: { tab: Pick<PanelTab, "id" | "kind" | "title">; className?: string }) {
     if (tab.kind === "file") return <FileIcon name={tab.title} className={cn("size-3.5", className)} />;
+    if (tab.kind === "browser") return <BrowserTabIcon id={tab.id} className={className} />;
     const Glyph = GLYPHS[tab.kind];
     return <Glyph className={cn("size-3.5 shrink-0 text-muted", className)} />;
 }

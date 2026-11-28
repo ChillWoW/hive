@@ -13,8 +13,11 @@
 //!   goes to a file only the user can read, and the agent gets its path.
 //! - `start_chat` and the rest ([`agents`]): other agents, each in a chat of
 //!   its own.
+//! - `browser_open` and the rest ([`browser`]): the browser tabs in the tabs
+//!   panel, shared with the user.
 
 mod agents;
+mod browser;
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -126,7 +129,7 @@ fn tools(app: &AppHandle) -> Tools {
             }),
             move |ctx, args| request_secret(e.clone(), ctx, args),
         );
-    agents::tools(tools, app)
+    browser::tools(agents::tools(tools, app), app)
 }
 
 fn html_schema(render: bool) -> Value {

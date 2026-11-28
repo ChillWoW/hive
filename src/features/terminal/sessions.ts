@@ -3,13 +3,13 @@ import { Unicode11Addon } from "@xterm/addon-unicode11";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { Terminal, type ITerminalOptions } from "@xterm/xterm";
-import { openUrl } from "@tauri-apps/plugin-opener";
+import { openLink } from "@/features/browser/open";
 import { settings } from "@/features/settings/store";
 import { isAppShortcut, isShortcutOf } from "@/keybindings";
 import { useLayoutStore } from "@/layout/store";
 import { copyText } from "@/lib/clipboard";
 import { errorMessage } from "@/lib/errors";
-import { isMac, isTauri } from "@/lib/platform";
+import { isMac } from "@/lib/platform";
 import { foregroundProcess, killTerminal, resizeTerminal, spawnTerminal, writeTerminal } from "./api";
 
 export type SessionEvents = {
@@ -259,8 +259,7 @@ export function createSession(id: string, cwd: string | null, events: SessionEve
         new WebLinksAddon((event, uri) => {
             // ⌘/Ctrl-click, so a click to place the selection doesn't open it.
             if (!(isMac ? event.metaKey : event.ctrlKey)) return;
-            if (isTauri) void openUrl(uri);
-            else window.open(uri, "_blank", "noopener");
+            openLink(uri);
         })
     );
     const host = document.createElement("div");

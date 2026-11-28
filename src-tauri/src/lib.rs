@@ -1,5 +1,6 @@
 mod antigravity;
 mod avatars;
+mod browser;
 mod chat;
 mod claude;
 mod codex;
@@ -43,7 +44,10 @@ pub fn run() {
         )
         .plugin(tauri_plugin_log::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_opener::init())
+        // Without its click handler for links that open a new window: it's
+        // injected into every webview, browser tabs' pages too, where it
+        // swallowed those clicks. The page opens its own links (`openLink`).
+        .plugin(tauri_plugin_opener::Builder::new().open_js_links_on_click(false).build())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         // A reload takes the page's channels (and so its watchers) with it.
@@ -64,6 +68,9 @@ pub fn run() {
                 if let Some(watches) = app.try_state::<file_watch::FileWatches>() {
                     watches.stop_owned_by(webview.label());
                 }
+                if let Some(browsers) = app.try_state::<browser::Browsers>() {
+                    browsers.close_owned_by(app, webview.label());
+                }
             }
         })
         .setup(|app| {
@@ -80,6 +87,7 @@ pub fn run() {
             app.manage(themes::ThemesDir::open(data_dir.join("themes"))?);
             app.manage(updater::Updates::default());
             app.manage(avatars::Avatars::default());
+            app.manage(browser::Browsers::new(&data_dir));
             let engine = chat::engine(app.handle(), &data_dir)?;
             app.manage(mcp::SecretRequests::default());
             mcp::start(app.handle(), &data_dir, &engine);
@@ -185,6 +193,19 @@ pub fn run() {
             terminal::terminal_kill,
             task_output::task_output_watch,
             task_output::task_output_unwatch,
+            browser::browser_open,
+            browser::browser_list,
+            browser::browser_close,
+            browser::browser_navigate,
+            browser::browser_go,
+            browser::browser_place,
+            browser::browser_hide,
+            browser::browser_freeze,
+            browser::browser_set_viewport,
+            browser::browser_devtools,
+            browser::browser_capture,
+            browser::browser_pick,
+            browser::browser_pick_cancel,
             fonts::fonts_list,
             themes::themes_list,
             themes::themes_open_dir,

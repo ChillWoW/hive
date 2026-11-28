@@ -52,6 +52,7 @@ export type KeyboardSettings = {
     goToTab8: string;
     goToLastTab: string;
     newTerminal: string;
+    newBrowserTab: string;
     showChanges: string;
     showHistory: string;
     refresh: string;
@@ -261,6 +262,7 @@ export const DEFAULT_SETTINGS: Settings = {
         goToTab8: "Mod+8",
         goToLastTab: "Mod+9",
         newTerminal: "Mod+J",
+        newBrowserTab: "Mod+Shift+B",
         showChanges: "Mod+Shift+G",
         showHistory: "Mod+Shift+H",
         refresh: "Mod+R"

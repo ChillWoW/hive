@@ -11,7 +11,7 @@ use serde_json::{Value, json};
 use tokio::io::{AsyncBufRead, AsyncBufReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::sync::mpsc;
 
-use crate::{BoxFuture, write_json_line};
+use crate::{BoxFuture, IMAGES_KEY, write_json_line};
 
 /// Revisions this server knows: the client's is echoed when it's one of
 /// these, else the newest is offered and the client decides.
@@ -23,7 +23,7 @@ These tools act on Outcode itself (its chats, its window), not on the files you 
 To show the user an interactive chart, diagram, dashboard or mockup, check an HTML page \
 with preview_html, then show it in the chat with render_html. \
 To show an image file (a screenshot, a plot) use show_image; for a static diagram or sketch \
-you draw yourself, show_svg.";
+you draw yourself, show_svg. The browser_* tools drive real browser tabs in Outcode's tabs panel, shared with the user: use them to open and check a page you're working on (a dev server, a built page), reading it with browser_snapshot and acting on the refs it gives.";
 
 const PARSE_ERROR: i64 = -32700;
 const INVALID_REQUEST: i64 = -32600;
@@ -146,14 +146,19 @@ async fn handle_request(
                 args => args.clone(),
             };
             match backend.call(name.to_owned(), arguments).await {
-                Ok(value) => ok_response(
-                    id,
-                    json!({
-                        "content": [{ "type": "text", "text": text(&value) }],
-                        "structuredContent": structured(value),
-                        "isError": false,
-                    }),
-                ),
+                Ok(mut value) => {
+                    let images = take_images(&mut value);
+                    let mut content = vec![json!({ "type": "text", "text": text(&value) })];
+                    content.extend(images);
+                    ok_response(
+                        id,
+                        json!({
+                            "content": content,
+                            "structuredContent": structured(value),
+                            "isError": false,
+                        }),
+                    )
+                }
                 Err(message) => ok_response(
                     id,
                     json!({
@@ -170,6 +175,18 @@ async fn handle_request(
         "prompts/list" => ok_response(id, json!({ "prompts": [] })),
         other => error_response(id, METHOD_NOT_FOUND, &format!("unknown method: {other}")),
     }
+}
+
+/// Takes a result's pictures ([`IMAGES_KEY`]) out of it, as image content.
+fn take_images(value: &mut Value) -> Vec<Value> {
+    let Some(Value::Array(images)) = value.as_object_mut().and_then(|o| o.remove(IMAGES_KEY)) else {
+        return Vec::new();
+    };
+    images
+        .into_iter()
+        .filter(|image| image["data"].is_string())
+        .map(|image| json!({ "type": "image", "data": image["data"], "mimeType": image["mimeType"].as_str().unwrap_or("image/png") }))
+        .collect()
 }
 
 /// `structuredContent` must be an object; anything else is wrapped.
@@ -224,6 +241,9 @@ mod tests {
             )
             .tool("fail", "Fails.", json!({"type": "object"}), |_, _| async {
                 Err::<Value, _>("nope".to_owned())
+            })
+            .tool("picture", "A picture.", json!({"type": "object"}), |_, _| async {
+                Ok(json!({ "file": "a.png", (IMAGES_KEY): [{ "data": "AAAA", "mimeType": "image/png" }] }))
             })
             .tool(
                 "plain",
@@ -280,7 +300,7 @@ mod tests {
             .iter()
             .map(|t| t["name"].as_str().unwrap())
             .collect();
-        assert_eq!(names, ["echo", "fail", "plain"]);
+        assert_eq!(names, ["echo", "fail", "picture", "plain"]);
         assert!(replies[1]["result"]["tools"][0]["inputSchema"].is_object());
         assert_eq!(replies[2]["result"]["isError"], false);
         assert_eq!(
@@ -300,6 +320,19 @@ mod tests {
         );
         assert_eq!(replies[6]["error"]["code"], METHOD_NOT_FOUND);
         assert_eq!(replies[7]["result"], json!({}));
+    }
+
+    #[tokio::test]
+    async fn pictures_go_as_image_content() {
+        let replies = exchange(&[
+            json!({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "picture"}}),
+        ])
+        .await;
+        let result = &replies[0]["result"];
+        assert_eq!(result["structuredContent"], json!({"file": "a.png"}));
+        assert_eq!(result["content"][0]["type"], "text");
+        assert!(!result["content"][0]["text"].as_str().unwrap().contains("AAAA"));
+        assert_eq!(result["content"][1], json!({"type": "image", "data": "AAAA", "mimeType": "image/png"}));
     }
 
     #[tokio::test]

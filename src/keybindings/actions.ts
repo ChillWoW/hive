@@ -86,6 +86,14 @@ export const ACTIONS: readonly Action[] = [
         scope: "global"
     },
     {
+        id: "newBrowserTab",
+        category: "general",
+        label: "New browser tab",
+        description: "Opens a web page in the tabs panel",
+        keywords: "browser web page tab url localhost preview site open new",
+        scope: "global"
+    },
+    {
         id: "showChanges",
         category: "general",
         label: "Show changes",

@@ -34,6 +34,11 @@ pub use outcode_proto::McpServer;
 pub use host::Host;
 pub use tools::{Ctx, Tools};
 
+/// A key a tool's result may carry: an array of `{ data, mimeType }` (base64)
+/// pictures, sent to the agent as image content beside the rest of the
+/// result as text.
+pub const IMAGES_KEY: &str = "_images";
+
 use bridge::Bridge;
 use protocol::serve;
 

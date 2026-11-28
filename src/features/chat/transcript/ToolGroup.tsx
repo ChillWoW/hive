@@ -17,6 +17,7 @@ import { ChatCwd } from "./context";
 import { DiffView, FileView, type FileChange, type FileRead } from "./DiffView";
 import { toFileRead } from "./fileRead";
 import { Markdown } from "./Markdown";
+import { Shown } from "./Shown";
 import { ThoughtIcon } from "./ThoughtIcon";
 import {
     blockClassName,
@@ -428,6 +429,14 @@ function CallBody({ part }: { part: ToolPart }): ReactNode {
     if (change && !part.isError) return <DiffView change={change} className="mt-0.5 mb-2" />;
     const read = viewOf(part);
     if (read) return <FileView read={read} className="mt-0.5 mb-2" />;
+    // A browser tab's screenshot: the picture the agent got.
+    if (call.kind === "mcp" && call.server === "outcode" && call.tool === "browser_screenshot" && !part.isError && part.resolved) {
+        return (
+            <div className="mt-0.5 mb-2">
+                <Shown part={part} />
+            </div>
+        );
+    }
 
     const invocation = invocationOf(part, cwd);
     const output = part.output?.trim() ? part.output : "";

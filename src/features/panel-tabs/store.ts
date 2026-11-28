@@ -1,8 +1,12 @@
 import { create } from "zustand";
 
-export type PanelTabKind = "file" | "diff" | "terminal" | "output" | "history" | "commit";
+export type PanelTabKind = "file" | "diff" | "terminal" | "output" | "history" | "commit" | "browser";
 
-/** A tab in the tabs panel: a file, a diff, a terminal, a background shell's output, a folder's history or one commit. */
+/**
+ * A tab in the tabs panel: a file, a diff, a terminal, a background shell's
+ * output, a folder's history, one commit, or a web page (a browser tab, whose
+ * id is its backend tab's: `features/browser`).
+ */
 export type PanelTab = {
     id: string;
     kind: PanelTabKind;
@@ -58,14 +62,18 @@ export const panelTabs = {
     setCloseGuard: (guard: typeof closeGuard) => {
         closeGuard = guard;
     },
-    /** Opens a tab just after the shown one and shows it; returns its id. */
-    open: (tab: Omit<PanelTab, "id">): string => {
+    /**
+     * Opens a tab just after the shown one and shows it; returns its id
+     * (`id` when given one). In the `background` it goes last and the shown
+     * tab stays, unless there is none.
+     */
+    open: (tab: Omit<PanelTab, "id">, options: { id?: string; background?: boolean } = {}): string => {
         const { tabs, activeId } = state();
-        const id = crypto.randomUUID();
+        const id = options.id ?? crypto.randomUUID();
         const at = tabs.findIndex((t) => t.id === activeId);
         const next = [...tabs];
-        next.splice(at < 0 ? tabs.length : at + 1, 0, { ...tab, id });
-        setTabs(next, id);
+        next.splice(at < 0 || options.background ? tabs.length : at + 1, 0, { ...tab, id });
+        setTabs(next, options.background ? activeId : id);
         return id;
     },
     /** Changes a tab's title, detail, dirty mark, file or commit. */

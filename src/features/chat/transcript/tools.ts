@@ -250,7 +250,9 @@ export function iconOf(call: ToolCall): ToolIcon {
         case "todo":
             return ListChecksIcon;
         case "mcp":
-            return call.server === OUTCODE_SERVER ? OutcodeIcon : PlugsConnectedIcon;
+            if (call.server !== OUTCODE_SERVER) return PlugsConnectedIcon;
+            // Its browser tools act on a page, as a fetch reads one.
+            return call.tool.startsWith("browser_") ? GlobeIcon : OutcodeIcon;
         case "subagent":
             return RobotIcon;
         default:
