@@ -55,10 +55,12 @@ export const COLOR_KEYS = [
 export const BUILTIN_THEMES: Record<string, Theme> = {
     "Outcode Slate": { bg: "#131315", surface: "#18181a", raised: "#1e1e21", hover: "#252528", border: "#2e2e32", text: "#ededee", muted: "#8e8e94", accent: "#e6eeee", accentFg: "#131315", success: "#8fd68b", danger: "#ff6b6b", warning: "#f5b85c" },
     "Outcode Chalk": { bg: "#ffffff", surface: "#f5f5f6", raised: "#efeff1", hover: "#e8e8eb", border: "#e1e1e5", text: "#1b1b1f", muted: "#6b6b73", accent: "#1b1b1f", accentFg: "#ffffff", success: "#1a7f45", danger: "#d4343f", warning: "#b4610b", light: true },
-    Fjord: { bg: "#0f1217", surface: "#14181f", raised: "#1a1f28", hover: "#212732", border: "#272e3a", text: "#dfe4ec", muted: "#8691a2", accent: "#86a8e0", accentFg: "#0f1217", success: "#93cf9e", danger: "#ec7b86", warning: "#e5b97c" },
-    Moss: { bg: "#111310", surface: "#161914", raised: "#1c2019", hover: "#232820", border: "#2a3026", text: "#e2e6da", muted: "#8e9585", accent: "#b4c97c", accentFg: "#121509", success: "#9ccf72", danger: "#e5786d", warning: "#e3b462" },
-    Dusk: { bg: "#140f1a", surface: "#1b1522", raised: "#231c2c", hover: "#2c2337", border: "#342a40", text: "#eee6f4", muted: "#a093b0", accent: "#f0a3c8", accentFg: "#1e0f1a", success: "#a2d49c", danger: "#f07a7a", warning: "#f0b87a" },
-    Mono: { bg: "#000000", surface: "#0a0a0a", raised: "#151515", hover: "#1f1f1f", border: "#262626", text: "#f5f5f5", muted: "#8a8a8a", accent: "#f5f5f5", accentFg: "#000000", success: "#a3a3a3", danger: "#f5f5f5", warning: "#d4d4d4" }
+    Midnight: { bg: "#0e1116", surface: "#13171d", raised: "#191e26", hover: "#20262f", border: "#29303b", text: "#e8ecf2", muted: "#8791a1", accent: "#6aa5ff", accentFg: "#07111f", success: "#6fd598", danger: "#ff6b78", warning: "#f3b75a", info: "#5ccbe6" },
+    Evergreen: { bg: "#0f1312", surface: "#141918", raised: "#1a201e", hover: "#212826", border: "#2a3230", text: "#e7edea", muted: "#87938f", accent: "#4fd6a2", accentFg: "#04170f", success: "#a3d968", danger: "#ff6f6f", warning: "#f2bc5c", info: "#62b8f0" },
+    Orchid: { bg: "#121117", surface: "#17161d", raised: "#1d1c25", hover: "#25232e", border: "#2f2d3a", text: "#eceaf4", muted: "#918ea3", accent: "#a98eff", accentFg: "#120a29", success: "#7fd8a0", danger: "#ff6f81", warning: "#f3b961", info: "#6fb7f5" },
+    Ember: { bg: "#151312", surface: "#1a1817", raised: "#211e1c", hover: "#292523", border: "#332e2b", text: "#f0ebe7", muted: "#998f88", accent: "#ff9158", accentFg: "#1d0d03", success: "#8fce7e", danger: "#ff6565", warning: "#f2c14e", info: "#7ab8e8" },
+    Void: { bg: "#000000", surface: "#0c0c0c", raised: "#161616", hover: "#202020", border: "#2a2a2a", text: "#f2f2f2", muted: "#8c8c8c", accent: "#ffffff", accentFg: "#000000", success: "#5fd38a", danger: "#ff5c5c", warning: "#f2b84b" },
+    Paper: { bg: "#fdfcfa", surface: "#f4f2ed", raised: "#ece9e2", hover: "#e4e0d7", border: "#dad5ca", text: "#25221d", muted: "#6f695f", accent: "#bf4f17", accentFg: "#ffffff", success: "#2c7a3a", danger: "#c8362e", warning: "#a15c08", info: "#2a6fc9", light: true }
 };
 
 /** A user theme file's contents as a `Theme`, or why it isn't one. */
