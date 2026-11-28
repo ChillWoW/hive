@@ -1,7 +1,8 @@
 import { useChatsStore } from "@/features/chats";
 import { addDraftAttachments, composer } from "@/features/composer/store";
+import { elementMention } from "@/features/composer/tags";
 import { toast } from "@/ui";
-import { browserApi, type Picked } from "./api";
+import { browserApi } from "./api";
 import { useBrowserStore } from "./store";
 
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
@@ -20,16 +21,10 @@ export async function attachScreenshot(id: string) {
     }
 }
 
-/** How a picked element reads in a prompt: its selector, what it is, where. */
-function describe(picked: Picked): string {
-    const text = picked.text ? ` "${picked.text.slice(0, 80)}"` : "";
-    return `\`${picked.selector}\` (<${picked.tag}>${text}) on ${picked.url}`;
-}
-
 /**
  * Lets the user click an element in tab `id`'s page, then puts it in the
- * open chat's unsent prompt: its selector in the text, its picture attached.
- * Called again while picking, it backs out.
+ * open chat's unsent prompt: a tag in the text (its selector, what it is,
+ * its page), its picture attached. Called again while picking, it backs out.
  */
 export async function pickElement(id: string) {
     if (useBrowserStore.getState().picking === id) {
@@ -43,8 +38,14 @@ export async function pickElement(id: string) {
         const chatId = targetChat();
         if (picked.attachment) addDraftAttachments(chatId, [picked.attachment]);
         const draft = composer.draft(chatId);
-        const gap = draft && !/\s$/.test(draft) ? "\n" : "";
-        composer.setDraft(chatId, `${draft}${gap}${describe(picked)} `);
+        const gap = draft && !/\s$/.test(draft) ? " " : "";
+        const mention = elementMention({
+            selector: picked.selector,
+            tag: picked.tag,
+            text: picked.text.slice(0, 80),
+            page: picked.url
+        });
+        composer.setDraft(chatId, `${draft}${gap}${mention} `);
         composer.focus();
     } catch (error) {
         toast.error({ title: "Couldn't pick an element", description: message(error) });

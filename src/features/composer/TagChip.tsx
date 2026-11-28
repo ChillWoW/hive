@@ -1,4 +1,4 @@
-import { BookOpenIcon } from "@phosphor-icons/react";
+import { BookOpenIcon, CursorClickIcon } from "@phosphor-icons/react";
 import { cn } from "@/lib/cn";
 import { baseName } from "@/lib/paths";
 import { FileIcon, Tooltip } from "@/ui";
@@ -32,6 +32,13 @@ export function TagFace({ tag }: { tag: Tag }) {
                     <span className="truncate">{tag.name}</span>
                 </span>
             );
+        case "element":
+            return (
+                <span className={chipClassName}>
+                    <CursorClickIcon className="size-3.5 shrink-0 text-info" weight="fill" />
+                    <span className="truncate">{elementLabel(tag)}</span>
+                </span>
+            );
         case "command":
             return (
                 <span className={cn(chipClassName, "gap-0 pl-1.5")}>
@@ -42,8 +49,31 @@ export function TagFace({ tag }: { tag: Tag }) {
     }
 }
 
-/** `TagFace` with the path a file tag stands for in a tooltip. */
+/** A picked element's name on its tag: its selector, or the end of a long one. */
+function elementLabel(tag: Extract<Tag, { kind: "element" }>): string {
+    if (tag.selector.length <= 32) return tag.selector;
+    const last = tag.selector.split(" > ").at(-1)!;
+    return last.length <= 32 ? `… ${last}` : `<${tag.tag || "element"}>`;
+}
+
+/** `TagFace` with what a file or element tag stands for in a tooltip. */
 export function TagChip({ tag }: { tag: Tag }) {
+    if (tag.kind === "element") {
+        return (
+            <Tooltip>
+                <Tooltip.Trigger render={<span />}>
+                    <TagFace tag={tag} />
+                </Tooltip.Trigger>
+                <Tooltip.Content side="top" className="max-w-80 break-all">
+                    <span className="flex flex-col gap-0.5">
+                        <span>{tag.selector}</span>
+                        {tag.text && <span className="text-muted">&ldquo;{tag.text}&rdquo;</span>}
+                        {tag.page && <span className="text-muted">{tag.page}</span>}
+                    </span>
+                </Tooltip.Content>
+            </Tooltip>
+        );
+    }
     if (tag.kind !== "file") return <TagFace tag={tag} />;
     return (
         <Tooltip>

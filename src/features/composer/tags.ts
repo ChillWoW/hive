@@ -1,11 +1,13 @@
 /**
  * What the composer draws as a tag, and the sent prompt the same way: an
- * `@path` mention, a `$skill`, and a `/command` at the prompt's start.
+ * `@path` mention, a `$skill`, a `/command` at the prompt's start, and an
+ * element picked in a browser tab (`<element … />`, see `elementMention`).
  */
 export type Tag =
     | { kind: "file"; path: string }
     | { kind: "skill"; name: string }
-    | { kind: "command"; name: string };
+    | { kind: "command"; name: string }
+    | { kind: "element"; selector: string; tag: string; text: string; page: string };
 
 export type FoundTag = { from: number; to: number; tag: Tag };
 
@@ -20,9 +22,43 @@ const NAME = String.raw`[\p{L}_](?:[\p{L}\p{N}_:.-]*[\p{L}\p{N}_])?`;
 const SKILL = new RegExp(String.raw`(?<![^\s([{])\$(${NAME})(?=[.,;:!?)\]}]*(?:\s|$))`, "gu");
 const COMMAND = new RegExp(String.raw`^\s*(\/(${NAME}))(?=\s|$)`, "u");
 
+/** A picked element, as `elementMention` writes it. */
+const ELEMENT = /<element((?:\s+[a-z]+="[^"\n]*")+)\s*\/>/g;
+const ATTRIBUTE = /([a-z]+)="([^"\n]*)"/g;
+
+const escapeValue = (value: string) => value.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/\s+/g, " ").trim();
+const unescapeValue = (value: string) => value.replace(/&quot;/g, '"').replace(/&amp;/g, "&");
+
+/**
+ * An element of a web page as prompt text: its CSS selector, what it is and
+ * says, and the page it's on, in a form the agent reads as is and the
+ * composer draws as one tag.
+ */
+export function elementMention(element: { selector: string; tag: string; text: string; page: string }): string {
+    const attributes = [
+        ["selector", element.selector],
+        ["tag", element.tag],
+        ["text", element.text],
+        ["page", element.page]
+    ]
+        .filter(([, value]) => value)
+        .map(([name, value]) => `${name}="${escapeValue(value!)}"`);
+    return `<element ${attributes.join(" ")}/>`;
+}
+
 /** Every tag in `text`, in order, none overlapping. */
 export function findTags(text: string): FoundTag[] {
     const found: FoundTag[] = [];
+    for (const m of text.matchAll(ELEMENT)) {
+        const read: Record<string, string> = {};
+        for (const [, name, value] of m[1]!.matchAll(ATTRIBUTE)) read[name!] = unescapeValue(value!);
+        if (!read.selector) continue;
+        found.push({
+            from: m.index,
+            to: m.index + m[0].length,
+            tag: { kind: "element", selector: read.selector, tag: read.tag ?? "", text: read.text ?? "", page: read.page ?? "" }
+        });
+    }
     for (const m of text.matchAll(MENTION)) {
         found.push({ from: m.index, to: m.index + m[0].length, tag: { kind: "file", path: (m[1] ?? m[2])! } });
     }
