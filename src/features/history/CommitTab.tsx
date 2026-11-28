@@ -188,7 +188,7 @@ function CommitHeader({ id, cwd, detail }: { id: string; cwd: string; detail: Gi
                 <div className="flex flex-col items-start gap-1">
                     <p
                         className={cn(
-                            "font-mono text-[11.5px] leading-relaxed break-words whitespace-pre-wrap text-muted",
+                            "text-xs leading-relaxed break-words whitespace-pre-wrap text-muted",
                             long && !expanded && "line-clamp-[8]"
                         )}
                     >

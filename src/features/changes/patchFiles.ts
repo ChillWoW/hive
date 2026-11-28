@@ -18,15 +18,15 @@ export function parsePatch(patch: string): Changed[] {
     });
 }
 
-/** Which files are collapsed, by name: a file that comes back keeps its state. */
+/** Which files are collapsed, by name: all start collapsed, and a file that comes back keeps its state. */
 export function useCollapsedFiles(files: Changed[]) {
-    const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
-    const allCollapsed = files.length > 0 && files.every((f) => collapsed[f.diff.name]);
+    const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+    const allCollapsed = files.every((f) => !expanded[f.diff.name]);
     return {
-        isCollapsed: (name: string) => !!collapsed[name],
+        isCollapsed: (name: string) => !expanded[name],
         allCollapsed,
-        toggle: (name: string) => setCollapsed((c) => ({ ...c, [name]: !c[name] })),
+        toggle: (name: string) => setExpanded((e) => ({ ...e, [name]: !e[name] })),
         toggleAll: () =>
-            setCollapsed(allCollapsed ? {} : Object.fromEntries(files.map((f) => [f.diff.name, true])))
+            setExpanded(allCollapsed ? Object.fromEntries(files.map((f) => [f.diff.name, true])) : {})
     };
 }

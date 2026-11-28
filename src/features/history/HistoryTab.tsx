@@ -393,7 +393,7 @@ function Toolbar({
                         <Tooltip.Trigger
                             render={
                                 // Extra detail: gone before it crowds the buttons.
-                                <span className="hidden shrink-0 items-center gap-1.5 font-mono text-[11px] tabular-nums @[24rem]:flex">
+                                <span className="hidden shrink-0 items-center gap-1.5 text-[11px] tabular-nums @[24rem]:flex">
                                     {comparison.ahead > 0 && (
                                         <span className="flex items-center gap-0.5 text-success">
                                             <ArrowUpIcon className="size-3" weight="bold" />

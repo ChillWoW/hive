@@ -16,7 +16,7 @@ import type { Changed } from "./patchFiles";
 
 export function LineCounts({ additions, deletions }: { additions: number; deletions: number }) {
     return (
-        <span className="flex shrink-0 items-center gap-1.5 font-mono text-[11px] tabular-nums">
+        <span className="flex shrink-0 items-center gap-1.5 text-[11px] tabular-nums">
             {additions > 0 && <span className="text-success">+{additions}</span>}
             {deletions > 0 && <span className="text-danger">−{deletions}</span>}
         </span>
