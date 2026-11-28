@@ -138,6 +138,25 @@ export function shortcutFromEvent(event: KeyboardEvent): Shortcut | null {
     };
 }
 
+/**
+ * A `keydown` for `shortcut`, as `shortcutFromEvent` reads it back: for a
+ * key pressed where the page can't hear it (inside a browser tab).
+ */
+export function keydownOf(s: Shortcut): KeyboardEvent {
+    const code = Object.keys(CODE_KEYS).find((c) => CODE_KEYS[c] === s.key);
+    const named = Object.keys(NAMED_KEYS).find((k) => NAMED_KEYS[k] === s.key);
+    return new KeyboardEvent("keydown", {
+        key: named ?? (s.key.length === 1 ? s.key.toLowerCase() : s.key),
+        code: code ?? (/^[A-Z]$/.test(s.key) ? `Key${s.key}` : /^\d$/.test(s.key) ? `Digit${s.key}` : ""),
+        ctrlKey: isMac ? s.ctrl : s.mod,
+        metaKey: isMac && s.mod,
+        altKey: s.alt,
+        shiftKey: s.shift,
+        bubbles: true,
+        cancelable: true
+    });
+}
+
 type Assignable = { ok: true } | { ok: false; reason: string };
 
 /** Editing shortcuts every text field relies on. */

@@ -40,6 +40,8 @@ export type BrowserEvents = {
     onOpened: (tab: BrowserTab, chatId: string | null) => void;
     onChanged: (tab: BrowserTab) => void;
     onClosed: (id: string) => void;
+    /** One of the app's shortcuts was pressed inside tab `id`'s page. */
+    onKey: (id: string, key: { key: string; mod: boolean; alt: boolean; shift: boolean }) => void;
 };
 
 export const browserApi = {
@@ -61,6 +63,8 @@ export const browserApi = {
     /** Lets the user click an element in the page; null when they back out. */
     pick: (id: string) => backend<Picked | null>("browser_pick", { id }),
     cancelPick: (id: string) => backend<void>("browser_pick_cancel", { id }),
+    /** Says which shortcuts (`Mod+W`) tabs' pages give up to the app. */
+    setShortcuts: (shortcuts: string[]) => backend<void>("browser_set_shortcuts", { shortcuts }, () => {}),
 
     /** Follows the tabs as they open, change and close. Returns what stops it. */
     watch(events: BrowserEvents): () => void {
@@ -70,7 +74,10 @@ export const browserApi = {
                 events.onOpened(e.payload.tab, e.payload.chatId)
             ),
             listen<BrowserTab>("browser:changed", (e) => events.onChanged(e.payload)),
-            listen<string>("browser:closed", (e) => events.onClosed(e.payload))
+            listen<string>("browser:closed", (e) => events.onClosed(e.payload)),
+            listen<{ id: string; key: string; mod: boolean; alt: boolean; shift: boolean }>("browser:key", (e) =>
+                events.onKey(e.payload.id, e.payload)
+            )
         ];
         return () => {
             for (const stop of stops) void stop.then((off) => off());

@@ -206,6 +206,7 @@ pub fn run() {
             browser::browser_capture,
             browser::browser_pick,
             browser::browser_pick_cancel,
+            browser::browser_set_shortcuts,
             fonts::fonts_list,
             themes::themes_list,
             themes::themes_open_dir,

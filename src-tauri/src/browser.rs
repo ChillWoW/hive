@@ -18,7 +18,7 @@
 
 mod native;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -109,6 +109,9 @@ struct Inner {
 /// Every open browser tab.
 pub struct Browsers {
     inner: Mutex<Inner>,
+    /// The app's shortcuts (`Mod+Shift+B`), taken from a tab's page and
+    /// handed to the app's own when pressed there.
+    shortcuts: Mutex<HashSet<String>>,
     /// The tabs' shared profile folder.
     profile: PathBuf,
 }
@@ -200,6 +203,7 @@ impl Browsers {
     pub fn new(data_dir: &Path) -> Self {
         Self {
             inner: Mutex::default(),
+            shortcuts: Mutex::default(),
             profile: data_dir.join("browser"),
         }
     }
@@ -339,6 +343,41 @@ impl Browsers {
                     tab.info.can_go_back = back;
                     tab.info.can_go_forward = forward;
                 });
+            }
+        });
+        // The app's shortcuts work from inside a page too: the page is
+        // another webview, so the app's own never hears them.
+        native::watch_keys(&webview, {
+            let (app, id) = (app.clone(), id.clone());
+            move |press| {
+                let combo = [
+                    press.ctrl.then_some("Mod"),
+                    press.alt.then_some("Alt"),
+                    press.shift.then_some("Shift"),
+                    Some(press.key),
+                ]
+                .into_iter()
+                .flatten()
+                .collect::<Vec<_>>()
+                .join("+");
+                let browsers = app.state::<Browsers>();
+                if !browsers.shortcuts.lock().unwrap().contains(&combo) {
+                    return false;
+                }
+                // Held down, it's still the app's, and still runs once.
+                if press.repeat {
+                    return true;
+                }
+                // What it does may need the keyboard (a new terminal, the tab closing).
+                if let Some(page) = app.get_webview(MAIN) {
+                    let _ = page.set_focus();
+                }
+                let _ = app.emit_to(
+                    MAIN,
+                    "browser:key",
+                    json!({ "id": id, "key": press.key, "mod": press.ctrl, "alt": press.alt, "shift": press.shift }),
+                );
+                true
             }
         });
         let info = {
@@ -826,6 +865,14 @@ pub async fn browser_pick(app: AppHandle, browsers: State<'_, Browsers>, id: Str
         url: browsers.info(&id).map(|t| t.url).unwrap_or_default(),
         attachment,
     }))
+}
+
+/// The app's shortcuts as bound now (`Mod+W`, `Mod+Shift+B`), for tabs'
+/// pages to give up to the app.
+#[tauri::command]
+pub async fn browser_set_shortcuts(browsers: State<'_, Browsers>, shortcuts: Vec<String>) -> Result<(), String> {
+    *browsers.shortcuts.lock().unwrap() = shortcuts.into_iter().collect();
+    Ok(())
 }
 
 #[tauri::command]

@@ -34,6 +34,18 @@ pub struct Clip {
 /// are always offered.
 pub const HISTORY: bool = cfg!(windows);
 
+/// A key pressed in a tab's page, with the modifiers held: its name as
+/// shortcuts are written in the settings (`W`, `1`, `,`, `F5`, `Tab`, `Up`).
+#[derive(Debug, Clone)]
+pub struct KeyPress {
+    pub key: &'static str,
+    pub ctrl: bool,
+    pub alt: bool,
+    pub shift: bool,
+    /// Held down: this is the key repeating.
+    pub repeat: bool,
+}
+
 /// Whether [`screenshot`] works here.
 pub const SCREENSHOTS: bool = cfg!(windows);
 
@@ -47,8 +59,13 @@ mod imp {
     use base64::Engine as _;
     use serde_json::{Value, json};
     use tokio::sync::oneshot;
-    use webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2;
-    use webview2_com::{CallDevToolsProtocolMethodCompletedHandler, HistoryChangedEventHandler, take_pwstr};
+    use webview2_com::Microsoft::Web::WebView2::Win32::{
+        COREWEBVIEW2_KEY_EVENT_KIND, COREWEBVIEW2_KEY_EVENT_KIND_KEY_DOWN, COREWEBVIEW2_KEY_EVENT_KIND_SYSTEM_KEY_DOWN,
+        COREWEBVIEW2_PHYSICAL_KEY_STATUS, ICoreWebView2, ICoreWebView2AcceleratorKeyPressedEventArgs,
+    };
+    use webview2_com::{
+        AcceleratorKeyPressedEventHandler, CallDevToolsProtocolMethodCompletedHandler, HistoryChangedEventHandler, take_pwstr,
+    };
     use windows_core::{BOOL, HSTRING, PWSTR};
 
     use super::*;
@@ -79,6 +96,93 @@ mod imp {
             }));
             let mut token = 0;
             let _ = core.add_HistoryChanged(&handler, &mut token);
+        });
+    }
+
+    #[link(name = "user32")]
+    unsafe extern "system" {
+        fn GetKeyState(virtual_key: i32) -> i16;
+    }
+
+    /// A virtual-key code's name, for the keys a shortcut can use.
+    fn key_name(virtual_key: u32) -> Option<&'static str> {
+        const LETTERS: [&str; 26] = [
+            "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X",
+            "Y", "Z",
+        ];
+        const DIGITS: [&str; 10] = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"];
+        const FUNCTION: [&str; 12] = ["F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "F11", "F12"];
+        Some(match virtual_key {
+            0x30..=0x39 => DIGITS[(virtual_key - 0x30) as usize],
+            0x41..=0x5A => LETTERS[(virtual_key - 0x41) as usize],
+            0x70..=0x7B => FUNCTION[(virtual_key - 0x70) as usize],
+            0x08 => "Backspace",
+            0x09 => "Tab",
+            0x0D => "Enter",
+            0x1B => "Escape",
+            0x20 => "Space",
+            0x21 => "PageUp",
+            0x22 => "PageDown",
+            0x23 => "End",
+            0x24 => "Home",
+            0x25 => "Left",
+            0x26 => "Up",
+            0x27 => "Right",
+            0x28 => "Down",
+            0x2E => "Delete",
+            0xBA => ";",
+            0xBB => "=",
+            0xBC => ",",
+            0xBD => "-",
+            0xBE => ".",
+            0xBF => "/",
+            0xC0 => "`",
+            0xDB => "[",
+            0xDC => "\\",
+            0xDD => "]",
+            0xDE => "'",
+            _ => return None,
+        })
+    }
+
+    /// Calls `on_key` for each shortcut-like key pressed while the tab's page
+    /// has the keyboard (with Ctrl or Alt, or a function key), before the
+    /// page sees it; true keeps it from the page.
+    pub fn watch_keys(webview: &Webview, on_key: impl Fn(KeyPress) -> bool + Send + 'static) {
+        let _ = webview.with_webview(move |platform| unsafe {
+            let handler = AcceleratorKeyPressedEventHandler::create(Box::new(
+                move |_, args: Option<ICoreWebView2AcceleratorKeyPressedEventArgs>| {
+                    let Some(args) = args else {
+                        return Ok(());
+                    };
+                    let mut kind = COREWEBVIEW2_KEY_EVENT_KIND::default();
+                    args.KeyEventKind(&mut kind)?;
+                    if kind != COREWEBVIEW2_KEY_EVENT_KIND_KEY_DOWN && kind != COREWEBVIEW2_KEY_EVENT_KIND_SYSTEM_KEY_DOWN {
+                        return Ok(());
+                    }
+                    let mut status = COREWEBVIEW2_PHYSICAL_KEY_STATUS::default();
+                    args.PhysicalKeyStatus(&mut status)?;
+                    let mut virtual_key = 0;
+                    args.VirtualKey(&mut virtual_key)?;
+                    let Some(key) = key_name(virtual_key) else {
+                        return Ok(());
+                    };
+                    let held = |virtual_key: i32| GetKeyState(virtual_key) < 0;
+                    let press = KeyPress {
+                        key,
+                        ctrl: held(0x11),
+                        alt: held(0x12),
+                        shift: held(0x10),
+                        repeat: status.WasKeyDown.as_bool(),
+                    };
+                    if on_key(press) {
+                        args.SetHandled(true)?;
+                    }
+                    Ok(())
+                },
+            ));
+            let mut token = 0;
+            let _ = platform.controller().add_AcceleratorKeyPressed(&handler, &mut token);
         });
     }
 
@@ -188,6 +292,8 @@ mod imp {
     use super::*;
 
     pub fn attach(_webview: &Webview, _on_history: impl Fn(String, bool, bool) + Send + 'static) {}
+
+    pub fn watch_keys(_webview: &Webview, _on_key: impl Fn(KeyPress) -> bool + Send + 'static) {}
 
     pub fn back(webview: &Webview) {
         let _ = webview.eval("history.back()");

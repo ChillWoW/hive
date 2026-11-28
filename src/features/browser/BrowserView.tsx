@@ -13,6 +13,8 @@ import {
     GlobeIcon,
     XIcon
 } from "@phosphor-icons/react";
+import { panelTabs } from "@/features/panel-tabs/store";
+import { isShortcutOf } from "@/keybindings";
 import { cn } from "@/lib/cn";
 import { IconButton, iconButtonClassName, Menu, Tooltip } from "@/ui";
 import { attachScreenshot, navigate, pickElement } from "./actions";
@@ -58,7 +60,17 @@ export function BrowserView({ id }: { id: string }) {
     }, [id, blank]);
 
     return (
-        <div tabIndex={-1} className="flex min-h-0 flex-1 flex-col outline-none">
+        <div
+            // Focusable, so the close-tab shortcut closes this tab, not the chat's.
+            tabIndex={-1}
+            data-browser-view={id}
+            onKeyDown={(event) => {
+                if (!isShortcutOf(event.nativeEvent, "closeTab")) return;
+                event.preventDefault();
+                panelTabs.close(id);
+            }}
+            className="flex min-h-0 flex-1 flex-col outline-none"
+        >
             {tab && <Toolbar tab={tab} />}
             {/* Inset, so the panel's resize edge and the box's rounded corners stay the page's. */}
             <div className="flex min-h-0 flex-1 px-1.5 pt-0.5 pb-1.5">

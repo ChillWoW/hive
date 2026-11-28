@@ -1,7 +1,9 @@
 import { useEffect } from "react";
 import { useChatsStore } from "@/features/chats";
 import { panelTabs, usePanelTabsStore } from "@/features/panel-tabs/store";
-import { useShortcut } from "@/keybindings";
+import { useSettingsStore } from "@/features/settings/store";
+import { ACTIONS, useShortcut } from "@/keybindings";
+import { canonical, keydownOf } from "@/keybindings/shortcut";
 import { getPanelLayout, useLayoutStore } from "@/layout/store";
 import { browserApi, type BrowserTab } from "./api";
 import { openBrowser } from "./open";
@@ -25,6 +27,17 @@ const drop = (id: string) =>
 export function useBrowserRuntime() {
     useShortcut("newBrowserTab", () => openBrowser());
 
+    // A tab's page is another webview and keeps its keys: it's told which
+    // are the app's, to hand over. Not the ones a page has its own use for
+    // (Refresh reloads the page there).
+    const keyboard = useSettingsStore((s) => s.settings.keyboard);
+    useEffect(() => {
+        const shortcuts = ACTIONS.filter((a) => a.scope === "global" && !a.shellKeeps)
+            .map((a) => canonical(keyboard[a.id]))
+            .filter((s): s is string => s !== null);
+        void browserApi.setShortcuts(shortcuts).catch(() => {});
+    }, [keyboard]);
+
     useEffect(() => {
         /** Gives a browser tab its panel tab; at the `front`, it's shown and the panel brought up. */
         const adopt = (tab: BrowserTab, front: boolean) => {
@@ -47,6 +60,11 @@ export function useBrowserRuntime() {
             onClosed: (id) => {
                 drop(id);
                 panelTabs.close(id, true);
+            },
+            // Pressed as if on the tab's own view: its close-tab closes this tab, the rest go on to the app.
+            onKey: (id, key) => {
+                const view = document.querySelector(`[data-browser-view="${CSS.escape(id)}"]`) ?? document.body;
+                view.dispatchEvent(keydownOf({ ...key, ctrl: false }));
             }
         });
         // Tabs an agent opened before this page was listening.
