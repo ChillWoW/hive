@@ -43,7 +43,7 @@ export function LayoutSection() {
                 control={
                     <Button
                         size="sm"
-                        variant="outline"
+                        variant="ghost"
                         onClick={() => layout.set(mirrorLayout(layout.value))}
                     >
                         <ArrowsLeftRightIcon />

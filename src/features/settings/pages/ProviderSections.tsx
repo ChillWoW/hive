@@ -40,7 +40,7 @@ export function AccountSection({ provider, label }: { provider: Provider; label:
                 control={
                     account?.loggedIn ? (
                         <Button
-                            variant="outline"
+                            variant="ghost"
                             size="sm"
                             loading={action === "signing-out"}
                             onClick={() => void actions.signOut()}

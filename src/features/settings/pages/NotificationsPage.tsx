@@ -45,7 +45,7 @@ function AlertsSection() {
                 description="Sends the finished alert now, as set up here"
                 keywords="test try preview notification sound"
                 control={
-                    <Button size="sm" variant="outline" onClick={() => notify("done", null, true)}>
+                    <Button size="sm" variant="ghost" onClick={() => notify("done", null, true)}>
                         Send test
                     </Button>
                 }
