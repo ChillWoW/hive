@@ -70,6 +70,16 @@ export const ACTIONS: readonly Action[] = [
         scope: "global"
     },
     {
+        id: "findInChat",
+        category: "general",
+        label: "Find in chat",
+        description: "Searches the open chat's transcript for a text",
+        keywords: "find search text chat transcript conversation messages",
+        scope: "global",
+        // A terminal and a browser tab's page have their own use for it.
+        shellKeeps: true
+    },
+    {
         id: "maximizeTabsPanel",
         category: "general",
         label: "Maximize tabs panel",

@@ -177,6 +177,15 @@
         background-color: color-mix(in srgb, var(--accent) 30%, transparent);
     }
 
+    /* Find in chat's matches, and the one it's on (`src/features/chat/find.ts`). */
+    ::highlight(chat-find) {
+        background-color: color-mix(in srgb, var(--warning) 28%, transparent);
+    }
+
+    ::highlight(chat-find-current) {
+        background-color: color-mix(in srgb, var(--warning) 65%, transparent);
+    }
+
     button:not(:disabled),
     [role="button"]:not([aria-disabled="true"]) {
         cursor: pointer;

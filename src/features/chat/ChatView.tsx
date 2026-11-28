@@ -13,7 +13,10 @@ import { useSettingsStore, type TranscriptWidth } from "@/features/settings";
 import { useChatConfig } from "./config";
 import { AgentUpdates } from "./AgentUpdates";
 import { AssistantMessage } from "./transcript/AssistantMessage";
-import { ChatCwd, KnownFiles, LiveTasks } from "./transcript/context";
+import { ChatCwd, FindNeedle, KnownFiles, LiveTasks } from "./transcript/context";
+import { useShortcut } from "@/keybindings";
+import { FindBar } from "./FindBar";
+import { useTranscriptFind } from "./find";
 import { foldPath, fullPath, parseFileRef, resolveFileRef } from "./transcript/filePaths";
 import { Minimap } from "./transcript/Minimap";
 import { minimapItems, type MinimapItem } from "./transcript/minimapItems";
@@ -506,7 +509,8 @@ function Bottom({
 /**
  * The transcript's scroller: messages down the lane, its scrollbar kept
  * clear of it. While scrolled to the end it stays there as `follow` changes.
- * Given `minimap`, its prompts run as ticks down the left edge.
+ * Given `minimap`, its prompts run as ticks down the left edge. The find
+ * shortcut opens find-in-chat over its top right corner.
  */
 export function TranscriptScroller({
     follow,
@@ -525,6 +529,9 @@ export function TranscriptScroller({
         const scroller = scrollerRef.current;
         if (scroller && pinnedRef.current) scroller.scrollTop = scroller.scrollHeight;
     }, [follow]);
+
+    const find = useTranscriptFind(scrollerRef, contentRef, pinnedRef);
+    useShortcut("findInChat", find.start);
 
     const items = useMemo(() => (minimap ? minimapItems(minimap) : []), [minimap]);
     const [ticks] = useState(() => new Map<string, HTMLSpanElement>());
@@ -587,10 +594,19 @@ export function TranscriptScroller({
                 }}
                 className="min-h-0 flex-1 overflow-y-auto px-6 [scrollbar-gutter:stable_both-edges]"
             >
-                <div ref={contentRef} className={cn(laneClassName, "flex flex-col gap-5 py-6 compact:gap-3 compact:py-4")}>
-                    {children}
+                <div
+                    ref={contentRef}
+                    className={cn(
+                        laneClassName,
+                        "flex flex-col gap-5 py-6 compact:gap-3 compact:py-4",
+                        // Room for the find bar, so it never covers the first prompt.
+                        find.open && "pt-14 compact:pt-14"
+                    )}
+                >
+                    <FindNeedle value={find.needle}>{children}</FindNeedle>
                 </div>
             </div>
+            {find.open && <FindBar find={find} />}
             {minimap && (
                 <Minimap
                     items={items}

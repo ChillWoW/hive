@@ -8,7 +8,8 @@ import { formatElapsed, useNow } from "@/lib/time";
 import { useSettingsStore } from "@/features/settings";
 import { Tooltip } from "@/ui";
 import { pendingInput } from "../fold";
-import { LiveTasks } from "./context";
+import { foldText } from "../find";
+import { FindNeedle, LiveTasks } from "./context";
 import { lineClassName, panelTransition, verbClassName } from "./line";
 import { drawsAny, endsInGroup } from "./blocks";
 import { TurnParts } from "./Parts";
@@ -195,6 +196,7 @@ export function AssistantMessage({
     // Settings › Chats can keep thoughts or tool output open; the turn stays open with them.
     const expanded = useSettingsStore((s) => s.settings.chat.toolOutputExpanded || s.settings.chat.reasoningExpanded);
     const live = use(LiveTasks);
+    const needle = use(FindNeedle);
     const [userOpen, setUserOpen] = useState<boolean>();
 
     // What opens the turn and stays in view (a wake divider) sits over the header.
@@ -235,7 +237,11 @@ export function AssistantMessage({
                 live.some((t) => t.toolCallId === p.id)
             ) === "running"
     );
-    const open = userOpen ?? (expanded || running);
+    // Find-in-chat searches what's drawn: a fold with the text in a reply opens for it.
+    const found =
+        !!needle &&
+        sections.some((s) => s.work.some((p) => p.kind === "text" && foldText(p.text).includes(needle)));
+    const open = userOpen ?? (expanded || running || found);
 
     const footer = (answer || onFork || turnOf) && (
         <div className="-mt-1 flex h-6 items-center gap-0.5">
