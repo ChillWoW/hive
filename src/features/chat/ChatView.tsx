@@ -295,6 +295,7 @@ export function ChatView() {
                                         <MessageView
                                             message={message}
                                             onFork={chat ? () => forkChat(chat, message.id) : undefined}
+                                            turnOf={at === messages.length - 1 ? chat?.id : undefined}
                                         />
                                         {/* The chat's worktree, under its first prompt. */}
                                         {at === 0 && chat?.worktree && (
@@ -617,13 +618,22 @@ function knownFiles(messages: Message[], cwd: string): Set<string> {
     return known;
 }
 
-function MessageView({ message, onFork }: { message: Message; onFork?: () => unknown }) {
+function MessageView({
+    message,
+    onFork,
+    turnOf
+}: {
+    message: Message;
+    onFork?: () => unknown;
+    /** The chat this is the latest message of. */
+    turnOf?: string;
+}) {
     return message.role === "user" ? (
         // A turn starts here, for the minimap.
         <div data-turn={message.id} className="flex flex-col">
             <UserMessage message={message} />
         </div>
     ) : (
-        <AssistantMessage message={message} onFork={onFork} />
+        <AssistantMessage message={message} onFork={onFork} turnOf={turnOf} />
     );
 }

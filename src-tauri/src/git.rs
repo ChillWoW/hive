@@ -1,4 +1,4 @@
-//! The branch picker's, changes tab's and history tab's git commands, over
+//! The branch picker's, changes tab's (a turn's changes too) and history tab's git commands, over
 //! `outcode_git`, for a chat's folder.
 
 use std::collections::HashMap;
@@ -105,4 +105,25 @@ pub async fn git_commit_detail(
     outcode_git::commit_detail(Path::new(&cwd), &sha)
         .await
         .map_err(err)
+}
+
+/// What changed in a chat's checkout since its latest prompted turn started,
+/// as a patch; null before a prompt since launch (or outside a checkout).
+#[tauri::command]
+pub async fn git_turn_changes(
+    engine: tauri::State<'_, outcode_engine::Engine>,
+    chat_id: String,
+) -> Result<Option<GitChanges>, String> {
+    engine.turn_changes(&chat_id).await.map_err(err)
+}
+
+/// Puts back what a chat's latest prompted turn changed: every file, or only
+/// `paths` (from the checkout's top folder). Returns the paths put back.
+#[tauri::command]
+pub async fn git_revert_turn(
+    engine: tauri::State<'_, outcode_engine::Engine>,
+    chat_id: String,
+    paths: Option<Vec<String>>,
+) -> Result<Vec<String>, String> {
+    engine.revert_turn(&chat_id, paths).await.map_err(err)
 }

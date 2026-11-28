@@ -13,8 +13,8 @@ export type PanelTab = {
     dirty?: boolean;
     /** A file tab's file: `path` relative to `cwd`, `/`-separated. */
     file?: { cwd: string; path: string };
-    /** A diff tab's folder: its checkout's uncommitted changes. */
-    diff?: { cwd: string };
+    /** A diff tab's folder: its checkout's uncommitted changes, or with `chatId` what that chat's latest turn changed there. */
+    diff?: { cwd: string; chatId?: string };
     /** An output tab's background shell: chat `chatId`'s task, the file its output goes to, what it runs. */
     output?: { chatId: string; taskId: string; path: string; command?: string };
     /** A history tab's folder: its checkout's commits. */

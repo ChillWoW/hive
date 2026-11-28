@@ -24,6 +24,7 @@ fn engine_with(
         text_model: Box::new(text_model),
         idle: Box::new(move || idle),
         worktrees: Box::new(WorktreeOptions::default),
+        turn_snapshots: dir.path().join("turn-snapshots"),
     };
     let engine = Engine::new(Store::open(dir.path()).unwrap(), hooks);
     (dir, engine, seen)
@@ -571,6 +572,7 @@ async fn a_worktree_chat_runs_in_its_worktree_and_takes_it_when_deleted() {
         text_model: Box::new(|kind| (kind == TextUse::Branch).then(claude_text)),
         idle: Box::new(|| Duration::from_secs(60)),
         worktrees: Box::new(move || options.clone()),
+        turn_snapshots: dir.path().join("turn-snapshots"),
     };
     let engine = Engine::new(Store::open(dir.path()).unwrap(), hooks);
 
@@ -626,6 +628,7 @@ async fn a_chat_runs_on_its_harness_and_switching_starts_a_new_session() {
         text_model: Box::new(|_| None),
         idle: Box::new(|| Duration::from_secs(60)),
         worktrees: Box::new(WorktreeOptions::default),
+        turn_snapshots: dir.path().join("turn-snapshots"),
     };
     let engine = Engine::new(Store::open(dir.path()).unwrap(), hooks);
     let chat = engine.create_chat("/a".into(), ChatConfig::default()).unwrap();
@@ -678,6 +681,7 @@ fn two_harnesses(summary: Option<&str>) -> (tempfile::TempDir, Engine, Arc<Seen>
         text_model: Box::new(move |kind| (summaries && kind == TextUse::Handoff).then(claude_text)),
         idle: Box::new(|| Duration::from_secs(60)),
         worktrees: Box::new(WorktreeOptions::default),
+        turn_snapshots: dir.path().join("turn-snapshots"),
     };
     let engine = Engine::new(Store::open(dir.path()).unwrap(), hooks);
     (dir, engine, on_claude, on_codex)
@@ -972,4 +976,45 @@ async fn stopping_a_parent_stops_its_children() {
     let status = engine.wait_child(&child, Duration::from_secs(5)).await.unwrap();
     assert_eq!(status.state, ChildState::Idle);
     assert!(status.stopped);
+}
+
+#[tokio::test]
+async fn a_turns_changes_are_read_and_undone() {
+    let repo = tempfile::tempdir().unwrap();
+    let git = |args: &[&str]| {
+        std::process::Command::new("git")
+            .args(args)
+            .current_dir(repo.path())
+            .output()
+            .is_ok_and(|out| out.status.success())
+    };
+    // Without git there's nothing to snapshot with.
+    if !git(&["init", "-q"]) {
+        return;
+    }
+    std::fs::write(repo.path().join("a.txt"), "before\n").unwrap();
+    let (_dir, engine, _) = engine(Duration::from_secs(60));
+    let chat = engine.create_chat(repo.path().to_string_lossy().into_owned(), ChatConfig::default()).unwrap();
+    // Nothing to read against before a prompt.
+    assert!(engine.turn_changes(&chat.id).await.unwrap().is_none());
+    assert!(matches!(engine.revert_turn(&chat.id, None).await, Err(EngineError::NoTurnSnapshot)));
+
+    engine.send(&chat.id, "go".into(), Vec::new()).unwrap();
+    settle(&engine, &chat.id).await;
+    assert!(engine.turn_changes(&chat.id).await.unwrap().unwrap().patch.is_empty());
+
+    std::fs::write(repo.path().join("a.txt"), "after\n").unwrap();
+    std::fs::write(repo.path().join("new.txt"), "new\n").unwrap();
+    let changes = engine.turn_changes(&chat.id).await.unwrap().unwrap();
+    assert!(changes.patch.contains("-before\n+after\n"), "{}", changes.patch);
+    assert!(changes.patch.contains("+++ b/new.txt"));
+
+    let undone = engine.revert_turn(&chat.id, None).await.unwrap();
+    assert_eq!(undone, ["a.txt", "new.txt"]);
+    assert_eq!(std::fs::read_to_string(repo.path().join("a.txt")).unwrap(), "before\n");
+    assert!(!repo.path().join("new.txt").exists());
+
+    // The chat's snapshot goes with it.
+    engine.delete_chat(&chat.id).unwrap();
+    assert!(engine.state().turn_bases.is_empty());
 }

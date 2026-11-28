@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import type { FileDiffMetadata } from "@pierre/diffs";
 import { FileDiff } from "@pierre/diffs/react";
-import { ArrowSquareOutIcon, CaretRightIcon } from "@phosphor-icons/react";
+import { ArrowUUpLeftIcon, ArrowSquareOutIcon, CaretRightIcon } from "@phosphor-icons/react";
 import { useDiffOptions } from "@/features/chat/transcript/useDiffOptions";
 import { openFileTab } from "@/features/editor/open";
 import { useSettingsStore } from "@/features/settings/store";
@@ -30,17 +30,19 @@ const STATUS: Partial<Record<FileDiffMetadata["type"], { label: string; classNam
     "rename-changed": { label: "Renamed", className: "text-info" }
 };
 
-/** One file: a sticky header (a press collapses it) over its diff. */
+/** One file: a sticky header (a press collapses it) over its diff. Given `onRevert`, the header offers to undo the file's changes. */
 export function FileSection({
     file,
     root,
     collapsed,
-    onToggle
+    onToggle,
+    onRevert
 }: {
     file: Changed;
     root: string;
     collapsed: boolean;
     onToggle: () => void;
+    onRevert?: () => void;
 }) {
     const style = useSettingsStore((s) => s.settings.diffs.style);
     const options = useDiffOptions(true, { style, background: "bg" });
@@ -90,6 +92,18 @@ export function FileSection({
                 </Tooltip>
                 {status && <span className={cn("shrink-0 text-[11px]", status.className)}>{status.label}</span>}
                 <LineCounts additions={file.additions} deletions={file.deletions} />
+                {onRevert && (
+                    <IconButton
+                        label="Undo this file's changes"
+                        onClick={(event) => {
+                            event.stopPropagation();
+                            onRevert();
+                        }}
+                        className="opacity-0 group-hover/file:opacity-100 focus-visible:opacity-100"
+                    >
+                        <ArrowUUpLeftIcon className="size-3.5" />
+                    </IconButton>
+                )}
                 {diff.type !== "deleted" && (
                     <IconButton
                         label="Open file"

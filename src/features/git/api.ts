@@ -10,6 +10,8 @@ import type { GitBranch, GitChanges, GitFileState, GitRepo } from "@/proto";
 const HOUR = 60 * 60 * 1000;
 const fake = {
     current: "main",
+    /** The made-up turn's changes were undone. */
+    reverted: false,
     branches: [
         { name: "main", age: 2 },
         { name: "feat/branch-picker", age: 0.2 },
@@ -72,6 +74,21 @@ export const gitApi = {
     /** The uncommitted changes as a patch; null outside a checkout. */
     changes: (cwd: string) =>
         backend<GitChanges | null>("git_changes", { cwd }, () => ({ root: cwd, patch: FAKE_PATCH, skipped: 0 })),
+    /**
+     * What changed in a chat's checkout since its latest prompted turn
+     * started, as a patch; null before a prompt since launch, or outside a
+     * checkout.
+     */
+    turnChanges: (chatId: string) =>
+        backend<GitChanges | null>("git_turn_changes", { chatId }, () =>
+            fake.reverted ? { root: "", patch: "", skipped: 0 } : { root: "", patch: FAKE_PATCH, skipped: 0 }
+        ),
+    /** Puts back what that turn changed: every file, or only `paths` (from the checkout's top folder). Resolves to the paths put back. */
+    revertTurn: (chatId: string, paths?: string[]) =>
+        backend<string[]>("git_revert_turn", { chatId, paths: paths ?? null }, () => {
+            fake.reverted = true;
+            return paths ?? [];
+        }),
     /** Each uncommitted file at or under `cwd`, by its path from it; null outside a checkout. */
     status: (cwd: string) =>
         backend<Record<string, GitFileState> | null>("git_status", { cwd }, () => ({

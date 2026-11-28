@@ -3009,10 +3009,12 @@ dependencies = [
 name = "outcode-git"
 version = "0.0.1"
 dependencies = [
+ "ignore",
  "outcode-proto",
  "tempfile",
  "thiserror 2.0.21",
  "tokio",
+ "uuid",
 ]
 
 [[package]]

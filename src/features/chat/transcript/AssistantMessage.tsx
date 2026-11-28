@@ -15,6 +15,7 @@ import { TurnParts } from "./Parts";
 import { isShowing } from "./showing";
 import { subagentState } from "./subagents";
 import { ThoughtIcon } from "./ThoughtIcon";
+import { TurnChanges } from "./TurnChanges";
 import { isRunning } from "./tools";
 
 const formatDuration = (ms: number) => formatElapsed(ms, { round: true });
@@ -165,17 +166,21 @@ function toSections(parts: MessagePart[]): Section[] {
  * it whenever nothing else there is live. Once done, its work folds behind
  * "Worked for 1m 5s" in that row's place, leaving the answer (and what the
  * agent asked or showed on the way); `fold={false}` keeps the work open.
- * Given `onFork`, a finished turn offers "Fork from here" under it.
+ * Given `onFork`, a finished turn offers "Fork from here" under it; given
+ * `turnOf`, what it changed in the checkout and an undo of that.
  */
 export function AssistantMessage({
     message,
     fold = true,
-    onFork
+    onFork,
+    turnOf
 }: {
     message: Message;
     fold?: boolean;
     /** Forks the chat from this reply; may resolve once the fork is open. */
     onFork?: () => unknown;
+    /** The chat this is the latest reply of: its footer shows the turn's changes. */
+    turnOf?: string;
 }) {
     const streaming = message.status === "streaming";
     const parts = message.parts;
@@ -232,10 +237,11 @@ export function AssistantMessage({
     );
     const open = userOpen ?? (expanded || running);
 
-    const footer = (answer || onFork) && (
+    const footer = (answer || onFork || turnOf) && (
         <div className="-mt-1 flex h-6 items-center gap-0.5">
             {answer && <CopyButton text={answer} />}
             {onFork && <ForkButton onFork={onFork} />}
+            {turnOf && <TurnChanges chatId={turnOf} />}
         </div>
     );
 

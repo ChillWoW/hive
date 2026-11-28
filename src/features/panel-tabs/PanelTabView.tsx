@@ -26,7 +26,9 @@ function Content({ tab }: { tab: PanelTab }) {
     if (tab.kind === "file" && tab.file) {
         return <FileTab key={tab.id} id={tab.id} cwd={tab.file.cwd} path={tab.file.path} />;
     }
-    if (tab.kind === "diff" && tab.diff) return <ChangesTab key={tab.id} id={tab.id} cwd={tab.diff.cwd} />;
+    if (tab.kind === "diff" && tab.diff) {
+        return <ChangesTab key={tab.id} id={tab.id} cwd={tab.diff.cwd} chatId={tab.diff.chatId} />;
+    }
     if (tab.kind === "history" && tab.history) {
         return <HistoryTab key={tab.id} id={tab.id} cwd={tab.history.cwd} />;
     }

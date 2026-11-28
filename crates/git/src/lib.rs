@@ -1,13 +1,16 @@
 //! outcode-git — a project folder's branches and Outcode's worktrees, over
 //! the `git` the user has installed: list branches, switch, branch off one,
-//! delete one; add, restore and remove a chat's worktree; read its history.
+//! delete one; add, restore and remove a chat's worktree; read its history;
+//! snapshot it as a turn starts, to show and undo what the turn changed.
 
 mod history;
+mod turn;
 
 pub use history::{
     HISTORY_DEFAULT_LIMIT, HISTORY_MAX_LIMIT, commit_detail, fetch_all, github_remote, history,
     search_history,
 };
+pub use turn::{TreeSnapshot, revert_turn, snapshot_tree, sweep_turn_snapshots, turn_changes};
 
 use std::path::{Path, PathBuf};
 use std::process::Stdio;

@@ -37,10 +37,10 @@ Branch `rework/app` is a from-scratch rebuild: app shell, settings, themes, font
 - `src-tauri/src/` — Tauri commands, registered in `lib.rs`: `chat.rs` (engine commands, watchers), `folders.rs`, `git.rs`, `files.rs`, `file_watch.rs` (tells the page when a folder's files change), `search.rs` (text search across a folder's files), `editor.rs` (file tabs: read, save with conflict checks), `terminal.rs`, `settings/`, `themes.rs`, `fonts.rs`, `updater.rs`, `http.rs`.
 - `crates/proto` — wire types; `cargo test -p outcode-proto` regenerates `src/proto/` (never edit by hand).
 - `crates/harness` — spawns agent CLIs, normalizes output to `AgentEvent`s; each CLI is a `Harness` (`claude::Claude`, `codex::Codex`; `mock::Mock` behind feature `mock` for engine tests), picked per chat by `ChatConfig.harness`. Live tests: `cargo test -p outcode-harness -- --ignored`.
-- `crates/git` — a folder's branches over the user's `git` CLI (list, switch, create, delete), and chats' worktrees (add, restore, remove).
+- `crates/git` — a folder's branches over the user's `git` CLI (list, switch, create, delete), chats' worktrees (add, restore, remove), and turn snapshots (`turn.rs`: the checkout written as a tree into a private object store under `<data dir>/turn-snapshots`, never into the user's repo; a turn's changes are that against the checkout now, and undo writes it back).
 - `crates/terminal` — the user's shell in a pty (portable-pty) for terminal tabs: batched output, hangup on close, the foreground program for tab titles. Frontend in `src/features/terminal/` (xterm.js).
 - `crates/store` — SQLite (`outcode.db`: chats, messages) + per-chat JSONL event journals; `recover()` closes turns a crash left open.
-- `crates/engine` — chats and their live runs over the store: one run per chat, resumed by session id, closed when idle; `watch_chats` / `watch_messages` stream a snapshot then changes.
+- `crates/engine` — chats and their live runs over the store: one run per chat, resumed by session id, closed when idle; `watch_chats` / `watch_messages` stream a snapshot then changes. Each prompted turn snapshots the chat's checkout (in memory, latest turn only, gone on restart): `turn_changes` / `revert_turn`, shown in the latest reply's footer and a "Last turn" diff tab (`src/features/changes/turn.ts`).
 
 ## Conventions
 

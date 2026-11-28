@@ -5,6 +5,14 @@ import { errorMessage } from "@/lib/errors";
 import { onWindowFocus } from "@/lib/windowFocus";
 import type { GitChanges } from "@/proto";
 
+/** The mounted readers' re-reads, for `rereadChanges`. */
+const rereads = new Set<() => void>();
+
+/** Has every shown changes tab read again: something just changed files behind them. */
+export function rereadChanges() {
+    for (const reread of [...rereads]) reread();
+}
+
 /** While an agent works in the folder, its changes are read again this often. */
 const BUSY_POLL_MS = 3_000;
 
@@ -55,7 +63,13 @@ export function useChanges(cwd: string): ChangesState {
 
     useEffect(() => {
         reread();
-        return onWindowFocus(() => reread());
+        const again = () => reread();
+        rereads.add(again);
+        const stopFocus = onWindowFocus(again);
+        return () => {
+            rereads.delete(again);
+            stopFocus();
+        };
     }, [cwd]);
 
     const wasBusy = useRef(busy);

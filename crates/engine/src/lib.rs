@@ -18,15 +18,15 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
-use outcode_git::GitError;
+use outcode_git::{GitError, TreeSnapshot};
 use outcode_harness::{Harness, HarnessError, Run, RunHandle};
 use outcode_proto::{
-    AgentEvent, Attachment, BackgroundTask, BackgroundTaskKind, Chat, ChatConfig, ChatsUpdate, ContextWindow, DoneStatus, HarnessId, InputResponse, MessagesUpdate,
+    AgentEvent, Attachment, BackgroundTask, BackgroundTaskKind, Chat, ChatConfig, ChatsUpdate, ContextWindow, DoneStatus, GitChanges, HarnessId, InputResponse, MessagesUpdate,
     McpServer, MessagePart, NewWorktree, SecretRequest, WorktreeStep, has_running_spawn, has_spawn,
     QueuedPrompt, RunRequest, Session,
 };
 use outcode_store::{Store, StoreError, Turn, new_id, now_ms};
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, watch};
 
 mod agents;
 mod branches;
@@ -74,6 +74,8 @@ pub enum EngineError {
     NotRunning,
     #[error("Wait for the agent to finish first.")]
     Busy,
+    #[error("This turn's changes aren't recorded any more.")]
+    NoTurnSnapshot,
     #[error("Send a prompt first.")]
     NothingToHandOff,
     #[error(transparent)]
@@ -104,6 +106,9 @@ pub struct Hooks {
     /// Where new worktrees go and how they're named; read as each is made
     /// (and as a worktree chat is deleted).
     pub worktrees: Box<dyn Fn() -> WorktreeOptions + Send + Sync>,
+    /// Where the checkout snapshots taken as turns start keep their objects;
+    /// what earlier launches left there is swept.
+    pub turn_snapshots: PathBuf,
 }
 
 /// What a text run runs on.
@@ -194,6 +199,9 @@ struct State {
     /// own: its agent, still expecting to hear of it, is told with the next
     /// prompt.
     lost: HashMap<String, Vec<String>>,
+    /// Each chat's checkout as its latest prompted turn found it, since
+    /// launch: what that turn's changes are read against.
+    turn_bases: HashMap<String, watch::Receiver<TurnBase>>,
 }
 
 struct Live {
@@ -217,6 +225,15 @@ struct Live {
     /// session with the new one. A prompt sent while the work still runs is
     /// refused, since restarting would end the work.
     stale: bool,
+}
+
+/// A chat's checkout as a turn found it, snapshotted in the background.
+#[derive(Clone)]
+enum TurnBase {
+    Pending,
+    /// None outside a checkout.
+    Ready(Option<TreeSnapshot>),
+    Failed(String),
 }
 
 #[derive(Default)]
@@ -281,6 +298,9 @@ impl Engine {
             }),
         };
         engine.recover_handoffs();
+        // Earlier launches' turn snapshots: unreachable now.
+        let snapshots = engine.shared.hooks.turn_snapshots.clone();
+        std::thread::spawn(move || outcode_git::sweep_turn_snapshots(&snapshots));
         engine
     }
 
@@ -473,6 +493,7 @@ impl Engine {
         state.sessions.remove(chat_id);
         state.summarizing.remove(chat_id);
         state.lost.remove(chat_id);
+        state.turn_bases.remove(chat_id);
         self.store().delete_chat(chat_id)?;
         state.watchers.chats(ChatsUpdate::Removed { id: chat_id.into() });
         // A handoff shares its worktree: it stays while another chat works in it.
@@ -547,6 +568,9 @@ impl Engine {
         let (mut turn, chat) = self.store().start_turn(chat_id, prompt.as_deref(), attachments)?;
         // The last turn's guess at this prompt is spent.
         state.update_session(chat_id, |s| s.suggestion = None);
+        if prompt.is_some() {
+            self.snapshot_turn(state, &chat);
+        }
         let State {
             runs,
             sessions,
@@ -697,6 +721,68 @@ impl Engine {
             }
         }
         Ok(())
+    }
+
+    /// Snapshots the chat's checkout in the background as a prompt starts a
+    /// turn: what [`Engine::turn_changes`] reads the turn's changes against.
+    /// Best-effort, and racing the agent's first edits.
+    fn snapshot_turn(&self, state: &mut State, chat: &Chat) {
+        let (tx, rx) = watch::channel(TurnBase::Pending);
+        state.turn_bases.insert(chat.id.clone(), rx);
+        let cwd = PathBuf::from(chat.work_dir());
+        let dir = self.shared.hooks.turn_snapshots.clone();
+        let chat_id = chat.id.clone();
+        tokio::spawn(async move {
+            let base = match outcode_git::snapshot_tree(&cwd, &dir).await {
+                Ok(snapshot) => TurnBase::Ready(snapshot),
+                Err(error) => {
+                    eprintln!("[engine] snapshotting {chat_id}'s turn: {error}");
+                    TurnBase::Failed(error.to_string())
+                }
+            };
+            // Nobody listening: a later turn replaced it, or the chat went.
+            let _ = tx.send(base);
+        });
+    }
+
+    /// The checkout as the chat's latest prompted turn found it, once that's
+    /// snapshotted. None before a prompt since launch, or outside a checkout.
+    async fn turn_base(&self, chat_id: &str) -> Result<Option<TreeSnapshot>> {
+        let Some(mut base) = self.state().turn_bases.get(chat_id).cloned() else {
+            return Ok(None);
+        };
+        let Ok(ready) = base.wait_for(|b| !matches!(b, TurnBase::Pending)).await else {
+            return Ok(None);
+        };
+        match &*ready {
+            TurnBase::Ready(snapshot) => Ok(snapshot.clone()),
+            TurnBase::Pending => Ok(None),
+            TurnBase::Failed(error) => Err(GitError::Failed(error.clone()).into()),
+        }
+    }
+
+    /// What changed in the chat's checkout since its latest prompted turn
+    /// started (so far, while it runs; whoever changed it), as a patch. None
+    /// before a prompt since launch, or outside a checkout.
+    pub async fn turn_changes(&self, chat_id: &str) -> Result<Option<GitChanges>> {
+        let Some(turn) = self.turn_base(chat_id).await? else {
+            return Ok(None);
+        };
+        Ok(Some(outcode_git::turn_changes(&turn).await?))
+    }
+
+    /// Undoes what [`Engine::turn_changes`] shows: every file, or only
+    /// `paths` (from the checkout's top folder), goes back to how the turn
+    /// found it. The agent isn't told. Refused while a turn runs. Returns
+    /// the paths put back.
+    pub async fn revert_turn(&self, chat_id: &str, paths: Option<Vec<String>>) -> Result<Vec<String>> {
+        if self.state().working(chat_id) {
+            return Err(EngineError::Busy);
+        }
+        let Some(turn) = self.turn_base(chat_id).await? else {
+            return Err(EngineError::NoTurnSnapshot);
+        };
+        Ok(outcode_git::revert_turn(&turn, paths.as_deref()).await?)
     }
 
     /// Stops the chat's running turn; its run stays up for the next prompt.

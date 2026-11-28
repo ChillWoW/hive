@@ -158,6 +158,8 @@ pub fn run() {
             git::git_search_history,
             git::git_fetch_all,
             git::git_commit_detail,
+            git::git_turn_changes,
+            git::git_revert_turn,
             avatars::git_avatars,
             editor::read_file,
             editor::read_file_bytes,

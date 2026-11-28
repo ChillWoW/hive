@@ -28,13 +28,34 @@ export function useCurrentFolder(): string | null {
  */
 export function openChangesTab(cwd: string | null = currentFolder()): string | null {
     if (!cwd) return null;
-    const open = usePanelTabsStore.getState().tabs.find((t) => t.kind === "diff" && t.diff?.cwd === cwd);
+    const open = usePanelTabsStore
+        .getState()
+        .tabs.find((t) => t.kind === "diff" && t.diff?.cwd === cwd && !t.diff.chatId);
     let id: string;
     if (open) {
         id = open.id;
         panelTabs.select(id);
     } else {
         id = panelTabs.open({ kind: "diff", title: "Changes", detail: tildify(cwd, home), diff: { cwd } });
+    }
+    if (!getPanelLayout().visible.tabs) useLayoutStore.getState().toggle("tabs");
+    return id;
+}
+
+/**
+ * Shows what chat `chatId`'s latest turn changed in `cwd`'s checkout in a
+ * diff tab of its own, the one already showing it if any.
+ */
+export function openTurnChangesTab(chatId: string, cwd: string): string {
+    const open = usePanelTabsStore.getState().tabs.find((t) => t.kind === "diff" && t.diff?.chatId === chatId);
+    let id: string;
+    if (open) {
+        id = open.id;
+        // A handed-off chat may have moved folders since.
+        if (open.diff?.cwd !== cwd) panelTabs.update(id, { detail: tildify(cwd, home), diff: { cwd, chatId } });
+        panelTabs.select(id);
+    } else {
+        id = panelTabs.open({ kind: "diff", title: "Last turn", detail: tildify(cwd, home), diff: { cwd, chatId } });
     }
     if (!getPanelLayout().visible.tabs) useLayoutStore.getState().toggle("tabs");
     return id;

@@ -65,6 +65,7 @@ pub fn engine(app: &AppHandle, data_dir: &Path) -> Result<Engine, Box<dyn std::e
                 let minutes = idle.state::<SettingsFile>().get().chat.idle_timeout_minutes;
                 Duration::from_secs(u64::from(minutes) * 60)
             }),
+            turn_snapshots: data_dir.join("turn-snapshots"),
             worktrees: Box::new(move || {
                 let settings = worktrees.state::<SettingsFile>().get().worktrees;
                 WorktreeOptions {
