@@ -10,7 +10,7 @@ import { Tooltip } from "@/ui";
 import { pendingInput } from "../fold";
 import { LiveTasks } from "./context";
 import { lineClassName, panelTransition, verbClassName } from "./line";
-import { drawsAny } from "./blocks";
+import { drawsAny, endsInGroup } from "./blocks";
 import { TurnParts } from "./Parts";
 import { isShowing } from "./showing";
 import { subagentState } from "./subagents";
@@ -157,12 +157,15 @@ export function AssistantMessage({ message, fold = true }: { message: Message; f
         // "Final reply only" shows none of the work, so nothing there is live but the reply.
         const finalOnly = show === "final-only";
         const idle = !waiting && (finalOnly ? parts.at(-1)?.kind !== "text" : !tailIsLive(parts));
+        const rest = parts.slice(leadCount);
+        // After a group, the wait is a row in it; else it stands under the turn.
+        const inGroup = idle && endsInGroup(rest, show);
         return (
             <div className={STACK}>
                 <TurnParts parts={parts.slice(0, leadCount)} streaming />
                 <WorkingHeader since={message.createdAt} waiting={waiting} />
-                <TurnParts parts={parts.slice(leadCount)} streaming />
-                {idle && <ActivityRow label={finalOnly ? "Working" : "Thinking"} />}
+                <TurnParts parts={rest} streaming pending={inGroup} />
+                {idle && !inGroup && <ActivityRow label={finalOnly ? "Working" : "Thinking"} />}
             </div>
         );
     }

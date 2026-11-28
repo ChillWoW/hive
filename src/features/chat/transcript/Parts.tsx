@@ -24,7 +24,16 @@ export function ErrorChip({ message }: { message: string }) {
  * (consecutive file edits on one line), what the agent asked, compactions,
  * subagents, and errors. Also a subagent's thread, under its row.
  */
-export function TurnParts({ parts, streaming }: { parts: MessagePart[]; streaming: boolean }) {
+export function TurnParts({
+    parts,
+    streaming,
+    pending = false
+}: {
+    parts: MessagePart[];
+    streaming: boolean;
+    /** The turn runs with nothing live at its tail: its last group shows "Thinking". */
+    pending?: boolean;
+}) {
     const last = parts.length - 1;
     const lastText = parts.findLastIndex((p) => p.kind === "text");
     const show = useSettingsStore((s) => s.settings.chat.toolCalls);
@@ -68,5 +77,5 @@ export function TurnParts({ parts, streaming }: { parts: MessagePart[]; streamin
         }
     };
 
-    return <>{toBlocks(parts, streaming, show).map(render)}</>;
+    return <>{toBlocks(parts, streaming, show, pending).map(render)}</>;
 }

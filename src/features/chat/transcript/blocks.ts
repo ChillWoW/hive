@@ -20,8 +20,12 @@ export type Block =
  * ends it. Subagent spawns gather into their own run, so a running subagent
  * never hides behind a fold. Empty text and empty thoughts draw nothing and
  * so split nothing.
+ *
+ * `pending` (a running turn with nothing live at its tail) adds a bare
+ * "Thinking" row to the group the turn ends in, so the wait shows where the
+ * thought will land rather than under the group.
  */
-export function toBlocks(parts: MessagePart[], streaming: boolean, show: ToolCalls): Block[] {
+export function toBlocks(parts: MessagePart[], streaming: boolean, show: ToolCalls, pending = false): Block[] {
     const blocks: Block[] = [];
     let open: Extract<Block, { kind: "group" | "agents" }> | undefined;
     const last = parts.length - 1;
@@ -62,12 +66,24 @@ export function toBlocks(parts: MessagePart[], streaming: boolean, show: ToolCal
         open = undefined;
         blocks.push({ kind: "part", part, index });
     });
+    if (pending && open?.kind === "group" && open.items.length) {
+        // The thought already begun, if any, so the row keeps its key as text arrives.
+        const tail = parts.at(-1);
+        const part = tail?.kind === "reasoning" ? tail : { kind: "reasoning" as const, id: "pending", text: "" };
+        open.items.push({ kind: "thought", part, live: true });
+        open.last = last;
+    }
     return blocks.filter((b) => (b.kind === "group" ? b.items.length : b.kind === "agents" ? b.parts.length : true));
 }
 
 /** A call that came back without an error; a subagent, once it's done. */
 function succeeded(part: ToolPart) {
     return !!part.resolved && !part.isError && (part.subagent ?? "done") === "done";
+}
+
+/** Whether a running turn's last block is a group, where its "Thinking" row goes. */
+export function endsInGroup(parts: MessagePart[], show: ToolCalls): boolean {
+    return toBlocks(parts, true, show).at(-1)?.kind === "group";
 }
 
 /** Whether `parts` draw anything under the tool calls setting. */
